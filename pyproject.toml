@@ -34,11 +34,12 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentmem"]
+packages = ["agentmem/src/agentmem"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["agentmem/tests"]
+pythonpath = ["agentmem"]
 
 [tool.ruff]
 line-length = 100
