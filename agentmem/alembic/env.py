@@ -1,48 +1,89 @@
+"""
+Alembic environment — async PostgreSQL via asyncpg.
+
+Run migrations:
+    cd agentmem
+    alembic upgrade head
+
+Generate a new migration after changing models.py:
+    alembic revision --autogenerate -m "describe the change"
+
+Preview SQL without touching the DB:
+    alembic upgrade head --sql
+"""
 import asyncio
+import sys
+from pathlib import Path
 from logging.config import fileConfig
+
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
-from src.agentmem.models import Base
-from src.agentmem.config import get_settings
+# Ensure `src.agentmem` is importable regardless of working directory.
+# prepend_sys_path = . in alembic.ini handles the common case (running from
+# agentmem/), but adding it explicitly here too makes env.py importable from
+# other tools (pytest-alembic, CI scripts, etc.).
+_pkg_root = str(Path(__file__).resolve().parents[1])
+if _pkg_root not in sys.path:
+    sys.path.insert(0, _pkg_root)
+
+# Import all model classes — this registers them with Base.metadata so that
+# autogenerate can diff the live DB against the current model definitions.
+from src.agentmem.models import Base  # noqa: E402
+from src.agentmem.config import get_settings  # noqa: E402
 
 config = context.config
+target_metadata = Base.metadata
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
 
-
-def get_url():
+def _db_url() -> str:
+    """Read from the app config so credentials are never in alembic.ini."""
     return get_settings().database_url
 
 
 def run_migrations_offline() -> None:
-    url = get_url()
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+    """Emit SQL to stdout — useful for reviewing DDL before applying."""
+    context.configure(
+        url=_db_url(),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        compare_type=True,
+        compare_server_default=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
-def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+def _do_run_migrations(connection: Connection) -> None:
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
-async def run_async_migrations() -> None:
+async def _run_async_migrations() -> None:
     cfg = config.get_section(config.config_ini_section, {})
-    cfg["sqlalchemy.url"] = get_url()
-    connectable = async_engine_from_config(cfg, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    cfg["sqlalchemy.url"] = _db_url()
+    connectable = async_engine_from_config(
+        cfg, prefix="sqlalchemy.", poolclass=pool.NullPool
+    )
     async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+        await connection.run_sync(_do_run_migrations)
     await connectable.dispose()
 
 
 def run_migrations_online() -> None:
-    asyncio.run(run_async_migrations())
+    asyncio.run(_run_async_migrations())
 
 
 if context.is_offline_mode():
