@@ -1,0 +1,12 @@
+.git/
+.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+.env
+agentmem/tests/
+agentmem/benchmarks/
+*.egg-info/
+dist/
+build/

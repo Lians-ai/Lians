@@ -1,4 +1,7 @@
 services:
+
+  # ── Infrastructure ────────────────────────────────────────────────────────
+
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -26,6 +29,52 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # ── Schema migrations (run once, exit) ───────────────────────────────────
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - path: .env
+        required: false      # falls back to the environment block below
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@postgres:5432/agentmem
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # ── API server ────────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@postgres:5432/agentmem
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   pgdata:
