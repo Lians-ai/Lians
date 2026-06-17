@@ -8,7 +8,7 @@ from typing import Any, Optional
 import httpx
 
 
-class AgentMemClient:
+class AsyncAgentMemClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8000",

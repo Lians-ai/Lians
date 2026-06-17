@@ -1,62 +1,100 @@
 """
-Demo: research agent that tracks earnings revisions using AgentMem.
+Demo: research agent tracking earnings revisions with AgentMem.
 
-Shows the core value prop: point-in-time recall for compliance/audit.
-Run against a local server: uvicorn src.agentmem.main:app --reload
+Shows two modes:
+  - Local mode  (LocalAgentMemClient): zero setup, in-memory SQLite, no server
+  - HTTP mode   (AgentMemClient):      sync client -> real AgentMem server
+
+Run local mode immediately::
+
+    cd agentmem
+    python examples/research_agent_demo.py
+
+Run against a live server::
+
+    uvicorn src.agentmem.main:app --reload
+    python examples/research_agent_demo.py --mode http --api-key your-key
 """
-import asyncio
+import sys
+import argparse
+from pathlib import Path
 from datetime import datetime, timezone
 
-from sdk.python.agentmem_sdk.client import AgentMemClient
+# Allow running from any directory without installing the SDK
+_root = Path(__file__).resolve().parent.parent  # agentmem/
+sys.path.insert(0, str(_root / "sdk" / "python"))
+sys.path.insert(0, str(_root))  # makes src.agentmem importable in dev mode
 
 
-async def main():
-    client = AgentMemClient(base_url="http://localhost:8000", api_key="your-api-key")
+def run_demo(mem) -> None:
     agent = "research-agent-1"
 
     print("--- Adding earnings guidance sequence ---")
-    await client.add(
+    mem.add(
         agent_id=agent,
         content="NVDA Q3 FY2026 guidance: $32B",
         event_time=datetime(2026, 2, 1, tzinfo=timezone.utc),
         source="earnings_call",
         metadata={"ticker": "NVDA", "metric": "guidance", "quarter": "Q3FY26"},
     )
-    print("Added: Q3 guidance $32B")
+    print("  Added: Q3 guidance $32B (Feb 1)")
 
-    await client.add(
+    mem.add(
         agent_id=agent,
         content="NVDA raises Q3 FY2026 guidance to $36B (analyst day)",
         event_time=datetime(2026, 5, 10, tzinfo=timezone.utc),
         source="analyst_day",
         metadata={"ticker": "NVDA", "metric": "guidance", "quarter": "Q3FY26"},
     )
-    print("Added: Q3 guidance raised to $36B")
+    print("  Added: Q3 guidance raised to $36B (May 10) -- should supersede Feb entry")
 
-    print("\n--- Present-time recall ---")
-    result = await client.recall(agent_id=agent, query="NVDA Q3 guidance", k=3)
-    for mem in result["memories"]:
-        print(f"  [{mem['event_time'][:10]}] {mem['content']} (valid_to={mem['valid_to']})")
+    print("\n--- Present-time recall (expect: $36B first) ---")
+    result = mem.recall(agent_id=agent, query="NVDA Q3 guidance", k=5)
+    for m in result["memories"]:
+        ts = (m.get("event_time") or "")[:10]
+        print(f"  [{ts}] {m['content']}  valid_to={m.get('valid_to')}")
 
-    print("\n--- Point-in-time recall (as of Feb 2026 — before the revision) ---")
-    past_result = await client.recall(
+    print("\n--- Point-in-time recall as of 2026-03-01 (expect: $32B only) ---")
+    past = mem.recall(
         agent_id=agent,
         query="NVDA Q3 guidance",
-        k=3,
+        k=5,
         as_of=datetime(2026, 3, 1, tzinfo=timezone.utc),
     )
-    for mem in past_result["memories"]:
-        print(f"  [{mem['event_time'][:10]}] {mem['content']}")
+    for m in past["memories"]:
+        ts = (m.get("event_time") or "")[:10]
+        print(f"  [{ts}] {m['content']}")
 
-    print("\n--- Audit reconstruction ---")
-    audit = await client.reconstruct(
+    print("\n--- Audit reconstruction as of 2099-01-01 ---")
+    audit = mem.reconstruct(
         agent_id=agent,
-        as_of=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        as_of=datetime(2099, 1, 1, tzinfo=timezone.utc),
         query="NVDA guidance",
     )
-    print(f"  Memories at that time: {len(audit['memories'])}")
+    print(f"  Memories visible: {len(audit['memories'])}")
     print(f"  Event log entries: {len(audit['event_trail'])}")
+    for e in audit["event_trail"][:6]:
+        print(f"    {e['op']:10s} {str(e.get('memory_id', ''))[:8]}")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["local", "http"], default="local")
+    parser.add_argument("--base-url", default="http://localhost:8000")
+    parser.add_argument("--api-key", default="")
+    args = parser.parse_args()
+
+    if args.mode == "local":
+        from agentmem_sdk import LocalAgentMemClient
+        print("=== Local mode (no server needed) ===\n")
+        with LocalAgentMemClient() as mem:
+            run_demo(mem)
+    else:
+        from agentmem_sdk import AgentMemClient
+        print(f"=== HTTP mode -> {args.base_url} ===\n")
+        with AgentMemClient(base_url=args.base_url, api_key=args.api_key) as mem:
+            run_demo(mem)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

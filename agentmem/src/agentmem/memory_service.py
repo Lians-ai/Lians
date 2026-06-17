@@ -15,7 +15,7 @@ from .models import Memory, EventLog, SubjectKey
 from .schemas import MemoryAdd, MemoryOut, RecallRequest, RecallResult
 from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, decrypt_content, unwrap_subject_key
-from .pii import get_or_create_subject_key
+from .pii import get_or_create_subject_key, destroy_subject_key
 from .supersession import run_supersession
 from .ranking import hybrid_recall
 
@@ -214,3 +214,41 @@ async def recall_memories(
         as_of=req.as_of,
         total_candidates=len(results),
     )
+
+
+async def erase_subject(
+    db: AsyncSession,
+    namespace: str,
+    subject_id: str,
+    request_ref: str,
+) -> int:
+    """
+    Crypto-shred a data subject: null out content, destroy their key, write
+    an immutable erase event to the audit log.  Returns count of erased rows.
+    """
+    stmt = select(Memory).where(
+        and_(
+            Memory.namespace == namespace,
+            Memory.subject_id == subject_id,
+            Memory.erased_at.is_(None),
+        )
+    )
+    result = await db.execute(stmt)
+    memories = result.scalars().all()
+
+    now = datetime.now(timezone.utc)
+    for mem in memories:
+        mem.content_encrypted = None
+        mem.erased_at = now
+        db.add(EventLog(
+            namespace=namespace,
+            agent_id=mem.agent_id,
+            op="erase",
+            memory_id=mem.id,
+            content_hash=mem.content_hash,
+            payload={"subject_id": subject_id, "request_ref": request_ref},
+        ))
+
+    await destroy_subject_key(db, subject_id)
+    await db.commit()
+    return len(memories)
