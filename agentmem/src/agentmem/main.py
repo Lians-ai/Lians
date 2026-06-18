@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from .api.routes_memory import router as memory_router
 from .api.routes_audit import router as audit_router
 from .api.routes_privacy import router as privacy_router
+from .api.routes_admin import router as admin_router
 
 
 @asynccontextmanager
@@ -22,6 +23,7 @@ app = FastAPI(
 app.include_router(memory_router)
 app.include_router(audit_router)
 app.include_router(privacy_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

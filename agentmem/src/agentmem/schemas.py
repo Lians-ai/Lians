@@ -73,6 +73,28 @@ class EraseResult(BaseModel):
     request_ref: str
 
 
+class ApiKeyCreate(BaseModel):
+    namespace: str
+    scopes: list[str] = Field(default=["read", "write"])
+    label: Optional[str] = None
+
+
+class ApiKeyOut(BaseModel):
+    id: UUID
+    namespace: str
+    label: Optional[str]
+    scopes: list[str]
+    created_at: datetime
+    rotated_at: Optional[datetime]
+    revoked_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+
+class ApiKeyCreated(ApiKeyOut):
+    key: str  # plaintext raw key — returned ONCE at creation/rotation, never stored
+
+
 class SupersessionResult(BaseModel):
     relation: str           # SUPERSEDES | CONFIRMS | ADDS | CONTRADICTS_SAME_TIME
     confidence: float

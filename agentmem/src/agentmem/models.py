@@ -142,6 +142,7 @@ class ApiKey(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     hashed_key = Column(String, nullable=False, unique=True, index=True)
     namespace = Column(String, nullable=False)
+    label = Column(String, nullable=True)
     scopes = Column(JSON, nullable=False, server_default='["read"]')
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     rotated_at = Column(DateTime(timezone=True), nullable=True)

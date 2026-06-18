@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # API
     api_secret_seed: str = "dev-seed-change-in-prod"
+    admin_secret: str = "dev-admin-secret-change-in-prod"
 
     # LLM adjudication (Stage 3 supersession)
     anthropic_api_key: str = ""          # falls back to ANTHROPIC_API_KEY env var
