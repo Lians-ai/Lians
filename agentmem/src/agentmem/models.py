@@ -27,14 +27,26 @@ class _FlexVector(sa_types.TypeDecorator):
         return dialect.type_descriptor(JSON())
 
     def process_bind_param(self, value, dialect):
-        if dialect.name == "postgresql":
-            return value  # pgvector handles list directly
+        # Return value as-is; on PostgreSQL the Vector.bind_processor (applied
+        # after this method by the TypeDecorator chain) converts the list to a
+        # Postgres-literal string that asyncpg sends via the text protocol.
+        # On SQLite, JSON serialises the list automatically.
         if value is None:
             return None
-        return value  # JSON serialises list fine
+        return value
 
     def process_result_value(self, value, dialect):
-        return value
+        # On PostgreSQL: Vector.result_processor runs first and converts the
+        # text-protocol string "[x,y,...]" → numpy array; we receive the array.
+        # On SQLite: JSON deserialization returns a plain Python list.
+        # In both cases, callers use list(mem.embedding) which handles both.
+        if value is None:
+            return None
+        if isinstance(value, str):
+            # Fallback: raw string (no result processor ran, e.g. direct text
+            # SQL query bypassing the ORM type system).
+            return [float(x) for x in value.strip("[]").split(",")]
+        return value  # numpy ndarray or list — both are iterable as floats
 
 EMBED_DIM = get_settings().embedding_dim  # 1024 — locked before first migration
 
