@@ -18,7 +18,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
 # Ensure `src.agentmem` is importable regardless of working directory.
@@ -33,6 +33,7 @@ if _pkg_root not in sys.path:
 # autogenerate can diff the live DB against the current model definitions.
 from src.agentmem.models import Base  # noqa: E402
 from src.agentmem.config import get_settings  # noqa: E402
+from src.agentmem.db import parse_db_url  # noqa: E402
 
 config = context.config
 target_metadata = Base.metadata
@@ -72,10 +73,11 @@ def _do_run_migrations(connection: Connection) -> None:
 
 
 async def _run_async_migrations() -> None:
-    cfg = config.get_section(config.config_ini_section, {})
-    cfg["sqlalchemy.url"] = _db_url()
-    connectable = async_engine_from_config(
-        cfg, prefix="sqlalchemy.", poolclass=pool.NullPool
+    url, connect_args = parse_db_url(_db_url())
+    connectable = create_async_engine(
+        url,
+        connect_args=connect_args,
+        poolclass=pool.NullPool,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(_do_run_migrations)
