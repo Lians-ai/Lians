@@ -130,6 +130,9 @@ class EventLog(Base):
     content_hash = Column(String, nullable=True)
     payload = Column(JSON, nullable=False, server_default="{}")
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    # Hash chain for SEC 17a-4 tamper-evidence
+    prev_hash = Column(String(64), nullable=True)   # row_hash of the preceding row in this namespace
+    row_hash = Column(String(64), nullable=True)    # SHA-256(prev_hash || this row's canonical fields)
 
 
 class AgentBarrierGroup(Base):

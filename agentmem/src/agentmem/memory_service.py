@@ -13,6 +13,7 @@ from sqlalchemy import select, and_, update, text, cast, Float
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy
+from .audit_chain import chain_log
 from .telemetry import tracer
 from .schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
@@ -221,11 +222,9 @@ async def add_memory(
                     old.valid_to = req.event_time
                     old.superseded_by = mem.id
                     old.supersession_confidence = supersession.confidence
-                    db.add(EventLog(
-                        namespace=namespace,
-                        agent_id=req.agent_id,
-                        op="supersede",
-                        memory_id=old.id,
+                    await chain_log(
+                        db, namespace=namespace, agent_id=req.agent_id,
+                        op="supersede", memory_id=old.id,
                         content_hash=old.content_hash,
                         payload={
                             "superseded_by": str(mem.id),
@@ -234,13 +233,11 @@ async def add_memory(
                             "rationale": supersession.rationale,
                             "adjudication_stage": 3 if supersession.rationale else 2,
                         },
-                    ))
+                    )
 
-            db.add(EventLog(
-                namespace=namespace,
-                agent_id=req.agent_id,
-                op="add",
-                memory_id=mem.id,
+            await chain_log(
+                db, namespace=namespace, agent_id=req.agent_id,
+                op="add", memory_id=mem.id,
                 content_hash=mem.content_hash,
                 payload={
                     "source": req.source,
@@ -249,7 +246,7 @@ async def add_memory(
                     "supersession_relation": supersession.relation,
                     "supersession_confidence": supersession.confidence,
                 },
-            ))
+            )
 
             await db.commit()
         # ── End critical section ────────────────────────────────────────────────
@@ -307,12 +304,9 @@ async def recall_memories(
         span.set_attribute("result_count", len(results))
 
         # Audit log the recall
-        db.add(EventLog(
-            namespace=namespace,
-            agent_id=req.agent_id,
+        await chain_log(
+            db, namespace=namespace, agent_id=req.agent_id,
             op="recall",
-            memory_id=None,
-            content_hash=None,
             payload={
                 "query_hash": _content_hash(req.query),
                 "k": req.k,
@@ -321,7 +315,7 @@ async def recall_memories(
                 "result_ids": [str(m.id) for m, _, _ in results],
                 "scores": [round(float(s), 4) for _, s, _ in results],
             },
-        ))
+        )
         await db.commit()
 
         memories_out = [_memory_to_out(mem, content) for mem, _, content in results]
@@ -452,18 +446,16 @@ async def apply_supersession_action(
     else:
         op = "supersession_confirmed"
 
-    db.add(EventLog(
-        namespace=namespace,
-        agent_id=mem.agent_id,
-        op=op,
-        memory_id=mem.id,
+    await chain_log(
+        db, namespace=namespace, agent_id=mem.agent_id,
+        op=op, memory_id=mem.id,
         content_hash=mem.content_hash,
         payload={
             "reviewer_note": action.reviewer_note,
             "action": action.action,
             "actioned_at": now.isoformat(),
         },
-    ))
+    )
     await db.commit()
     return SupersessionActionResult(
         memory_id=memory_id,
@@ -545,17 +537,15 @@ async def prune_expired_content(
     for mem in memories:
         mem.content_encrypted = None
         mem.erased_at = now
-        db.add(EventLog(
-            namespace=namespace,
-            agent_id=mem.agent_id,
-            op="retention_prune",
-            memory_id=mem.id,
+        await chain_log(
+            db, namespace=namespace, agent_id=mem.agent_id,
+            op="retention_prune", memory_id=mem.id,
             content_hash=mem.content_hash,
             payload={
                 "cutoff_date": cutoff.isoformat(),
                 "content_ttl_days": pol.content_ttl_days,
             },
-        ))
+        )
 
     await db.commit()
     return RetentionPruneResult(
@@ -589,14 +579,12 @@ async def erase_subject(
     for mem in memories:
         mem.content_encrypted = None
         mem.erased_at = now
-        db.add(EventLog(
-            namespace=namespace,
-            agent_id=mem.agent_id,
-            op="erase",
-            memory_id=mem.id,
+        await chain_log(
+            db, namespace=namespace, agent_id=mem.agent_id,
+            op="erase", memory_id=mem.id,
             content_hash=mem.content_hash,
             payload={"subject_id": subject_id, "request_ref": request_ref},
-        ))
+        )
 
     await destroy_subject_key(db, subject_id)
     await db.commit()

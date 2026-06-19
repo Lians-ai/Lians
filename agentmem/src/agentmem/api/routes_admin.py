@@ -23,8 +23,10 @@ from ..schemas import (
     ApiKeyCreate, ApiKeyCreated, ApiKeyOut,
     BarrierGroupAssign, BarrierGroupOut,
     RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
+    AuditChainVerifyResult,
 )
 from ..memory_service import get_retention_policy, set_retention_policy, prune_expired_content
+from ..audit_chain import verify_chain
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -319,3 +321,35 @@ async def run_prune(
     log so regulators can confirm the content was destroyed per policy.
     """
     return await prune_expired_content(db, namespace)
+
+
+# ── Audit chain verification ─────────────────────────────────────────────────
+
+@router.get(
+    "/audit/verify",
+    response_model=AuditChainVerifyResult,
+    summary="Verify the SEC 17a-4 tamper-evidence hash chain for a namespace",
+)
+async def verify_audit_chain(
+    namespace: str = Query(..., description="Namespace to verify"),
+    limit: int = Query(default=50_000, ge=1, le=500_000, description="Max rows to inspect"),
+    _: None = Depends(_require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AuditChainVerifyResult:
+    """
+    Walk the event_log hash chain for *namespace* and report any tampering.
+
+    For each row the verifier recomputes SHA-256(prev_hash || row fields) and
+    compares it to the stored row_hash.  A mismatch means the row was modified
+    after it was written.  An orphaned prev_hash means a row was deleted from
+    the middle of the chain.
+
+    Returns `{"status": "ok"}` when the chain is intact.
+    Returns `{"status": "tampered", "violations": [...]}` with details
+    identifying every broken link — suitable for regulatory examination.
+
+    Rows written before migration 0006 (which added the hash columns) have
+    NULL hashes and are skipped rather than reported as violations.
+    """
+    report = await verify_chain(db, namespace=namespace, limit=limit)
+    return AuditChainVerifyResult(**report)

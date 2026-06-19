@@ -175,3 +175,16 @@ class RetentionPruneResult(BaseModel):
     namespace: str
     memories_pruned: int
     cutoff_date: datetime
+
+
+class AuditChainViolation(BaseModel):
+    row_id: str
+    kind: str   # "hash_mismatch" | "orphaned_parent"
+    detail: str
+
+
+class AuditChainVerifyResult(BaseModel):
+    namespace: str
+    rows_checked: int
+    status: str          # "ok" | "tampered"
+    violations: list[AuditChainViolation]
