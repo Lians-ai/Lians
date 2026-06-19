@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     # Supersession review queue — supersessions below this confidence are flagged for review
     supersession_review_threshold: float = 0.75
 
+    # Logging
+    log_level: str = "INFO"       # DEBUG | INFO | WARNING | ERROR
+    log_json: bool = True         # False = human-readable format for local dev
+
+    # Rate limiting (per API key, sliding window)
+    rate_limit_per_minute: int = 300
+
     # Air-gapped mode — guarantees no customer data leaves the deployment boundary.
     # When True, startup validation enforces:
     #   1. EMBEDDING_PROVIDER must be "sentence-transformers" or "local"

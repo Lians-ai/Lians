@@ -68,9 +68,15 @@ def _mem(content: str, event_time: datetime = T0, meta: dict | None = None) -> d
 
 @pytest.mark.asyncio
 async def test_health(client):
-    resp = await client.get("/health")
+    from unittest.mock import AsyncMock, patch
+    with patch("src.agentmem.cache._get_redis") as mock_redis:
+        mock_redis.return_value.ping = AsyncMock(return_value=True)
+        resp = await client.get("/health")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["checks"]["db"] == "ok"
+    assert body["checks"]["redis"] == "ok"
 
 
 # ---------------------------------------------------------------------------
