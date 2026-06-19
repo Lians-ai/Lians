@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentMem Live Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 3rem; }
+    header h1 { font-size: 2.2rem; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+    header p  { margin-top: 0.5rem; color: #94a3b8; font-size: 1rem; }
+    header .badge {
+      display: inline-block; margin-top: 0.75rem;
+      background: #1e293b; border: 1px solid #334155;
+      border-radius: 9999px; padding: 0.2rem 0.75rem;
+      font-size: 0.75rem; color: #64748b;
+    }
+
+    /* Config bar */
+    .config {
+      background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+      padding: 1rem 1.25rem; margin-bottom: 2rem;
+      display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+    }
+    .config label { display: block; font-size: 0.72rem; color: #64748b; margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .config input {
+      background: #0f1117; border: 1px solid #334155; border-radius: 6px;
+      color: #e2e8f0; padding: 0.4rem 0.65rem; font-size: 0.85rem; width: 100%;
+    }
+    .config input:focus { outline: none; border-color: #6366f1; }
+    .config-field { flex: 1; min-width: 180px; }
+    .config-field.wide { flex: 2; min-width: 280px; }
+
+    /* Cards */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+
+    .card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+      padding: 1.4rem; display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    .card-title { font-weight: 600; font-size: 0.95rem; color: #f1f5f9; }
+    .card-desc  { font-size: 0.82rem; color: #64748b; line-height: 1.5; }
+
+    .tag {
+      display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem;
+      border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .tag-stale   { background: #7f1d1d; color: #fca5a5; }
+    .tag-time    { background: #1e3a5f; color: #93c5fd; }
+    .tag-audit   { background: #14532d; color: #86efac; }
+    .tag-macro   { background: #3b1f5e; color: #d8b4fe; }
+
+    .card-extra { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+    input.date-input {
+      background: #0f1117; border: 1px solid #334155; border-radius: 6px;
+      color: #e2e8f0; padding: 0.35rem 0.6rem; font-size: 0.82rem; flex: 1; min-width: 130px;
+    }
+    input.date-input:focus { outline: none; border-color: #6366f1; }
+
+    button {
+      background: #6366f1; color: #fff; border: none; border-radius: 7px;
+      padding: 0.45rem 1rem; font-size: 0.83rem; font-weight: 600;
+      cursor: pointer; transition: background 0.15s; white-space: nowrap;
+    }
+    button:hover  { background: #4f46e5; }
+    button:active { background: #4338ca; }
+    button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+
+    /* Result pane */
+    .result {
+      background: #0f1117; border: 1px solid #1e293b; border-radius: 8px;
+      padding: 0.75rem; font-size: 0.78rem; font-family: "Menlo", "Consolas", monospace;
+      color: #94a3b8; min-height: 3.5rem; max-height: 280px; overflow-y: auto;
+      white-space: pre-wrap; word-break: break-word; line-height: 1.55;
+      display: none;
+    }
+    .result.visible { display: block; }
+    .result.ok      { border-color: #166534; color: #86efac; }
+    .result.error   { border-color: #7f1d1d; color: #fca5a5; }
+
+    /* Memory item */
+    .mem {
+      border-left: 3px solid #334155; padding-left: 0.6rem; margin-bottom: 0.5rem;
+    }
+    .mem-content { color: #e2e8f0; font-size: 0.8rem; }
+    .mem-meta    { color: #64748b; font-size: 0.72rem; margin-top: 0.2rem; }
+    .mem-stale   { border-left-color: #ef4444; opacity: 0.45; }
+    .mem-current { border-left-color: #22c55e; }
+
+    /* Footer */
+    footer { text-align: center; margin-top: 3.5rem; color: #334155; font-size: 0.78rem; }
+    footer a { color: #6366f1; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    .section-title {
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #475569; margin: 1.5rem 0 0.75rem;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>AgentMem Live Demo</h1>
+    <p>Financial memory that suppresses stale facts, travels through time, and never loses its audit trail.</p>
+    <span class="badge">Bitemporal · AES-256-GCM · SEC 17a-4 hash chain</span>
+  </header>
+
+  <!-- Config -->
+  <div class="config">
+    <div class="config-field wide">
+      <label>API URL</label>
+      <input id="api-url" type="text" value="http://localhost:8000" placeholder="http://localhost:8000" />
+    </div>
+    <div class="config-field wide">
+      <label>Read-only API Key (from seed_demo.py)</label>
+      <input id="api-key" type="text" placeholder="agentmem_..." />
+    </div>
+  </div>
+
+  <!-- Row 1: Stale-fact suppression -->
+  <div class="section-title">Benchmark 1 — Stale-fact suppression</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-stale">pure cosine · mem0-style</span></div>
+      <div class="card-title">NVDA Guidance — No Supersession</div>
+      <div class="card-desc">
+        Retrieves the top-5 results with no validity filter. All 5 revisions
+        ($28B → $40B) are returned — the LLM context is contaminated with stale data.
+      </div>
+      <button onclick="queryRaw()">Query without supersession</button>
+      <div id="result-raw" class="result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-stale" style="background:#14532d;color:#86efac">AgentMem hybrid</span></div>
+      <div class="card-title">NVDA Guidance — With Supersession</div>
+      <div class="card-desc">
+        Present-time recall filters <code>valid_to IS NULL</code> before scoring.
+        Only the current revision ($40B) reaches the LLM. 0 stale facts in top-5.
+      </div>
+      <button onclick="queryPresent()">Query present-time (AgentMem)</button>
+      <div id="result-present" class="result"></div>
+    </div>
+
+  </div>
+
+  <!-- Row 2: Point-in-time -->
+  <div class="section-title">Benchmark 2 — Point-in-time recall</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-time">as_of query</span></div>
+      <div class="card-title">NVDA Guidance on a Past Date</div>
+      <div class="card-desc">
+        Query what the agent knew on any historical date. Try dates between
+        2024-11-20 and today to walk through each revision.
+      </div>
+      <div class="card-extra">
+        <input class="date-input" id="nvda-as-of" type="date" value="2025-03-01" />
+        <button onclick="queryAsOf()">Query as of date</button>
+      </div>
+      <div id="result-asof" class="result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-time">quarterly series</span></div>
+      <div class="card-title">TSLA Deliveries — Any Quarter</div>
+      <div class="card-desc">
+        4 quarters of delivery numbers. Pick a date to see which quarterly
+        figure was the current record at that point in time.
+      </div>
+      <div class="card-extra">
+        <input class="date-input" id="tsla-as-of" type="date" value="2025-05-01" />
+        <button onclick="queryTsla()">Query TSLA deliveries</button>
+      </div>
+      <div id="result-tsla" class="result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-macro">macro</span></div>
+      <div class="card-title">Fed Funds Rate — Any Date</div>
+      <div class="card-desc">
+        6 FOMC decisions spanning Sep 2024 → May 2025. Query what the target
+        rate was on any date in that window.
+      </div>
+      <div class="card-extra">
+        <input class="date-input" id="fed-as-of" type="date" value="2024-12-01" />
+        <button onclick="queryFed()">Query fed funds rate</button>
+      </div>
+      <div id="result-fed" class="result"></div>
+    </div>
+
+  </div>
+
+  <!-- Row 3: Compliance -->
+  <div class="section-title">Benchmark 3 — Compliance auditability</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-audit">SEC 17a-4</span></div>
+      <div class="card-title">Audit Chain Verification</div>
+      <div class="card-desc">
+        Verifies the SHA-256 hash chain across every event-log row. Any
+        tampered or deleted row breaks the chain and is reported.
+        Requires X-Admin-Secret (default: <code>demo-admin-secret</code>).
+      </div>
+      <div class="card-extra">
+        <input id="admin-secret" type="text" class="date-input" value="demo-admin-secret" placeholder="Admin secret" style="flex:2" />
+        <button onclick="verifyChain()">Verify chain</button>
+      </div>
+      <div id="result-audit" class="result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-audit">deep health</span></div>
+      <div class="card-title">Health Check (DB + Redis)</div>
+      <div class="card-desc">
+        Deep health check that probes Postgres and Redis connectivity. Returns
+        503 if either dependency is unhealthy — suitable for load-balancer probes.
+      </div>
+      <button onclick="checkHealth()">Check health</button>
+      <div id="result-health" class="result"></div>
+    </div>
+
+  </div>
+
+  <footer>
+    <p>
+      <a href="../BENCHMARK.md">Benchmark vs mem0 &amp; Zep</a> ·
+      <a href="https://github.com/ebeirne/AI_Memory_Software_lotus">GitHub</a> ·
+      AgentMem — financial-grade agent memory
+    </p>
+  </footer>
+
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  function apiUrl()    { return $("api-url").value.replace(/\/$/, ""); }
+  function apiKey()    { return $("api-key").value.trim(); }
+
+  function showResult(id, content, type = "") {
+    const el = $(id);
+    el.className = "result visible" + (type ? " " + type : "");
+    el.textContent = content;
+  }
+
+  function fmtMemory(m) {
+    const date = m.event_time ? m.event_time.slice(0, 10) : "?";
+    const stale = m.valid_to ? " [SUPERSEDED " + m.valid_to.slice(0, 10) + "]" : " [CURRENT]";
+    return `[${date}]${stale}\n${m.content}\n`;
+  }
+
+  async function recall(payload, resultId) {
+    const key = apiKey();
+    if (!key) { showResult(resultId, "Paste your read-only API key in the config above.", "error"); return; }
+    showResult(resultId, "Loading...");
+    try {
+      const r = await fetch(apiUrl() + "/v1/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": key },
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (!r.ok) { showResult(resultId, JSON.stringify(data, null, 2), "error"); return; }
+      if (!data.memories || data.memories.length === 0) {
+        showResult(resultId, "No memories returned.", "error"); return;
+      }
+      const lines = data.memories.map(fmtMemory).join("\n");
+      showResult(resultId, `${data.memories.length} result(s) — as_of: ${data.as_of || "present"}\n\n${lines}`, "ok");
+    } catch (e) {
+      showResult(resultId, "Request failed: " + e.message + "\n\nIs the API running at " + apiUrl() + "?", "error");
+    }
+  }
+
+  // ── Stale-fact demos ─────────────────────────────────────────────────────
+
+  // Simulates mem0-style retrieval: no as_of, but we display valid_to so user
+  // can see which results are stale. In a real mem0 query all would be returned.
+  async function queryRaw() {
+    // We query with a far-future as_of to see ALL memories regardless of valid_to.
+    // This mimics what pure-cosine systems return (no validity gate).
+    await recall({
+      agent_id: "market-analyst",
+      query: "NVDA FY2026 revenue guidance",
+      k: 10,
+      as_of: "2099-01-01T00:00:00Z",   // future date = see everything
+    }, "result-raw");
+    // Annotate stale items visually
+    const el = $("result-raw");
+    el.innerHTML = el.textContent
+      .replace(/\[SUPERSEDED[^\]]*\]/g, m => `<span style="color:#f87171">${m}</span>`)
+      .replace(/\[CURRENT\]/g, m => `<span style="color:#4ade80">${m}</span>`);
+  }
+
+  async function queryPresent() {
+    await recall({
+      agent_id: "market-analyst",
+      query: "NVDA FY2026 revenue guidance",
+      k: 5,
+    }, "result-present");
+  }
+
+  // ── Point-in-time demos ──────────────────────────────────────────────────
+
+  async function queryAsOf() {
+    const d = $("nvda-as-of").value;
+    await recall({
+      agent_id: "market-analyst",
+      query: "NVDA FY2026 revenue guidance",
+      k: 3,
+      as_of: d + "T12:00:00Z",
+    }, "result-asof");
+  }
+
+  async function queryTsla() {
+    const d = $("tsla-as-of").value;
+    await recall({
+      agent_id: "market-analyst",
+      query: "TSLA quarterly deliveries vehicles",
+      k: 3,
+      as_of: d + "T12:00:00Z",
+    }, "result-tsla");
+  }
+
+  async function queryFed() {
+    const d = $("fed-as-of").value;
+    await recall({
+      agent_id: "macro-analyst",
+      query: "federal funds rate FOMC target",
+      k: 3,
+      as_of: d + "T12:00:00Z",
+    }, "result-fed");
+  }
+
+  // ── Compliance demos ─────────────────────────────────────────────────────
+
+  async function verifyChain() {
+    const secret = $("admin-secret").value.trim();
+    showResult("result-audit", "Verifying...");
+    try {
+      const r = await fetch(apiUrl() + "/v1/admin/audit/verify?namespace=demo", {
+        headers: { "X-Admin-Secret": secret },
+      });
+      const data = await r.json();
+      const ok = data.status === "ok";
+      showResult("result-audit",
+        JSON.stringify(data, null, 2),
+        ok ? "ok" : "error",
+      );
+    } catch (e) {
+      showResult("result-audit", "Request failed: " + e.message, "error");
+    }
+  }
+
+  async function checkHealth() {
+    showResult("result-health", "Checking...");
+    try {
+      const r = await fetch(apiUrl() + "/health");
+      const data = await r.json();
+      showResult("result-health", JSON.stringify(data, null, 2), data.status === "ok" ? "ok" : "error");
+    } catch (e) {
+      showResult("result-health", "Request failed: " + e.message, "error");
+    }
+  }
+</script>
+</body>
+</html>

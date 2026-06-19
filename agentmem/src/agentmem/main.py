@@ -3,10 +3,12 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .config import get_settings
 from .db import get_db as _get_db
 from .api.routes_memory import router as memory_router
 from .api.routes_audit import router as audit_router
@@ -115,8 +117,19 @@ app = FastAPI(
 
 instrument_fastapi(app)
 
+# CORS — allows the demo/index.html page to call the API from a browser.
+# In production, set CORS_ORIGINS to a comma-separated list of trusted origins.
+_cors_origins = [o.strip() for o in (get_settings().cors_origins or "*").split(",")]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Middleware is applied in reverse registration order (last added = outermost).
-# Order: RequestID → AccessLog → RateLimit → routes
+# Order: CORS → RequestID → AccessLog → RateLimit → routes
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIDMiddleware)

@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     stripe_meter_write_event: str = "agentmem_memory_write"
     stripe_meter_recall_event: str = "agentmem_memory_recall"
 
+    # CORS — comma-separated list of allowed origins for browser clients.
+    # Use "*" for open-access demo instances.  In production, list explicit origins,
+    # e.g. "https://app.example.com,https://admin.example.com".
+    cors_origins: str = "*"
+
     # Air-gapped mode — guarantees no customer data leaves the deployment boundary.
     # When True, startup validation enforces:
     #   1. EMBEDDING_PROVIDER must be "sentence-transformers" or "local"
