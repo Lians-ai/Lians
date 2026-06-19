@@ -1,0 +1,63 @@
+app = "agentmem"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8000
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+
+  [[services.tcp_checks]]
+    grace_period = "10s"
+    interval = "30s"
+    restart_limit = 3
+    timeout = "5s"
+
+  [[services.http_checks]]
+    interval = "30s"
+    grace_period = "15s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+
+[env]
+  PYTHONPATH = "agentmem/src"
+  EMBEDDING_PROVIDER = "voyage"
+  SUPERSESSION_LLM_STAGE = "true"
+  RECALL_CACHE_ENABLED = "true"
+  RECALL_CACHE_TTL_SECONDS = "60"
+  SUPERSESSION_REVIEW_THRESHOLD = "0.75"
+  OTEL_SERVICE_NAME = "agentmem"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 1024

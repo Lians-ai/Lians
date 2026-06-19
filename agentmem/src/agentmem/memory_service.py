@@ -5,19 +5,21 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
 from sqlalchemy import select, and_, update, text, cast, Float
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup
+from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy
+from .telemetry import tracer
 from .schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult,
     SupersessionReviewItem, SupersessionReviewResult,
     SupersessionAction, SupersessionActionResult,
+    RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
 )
 from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, decrypt_content, unwrap_subject_key
@@ -143,115 +145,122 @@ async def add_memory(
     namespace: str,
     req: MemoryAdd,
 ) -> MemoryOut:
-    provider = get_embedding_provider()
-    embedding = await provider.embed_one(req.content)
+    with tracer.start_as_current_span("memory.add") as span:
+        span.set_attribute("namespace", namespace)
+        span.set_attribute("agent_id", req.agent_id)
+        span.set_attribute("has_subject", bool(req.subject_id))
 
-    # Resolve subject key if PII
-    subject_key: Optional[bytes] = None
-    if req.subject_id:
-        subject_key = await get_or_create_subject_key(db, req.subject_id, namespace)
+        provider = get_embedding_provider()
+        embedding = await provider.embed_one(req.content)
 
-    # Encrypt content outside the lock (pure CPU, no DB I/O)
-    stored_bytes = (
-        encrypt_content(req.content, subject_key) if subject_key else req.content.encode()
-    )
+        # Resolve subject key if PII
+        subject_key: Optional[bytes] = None
+        if req.subject_id:
+            subject_key = await get_or_create_subject_key(db, req.subject_id, namespace)
 
-    # ── Critical section ────────────────────────────────────────────────────
-    # Two-layer write serialisation for (namespace, agent_id):
-    #   Layer 1 — asyncio.Lock: in-process (single worker or test)
-    #   Layer 2 — pg_advisory_xact_lock: cross-process (multi-worker)
-    # Both are acquired before reading supersession candidates; Layer 2 is
-    # released automatically on db.commit() / rollback.
-    #
-    # barrier_group is looked up INSIDE the lock so that it reads within the
-    # same transaction as supersession candidates.  If it were fetched outside,
-    # on SQLite the autobegin transaction would snapshot the DB before any
-    # concurrent write commits, causing concurrent adds to miss each other's
-    # superseded memories (tested in test_concurrency.py).
-    in_process_lock = await _get_in_process_lock(namespace, req.agent_id)
-    async with in_process_lock:
-        await _acquire_pg_advisory_lock(db, namespace, req.agent_id)
-
-        # Tag memory with agent's barrier group so that other barrier groups
-        # cannot recall it.  Looked up here so the read is within the locked
-        # transaction (consistent with supersession candidate reads below).
-        barrier_group = await _get_barrier_group(db, namespace, req.agent_id)
-
-        supersession = await run_supersession(
-            db=db,
-            namespace=namespace,
-            agent_id=req.agent_id,
-            new_content=req.content,
-            new_meta=req.metadata,
-            new_embedding=embedding,
-            new_event_time=req.event_time,
-            subject_key=subject_key,
+        # Encrypt content outside the lock (pure CPU, no DB I/O)
+        stored_bytes = (
+            encrypt_content(req.content, subject_key) if subject_key else req.content.encode()
         )
 
-        now = datetime.now(timezone.utc)
-        mem = Memory(
-            namespace=namespace,
-            agent_id=req.agent_id,
-            content_encrypted=stored_bytes,
-            subject_id=req.subject_id,
-            embedding=embedding,
-            metadata_=req.metadata,
-            event_time=req.event_time,
-            ingestion_time=now,
-            valid_from=req.event_time,
-            valid_to=None,
-            importance=_compute_importance(req.event_time, req.importance),
-            source=req.source,
-            content_hash=_content_hash(req.content),
-            barrier_group=barrier_group,
-        )
-        db.add(mem)
-        await db.flush()  # get mem.id
+        # ── Critical section ────────────────────────────────────────────────────
+        # Two-layer write serialisation for (namespace, agent_id):
+        #   Layer 1 — asyncio.Lock: in-process (single worker or test)
+        #   Layer 2 — pg_advisory_xact_lock: cross-process (multi-worker)
+        # Both are acquired before reading supersession candidates; Layer 2 is
+        # released automatically on db.commit() / rollback.
+        #
+        # barrier_group is looked up INSIDE the lock so that it reads within the
+        # same transaction as supersession candidates.  If it were fetched outside,
+        # on SQLite the autobegin transaction would snapshot the DB before any
+        # concurrent write commits, causing concurrent adds to miss each other's
+        # superseded memories (tested in test_concurrency.py).
+        in_process_lock = await _get_in_process_lock(namespace, req.agent_id)
+        async with in_process_lock:
+            await _acquire_pg_advisory_lock(db, namespace, req.agent_id)
 
-        for old_id in supersession.superseded_ids:
-            old = await db.get(Memory, old_id)
-            if old:
-                old.valid_to = req.event_time
-                old.superseded_by = mem.id
-                old.supersession_confidence = supersession.confidence
-                db.add(EventLog(
-                    namespace=namespace,
-                    agent_id=req.agent_id,
-                    op="supersede",
-                    memory_id=old.id,
-                    content_hash=old.content_hash,
-                    payload={
-                        "superseded_by": str(mem.id),
-                        "confidence": supersession.confidence,
-                        "relation": supersession.relation,
-                        "rationale": supersession.rationale,
-                        "adjudication_stage": 3 if supersession.rationale else 2,
-                    },
-                ))
+            # Tag memory with agent's barrier group so that other barrier groups
+            # cannot recall it.  Looked up here so the read is within the locked
+            # transaction (consistent with supersession candidate reads below).
+            barrier_group = await _get_barrier_group(db, namespace, req.agent_id)
 
-        db.add(EventLog(
-            namespace=namespace,
-            agent_id=req.agent_id,
-            op="add",
-            memory_id=mem.id,
-            content_hash=mem.content_hash,
-            payload={
-                "source": req.source,
-                "event_time": req.event_time.isoformat(),
-                "metadata": req.metadata,
-                "supersession_relation": supersession.relation,
-                "supersession_confidence": supersession.confidence,
-            },
-        ))
+            supersession = await run_supersession(
+                db=db,
+                namespace=namespace,
+                agent_id=req.agent_id,
+                new_content=req.content,
+                new_meta=req.metadata,
+                new_embedding=embedding,
+                new_event_time=req.event_time,
+                subject_key=subject_key,
+            )
 
-        await db.commit()
-    # ── End critical section ────────────────────────────────────────────────
+            now = datetime.now(timezone.utc)
+            mem = Memory(
+                namespace=namespace,
+                agent_id=req.agent_id,
+                content_encrypted=stored_bytes,
+                subject_id=req.subject_id,
+                embedding=embedding,
+                metadata_=req.metadata,
+                event_time=req.event_time,
+                ingestion_time=now,
+                valid_from=req.event_time,
+                valid_to=None,
+                importance=_compute_importance(req.event_time, req.importance),
+                source=req.source,
+                content_hash=_content_hash(req.content),
+                barrier_group=barrier_group,
+            )
+            db.add(mem)
+            await db.flush()  # get mem.id
 
-    await db.refresh(mem)
-    # Invalidate all cached recall results for this agent so the next recall
-    # sees the new memory immediately rather than a stale hot-cache response.
-    await invalidate_agent(namespace, req.agent_id)
-    return _memory_to_out(mem, req.content)
+            for old_id in supersession.superseded_ids:
+                old = await db.get(Memory, old_id)
+                if old:
+                    old.valid_to = req.event_time
+                    old.superseded_by = mem.id
+                    old.supersession_confidence = supersession.confidence
+                    db.add(EventLog(
+                        namespace=namespace,
+                        agent_id=req.agent_id,
+                        op="supersede",
+                        memory_id=old.id,
+                        content_hash=old.content_hash,
+                        payload={
+                            "superseded_by": str(mem.id),
+                            "confidence": supersession.confidence,
+                            "relation": supersession.relation,
+                            "rationale": supersession.rationale,
+                            "adjudication_stage": 3 if supersession.rationale else 2,
+                        },
+                    ))
+
+            db.add(EventLog(
+                namespace=namespace,
+                agent_id=req.agent_id,
+                op="add",
+                memory_id=mem.id,
+                content_hash=mem.content_hash,
+                payload={
+                    "source": req.source,
+                    "event_time": req.event_time.isoformat(),
+                    "metadata": req.metadata,
+                    "supersession_relation": supersession.relation,
+                    "supersession_confidence": supersession.confidence,
+                },
+            ))
+
+            await db.commit()
+        # ── End critical section ────────────────────────────────────────────────
+
+        await db.refresh(mem)
+        # Invalidate all cached recall results for this agent so the next recall
+        # sees the new memory immediately rather than a stale hot-cache response.
+        await invalidate_agent(namespace, req.agent_id)
+        span.set_attribute("memory_id", str(mem.id))
+        span.set_attribute("supersession_relation", supersession.relation)
+        return _memory_to_out(mem, req.content)
 
 
 async def recall_memories(
@@ -259,71 +268,78 @@ async def recall_memories(
     namespace: str,
     req: RecallRequest,
 ) -> RecallResult:
-    settings = get_settings()
+    with tracer.start_as_current_span("memory.recall") as span:
+        span.set_attribute("namespace", namespace)
+        span.set_attribute("agent_id", req.agent_id)
+        span.set_attribute("k", req.k)
+        span.set_attribute("has_as_of", bool(req.as_of))
 
-    # ── Hot cache (Redis) ───────────────────────────────────────────────────
-    # Cache read: check before any DB work. Skip for audit-time recall (as_of)
-    # since those are deterministic and can be cached; present-time recall
-    # changes after every write and is invalidated on add_memory.
-    if settings.recall_cache_enabled:
-        cached = await get_cached_recall(
-            namespace, req.agent_id, req.query, req.as_of, req.k, req.filters
-        )
-        if cached is not None:
-            return RecallResult.model_validate_json(cached)
+        settings = get_settings()
 
-    provider = get_embedding_provider()
-    query_embedding = await provider.embed_one(req.query)
-    subject_keys = await _load_namespace_subject_keys(db, namespace)
-    barrier_group = await _get_barrier_group(db, namespace, req.agent_id)
+        # ── Hot cache (Redis) ───────────────────────────────────────────────────
+        if settings.recall_cache_enabled:
+            cached = await get_cached_recall(
+                namespace, req.agent_id, req.query, req.as_of, req.k, req.filters
+            )
+            if cached is not None:
+                span.set_attribute("cache_hit", True)
+                return RecallResult.model_validate_json(cached)
 
-    results = await hybrid_recall(
-        db=db,
-        namespace=namespace,
-        agent_id=req.agent_id,
-        query=req.query,
-        query_embedding=query_embedding,
-        k=req.k,
-        as_of=req.as_of,
-        filters=req.filters,
-        subject_keys=subject_keys,
-        barrier_group=barrier_group,
-    )
+        span.set_attribute("cache_hit", False)
+        provider = get_embedding_provider()
+        query_embedding = await provider.embed_one(req.query)
+        subject_keys = await _load_namespace_subject_keys(db, namespace)
+        barrier_group = await _get_barrier_group(db, namespace, req.agent_id)
 
-    # Audit log the recall
-    db.add(EventLog(
-        namespace=namespace,
-        agent_id=req.agent_id,
-        op="recall",
-        memory_id=None,
-        content_hash=None,
-        payload={
-            "query_hash": _content_hash(req.query),
-            "k": req.k,
-            "as_of": req.as_of.isoformat() if req.as_of else None,
-            "filters": req.filters,
-            "result_ids": [str(m.id) for m, _, _ in results],
-            "scores": [round(float(s), 4) for _, s, _ in results],
-        },
-    ))
-    await db.commit()
-
-    memories_out = [_memory_to_out(mem, content) for mem, _, content in results]
-    result = RecallResult(
-        memories=memories_out,
-        as_of=req.as_of,
-        total_candidates=len(results),
-    )
-
-    # ── Hot cache (Redis) write ─────────────────────────────────────────────
-    if settings.recall_cache_enabled:
-        await set_cached_recall(
-            namespace, req.agent_id, req.query, req.as_of, req.k, req.filters,
-            result.model_dump_json(),
-            settings.recall_cache_ttl_seconds,
+        results = await hybrid_recall(
+            db=db,
+            namespace=namespace,
+            agent_id=req.agent_id,
+            query=req.query,
+            query_embedding=query_embedding,
+            k=req.k,
+            as_of=req.as_of,
+            filters=req.filters,
+            subject_keys=subject_keys,
+            barrier_group=barrier_group,
         )
 
-    return result
+        span.set_attribute("result_count", len(results))
+
+        # Audit log the recall
+        db.add(EventLog(
+            namespace=namespace,
+            agent_id=req.agent_id,
+            op="recall",
+            memory_id=None,
+            content_hash=None,
+            payload={
+                "query_hash": _content_hash(req.query),
+                "k": req.k,
+                "as_of": req.as_of.isoformat() if req.as_of else None,
+                "filters": req.filters,
+                "result_ids": [str(m.id) for m, _, _ in results],
+                "scores": [round(float(s), 4) for _, s, _ in results],
+            },
+        ))
+        await db.commit()
+
+        memories_out = [_memory_to_out(mem, content) for mem, _, content in results]
+        result = RecallResult(
+            memories=memories_out,
+            as_of=req.as_of,
+            total_candidates=len(results),
+        )
+
+        # ── Hot cache (Redis) write ─────────────────────────────────────────────
+        if settings.recall_cache_enabled:
+            await set_cached_recall(
+                namespace, req.agent_id, req.query, req.as_of, req.k, req.filters,
+                result.model_dump_json(),
+                settings.recall_cache_ttl_seconds,
+            )
+
+        return result
 
 
 async def batch_add_memories(
@@ -453,6 +469,99 @@ async def apply_supersession_action(
         memory_id=memory_id,
         action=action.action,
         applied_at=now,
+    )
+
+
+async def get_retention_policy(
+    db: AsyncSession,
+    namespace: str,
+) -> RetentionPolicyOut:
+    """Return the namespace's retention policy, creating a default one if absent."""
+    pol = await db.get(NamespacePolicy, namespace)
+    if pol is None:
+        pol = NamespacePolicy(namespace=namespace)
+        db.add(pol)
+        await db.commit()
+        await db.refresh(pol)
+    return RetentionPolicyOut.model_validate(pol)
+
+
+async def set_retention_policy(
+    db: AsyncSession,
+    namespace: str,
+    data: RetentionPolicyIn,
+) -> RetentionPolicyOut:
+    """Upsert the retention policy for a namespace."""
+    pol = await db.get(NamespacePolicy, namespace)
+    if pol is None:
+        pol = NamespacePolicy(namespace=namespace)
+        db.add(pol)
+    pol.content_ttl_days = data.content_ttl_days
+    pol.audit_retention_days = data.audit_retention_days
+    pol.legal_hold = data.legal_hold
+    pol.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(pol)
+    return RetentionPolicyOut.model_validate(pol)
+
+
+async def prune_expired_content(
+    db: AsyncSession,
+    namespace: str,
+) -> RetentionPruneResult:
+    """
+    Null out content_encrypted on memories whose ingestion_time exceeds content_ttl_days.
+
+    Never runs when legal_hold is True or when content_ttl_days is NULL.
+    The content_hash is preserved so the audit trail remains intact after pruning
+    (SEC 17a-4 requires that audit records outlive the underlying content).
+    """
+    pol = await db.get(NamespacePolicy, namespace)
+    if pol is None or pol.content_ttl_days is None:
+        cutoff = datetime.min.replace(tzinfo=timezone.utc)
+        return RetentionPruneResult(namespace=namespace, memories_pruned=0, cutoff_date=cutoff)
+
+    if pol.legal_hold:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=409,
+            detail=f"Namespace '{namespace}' is under legal hold — pruning is blocked.",
+        )
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=pol.content_ttl_days)
+
+    stmt = select(Memory).where(
+        and_(
+            Memory.namespace == namespace,
+            Memory.ingestion_time < cutoff,
+            Memory.content_encrypted.is_not(None),
+            Memory.erased_at.is_(None),
+        )
+    )
+    result = await db.execute(stmt)
+    memories = result.scalars().all()
+
+    for mem in memories:
+        mem.content_encrypted = None
+        mem.erased_at = now
+        db.add(EventLog(
+            namespace=namespace,
+            agent_id=mem.agent_id,
+            op="retention_prune",
+            memory_id=mem.id,
+            content_hash=mem.content_hash,
+            payload={
+                "cutoff_date": cutoff.isoformat(),
+                "content_ttl_days": pol.content_ttl_days,
+            },
+        ))
+
+    await db.commit()
+    return RetentionPruneResult(
+        namespace=namespace,
+        memories_pruned=len(memories),
+        cutoff_date=cutoff,
     )
 
 

@@ -153,3 +153,25 @@ class SupersessionReviewResult(BaseModel):
     items: list[SupersessionReviewItem]
     total: int
     confidence_threshold: float
+
+
+class RetentionPolicyIn(BaseModel):
+    content_ttl_days: Optional[int] = None   # None = retain forever
+    audit_retention_days: int = 1825          # 5 years default (CFTC swap dealer minimum)
+    legal_hold: bool = False
+
+
+class RetentionPolicyOut(BaseModel):
+    namespace: str
+    content_ttl_days: Optional[int]
+    audit_retention_days: int
+    legal_hold: bool
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RetentionPruneResult(BaseModel):
+    namespace: str
+    memories_pruned: int
+    cutoff_date: datetime

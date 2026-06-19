@@ -20,7 +20,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "@langchain/core": ">=0.2.0",
@@ -33,7 +35,8 @@
   "devDependencies": {
     "typescript": "^5.4.0",
     "@langchain/core": "^0.3.0",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "vitest": "^1.6.0"
   },
   "keywords": [
     "agentmem",

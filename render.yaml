@@ -1,0 +1,69 @@
+services:
+  - type: web
+    name: agentmem-api
+    runtime: python
+    plan: standard
+    region: oregon
+    branch: master
+    buildCommand: pip install -e ".[otel]"
+    startCommand: uvicorn agentmem.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentmem-pg
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: agentmem-redis
+          type: redis
+          property: connectionString
+      - key: EMBEDDING_PROVIDER
+        value: voyage
+      - key: VOYAGE_API_KEY
+        sync: false          # set in Render dashboard
+      - key: MASTER_ENCRYPTION_KEY
+        generateValue: true  # 32-byte random — generated once, pinned forever
+      - key: ADMIN_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPERSESSION_LLM_STAGE
+        value: "true"
+      - key: RECALL_CACHE_ENABLED
+        value: "true"
+      - key: RECALL_CACHE_TTL_SECONDS
+        value: "60"
+      - key: SUPERSESSION_REVIEW_THRESHOLD
+        value: "0.75"
+      - key: OTEL_SERVICE_NAME
+        value: agentmem
+      - key: PYTHONPATH
+        value: agentmem/src
+
+  - type: worker
+    name: agentmem-migrate
+    runtime: python
+    plan: starter
+    branch: master
+    buildCommand: pip install -e .
+    startCommand: alembic -c agentmem/alembic.ini upgrade head
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agentmem-pg
+          property: connectionString
+      - key: PYTHONPATH
+        value: agentmem/src
+
+databases:
+  - name: agentmem-pg
+    plan: standard
+    databaseName: agentmem
+    user: agentmem
+
+# Redis
+  - type: redis
+    name: agentmem-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru

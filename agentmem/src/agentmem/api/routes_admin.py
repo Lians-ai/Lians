@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..db import get_db
 from ..models import ApiKey, AgentBarrierGroup
-from ..schemas import ApiKeyCreate, ApiKeyCreated, ApiKeyOut, BarrierGroupAssign, BarrierGroupOut
+from ..schemas import (
+    ApiKeyCreate, ApiKeyCreated, ApiKeyOut,
+    BarrierGroupAssign, BarrierGroupOut,
+    RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
+)
+from ..memory_service import get_retention_policy, set_retention_policy, prune_expired_content
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -245,3 +250,72 @@ async def remove_barrier_group(
     await db.delete(row)
     await db.commit()
     return Response(status_code=204)
+
+
+# ── Retention & Compliance Policy ───────────────────────────────────────────
+
+@router.get(
+    "/retention/{namespace}",
+    response_model=RetentionPolicyOut,
+    summary="Get the retention policy for a namespace",
+)
+async def get_retention(
+    namespace: str,
+    _: None = Depends(_require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> RetentionPolicyOut:
+    """
+    Return the content TTL and audit retention settings for a namespace.
+
+    Default policy (auto-created on first fetch):
+      - content_ttl_days: None (retain forever)
+      - audit_retention_days: 1825 (5 years — CFTC swap dealer minimum)
+      - legal_hold: False
+    """
+    return await get_retention_policy(db, namespace)
+
+
+@router.put(
+    "/retention/{namespace}",
+    response_model=RetentionPolicyOut,
+    summary="Set or update the retention policy for a namespace",
+)
+async def set_retention(
+    namespace: str,
+    body: RetentionPolicyIn,
+    _: None = Depends(_require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> RetentionPolicyOut:
+    """
+    Upsert the retention policy.
+
+    Setting `legal_hold: true` blocks any automated pruning on this namespace
+    until the hold is explicitly lifted (litigation hold pattern).
+
+    Setting `content_ttl_days` to a value means memories older than N days will
+    have their content erased by the next prune run.  The content_hash audit
+    record is preserved (SEC 17a-4 / CFTC compliance).
+    """
+    return await set_retention_policy(db, namespace, body)
+
+
+@router.post(
+    "/retention/{namespace}/prune",
+    response_model=RetentionPruneResult,
+    summary="Immediately prune expired memory content for a namespace",
+)
+async def run_prune(
+    namespace: str,
+    _: None = Depends(_require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> RetentionPruneResult:
+    """
+    Erase the encrypted content of memories whose age exceeds content_ttl_days.
+
+    Returns 409 if the namespace is under legal hold.
+    Returns 0 memories_pruned if content_ttl_days is not set.
+
+    Each pruned memory writes a `retention_prune` event to the immutable audit
+    log so regulators can confirm the content was destroyed per policy.
+    """
+    return await prune_expired_content(db, namespace)

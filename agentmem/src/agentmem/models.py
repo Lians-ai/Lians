@@ -171,3 +171,21 @@ class ApiKey(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     rotated_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class NamespacePolicy(Base):
+    """
+    Per-namespace retention and compliance policy.
+
+    content_ttl_days  — days after ingestion_time before memory content is pruned.
+                        NULL means retain forever.
+    audit_retention_days — minimum days to keep event_log rows (SEC 17a-4 / CFTC default 5yr).
+    legal_hold        — when True, prune is blocked regardless of ttl settings.
+    """
+    __tablename__ = "namespace_policies"
+
+    namespace = Column(String, primary_key=True)
+    content_ttl_days = Column(sa_types.Integer, nullable=True)
+    audit_retention_days = Column(sa_types.Integer, nullable=False, default=1825)
+    legal_hold = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
