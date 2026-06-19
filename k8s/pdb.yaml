@@ -1,0 +1,17 @@
+# PodDisruptionBudget — guarantees at least 1 pod stays up during voluntary
+# disruptions (node drain, cluster upgrade, AZ failure).
+# Required for financial-grade uptime: prevents the Kubernetes scheduler from
+# evicting all pods simultaneously during a rolling node replacement.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agentmem
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentmem
+      app.kubernetes.io/component: api

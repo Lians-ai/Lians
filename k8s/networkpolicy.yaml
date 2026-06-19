@@ -1,0 +1,87 @@
+# NetworkPolicy — defence-in-depth for financial deployments.
+# Restricts what can reach the API pods and where the pods can connect to.
+#
+# Ingress: only traffic from the ingress-nginx controller namespace is allowed.
+# Egress:  only Postgres (5432), Redis (6379), and external HTTPS (443) are
+#          allowed.  The HTTPS egress covers Voyage AI, Anthropic, Stripe, and
+#          any KMS endpoint.  DNS (53/UDP+TCP) is always permitted.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentmem-api
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentmem
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow traffic from the NGINX ingress controller pods only.
+    # Adjust the namespace label if your ingress controller lives elsewhere.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8000
+          protocol: TCP
+
+  egress:
+    # DNS — required for service discovery
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+    # Postgres
+    - ports:
+        - port: 5432
+          protocol: TCP
+
+    # Redis
+    - ports:
+        - port: 6379
+          protocol: TCP
+
+    # External HTTPS — Voyage AI, Anthropic, Stripe, AWS KMS, Azure KV, Vault
+    - ports:
+        - port: 443
+          protocol: TCP
+
+    # HashiCorp Vault (in-cluster) — only needed when KMS_PROVIDER=vault
+    - ports:
+        - port: 8200
+          protocol: TCP
+---
+# Allow the migration job to reach Postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentmem-migrate
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentmem
+      app.kubernetes.io/component: migrate
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - ports:
+        - port: 5432
+          protocol: TCP

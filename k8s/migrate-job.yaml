@@ -1,0 +1,89 @@
+# Database migration Job — run BEFORE applying deployment.yaml on a new install
+# or before upgrading to a new image version.
+#
+# Usage:
+#   # Update IMAGE below to match the target release tag, then:
+#   kubectl apply -f k8s/migrate-job.yaml
+#   kubectl wait --for=condition=complete job/agentmem-migrate -n agentmem --timeout=120s
+#   # If the job fails:
+#   kubectl logs -n agentmem -l job-name=agentmem-migrate
+#
+# The job is idempotent — alembic upgrade head is safe to run multiple times.
+# Delete the job after confirming success:
+#   kubectl delete job agentmem-migrate -n agentmem
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agentmem-migrate
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+    app.kubernetes.io/component: migrate
+  annotations:
+    # Annotate with the target migration version for audit purposes
+    agentmem.io/alembic-target: "head"
+spec:
+  # Keep the completed/failed pod for 10 minutes so logs are inspectable
+  ttlSecondsAfterFinished: 600
+  # Retry up to 3 times before marking the job failed
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentmem
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          # CHANGE: match the image tag you are deploying
+          image: agentmem:latest
+          imagePullPolicy: IfNotPresent
+          # alembic.ini lives in /app/agentmem/; alembic is on PATH from pip install
+          command:
+            - alembic
+            - -c
+            - agentmem/alembic.ini
+            - upgrade
+            - head
+          workingDir: /app
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-secret
+                  key: DATABASE_URL
+            - name: MASTER_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-secret
+                  key: MASTER_ENCRYPTION_KEY
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: app-cache
+              mountPath: /app/agentmem/__pycache__
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: app-cache
+          emptyDir: {}

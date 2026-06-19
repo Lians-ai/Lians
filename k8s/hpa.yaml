@@ -1,0 +1,42 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agentmem
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agentmem
+  minReplicas: 2   # never drop below 2 — ensures HA even at idle
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60   # scale out at 60% CPU — leaves headroom for burst
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      # Slow scale-down: wait 5 minutes before reducing replicas.
+      # Prevents thrashing when traffic is spiky (common for financial APIs).
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60   # remove at most 1 pod per minute
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30   # add up to 2 pods every 30 s during a spike

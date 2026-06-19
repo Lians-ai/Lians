@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+    # Required for NetworkPolicy ingress from ingress-nginx
+    kubernetes.io/metadata.name: agentmem

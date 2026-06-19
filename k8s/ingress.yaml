@@ -1,0 +1,53 @@
+# Requires: ingress-nginx controller + cert-manager with a ClusterIssuer named
+# "letsencrypt-prod".  Adjust annotations for other ingress controllers
+# (e.g. AWS ALB, GKE Gateway, Traefik).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentmem
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+  annotations:
+    # TLS certificate — issued and renewed automatically by cert-manager.
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # NGINX: enforce HTTPS and add security headers appropriate for financial APIs.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Ingress-level rate limiting (backs up the app-level 300 rpm limit).
+    # 50 r/s burst per IP; sustained 30 r/s.
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+
+    # Maximum request body size (memories can include long text).
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+    # Timeouts — embedding calls can take 2-3 s; set headroom.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "Referrer-Policy: no-referrer";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.agentmem.example.com   # CHANGE: your domain
+      secretName: agentmem-tls
+  rules:
+    - host: api.agentmem.example.com   # CHANGE: your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: agentmem
+                port:
+                  name: http

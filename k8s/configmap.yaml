@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentmem-config
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+data:
+  # Embedding provider — set to "voyage" for production (requires VOYAGE_API_KEY in secret)
+  # Options: voyage | openai | sentence-transformers | local
+  EMBEDDING_PROVIDER: "voyage"
+
+  # KMS provider — set to "aws", "azure", or "vault" for production.
+  # "env" reads MASTER_ENCRYPTION_KEY from the secret (acceptable only for dev/staging).
+  KMS_PROVIDER: "env"
+
+  # Logging
+  LOG_LEVEL: "INFO"
+  LOG_JSON: "true"
+
+  # Recall hot cache
+  RECALL_CACHE_ENABLED: "true"
+  RECALL_CACHE_TTL_SECONDS: "60"
+
+  # Supersession
+  SUPERSESSION_REVIEW_THRESHOLD: "0.75"
+  SUPERSESSION_LLM_STAGE: "false"   # set "true" to enable LLM adjudication (requires ANTHROPIC_API_KEY)
+
+  # Rate limiting (requests per minute per API key)
+  RATE_LIMIT_PER_MINUTE: "300"
+
+  # Retention scheduler — set to "0" to disable
+  RETENTION_PRUNE_INTERVAL_HOURS: "24"
+
+  # Air-gapped mode — set "true" for deployments where data must not leave the network
+  AIRGAP_MODE: "false"
+
+  # OpenTelemetry
+  OTEL_SERVICE_NAME: "agentmem"
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""   # e.g. http://otel-collector:4317

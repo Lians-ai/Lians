@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentmem
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+    app.kubernetes.io/component: api
+  annotations:
+    # Trigger a rollout whenever the ConfigMap or Secret changes:
+    #   kubectl rollout restart deployment/agentmem -n agentmem
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentmem
+      app.kubernetes.io/component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0   # zero-downtime: never reduce capacity during rollout
+      maxSurge: 1         # spin one extra pod up before taking old ones down
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agentmem
+        app.kubernetes.io/component: api
+      annotations:
+        # Force pod recreation when secrets/configmaps change (checksum rollout pattern).
+        # Populate with: kubectl get secret agentmem-secret -o json | jq -r '.data | to_entries | map("\(.key)=\(.value)") | join(",")' | sha256sum
+        checksum/secret: "UPDATE_WITH_SECRET_CHECKSUM"
+        checksum/config: "UPDATE_WITH_CONFIGMAP_CHECKSUM"
+    spec:
+      # ── Security ──────────────────────────────────────────────────────────────
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # ── Zone spread — no two pods on the same AZ ──────────────────────────────
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentmem
+              app.kubernetes.io/component: api
+
+      # ── Init: wait for Postgres to be ready ───────────────────────────────────
+      # Prevents CrashLoopBackOff when the DB pod is still starting.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "${PG_HOST}" -p 5432; do
+                echo "Waiting for Postgres…"
+                sleep 2
+              done
+          env:
+            - name: PG_HOST
+              # Extract just the hostname from DATABASE_URL.
+              # This is a best-effort check — failures here do not block startup.
+              value: "postgres.agentmem.svc.cluster.local"
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+      containers:
+        - name: agentmem
+          # Replace with your registry/image:tag — e.g. ghcr.io/your-org/agentmem:v0.2.0
+          image: agentmem:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # ── Environment ─────────────────────────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: agentmem-config
+            - secretRef:
+                name: agentmem-secret
+
+          # ── Health probes ────────────────────────────────────────────────────
+          # /health checks DB + Redis connectivity, not just process liveness.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 5
+
+          # ── Resources ────────────────────────────────────────────────────────
+          # Tune for your workload.  Embedding calls are CPU-heavy; set requests
+          # conservatively and limits higher to handle burst without eviction.
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+
+          # ── Pod security ─────────────────────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          # ── Volumes ──────────────────────────────────────────────────────────
+          volumeMounts:
+            # /tmp is writable for uvicorn's access log buffer and any OS temp writes
+            - name: tmp
+              mountPath: /tmp
+            # /app/agentmem is the CWD; alembic writes a __pycache__ dir there
+            - name: app-cache
+              mountPath: /app/agentmem/__pycache__
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: app-cache
+          emptyDir: {}
+
+      # ── Graceful shutdown ────────────────────────────────────────────────────
+      # Give in-flight requests up to 30 s to complete before the pod is killed.
+      terminationGracePeriodSeconds: 30
