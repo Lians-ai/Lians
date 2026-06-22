@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from lian import LocalLianClient
 from lian.langchain_integration import (
     LianChatHistory,
-    AgentMemTools,
+    LianTools,
     build_tools,
 )
 
@@ -97,10 +97,10 @@ class TestLianChatHistory:
 
 
 # ===========================================================================
-# AgentMemTools / build_tools
+# LianTools / build_tools
 # ===========================================================================
 
-class TestAgentMemTools:
+class TestLianTools:
 
     def test_build_tools_returns_three_tools(self):
         with LocalLianClient() as client:
@@ -110,7 +110,7 @@ class TestAgentMemTools:
 
     def test_agentmemtools_as_tools(self):
         with LocalLianClient() as client:
-            provider = AgentMemTools(client=client, agent_id="a")
+            provider = LianTools(client=client, agent_id="a")
             tools = provider.as_tools()
         assert len(tools) == 3
 
