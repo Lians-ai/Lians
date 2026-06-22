@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentmem-backtest-check"
+version = "0.1.0"
+description = "Standalone lookahead-bias detector for AI agent memory — no database required"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []   # stdlib only
+
+keywords = ["backtest", "lookahead-bias", "ai-agents", "finance", "quantitative"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/ebeirne/AI_Memory_Software_lotus"
+"Bug Tracker" = "https://github.com/ebeirne/AI_Memory_Software_lotus/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentmem_backtest_check"]

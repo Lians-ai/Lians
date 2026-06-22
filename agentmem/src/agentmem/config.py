@@ -94,6 +94,54 @@ class Settings(BaseSettings):
     # Set to True for any regulated deployment where data must not leave the network.
     airgap_mode: bool = False
 
+    # ── Performance roadmap (Changes 3 / 7 / 8) ───────────────────────────────
+
+    # Change 3: async LLM adjudication worker.  When True, Stage-3 LLM verdicts
+    # are computed off the write path and applied retroactively.  Requires
+    # supersession_llm_stage=True; no-op otherwise.
+    llm_adjudication_async: bool = True
+
+    # Change 7: in-process session cache TTL and size limit.
+    session_cache_ttl_seconds: int = 300
+    session_cache_max_entries: int = 512
+
+    # Change 8: Merkle-batch audit chain.  When True, audit events are batched
+    # into Merkle windows before the serial chain anchor is written, reducing
+    # write serialization to one DB row per window.  Set to False to use the
+    # classic per-event serial chain (suitable for very low write rates).
+    merkle_batch_enabled: bool = False  # opt-in — won't break existing chain
+    merkle_batch_size: int = 64         # events per Merkle window
+
+    # Change 9: Postgres RLS barrier enforcement.
+    # When True, the DB session variable ``agentmem.barrier_group`` is set
+    # before each query so the RLS policy enforces the barrier at the DB layer.
+    # Enabled by default after migration 0011_rls_barriers applies the policy.
+    # Set False only on non-Postgres backends (SQLite tests) or before running
+    # the migration on an existing cluster.
+    rls_barriers_enabled: bool = True
+
+    # ── Observability ──────────────────────────────────────────────────────────
+
+    # Expose GET /metrics in Prometheus text format.
+    # Requires prometheus-client>=0.19 (pip install agentmem[metrics]).
+    # Disable to suppress the endpoint entirely (returns 404).
+    metrics_enabled: bool = True
+
+    # ── Domain adapter ─────────────────────────────────────────────────────────
+
+    # Active domain adapter.  Controls entity normalization and which metadata
+    # keys participate in the keyed supersession fast path.
+    #
+    # "finance"     — financial entities: ticker/ISIN/CUSIP normalization,
+    #                 structured keys: ticker, metric, entity, isin, cusip,
+    #                 instrument, field.  Default for financial deployments.
+    # "passthrough" — no normalization, no structured keys; pure semantic
+    #                 supersession only.  Starting point for new verticals.
+    #
+    # Custom adapters can be registered via adapters.register_adapter() before
+    # startup and referenced by name here.
+    domain_adapter: str = "finance"
+
 
 @lru_cache
 def get_settings() -> Settings:

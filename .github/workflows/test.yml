@@ -70,7 +70,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
 
-      - name: Run pytest (all 181 tests)
+      - name: Run pytest
         run: python -m pytest agentmem/tests/ -v --tb=short
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
@@ -99,6 +99,6 @@ jobs:
         run: npm install
         working-directory: agentmem/sdk/typescript
 
-      - name: Run vitest
+      - name: Run Jest tests
         run: npm test
         working-directory: agentmem/sdk/typescript

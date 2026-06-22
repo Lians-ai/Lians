@@ -123,11 +123,26 @@ def _validate_key(key: bytes) -> None:
 def _env_key(settings) -> bytes:
     raw = settings.master_encryption_key
     if not raw:
-        logger.warning(
-            "MASTER_ENCRYPTION_KEY is not set — using zero key. "
-            "This is only safe for local development; set a real key in production."
+        # Allow an explicit opt-out for unit tests and local dev (never set in prod).
+        import os
+        if os.getenv("AGENTMEM_ALLOW_UNENCRYPTED", "").lower() in ("1", "true", "yes"):
+            logger.warning(
+                "MASTER_ENCRYPTION_KEY is not set and AGENTMEM_ALLOW_UNENCRYPTED=true. "
+                "All content will be stored with a zero encryption key. "
+                "NEVER use this setting with real data."
+            )
+            return b"\x00" * 32
+        raise RuntimeError(
+            "MASTER_ENCRYPTION_KEY is not set. "
+            "AgentMem cannot start without an encryption key because storing financial "
+            "data with a predictable key violates the GDPR crypto-shred guarantee.\n\n"
+            "Generate a key:\n"
+            "  python -c \"import secrets,base64; "
+            "print(base64.b64encode(secrets.token_bytes(32)).decode())\"\n\n"
+            "Then set it as MASTER_ENCRYPTION_KEY in your .env or secrets manager.\n\n"
+            "For local development or unit tests only, set "
+            "AGENTMEM_ALLOW_UNENCRYPTED=true to bypass this check."
         )
-        return b"\x00" * 32
     return base64.b64decode(raw)
 
 

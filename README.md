@@ -13,7 +13,7 @@ AgentMem solves this with a **bitemporal model**: every fact carries both *when 
 | What | AgentMem | mem0 | Zep |
 |------|----------|------|-----|
 | Stale facts in top-5 (5-revision NVDA chain) | **0 / 4** | 4 / 4 | 4 / 4 |
-| Supersession accuracy (30-pair labeled set)   | **100%** | N/A | ~partial |
+| Supersession accuracy (22-pair: synthetic + real-world) | **100%** | N/A | ~partial |
 | Point-in-time recall (4 quarterly queries)    | **4 / 4** | 0 / 4 | 0 / 4 |
 | SEC 17a-4 audit hash chain                    | ✓ | ✗ | ✗ |
 | GDPR crypto-shred with audit survival         | ✓ | ✗ | ✗ |
@@ -225,13 +225,13 @@ python -m pytest -v
 python -m pytest tests/test_supersession_benchmark.py tests/test_recall_quality.py -v
 ```
 
-291 tests pass. 8 skipped (require `TEST_DATABASE_URL` pointing to a live Postgres + pgvector instance).
+557 tests pass. 30 skipped (require `TEST_DATABASE_URL` pointing to a live Postgres + pgvector instance).
 
 ---
 
 ## Integrations
 
-- **MCP server** — `src/agentmem/mcp_server.py` (stdio transport, 4 tools: add/recall/erase/audit)
+- **MCP server** — `src/agentmem/mcp_server.py` (stdio transport, 8 tools: remember, recall, recall_at, reconstruct, list_conflicts, memory_lineage, fact_history, backtest_check)
 - **LangChain.js** — `sdk/typescript/src/langchain.ts` (`buildAgentMemTools`, `AgentMemChatHistory`)
 - **TypeScript SDK** — `sdk/typescript/` (native fetch, no runtime dependencies, Node 18+)
 - **OpenTelemetry** — `memory.add` and `memory.recall` spans; plug into Datadog / Grafana Tempo / Honeycomb

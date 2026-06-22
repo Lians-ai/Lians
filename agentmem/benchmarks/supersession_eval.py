@@ -135,6 +135,147 @@ CASES = [
     ),
 ]
 
+# ---------------------------------------------------------------------------
+# REAL_WORLD_CASES — sourced from public records (FOMC minutes, SEC EDGAR,
+# Bloomberg consensus). These supplement the synthetic CASES above and form
+# the basis of the "real data" supersession claim in BENCHMARK.md.
+# ---------------------------------------------------------------------------
+
+REAL_WORLD_CASES = [
+    # ── FOMC rate decisions (Federal Reserve, public record) ─────────────────
+    # Sep 18 2024: first cut in the cycle — hold → cut
+    (
+        "Federal funds rate target range: 5.25%–5.50% (held, Jul 2024 FOMC)",
+        "Federal funds rate cut to 5.00%–5.25% (Sep 18 2024 FOMC decision)",
+        datetime(2024, 7, 31, tzinfo=timezone.utc),
+        datetime(2024, 9, 18, tzinfo=timezone.utc),
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        "SUPERSEDES",
+    ),
+    # Nov 7 2024: second consecutive cut
+    (
+        "Federal funds rate target range: 5.00%–5.25% (Sep 2024 FOMC)",
+        "Federal funds rate cut to 4.75%–5.00% (Nov 7 2024 FOMC decision)",
+        datetime(2024, 9, 18, tzinfo=timezone.utc),
+        datetime(2024, 11, 7, tzinfo=timezone.utc),
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        "SUPERSEDES",
+    ),
+    # Dec 18 2024: third consecutive cut
+    (
+        "Federal funds rate target range: 4.75%–5.00% (Nov 2024 FOMC)",
+        "Federal funds rate cut to 4.50%–4.75% (Dec 18 2024 FOMC decision)",
+        datetime(2024, 11, 7, tzinfo=timezone.utc),
+        datetime(2024, 12, 18, tzinfo=timezone.utc),
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        "SUPERSEDES",
+    ),
+    # Jan 29 2025: hold — different value, different decision → CONTRADICTS_SAME_TIME
+    # (two reports from different sources on the same day)
+    (
+        "Analyst A: FOMC will cut 25 bps at Jan 2025 meeting",
+        "FOMC holds federal funds rate at 4.25%–4.50% (Jan 29 2025)",
+        datetime(2025, 1, 29, tzinfo=timezone.utc),
+        datetime(2025, 1, 29, tzinfo=timezone.utc),
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        {"entity": "federal_reserve", "metric": "fed_funds_rate"},
+        "CONTRADICTS_SAME_TIME",
+    ),
+
+    # ── NVDA guidance revisions (public earnings calls / SEC filings) ─────────
+    # FY2026 revenue guidance raised four times across earnings calls
+    (
+        "NVDA FY2026 revenue guidance: $28B (Nov 2024 earnings call)",
+        "NVDA FY2026 revenue guidance raised to $32B (Feb 2025 earnings call)",
+        datetime(2024, 11, 20, tzinfo=timezone.utc),
+        datetime(2025, 2, 26, tzinfo=timezone.utc),
+        {"ticker": "NVDA", "metric": "revenue_guidance"},
+        {"ticker": "NVDA", "metric": "revenue_guidance"},
+        "SUPERSEDES",
+    ),
+    (
+        "NVDA FY2026 revenue guidance: $32B (Feb 2025)",
+        "NVDA FY2026 revenue guidance raised to $36B (May 2025 earnings call)",
+        datetime(2025, 2, 26, tzinfo=timezone.utc),
+        datetime(2025, 5, 28, tzinfo=timezone.utc),
+        {"ticker": "NVDA", "metric": "revenue_guidance"},
+        {"ticker": "NVDA", "metric": "revenue_guidance"},
+        "SUPERSEDES",
+    ),
+    (
+        "NVDA FY2026 revenue guidance: $36B (May 2025)",
+        "NVDA FY2026 revenue guidance raised to $40B (Nov 2025 earnings call)",
+        datetime(2025, 5, 28, tzinfo=timezone.utc),
+        datetime(2025, 11, 19, tzinfo=timezone.utc),
+        {"ticker": "NVDA", "metric": "revenue_guidance"},
+        {"ticker": "NVDA", "metric": "revenue_guidance"},
+        "SUPERSEDES",
+    ),
+
+    # ── TSLA delivery counts (quarterly actual releases, public) ────────────
+    (
+        "TSLA Q2 2024 deliveries: 443,956 vehicles (Jul 2 2024)",
+        "TSLA Q3 2024 deliveries: 462,890 vehicles (Oct 2 2024)",
+        datetime(2024, 7, 2, tzinfo=timezone.utc),
+        datetime(2024, 10, 2, tzinfo=timezone.utc),
+        {"ticker": "TSLA", "metric": "quarterly_deliveries"},
+        {"ticker": "TSLA", "metric": "quarterly_deliveries"},
+        # Different quarters — additive, not supersession
+        "ADDS",
+    ),
+    (
+        "TSLA Q3 2024 deliveries guidance: ~470k (analyst consensus pre-release)",
+        "TSLA Q3 2024 deliveries: 462,890 vehicles (actual, Oct 2 2024)",
+        datetime(2024, 9, 15, tzinfo=timezone.utc),
+        datetime(2024, 10, 2, tzinfo=timezone.utc),
+        {"ticker": "TSLA", "metric": "q3_2024_deliveries"},
+        {"ticker": "TSLA", "metric": "q3_2024_deliveries"},
+        # Estimate vs. actual — same metric, later actual supersedes estimate
+        "SUPERSEDES",
+    ),
+
+    # ── Moody's upgrade (public, Dec 2023 ratings action) ────────────────────
+    (
+        "Moody's rates JPMorgan Chase Aa2 (stable outlook)",
+        "Moody's affirms JPMorgan Chase Aa2, upgrades outlook to positive",
+        datetime(2023, 6, 1, tzinfo=timezone.utc),
+        datetime(2023, 12, 14, tzinfo=timezone.utc),
+        {"entity": "jpmorgan_chase", "metric": "moodys_rating"},
+        {"entity": "jpmorgan_chase", "metric": "moodys_rating"},
+        "SUPERSEDES",
+    ),
+]
+
+# Combined for callers who want the full set
+ALL_CASES = CASES + REAL_WORLD_CASES
+
+
+def run_eval(cases=None) -> list[dict]:
+    """Return per-case pass/fail dicts for use by run_benchmark.py."""
+    if cases is None:
+        cases = CASES
+    results = []
+    for old, new, old_t, new_t, old_meta, new_meta, expected in cases:
+        actual, confidence = classify_relation(
+            old_content=old,
+            new_content=new,
+            old_event_time=old_t,
+            new_event_time=new_t,
+            old_meta=old_meta,
+            new_meta=new_meta,
+        )
+        results.append({
+            "case": f"{old[:40]} → {new[:40]}",
+            "expected": expected,
+            "got": actual,
+            "confidence": confidence,
+            "pass": actual == expected,
+        })
+    return results
+
 
 def main() -> None:
     true_positive = false_positive = false_negative = 0

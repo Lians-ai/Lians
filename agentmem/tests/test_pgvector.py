@@ -46,7 +46,7 @@ pytestmark = pytest.mark.skipif(
 # Fixtures
 # ---------------------------------------------------------------------------
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture
 async def pg_engine():
     """Async engine pointing at the test Postgres."""
     from sqlalchemy.ext.asyncio import create_async_engine
@@ -56,7 +56,7 @@ async def pg_engine():
     await engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture
 async def pg_session_factory(pg_engine):
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
@@ -210,17 +210,37 @@ class TestEndToEnd:
 
     async def test_ann_prefetch_used_on_postgres(self, pg_session_factory):
         """
-        When the ANN pre-filter runs, EXPLAIN shows an Index Scan on the HNSW
+        With enough rows seeded, EXPLAIN should show an Index Scan on the HNSW
         index rather than a Seq Scan — proves the index is actually used.
         """
         from sqlalchemy import text
+        from src.agentmem.memory_service import add_memory
+        from src.agentmem.schemas import MemoryAdd
         from src.agentmem.embeddings import get_embedding_provider
+
+        # Seed 30 rows so the planner prefers the HNSW index over a seq scan
+        seed_agent = f"ann-seed-{uuid.uuid4().hex[:6]}"
+        tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"]
+        async with pg_session_factory() as db:
+            for i in range(30):
+                ticker = tickers[i % len(tickers)]
+                await add_memory(db, TEST_NS, MemoryAdd(
+                    agent_id=seed_agent,
+                    content=f"{ticker} Q{(i % 4) + 1} revenue ${10 + i}B",
+                    event_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                    metadata={"ticker": ticker, "metric": "revenue"},
+                ))
 
         provider = get_embedding_provider()
         query_embedding = await provider.embed_one("NVDA guidance")
         vec_str = "[" + ",".join(f"{x:.8f}" for x in query_embedding) + "]"
 
         async with pg_session_factory() as db:
+            await db.execute(text("ANALYZE memories"))
+            # Disable seq scan so the planner is forced to use the HNSW index
+            # if one exists — standard technique for index-existence tests without
+            # needing millions of rows.
+            await db.execute(text("SET enable_seqscan = off"))
             result = await db.execute(text(
                 f"EXPLAIN SELECT * FROM memories "
                 f"ORDER BY embedding <=> '{vec_str}'::vector LIMIT 20"

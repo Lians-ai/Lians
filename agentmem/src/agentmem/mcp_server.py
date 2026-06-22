@@ -168,6 +168,93 @@ def _build_server() -> Any:
                     },
                 },
             ),
+            Tool(
+                name="list_conflicts",
+                description=(
+                    "List open conflict flags — cases where two sources reported different values "
+                    "for the same fact at the same event_time.  Use this to surface data quality "
+                    "issues before they affect trading decisions.  Returns up to 20 open conflicts "
+                    "with both memory contents so a human or LLM can decide which source to trust."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "enum": ["open", "accept_a", "accept_b", "dismissed"],
+                            "default": "open",
+                            "description": "Filter by resolution status.",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="memory_lineage",
+                description=(
+                    "Return the full supersession history of a memory — every prior version "
+                    "of the same fact and the chain of updates that led to the current value. "
+                    "Use when a trader asks 'how did this guidance number evolve over time?' "
+                    "or when investigating why a memory was replaced."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "required": ["memory_id"],
+                    "properties": {
+                        "memory_id": {
+                            "type": "string",
+                            "description": "UUID of any memory in the lineage chain.",
+                        },
+                    },
+                },
+            ),
+            Tool(
+                name="fact_history",
+                description=(
+                    "Return every recorded version of a structured fact ordered by event_time. "
+                    "Query by ticker + metric instead of a memory_id — ideal for time-series views "
+                    "like 'show me how AAPL EPS evolved over the last four quarters'. "
+                    "Superseded versions are included so you can see the full revision history. "
+                    "Entity normalization is automatic: 'Apple Inc.', ISIN 'US0378331005', and "
+                    "'AAPL' all resolve to the same fact series."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "required": ["ticker", "metric"],
+                    "properties": {
+                        "ticker": {
+                            "type": "string",
+                            "description": "Ticker symbol, ISIN, CUSIP, or company name.",
+                        },
+                        "metric": {
+                            "type": "string",
+                            "description": "Metric name (e.g. 'eps', 'price_target', 'guidance').",
+                        },
+                        "limit": {"type": "integer", "default": 50},
+                    },
+                },
+            ),
+            Tool(
+                name="backtest_check",
+                description=(
+                    "Detect lookahead bias in a backtest simulation. "
+                    "Scans the agent's memory store and flags every fact that the agent "
+                    "couldn't have known at the given simulation date. "
+                    "Returns two contamination types: FUTURE_EVENT (event_time is after the "
+                    "simulation checkpoint — clear lookahead) and LATE_REVISION (the event is "
+                    "historical but the revised figure hadn't been published yet). "
+                    "A clean report (is_clean=true) is the proof a risk committee needs."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "required": ["simulation_as_of_iso"],
+                    "properties": {
+                        "simulation_as_of_iso": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the simulation checkpoint.",
+                        },
+                    },
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -228,6 +315,89 @@ def _build_server() -> Any:
                     lines.append(
                         f"  {(e.get('created_at') or '')[:19]}  "
                         f"{e.get('op','')}  id={str(e.get('memory_id') or '')[:8]}"
+                    )
+                return [TextContent(type="text", text="\n".join(lines))]
+
+            elif name == "list_conflicts":
+                status = arguments.get("status", "open")
+                result = await _api("GET", f"/v1/conflicts?status={status}&limit=20")
+                conflicts = result.get("conflicts", [])
+                if not conflicts:
+                    return [TextContent(type="text", text=f"No {status} conflicts found.")]
+                lines = [f"{len(conflicts)} {status} conflict(s):"]
+                for c in conflicts:
+                    lines.append(
+                        f"  [{c['id'][:8]}] A: {(c.get('memory_a_content') or '')[:80]!r}  "
+                        f"vs  B: {(c.get('memory_b_content') or '')[:80]!r}"
+                        f"  (confidence={c.get('confidence', 0):.2f})"
+                    )
+                return [TextContent(type="text", text="\n".join(lines))]
+
+            elif name == "memory_lineage":
+                memory_id = arguments["memory_id"]
+                result = await _api("GET", f"/v1/memories/{memory_id}/lineage")
+                nodes = result.get("nodes", [])
+                edges = result.get("edges", [])
+                root = result.get("root_id", "")
+                tip  = result.get("tip_id", "")
+                lines = [
+                    f"Lineage for {memory_id[:8]}…: {len(nodes)} versions, {len(edges)} edges",
+                    f"Root: {str(root)[:8]}  →  Tip (current): {str(tip)[:8]}",
+                ]
+                for node in nodes:
+                    status = "✓ CURRENT" if node.get("is_current") else "superseded"
+                    et = (node.get("event_time") or "")[:10]
+                    content = (node.get("content") or "[erased]")[:80]
+                    lines.append(f"  [{str(node['id'])[:8]}] {et}  {status}  {content!r}")
+                return [TextContent(type="text", text="\n".join(lines))]
+
+            elif name == "fact_history":
+                ticker = arguments["ticker"]
+                metric = arguments["metric"]
+                limit = arguments.get("limit", 50)
+                result = await _api(
+                    "GET",
+                    f"/v1/facts/history?ticker={ticker}&metric={metric}"
+                    f"&agent_id={AGENTMEM_AGENT_ID}&limit={limit}",
+                )
+                items = result.get("items", [])
+                canonical = result.get("ticker", ticker)
+                lines = [
+                    f"{len(items)} version(s) of {canonical} {metric} "
+                    f"(canonical ticker: {canonical}):",
+                ]
+                for item in items:
+                    et = (item.get("event_time") or "")[:10]
+                    status = "active" if item.get("valid_to") is None else "superseded"
+                    content = (item.get("content") or "[erased]")[:100]
+                    lines.append(f"  {et}  [{status}]  {content!r}")
+                return [TextContent(type="text", text="\n".join(lines))]
+
+            elif name == "backtest_check":
+                result = await _api("POST", "/v1/backtest/check", {
+                    "agent_id": AGENTMEM_AGENT_ID,
+                    "simulation_as_of": arguments["simulation_as_of_iso"],
+                })
+                is_clean = result.get("is_clean", True)
+                flags = result.get("flags", [])
+                checked = result.get("memories_checked", 0)
+                rate = result.get("contamination_rate", 0.0)
+                if is_clean:
+                    return [TextContent(
+                        type="text",
+                        text=f"✓ CLEAN — {checked} memories checked, no lookahead bias detected.",
+                    )]
+                lines = [
+                    f"⚠ CONTAMINATED — {len(flags)} flag(s) out of {checked} memories "
+                    f"({rate:.1%} contamination rate):",
+                ]
+                for flag in flags:
+                    ctype = flag.get("contamination_type", "")
+                    delta = flag.get("delta_days", 0)
+                    preview = (flag.get("content_preview") or "[erased]")[:80]
+                    et = (flag.get("event_time") or "")[:10]
+                    lines.append(
+                        f"  [{ctype}] +{delta:.1f}d  event={et}  {preview!r}"
                     )
                 return [TextContent(type="text", text="\n".join(lines))]
 

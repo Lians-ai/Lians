@@ -98,11 +98,12 @@ class TestWriteLockKeys:
         assert k1 != k2
 
     def test_keys_are_valid_int4_range(self):
-        """PostgreSQL int4 is signed 32-bit (0 .. 2^32-1 when treated as uint)."""
+        """PostgreSQL int4 is signed 32-bit: -(2^31) .. 2^31-1."""
+        INT4_MIN, INT4_MAX = -(2**31), 2**31 - 1
         for ns, agent in [("ns", "a"), ("long-namespace", "complex-agent-id-123")]:
             k1, k2 = _write_lock_keys(ns, agent)
-            assert 0 <= k1 < 2**32, f"k1={k1} out of int4 range"
-            assert 0 <= k2 < 2**32, f"k2={k2} out of int4 range"
+            assert INT4_MIN <= k1 <= INT4_MAX, f"k1={k1} out of int4 range"
+            assert INT4_MIN <= k2 <= INT4_MAX, f"k2={k2} out of int4 range"
 
     def test_null_byte_separator_prevents_collisions(self):
         """

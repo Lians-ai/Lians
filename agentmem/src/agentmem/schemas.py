@@ -100,6 +100,7 @@ class SupersessionResult(BaseModel):
     relation: str           # SUPERSEDES | CONFIRMS | ADDS | CONTRADICTS_SAME_TIME
     confidence: float
     superseded_ids: list[UUID] = Field(default_factory=list)
+    conflict_ids: list[UUID] = Field(default_factory=list)  # memories that CONTRADICTS_SAME_TIME
     rationale: Optional[str] = None
 
 
@@ -186,6 +187,181 @@ class NamespaceBillingOut(BaseModel):
     stripe_customer_id: Optional[str]
 
     model_config = {"from_attributes": True}
+
+
+class ConflictFlagOut(BaseModel):
+    """A detected conflict between two memories that disagree on the same fact."""
+    id: UUID
+    namespace: str
+    agent_id: str
+    memory_a_id: UUID          # pre-existing memory
+    memory_b_id: UUID          # newly ingested memory that triggered detection
+    memory_a_content: Optional[str]    # decrypted — None if erased
+    memory_b_content: Optional[str]
+    memory_a_source: Optional[str]
+    memory_b_source: Optional[str]
+    memory_a_event_time: datetime
+    memory_b_event_time: datetime
+    confidence: float
+    detected_at: datetime
+    status: str                # open | accept_a | accept_b | dismissed
+    resolved_at: Optional[datetime]
+    resolver_note: Optional[str]
+
+    model_config = {"from_attributes": True}
+
+
+class ConflictListResult(BaseModel):
+    conflicts: list[ConflictFlagOut]
+    total: int
+    status_filter: Optional[str]
+
+
+class ConflictResolveRequest(BaseModel):
+    resolution: str            # accept_a | accept_b | dismiss
+    note: Optional[str] = None
+
+
+class ConflictResolveResult(BaseModel):
+    conflict_id: UUID
+    resolution: str
+    resolved_at: datetime
+    memory_invalidated: Optional[UUID]   # the memory whose valid_to was set, if any
+
+
+class LineageNode(BaseModel):
+    """One version of a belief in the provenance chain."""
+    id: UUID
+    content: Optional[str]              # None if erased
+    content_hash: str
+    event_time: datetime
+    ingestion_time: datetime
+    valid_from: datetime
+    valid_to: Optional[datetime]        # None = still live at this position
+    source: Optional[str]
+    importance: float
+    supersession_confidence: Optional[float]
+    erased_at: Optional[datetime]
+    metadata: dict[str, Any]
+    is_current: bool                    # True for the live tip of the chain
+
+
+class LineageEdge(BaseModel):
+    """A supersession transition between two consecutive belief versions."""
+    from_id: UUID                       # older belief being superseded
+    to_id: UUID                         # newer belief
+    relation: str                       # SUPERSEDES | CONFIRMS | ADDS | CONTRADICTS_SAME_TIME
+    confidence: float
+    rationale: Optional[str]            # LLM rationale when Stage 3 ran
+    adjudication_stage: int             # 1 | 2 | 3
+    superseded_at: datetime             # when the supersession was recorded
+
+
+class MemoryLineageResult(BaseModel):
+    """
+    Full belief provenance chain for a given memory.
+
+    ``nodes`` are ordered oldest-first (root → tip).
+    ``edges[i]`` connects ``nodes[i]`` to ``nodes[i+1]``.
+    The queried memory may be anywhere in the chain.
+    """
+    agent_id: str
+    namespace: str
+    queried_id: UUID                    # the ID the caller passed in
+    root_id: UUID                       # oldest ancestor in the chain
+    tip_id: UUID                        # most recent descendant (current belief)
+    depth: int                          # number of nodes
+    nodes: list[LineageNode]
+    edges: list[LineageEdge]
+
+
+class FactHistoryResult(BaseModel):
+    """
+    All known versions of a structured fact, ordered oldest-first by event_time.
+
+    Unlike lineage (which requires a memory_id), this query accepts a ticker
+    + metric pair and returns every recorded value across all temporal states
+    (including superseded ones).  Entity normalization is applied so 'Apple',
+    'AAPL', and 'US0378331005' all map to the same series.
+    """
+    ticker: str                          # canonical ticker (post-normalization)
+    metric: str
+    agent_id: str
+    namespace: str
+    total: int
+    items: list[MemoryOut]
+
+
+class KnowledgeSnapshot(BaseModel):
+    """
+    Complete knowledge state of an agent at a given point in time.
+
+    Unlike recall (which does vector search + ranking), this is exhaustive —
+    every memory that was valid as of `as_of` is returned.  Use this for
+    audit reconstruction: "show me everything the agent knew on 2025-03-14."
+
+    This is the one-call compliance demo that closes deals with risk committees
+    and regulators: SEC examiners can verify the agent's complete knowledge state
+    at any past T without hunting through logs.
+    """
+    agent_id: str
+    namespace: str
+    as_of: datetime
+    total: int
+    items: list[MemoryOut]
+
+
+class ContaminationFlagOut(BaseModel):
+    """Single lookahead-bias flag from a backtest contamination check."""
+    memory_id: UUID
+    event_time: datetime
+    ingestion_time: datetime
+    contamination_type: str          # "future_event" | "late_revision"
+    delta_days: float                # days beyond simulation_as_of
+    content_preview: Optional[str]   # None if content was erased
+    source: Optional[str]
+    metadata: dict[str, Any]
+
+
+class ContaminationReportOut(BaseModel):
+    """
+    Result of a backtest-contamination check.
+
+    is_clean=True is the proof a quant fund needs before trusting a backtest.
+    contamination_rate is flags / memories_checked (0.0 if no memories).
+    """
+    agent_id: str
+    namespace: str
+    simulation_as_of: datetime
+    memories_checked: int
+    flags: list[ContaminationFlagOut]
+    contamination_rate: float
+    is_clean: bool
+
+
+class ErasureCertificate(BaseModel):
+    """
+    Cryptographic proof that a data subject's content was permanently destroyed.
+
+    The certificate proves:
+      1. N memories had their encrypted content destroyed on `erased_at`.
+      2. The SHA-256 content_hashes are preserved — the erasure is auditable
+         but the content is unrecoverable.
+      3. The audit chain remains intact after the erasure (chain_status = "ok").
+      4. This certificate itself has a unique `certificate_id` for external
+         reference (e.g., filing with a supervisory authority).
+
+    Compliance officers buy proofs, not promises.  This is the proof.
+    """
+    certificate_id: str             # stable UUID derived from subject + erased_at
+    subject_id: str
+    namespace: str
+    request_ref: Optional[str]      # the erasure request reference from the caller
+    erased_at: datetime             # when the DEK was destroyed
+    memories_erased: int
+    content_hashes: list[str]       # SHA-256 of each erased memory's original content
+    chain_status: str               # "ok" | "tampered" | "unchecked"
+    generated_at: datetime
 
 
 class AuditChainViolation(BaseModel):

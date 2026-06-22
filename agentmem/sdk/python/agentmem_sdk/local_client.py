@@ -88,6 +88,11 @@ class LocalAgentMemClient:
 
         # Point the settings at the local embedding provider before any import
         os.environ.setdefault("EMBEDDING_PROVIDER", embedding_provider)
+        # LocalAgentMemClient is a dev/test tool — allow running without a real key.
+        # Production deployments use AgentMemClient (HTTP) against a server that
+        # enforces MASTER_ENCRYPTION_KEY at startup.
+        os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
+        os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
 
         # Build the async engine
         if db_path is None:
@@ -297,3 +302,296 @@ class LocalAgentMemClient:
         from src.agentmem.audit_chain import verify_chain
         async with self._session_factory() as db:
             return await verify_chain(db, namespace=self._namespace)
+
+    # ── Batch write ───────────────────────────────────────────────────────────
+
+    def batch_add(self, memories: list[dict]) -> dict:
+        """
+        Add multiple memories in a single call.
+
+        Items are processed sequentially so a later item can supersede an earlier
+        one within the same batch.  Returns a MemoryBatchResult dict.
+        """
+        return self._run(self._async_batch_add(memories))
+
+    async def _async_batch_add(self, memories: list[dict]) -> dict:
+        from src.agentmem.schemas import MemoryAdd
+        from src.agentmem.memory_service import batch_add_memories
+        items = [MemoryAdd(**m) for m in memories]
+        async with self._session_factory() as db:
+            result = await batch_add_memories(db, self._namespace, items)
+        return result.model_dump(mode="json")
+
+    # ── Point-in-time convenience ──────────────────────────────────────────────
+
+    def recall_at(
+        self,
+        agent_id: str,
+        query: str,
+        as_of: datetime,
+        k: int = 5,
+        filters: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        """
+        Recall memories valid at *as_of* (point-in-time compliance query).
+
+        Equivalent to ``recall(..., as_of=as_of)`` but signals intent at the
+        call site — use for audit questions rather than present-time queries.
+        """
+        return self.recall(agent_id=agent_id, query=query, k=k, as_of=as_of, filters=filters)
+
+    # ── Supersession review ───────────────────────────────────────────────────
+
+    def review_supersessions(
+        self,
+        threshold: Optional[float] = None,
+        limit: int = 50,
+    ) -> dict:
+        """
+        Return supersession events whose confidence is below *threshold*.
+
+        Returns a SupersessionReviewResult dict with an ``items`` list, sorted
+        newest-first.  Defaults to the configured review threshold.
+        """
+        return self._run(self._async_review_supersessions(threshold=threshold, limit=limit))
+
+    async def _async_review_supersessions(
+        self,
+        threshold: Optional[float],
+        limit: int,
+    ) -> dict:
+        from src.agentmem.memory_service import get_pending_supersessions
+        async with self._session_factory() as db:
+            result = await get_pending_supersessions(
+                db=db,
+                namespace=self._namespace,
+                confidence_threshold=threshold,
+                limit=limit,
+            )
+        return result.model_dump(mode="json")
+
+    def confirm_supersession(
+        self,
+        memory_id: str,
+        reviewer_note: Optional[str] = None,
+    ) -> dict:
+        """
+        Confirm a supersession was correct.
+
+        Writes an immutable audit event; the superseded memory remains closed.
+        Returns a SupersessionActionResult dict.
+        """
+        return self._run(self._async_supersession_action(memory_id, "confirm", reviewer_note))
+
+    def reject_supersession(
+        self,
+        memory_id: str,
+        reviewer_note: Optional[str] = None,
+    ) -> dict:
+        """
+        Reject a supersession — the engine was wrong.
+
+        Restores the old memory as currently valid (valid_to = NULL) and writes
+        an immutable audit event.  Returns a SupersessionActionResult dict.
+        """
+        return self._run(self._async_supersession_action(memory_id, "reject", reviewer_note))
+
+    async def _async_supersession_action(
+        self,
+        memory_id: str,
+        action: str,
+        reviewer_note: Optional[str],
+    ) -> dict:
+        from uuid import UUID
+        from src.agentmem.schemas import SupersessionAction
+        from src.agentmem.memory_service import apply_supersession_action
+        body = SupersessionAction(action=action, reviewer_note=reviewer_note)
+        async with self._session_factory() as db:
+            result = await apply_supersession_action(
+                db, self._namespace, UUID(memory_id), body
+            )
+        return result.model_dump(mode="json")
+
+    # ── Snapshot / compliance ─────────────────────────────────────────────────
+
+    def snapshot(
+        self,
+        agent_id: str,
+        as_of: datetime,
+        limit: int = 1000,
+    ) -> dict:
+        """
+        Return agent's complete knowledge state at *as_of* (exhaustive, no ANN).
+
+        Unlike ``recall()``, this is not ranked — it returns every memory that
+        was valid at that instant, ordered by event_time ascending.  Use for
+        compliance audit: "what did the agent know on date X?"
+        """
+        return self._run(self._async_snapshot(agent_id=agent_id, as_of=as_of, limit=limit))
+
+    async def _async_snapshot(self, agent_id: str, as_of: datetime, limit: int) -> dict:
+        from src.agentmem.memory_service import get_knowledge_snapshot
+        async with self._session_factory() as db:
+            items = await get_knowledge_snapshot(db, self._namespace, agent_id, as_of, limit)
+        return {
+            "agent_id": agent_id,
+            "namespace": self._namespace,
+            "as_of": as_of.isoformat(),
+            "total": len(items),
+            "items": [m.model_dump(mode="json") for m in items],
+        }
+
+    def backtest_check(
+        self,
+        agent_id: str,
+        simulation_as_of: datetime,
+    ) -> dict:
+        """
+        Detect lookahead bias in a backtest.
+
+        Returns a ContaminationReport dict with any ``future_event`` or
+        ``late_revision`` flags that could invalidate the simulation.
+        """
+        return self._run(self._async_backtest_check(
+            agent_id=agent_id, simulation_as_of=simulation_as_of,
+        ))
+
+    async def _async_backtest_check(self, agent_id: str, simulation_as_of: datetime) -> dict:
+        from src.agentmem.backtest import check_contamination
+        async with self._session_factory() as db:
+            report = await check_contamination(db, self._namespace, agent_id, simulation_as_of)
+        return report.model_dump(mode="json")
+
+    def list_conflicts(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> dict:
+        """
+        List conflict flags for this namespace.
+
+        *status* filters by ``"open"``, ``"accept_a"``, ``"accept_b"``, or
+        ``"dismissed"``.  Returns a ConflictListResult dict.
+        """
+        return self._run(self._async_list_conflicts(status=status, limit=limit))
+
+    async def _async_list_conflicts(self, status: Optional[str], limit: int) -> dict:
+        from src.agentmem.memory_service import list_conflicts
+        async with self._session_factory() as db:
+            result = await list_conflicts(db, self._namespace, status=status, limit=limit)
+        return result.model_dump(mode="json")
+
+    def resolve_conflict(
+        self,
+        conflict_id: str,
+        resolution: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        """
+        Resolve a conflict flag.
+
+        *resolution* must be ``"accept_a"``, ``"accept_b"``, or ``"dismiss"``.
+        Returns a ConflictResolveResult dict.
+        """
+        return self._run(self._async_resolve_conflict(
+            conflict_id=conflict_id, resolution=resolution, note=note,
+        ))
+
+    async def _async_resolve_conflict(
+        self, conflict_id: str, resolution: str, note: Optional[str]
+    ) -> dict:
+        from uuid import UUID
+        from src.agentmem.schemas import ConflictResolveRequest
+        from src.agentmem.memory_service import resolve_conflict
+        req = ConflictResolveRequest(resolution=resolution, note=note)
+        async with self._session_factory() as db:
+            result = await resolve_conflict(db, self._namespace, UUID(conflict_id), req)
+        return result.model_dump(mode="json")
+
+    def fact_history(
+        self,
+        agent_id: str,
+        ticker: str,
+        metric: str,
+        limit: int = 100,
+    ) -> list[dict]:
+        """
+        Return all versions of a ticker+metric fact, ordered by event_time ascending.
+
+        Shows the full history of revisions — useful for understanding how a
+        structured fact evolved over time (e.g., NVDA guidance across quarters).
+        """
+        return self._run(self._async_fact_history(
+            agent_id=agent_id, ticker=ticker, metric=metric, limit=limit,
+        ))
+
+    async def _async_fact_history(
+        self, agent_id: str, ticker: str, metric: str, limit: int
+    ) -> list[dict]:
+        from src.agentmem.adapters.finance import FinanceAdapter
+        adapter = FinanceAdapter()
+        async with self._session_factory() as db:
+            items = await adapter.fact_history(db, self._namespace, agent_id, ticker, metric, limit)
+        return [m.model_dump(mode="json") for m in items]
+
+    def erasure_certificate(self, subject_id: str) -> dict:
+        """
+        Return a verifiable erasure certificate for a data subject.
+
+        The certificate includes SHA-256 content hashes of erased memories
+        and the audit chain status — suitable for regulatory filing.
+        """
+        return self._run(self._async_erasure_certificate(subject_id=subject_id))
+
+    async def _async_erasure_certificate(self, subject_id: str) -> dict:
+        from src.agentmem.memory_service import get_erasure_certificate
+        async with self._session_factory() as db:
+            return await get_erasure_certificate(db, self._namespace, subject_id)
+
+    def compliance_report(self, *args: Any, **kwargs: Any) -> dict:  # noqa: ARG002
+        """
+        Not available in local mode.
+
+        The compliance report aggregates SQL window queries that require a
+        full PostgreSQL deployment.  Use AgentMemClient (HTTP) against a
+        running server for this endpoint.
+        """
+        raise NotImplementedError(
+            "compliance_report() requires a server deployment. "
+            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+        )
+
+    def register_webhook(self, *args: Any, **kwargs: Any) -> dict:  # noqa: ARG002
+        """Not available in local mode — webhooks require an HTTP server."""
+        raise NotImplementedError(
+            "Webhooks require a server deployment. "
+            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+        )
+
+    def list_webhooks(self, *args: Any, **kwargs: Any) -> list:  # noqa: ARG002
+        """Not available in local mode — webhooks require an HTTP server."""
+        raise NotImplementedError(
+            "Webhooks require a server deployment. "
+            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+        )
+
+    def update_webhook(self, *args: Any, **kwargs: Any) -> dict:  # noqa: ARG002
+        """Not available in local mode — webhooks require an HTTP server."""
+        raise NotImplementedError(
+            "Webhooks require a server deployment. "
+            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+        )
+
+    def delete_webhook(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
+        """Not available in local mode — webhooks require an HTTP server."""
+        raise NotImplementedError(
+            "Webhooks require a server deployment. "
+            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+        )
+
+    def webhook_deliveries(self, *args: Any, **kwargs: Any) -> list:  # noqa: ARG002
+        """Not available in local mode — webhooks require an HTTP server."""
+        raise NotImplementedError(
+            "Webhooks require a server deployment. "
+            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+        )

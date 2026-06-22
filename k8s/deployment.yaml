@@ -67,8 +67,6 @@ spec:
               done
           env:
             - name: PG_HOST
-              # Extract just the hostname from DATABASE_URL.
-              # This is a best-effort check — failures here do not block startup.
               value: "postgres.agentmem.svc.cluster.local"
           resources:
             requests:
@@ -82,6 +80,44 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+
+        # ── Init: wait for migrations to reach head ───────────────────────────
+        # Blocks the app pod until `alembic check` exits 0 (DB == head).
+        # This prevents startup against a schema that is behind the current code.
+        # Run `kubectl apply -f k8s/migrate-job.yaml` before applying this
+        # deployment; this initContainer will retry until the Job completes.
+        - name: wait-for-migrations
+          image: agentmem:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until alembic -c agentmem/alembic.ini check; do
+                echo "Migrations not yet at head — retrying in 5s…"
+                sleep 5
+              done
+          workingDir: /app
+          envFrom:
+            - secretRef:
+                name: agentmem-secret
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: app-cache
+              mountPath: /app/agentmem/__pycache__
 
       containers:
         - name: agentmem

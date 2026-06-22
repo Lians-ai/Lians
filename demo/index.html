@@ -56,10 +56,11 @@
       display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem;
       border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em;
     }
-    .tag-stale   { background: #7f1d1d; color: #fca5a5; }
-    .tag-time    { background: #1e3a5f; color: #93c5fd; }
-    .tag-audit   { background: #14532d; color: #86efac; }
-    .tag-macro   { background: #3b1f5e; color: #d8b4fe; }
+    .tag-stale    { background: #7f1d1d; color: #fca5a5; }
+    .tag-time     { background: #1e3a5f; color: #93c5fd; }
+    .tag-audit    { background: #14532d; color: #86efac; }
+    .tag-macro    { background: #3b1f5e; color: #d8b4fe; }
+    .tag-backtest { background: #451a03; color: #fdba74; }
 
     .card-extra { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 
@@ -205,10 +206,66 @@
       <div id="result-fed" class="result"></div>
     </div>
 
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-time">complete knowledge state</span></div>
+      <div class="card-title">Knowledge Snapshot</div>
+      <div class="card-desc">
+        <strong>The compliance demo that closes deals.</strong> Returns
+        <em>every</em> fact the agent held at a given timestamp — exhaustive,
+        no relevance filter. SEC/FINRA examiners use this to verify the agent's
+        exact knowledge at any date. Neither mem0 nor Zep can answer this
+        question at all.
+      </div>
+      <div class="card-extra">
+        <input class="date-input" id="snapshot-as-of" type="date" value="2025-03-01" />
+        <button onclick="querySnapshot()">Get knowledge snapshot</button>
+      </div>
+      <div id="result-snapshot" class="result"></div>
+    </div>
+
   </div>
 
-  <!-- Row 3: Compliance -->
-  <div class="section-title">Benchmark 3 — Compliance auditability</div>
+  <!-- Row 3: Backtest contamination -->
+  <div class="section-title">Benchmark 3 — Backtest contamination detection</div>
+  <div class="grid">
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-backtest">lookahead bias</span></div>
+      <div class="card-title">Detect Future-Data Contamination</div>
+      <div class="card-desc">
+        Pick a simulated backtest date. AgentMem flags every memory the agent
+        couldn't have known at that date — either because the event hadn't
+        happened yet (<em>future_event</em>) or because the data was ingested
+        too late (<em>late_revision</em>). Quants viscerally fear lookahead
+        bias; no other memory layer can detect it.
+      </div>
+      <div class="card-extra">
+        <input class="date-input" id="backtest-as-of" type="date" value="2025-01-01" />
+        <button onclick="queryBacktest()">Check contamination</button>
+      </div>
+      <div id="result-backtest" class="result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-extra"><span class="tag tag-backtest">clean simulation</span></div>
+      <div class="card-title">What a Clean Backtest Looks Like</div>
+      <div class="card-desc">
+        Query a date <em>after</em> all seed data was ingested to see a
+        contamination-free report. In production, real-time ingestion keeps
+        <code>ingestion_time ≈ event_time</code> so backtests stay clean
+        automatically — this demo shows how you'd verify it.
+      </div>
+      <div class="card-extra">
+        <input class="date-input" id="backtest-clean-as-of" type="date" value="2026-06-01" />
+        <button onclick="queryBacktestClean()">Verify clean simulation</button>
+      </div>
+      <div id="result-backtest-clean" class="result"></div>
+    </div>
+
+  </div>
+
+  <!-- Row 4: Compliance -->
+  <div class="section-title">Benchmark 4 — Compliance auditability</div>
   <div class="grid">
 
     <div class="card">
@@ -347,6 +404,87 @@
       k: 3,
       as_of: d + "T12:00:00Z",
     }, "result-fed");
+  }
+
+  // ── Knowledge snapshot ───────────────────────────────────────────────────
+
+  async function querySnapshot() {
+    const key = apiKey();
+    if (!key) { showResult("result-snapshot", "Paste your read-only API key in the config above.", "error"); return; }
+    const d = $("snapshot-as-of").value;
+    const asOf = d + "T12:00:00Z";
+    showResult("result-snapshot", "Loading complete knowledge state...");
+    try {
+      const r = await fetch(
+        apiUrl() + "/v1/snapshot?agent_id=market-analyst&as_of=" + encodeURIComponent(asOf) + "&limit=50",
+        { headers: { "X-API-Key": key } }
+      );
+      const data = await r.json();
+      if (!r.ok) { showResult("result-snapshot", JSON.stringify(data, null, 2), "error"); return; }
+      const lines = [
+        `Complete knowledge state as of ${d}`,
+        `${data.total} fact(s) — every memory valid at this timestamp:\n`,
+      ];
+      for (const m of (data.items || [])) {
+        const date = (m.event_time || "").slice(0, 10);
+        const status = m.valid_to ? `[superseded ${m.valid_to.slice(0,10)}]` : "[current]";
+        lines.push(`${date} ${status}`);
+        lines.push(`  ${(m.content || "[erased]").slice(0, 120)}`);
+        lines.push("");
+      }
+      showResult("result-snapshot", lines.join("\n"), "ok");
+    } catch (e) {
+      showResult("result-snapshot", "Request failed: " + e.message, "error");
+    }
+  }
+
+  // ── Backtest contamination ────────────────────────────────────────────────
+
+  async function _runBacktest(date, resultId) {
+    const key = apiKey();
+    if (!key) { showResult(resultId, "Paste your read-only API key in the config above.", "error"); return; }
+    const simulationAsOf = date + "T00:00:00Z";
+    showResult(resultId, "Scanning for contamination...");
+    try {
+      const r = await fetch(apiUrl() + "/v1/backtest/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": key },
+        body: JSON.stringify({ agent_id: "market-analyst", simulation_as_of: simulationAsOf }),
+      });
+      const data = await r.json();
+      if (!r.ok) { showResult(resultId, JSON.stringify(data, null, 2), "error"); return; }
+      const rate = ((data.contamination_rate || 0) * 100).toFixed(1);
+      const status = data.is_clean ? "✓ CLEAN — no lookahead bias detected" : `✗ CONTAMINATED — ${rate}% of memories are future data`;
+      const lines = [
+        `Simulation as of: ${date}`,
+        `Memories checked: ${data.memories_checked}`,
+        `${status}\n`,
+      ];
+      if ((data.flags || []).length === 0) {
+        lines.push("No contamination flags.");
+      } else {
+        lines.push(`${data.flags.length} flag(s):\n`);
+        for (const f of data.flags.slice(0, 8)) {
+          const type = f.contamination_type === "future_event" ? "FUTURE EVENT" : "LATE REVISION";
+          const delta = f.delta_days != null ? ` (+${f.delta_days}d late)` : "";
+          lines.push(`[${type}]${delta}  event: ${(f.event_time||"").slice(0,10)}`);
+          lines.push(`  ${(f.content_preview || "").slice(0, 100)}`);
+          lines.push("");
+        }
+        if (data.flags.length > 8) lines.push(`... and ${data.flags.length - 8} more`);
+      }
+      showResult(resultId, lines.join("\n"), data.is_clean ? "ok" : "error");
+    } catch (e) {
+      showResult(resultId, "Request failed: " + e.message, "error");
+    }
+  }
+
+  async function queryBacktest() {
+    await _runBacktest($("backtest-as-of").value, "result-backtest");
+  }
+
+  async function queryBacktestClean() {
+    await _runBacktest($("backtest-clean-as-of").value, "result-backtest-clean");
   }
 
   // ── Compliance demos ─────────────────────────────────────────────────────

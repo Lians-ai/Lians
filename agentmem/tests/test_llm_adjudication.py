@@ -180,15 +180,16 @@ async def test_stage3_disabled_by_default_llm_never_called(db):
 
 
 @pytest.mark.asyncio
-async def test_stage3_confirms_prevents_supersession(db, monkeypatch):
-    """Stage 3 returning CONFIRMS means the old memory is NOT superseded."""
+async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
+    """Change 3: keyed facts (full structured-key match) supersede deterministically
+    by event_time. Stage 3 LLM is never called, even when supersession_llm_stage=True.
+    """
     from src.agentmem.supersession import run_supersession
     from src.agentmem.embeddings import get_embedding_provider
     from src.agentmem.schemas import MemoryAdd
     from src.agentmem.memory_service import add_memory
     from src.agentmem.config import get_settings
 
-    # Seed an old memory with plain (non-PII) content so Stage 3 can read it
     await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
         content="NVDA Q3 guidance $36B",
@@ -202,9 +203,7 @@ async def test_stage3_confirms_prevents_supersession(db, monkeypatch):
     provider = get_embedding_provider()
     emb = await provider.embed_one("Nvidia raised Q3 outlook to thirty-six billion")
 
-    with patch("src.agentmem.supersession.llm_adjudicate", new=AsyncMock(
-        return_value=("CONFIRMS", 0.93, "Paraphrase of the same $36B figure")
-    )) as mock_llm:
+    with patch("src.agentmem.supersession.llm_adjudicate") as mock_llm:
         result = await run_supersession(
             db=db,
             namespace="test-ns",
@@ -212,61 +211,60 @@ async def test_stage3_confirms_prevents_supersession(db, monkeypatch):
             new_content="Nvidia raised Q3 outlook to thirty-six billion",
             new_meta={"ticker": "NVDA", "metric": "guidance"},
             new_embedding=emb,
-            new_event_time=T1,
+            new_event_time=T1,  # newer → deterministic SUPERSEDES
         )
 
     get_settings.cache_clear()
 
-    mock_llm.assert_called_once()
-    assert result.relation == "CONFIRMS"
-    assert len(result.superseded_ids) == 0, "Paraphrase must not supersede the old memory"
+    mock_llm.assert_not_called()  # keyed fast path never invokes LLM
+    assert result.relation == "SUPERSEDES"
+    assert len(result.superseded_ids) == 1
+    assert result.confidence == 1.0  # deterministic, not probabilistic
+    assert result.rationale is None  # no LLM rationale for keyed path
 
 
 @pytest.mark.asyncio
-async def test_stage3_supersedes_carries_rationale(db, monkeypatch):
-    """When Stage 3 confirms SUPERSEDES, the rationale is stored on the result."""
+async def test_keyed_facts_same_time_flags_conflict(db, monkeypatch):
+    """Keyed facts with equal event_time and different content → CONTRADICTS_SAME_TIME.
+
+    Neither memory is superseded (superseded_ids stays empty), but a conflict
+    flag is raised so a human can decide which source to trust.  This is the
+    correct behavior for same-time disagreement between data sources.
+    """
     from src.agentmem.supersession import run_supersession
     from src.agentmem.embeddings import get_embedding_provider
     from src.agentmem.schemas import MemoryAdd
     from src.agentmem.memory_service import add_memory
-    from src.agentmem.config import get_settings
 
-    await add_memory(db, "test-ns", MemoryAdd(
+    mem = await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
-        content="NVDA Q3 guidance $32B",
+        content="NVDA Q3 guidance $36B revenue",
         event_time=T0,
         metadata={"ticker": "NVDA", "metric": "guidance"},
     ))
 
-    monkeypatch.setenv("SUPERSESSION_LLM_STAGE", "true")
-    get_settings.cache_clear()
-
     provider = get_embedding_provider()
-    emb = await provider.embed_one("NVDA Q3 guidance raised to $36B")
+    emb = await provider.embed_one("Nvidia Q3 outlook thirty-six billion")
 
-    with patch("src.agentmem.supersession.llm_adjudicate", new=AsyncMock(
-        return_value=("SUPERSEDES", 0.97, "Value changed from $32B to $36B")
-    )):
-        result = await run_supersession(
-            db=db,
-            namespace="test-ns",
-            agent_id="agent-1",
-            new_content="NVDA Q3 guidance raised to $36B",
-            new_meta={"ticker": "NVDA", "metric": "guidance"},
-            new_embedding=emb,
-            new_event_time=T1,
-        )
+    result = await run_supersession(
+        db=db,
+        namespace="test-ns",
+        agent_id="agent-1",
+        new_content="Nvidia Q3 outlook thirty-six billion",
+        new_meta={"ticker": "NVDA", "metric": "guidance"},
+        new_embedding=emb,
+        new_event_time=T0,  # same timestamp, different value → conflict
+    )
 
-    get_settings.cache_clear()
-
-    assert result.relation == "SUPERSEDES"
-    assert len(result.superseded_ids) == 1
-    assert result.rationale == "Value changed from $32B to $36B"
+    assert result.relation == "CONTRADICTS_SAME_TIME"
+    assert len(result.superseded_ids) == 0      # neither memory overwritten
+    assert len(result.conflict_ids) == 1        # conflict flag will be raised
+    assert result.conflict_ids[0] == mem.id
 
 
 @pytest.mark.asyncio
 async def test_stage3_event_log_records_stage_number(db, monkeypatch):
-    """After a Stage 3 supersession, the event log payload shows adjudication_stage=3."""
+    """Keyed supersession records adjudication_stage=2 (deterministic) in the event log."""
     from src.agentmem.schemas import MemoryAdd
     from src.agentmem.memory_service import add_memory
     from src.agentmem.models import EventLog
@@ -283,6 +281,7 @@ async def test_stage3_event_log_records_stage_number(db, monkeypatch):
         metadata={"ticker": "NVDA", "metric": "guidance"},
     ))
 
+    # Keyed fast path: llm_adjudicate is NOT called regardless of the patch
     with patch("src.agentmem.supersession.llm_adjudicate", new=AsyncMock(
         return_value=("SUPERSEDES", 0.97, "Value changed from $32B to $36B")
     )):
@@ -301,6 +300,7 @@ async def test_stage3_event_log_records_stage_number(db, monkeypatch):
     log_row = result.scalar_one()
     payload = dict(log_row.payload)
 
-    assert payload["adjudication_stage"] == 3
-    assert payload["rationale"] == "Value changed from $32B to $36B"
-    assert payload["confidence"] >= 0.95
+    # Change 3: keyed path is deterministic — adjudication_stage=2, no LLM rationale
+    assert payload["adjudication_stage"] == 2
+    assert payload.get("rationale") is None
+    assert payload["confidence"] == 1.0

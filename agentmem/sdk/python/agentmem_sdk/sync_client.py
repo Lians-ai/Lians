@@ -7,12 +7,15 @@ handlers, Jupyter with a running loop) use AsyncAgentMemClient directly.
 Usage::
 
     from agentmem_sdk import AgentMemClient
+    from datetime import datetime, timezone
 
     with AgentMemClient(base_url="http://localhost:8000", api_key="...") as client:
-        client.add(agent_id="my-agent", content="NVDA guidance $36B",
-                   event_time=datetime(2026, 5, 10, tzinfo=timezone.utc),
-                   metadata={"ticker": "NVDA", "metric": "guidance"})
-
+        client.add(
+            agent_id="my-agent",
+            content="NVDA guidance $36B",
+            event_time=datetime(2026, 5, 10, tzinfo=timezone.utc),
+            metadata={"ticker": "NVDA", "metric": "guidance"},
+        )
         result = client.recall(agent_id="my-agent", query="NVDA guidance")
         for mem in result["memories"]:
             print(mem["content"])
@@ -33,14 +36,18 @@ class AgentMemClient:
         self,
         base_url: str = "http://localhost:8000",
         api_key: str = "",
+        admin_secret: str = "",
         timeout: float = 30.0,
     ):
-        self._async = AsyncAgentMemClient(base_url=base_url, api_key=api_key, timeout=timeout)
+        self._async = AsyncAgentMemClient(
+            base_url=base_url,
+            api_key=api_key,
+            admin_secret=admin_secret,
+            timeout=timeout,
+        )
         self._loop = asyncio.new_event_loop()
 
-    # ------------------------------------------------------------------
-    # Context manager
-    # ------------------------------------------------------------------
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def __enter__(self) -> "AgentMemClient":
         return self
@@ -51,9 +58,7 @@ class AgentMemClient:
     def close(self) -> None:
         self._loop.close()
 
-    # ------------------------------------------------------------------
-    # Public API (mirrors AsyncAgentMemClient)
-    # ------------------------------------------------------------------
+    # ── Write ─────────────────────────────────────────────────────────────────
 
     def add(
         self,
@@ -78,6 +83,17 @@ class AgentMemClient:
             )
         )
 
+    def batch_add(self, memories: list[dict[str, Any]]) -> dict:
+        """
+        Add multiple memories in a single request.
+
+        Returns a MemoryBatchResult dict with ``added`` count and ``memories`` list.
+        Items are processed sequentially so later items can supersede earlier ones.
+        """
+        return self._loop.run_until_complete(self._async.batch_add(memories))
+
+    # ── Read ──────────────────────────────────────────────────────────────────
+
     def recall(
         self,
         agent_id: str,
@@ -97,6 +113,30 @@ class AgentMemClient:
             )
         )
 
+    def recall_at(
+        self,
+        agent_id: str,
+        query: str,
+        as_of: datetime,
+        k: int = 5,
+        filters: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        """
+        Recall memories valid at *as_of* (point-in-time compliance query).
+
+        Equivalent to ``recall(..., as_of=as_of)`` but signals intent at the
+        call site — use for audit questions rather than present-time queries.
+        """
+        return self._loop.run_until_complete(
+            self._async.recall_at(
+                agent_id=agent_id,
+                query=query,
+                as_of=as_of,
+                k=k,
+                filters=filters,
+            )
+        )
+
     def reconstruct(
         self,
         agent_id: str,
@@ -108,8 +148,230 @@ class AgentMemClient:
             self._async.reconstruct(agent_id=agent_id, as_of=as_of, query=query)
         )
 
+    # ── Compliance ────────────────────────────────────────────────────────────
+
     def erase(self, subject_id: str, request_ref: str) -> dict:
-        """GDPR erasure. Returns EraseResult as a dict."""
+        """GDPR / CCPA crypto-shred. Returns EraseResult as a dict."""
         return self._loop.run_until_complete(
             self._async.erase(subject_id=subject_id, request_ref=request_ref)
+        )
+
+    # ── Supersession review ───────────────────────────────────────────────────
+
+    def review_supersessions(
+        self,
+        threshold: Optional[float] = None,
+        limit: int = 50,
+    ) -> dict:
+        """
+        Return supersession events whose confidence is below *threshold*.
+
+        Returns a SupersessionReviewResult dict with an ``items`` list.
+        """
+        return self._loop.run_until_complete(
+            self._async.review_supersessions(threshold=threshold, limit=limit)
+        )
+
+    def confirm_supersession(
+        self,
+        memory_id: str,
+        reviewer_note: Optional[str] = None,
+    ) -> dict:
+        """Confirm a supersession was correct. Returns SupersessionActionResult."""
+        return self._loop.run_until_complete(
+            self._async.confirm_supersession(memory_id=memory_id, reviewer_note=reviewer_note)
+        )
+
+    def reject_supersession(
+        self,
+        memory_id: str,
+        reviewer_note: Optional[str] = None,
+    ) -> dict:
+        """Reject a supersession — restores the old memory as valid."""
+        return self._loop.run_until_complete(
+            self._async.reject_supersession(memory_id=memory_id, reviewer_note=reviewer_note)
+        )
+
+    # ── Admin / Audit chain ───────────────────────────────────────────────────
+
+    def verify_chain(self, namespace: str) -> dict:
+        """
+        Verify the SEC 17a-4 hash chain for *namespace*.
+
+        Returns ``{"status": "ok"}`` or ``{"status": "tampered", "violations": [...]}``
+        Requires ``admin_secret`` to be set on the client.
+        """
+        return self._loop.run_until_complete(self._async.verify_chain(namespace=namespace))
+
+    def audit_export(
+        self,
+        namespace: str,
+        from_dt: Optional[datetime] = None,
+        to_dt: Optional[datetime] = None,
+        limit: int = 100_000,
+        verify: bool = False,
+    ) -> dict:
+        """
+        Export the full audit log for *namespace*.
+
+        Pass ``verify=True`` to include a tamper-evidence chain verification
+        report alongside the event rows.  Requires ``admin_secret``.
+        """
+        return self._loop.run_until_complete(
+            self._async.audit_export(
+                namespace=namespace,
+                from_dt=from_dt,
+                to_dt=to_dt,
+                limit=limit,
+                verify=verify,
+            )
+        )
+
+    # ── Snapshot (audit reconstruction) ───────────────────────────────────────
+
+    def snapshot(
+        self,
+        agent_id: str,
+        as_of: datetime,
+        limit: int = 1000,
+    ) -> dict:
+        """
+        Reconstruct the complete knowledge state of *agent_id* at *as_of*.
+
+        Returns every fact that was valid at that timestamp — exhaustive, no
+        relevance filter.  The one-call compliance demo that closes deals with
+        risk committees and regulators.
+
+        Returns a KnowledgeSnapshot dict: ``{agent_id, namespace, as_of, total, items}``.
+        """
+        return self._loop.run_until_complete(
+            self._async.snapshot(agent_id=agent_id, as_of=as_of, limit=limit)
+        )
+
+    # ── Backtest contamination ─────────────────────────────────────────────────
+
+    def backtest_check(
+        self,
+        agent_id: str,
+        simulation_as_of: datetime,
+    ) -> dict:
+        """
+        Detect lookahead bias in a backtest simulation.
+
+        ``is_clean: True`` is the proof a risk committee needs before trusting
+        a backtest result.  Returns a ContaminationReport dict.
+        """
+        return self._loop.run_until_complete(
+            self._async.backtest_check(agent_id=agent_id, simulation_as_of=simulation_as_of)
+        )
+
+    # ── Conflicts ──────────────────────────────────────────────────────────────
+
+    def list_conflicts(
+        self,
+        status: Optional[str] = "open",
+        limit: int = 50,
+    ) -> dict:
+        """List detected fact contradictions. Returns ConflictListResult."""
+        return self._loop.run_until_complete(
+            self._async.list_conflicts(status=status, limit=limit)
+        )
+
+    def resolve_conflict(
+        self,
+        conflict_id: str,
+        resolution: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        """
+        Resolve a conflict flag.
+
+        *resolution*: ``"accept_a"``, ``"accept_b"``, or ``"dismiss"``.
+        Returns ConflictResolveResult.
+        """
+        return self._loop.run_until_complete(
+            self._async.resolve_conflict(conflict_id=conflict_id, resolution=resolution, note=note)
+        )
+
+    # ── Fact history ───────────────────────────────────────────────────────────
+
+    def fact_history(
+        self,
+        agent_id: str,
+        ticker: str,
+        metric: str,
+        limit: int = 100,
+    ) -> dict:
+        """
+        Return all recorded versions of a structured fact ordered by event_time.
+
+        Returns a FactHistoryResult dict: ``{ticker, metric, agent_id, namespace, total, items}``.
+        """
+        return self._loop.run_until_complete(
+            self._async.fact_history(agent_id=agent_id, ticker=ticker, metric=metric, limit=limit)
+        )
+
+    # ── Compliance report ──────────────────────────────────────────────────────
+
+    def compliance_report(
+        self,
+        from_dt: Optional[datetime] = None,
+        to_dt: Optional[datetime] = None,
+        verify_chain: bool = False,
+    ) -> dict:
+        """Generate a compliance report for the caller's namespace."""
+        return self._loop.run_until_complete(
+            self._async.compliance_report(from_dt=from_dt, to_dt=to_dt, verify_chain=verify_chain)
+        )
+
+    # ── Erasure certificate ────────────────────────────────────────────────────
+
+    def erasure_certificate(self, subject_id: str) -> dict:
+        """
+        Retrieve the cryptographic proof-of-erasure certificate.
+
+        Returns an ErasureCertificate dict.  Returns 404 if no erasure recorded.
+        """
+        return self._loop.run_until_complete(self._async.erasure_certificate(subject_id=subject_id))
+
+    # ── Webhooks ───────────────────────────────────────────────────────────────
+
+    def register_webhook(
+        self,
+        url: str,
+        events: list[str],
+        secret: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> dict:
+        """Register a webhook endpoint. Returns WebhookRegisterResult (secret shown once)."""
+        return self._loop.run_until_complete(
+            self._async.register_webhook(url=url, events=events, secret=secret, description=description)
+        )
+
+    def list_webhooks(self) -> list:
+        """List all webhook endpoints for the caller's namespace."""
+        return self._loop.run_until_complete(self._async.list_webhooks())
+
+    def update_webhook(
+        self,
+        endpoint_id: str,
+        enabled: Optional[bool] = None,
+        events: Optional[list[str]] = None,
+        description: Optional[str] = None,
+    ) -> dict:
+        """Update an endpoint's enabled state, events, or description."""
+        return self._loop.run_until_complete(
+            self._async.update_webhook(
+                endpoint_id=endpoint_id, enabled=enabled, events=events, description=description
+            )
+        )
+
+    def delete_webhook(self, endpoint_id: str) -> None:
+        """Remove a webhook endpoint permanently."""
+        self._loop.run_until_complete(self._async.delete_webhook(endpoint_id=endpoint_id))
+
+    def webhook_deliveries(self, endpoint_id: str, limit: int = 50) -> dict:
+        """Return recent delivery attempts for a webhook endpoint."""
+        return self._loop.run_until_complete(
+            self._async.webhook_deliveries(endpoint_id=endpoint_id, limit=limit)
         )

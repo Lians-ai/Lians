@@ -128,6 +128,8 @@ async def chain_log(
     memory_id: Optional[UUID] = None,
     content_hash: Optional[str] = None,
     payload: Optional[dict] = None,
+    *,
+    _merkle: bool = True,
 ) -> EventLog:
     """
     Create an EventLog row with prev_hash and row_hash wired into the chain.
@@ -181,6 +183,23 @@ async def chain_log(
     ).hexdigest()
 
     await db.flush()
+
+    # Change 8: register this event with the Merkle window if batching is on.
+    # The window accumulates row hashes; when full it flushes a MerkleAnchor.
+    # The anchor itself calls chain_log with _merkle=False to avoid recursion.
+    if _merkle and op != "merkle_anchor":
+        try:
+            from .config import get_settings
+            from .merkle_audit import get_window, flush_window
+            settings = get_settings()
+            if settings.merkle_batch_enabled:
+                window = get_window(namespace, settings.merkle_batch_size)
+                window.add(str(row_id), row.row_hash)
+                if window.is_full():
+                    await flush_window(db, namespace)
+        except Exception:
+            pass  # Merkle batching is optional — never block the hot path
+
     return row
 
 

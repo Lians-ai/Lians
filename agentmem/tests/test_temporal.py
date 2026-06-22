@@ -40,6 +40,16 @@ async def _add_raw_memory(db, content, event_time, valid_from, valid_to=None, me
         content_hash=f"hash-{content[:8]}",
     )
     db.add(mem)
+    await db.flush()
+
+    # Maintain live_facts for present-time recall (Change 1).
+    # Only live memories (valid_to is None) are projected into live_facts;
+    # superseded ones are intentionally omitted.
+    if valid_to is None:
+        from src.agentmem.current_facts import upsert_live_fact, compute_predicate_key
+        predicate_key = compute_predicate_key(meta or {})
+        await upsert_live_fact(db, mem, predicate_key)
+
     await db.commit()
     return mem
 

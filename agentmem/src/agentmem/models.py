@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Text, DateTime, Float, Boolean,
-    ForeignKey, Index, LargeBinary, JSON,
+    ForeignKey, Index, LargeBinary, JSON, Integer,
     types as sa_types,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -174,6 +174,152 @@ class ApiKey(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     rotated_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class LiveFact(Base):
+    """Compact read model: one row per live fact per agent.
+
+    Maintained synchronously on the write path.  Recall queries this table
+    instead of scanning ``memories WHERE valid_to IS NULL``, shrinking the
+    search space 5–10×.  Keyed facts (predicate_key IS NOT NULL) have at most
+    one row per (namespace, agent_id, predicate_key); unkeyed facts accumulate
+    until explicitly superseded.
+
+    Content and embedding are denormalized here so recall needs no join back
+    to the memories table.
+    """
+    __tablename__ = "live_facts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    memory_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False, unique=True)
+
+    # None for unkeyed memories; canonical "k=v|..." string for keyed ones.
+    predicate_key = Column(String, nullable=True, index=True)
+    subject_id = Column(String, nullable=True, index=True)
+    barrier_group = Column(String, nullable=True, index=True)
+    event_time = Column(DateTime(timezone=True), nullable=False)
+    importance = Column(Float, nullable=False, default=0.5)
+    metadata_ = Column("metadata", JSON, nullable=False, server_default="{}")
+
+    # Denormalized for zero-join recall
+    content_encrypted = Column(LargeBinary, nullable=True)
+    embedding = Column(_FlexVector(EMBED_DIM), nullable=True)
+
+    __table_args__ = (
+        Index("ix_live_facts_ns_agent", "namespace", "agent_id"),
+        Index("ix_live_facts_ns_agent_pred", "namespace", "agent_id", "predicate_key"),
+        Index(
+            "ix_live_facts_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+
+class MerkleAnchor(Base):
+    """Periodic Merkle root anchors for the windowed audit-chain batcher.
+
+    Each row covers a window of ``window_size`` EventLog rows whose leaf
+    hashes form the Merkle tree.  ``root_hash`` is the Merkle root; the
+    serial chain is continued by wiring ``prev_hash``/``row_hash`` exactly
+    like a regular EventLog entry so existing verify_chain() logic still works.
+    """
+    __tablename__ = "merkle_anchors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    root_hash = Column(String(64), nullable=False)
+    window_size = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    prev_anchor_id = Column(UUID(as_uuid=True), ForeignKey("merkle_anchors.id"), nullable=True)
+
+
+class ConflictFlag(Base):
+    """
+    Flagged conflict between two memories that report different values for the
+    same fact at the same (or ambiguous) point in time.
+
+    Both memories remain valid and visible until a human resolves the conflict.
+    Resolution options:
+      accept_a — memory_a is authoritative; memory_b is invalidated
+      accept_b — memory_b is authoritative; memory_a is invalidated
+      dismiss   — both memories are left live (sources legitimately differ)
+
+    A "conflict_detected" audit event is written at detection time.
+    A "conflict_resolved" audit event is written at resolution time.
+    """
+    __tablename__ = "conflict_flags"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False)
+
+    # The two memories that disagree.  memory_a is the pre-existing memory;
+    # memory_b is the newly ingested one that triggered the conflict detection.
+    memory_a_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False)
+    memory_b_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False)
+
+    confidence = Column(Float, nullable=False)   # engine confidence that these conflict
+    detected_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    # open | accept_a | accept_b | dismissed
+    status = Column(String, nullable=False, default="open", index=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolver_note = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_conflict_flags_ns_status", "namespace", "status"),
+    )
+
+
+class WebhookEndpoint(Base):
+    """
+    Registered webhook endpoint for a namespace.
+
+    AgentMem will POST a signed JSON payload to `url` when any event in
+    `events` occurs.  The payload is HMAC-SHA256-signed with `secret` so
+    receivers can verify authenticity without trusting the network.
+
+    Supported event types:
+      memory.superseded       — a memory was invalidated by a newer fact
+      memory.conflict         — a same-time contradiction was detected
+      memory.erased           — a subject's DEK was destroyed (GDPR Art. 17)
+      supersession.rejected   — a human reviewer rejected a supersession
+    """
+    __tablename__ = "webhook_endpoints"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    url = Column(Text, nullable=False)
+    secret = Column(String, nullable=False)
+    events = Column(JSON, nullable=False)  # list[str]; JSONB on PostgreSQL via migration
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    description = Column(Text, nullable=True)
+
+    __table_args__ = (Index("ix_webhook_endpoints_ns_enabled", "namespace", "enabled"),)
+
+
+class WebhookDelivery(Base):
+    """Delivery attempt log for a webhook event (used for retry and audit)."""
+    __tablename__ = "webhook_deliveries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    endpoint_id = Column(UUID(as_uuid=True), ForeignKey("webhook_endpoints.id"), nullable=False, index=True)
+    event_type = Column(String, nullable=False)
+    payload = Column(JSON, nullable=False)
+    attempt = Column(Integer, nullable=False, default=1)
+    status_code = Column(Integer, nullable=True)   # NULL = not yet attempted / error before HTTP
+    error = Column(Text, nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (Index("ix_webhook_deliveries_endpoint_created", "endpoint_id", "created_at"),)
 
 
 class NamespacePolicy(Base):

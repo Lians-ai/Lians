@@ -1,4 +1,36 @@
+"""
+Database engine and session factory.
+
+Change 9 (Postgres RLS enforcement)
+-------------------------------------
+When ``config.rls_barriers_enabled=True``, each session sets the Postgres
+session variable ``agentmem.barrier_group`` before executing queries.  The
+RLS policy on ``live_facts`` and ``memories`` then enforces the information
+barrier at the database layer, eliminating the app-layer ``OR barrier_group
+IS NULL`` post-filter.
+
+RLS is applied automatically by Alembic migration 0011_rls_barriers.  The
+effective policy on both tables is:
+
+    USING (
+        barrier_group IS NULL
+        OR current_setting('agentmem.barrier_group', true) IS NULL
+        OR barrier_group = current_setting('agentmem.barrier_group', true)
+    )
+
+    WITH FORCE ROW LEVEL SECURITY (applied to table owner as well)
+
+Admin routes use get_db() and never SET the session variable, so
+current_setting() returns NULL → the IS NULL branch fires → all rows visible.
+
+Barrier-scoped routes use get_db_with_barrier(group) which issues
+SET LOCAL agentmem.barrier_group = '<group>' → only unbarriered rows +
+rows matching the group are visible.
+
+``rls_barriers_enabled=True`` is the default after migration 0011 is applied.
+"""
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
@@ -56,4 +88,25 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def get_db_with_barrier(barrier_group: Optional[str]) -> AsyncSession:
+    """Session factory that sets the RLS barrier variable (Change 9).
+
+    Use in place of ``get_db`` for agent-scoped routes when
+    ``rls_barriers_enabled=True``.  Admin/compliance routes that need to see
+    all memories should continue using the plain ``get_db``.
+    """
+    settings = get_settings()
+    async with AsyncSessionLocal() as session:
+        if settings.rls_barriers_enabled and barrier_group is not None:
+            try:
+                from sqlalchemy import text as _text
+                await session.execute(
+                    _text("SET LOCAL agentmem.barrier_group = :bg"),
+                    {"bg": barrier_group},
+                )
+            except Exception:
+                pass  # non-PG backend — RLS not available
         yield session

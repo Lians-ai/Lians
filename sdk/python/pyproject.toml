@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentmem-sdk"
+version = "0.1.0"
+description = "Python SDK for AgentMem — financial-grade AI memory layer"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = [
+    "ai", "memory", "agents", "finance", "compliance",
+    "bitemporal", "audit", "SEC", "FINRA", "GDPR"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Office/Business :: Financial",
+]
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+http2 = ["httpx[http2]>=0.27"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",       # httpx mock library
+]
+
+[project.urls]
+Homepage = "https://agentmem.dev"
+Repository = "https://github.com/agentmem/agentmem"
+Documentation = "https://docs.agentmem.dev"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentmem_sdk"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
