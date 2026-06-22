@@ -1,7 +1,7 @@
-# TESTING.md — AgentMem Correctness Invariants
+﻿# TESTING.md — Lian Correctness Invariants
 
 This document is for customers, compliance officers, and design partners who need
-to verify that AgentMem's correctness guarantees hold on their deployment. It lists
+to verify that Lian's correctness guarantees hold on their deployment. It lists
 the six named invariants, the tests that cover them, and how to reproduce the
 verification on a fresh install.
 
@@ -9,7 +9,7 @@ verification on a fresh install.
 
 ## The six named invariants
 
-These are the properties that define "correct" for AgentMem. A build that violates
+These are the properties that define "correct" for Lian. A build that violates
 any of them is wrong even if all tests pass. They are stable across versions; any
 change that weakens them is a breaking change.
 
@@ -103,7 +103,7 @@ test); `tests/test_recall_quality.py`.
 
 ```bash
 cd Ai_Mem_Soft
-EMBEDDING_PROVIDER=local python agentmem/scripts/run_benchmark.py
+EMBEDDING_PROVIDER=local python Lian/scripts/run_benchmark.py
 # Benchmark 1 should show: "stale facts in top-5: 0 / 4"
 ```
 
@@ -140,7 +140,7 @@ multi-namespace writes).
 docker compose up -d
 
 # Install
-cd agentmem
+cd Lian
 pip install -e ".[dev]"
 alembic upgrade head
 ```
@@ -173,14 +173,14 @@ pytest tests/test_barrier.py tests/test_concurrency.py -v
 
 ```bash
 cd Ai_Mem_Soft
-EMBEDDING_PROVIDER=local python agentmem/scripts/run_benchmark.py
+EMBEDDING_PROVIDER=local python Lian/scripts/run_benchmark.py
 ```
 
 Expected output:
 
 ```
 Benchmark 1 — Stale-fact contamination (5-revision NVDA chain)
-✓ AgentMem — stale facts in top-5: 0 / 4
+✓ Lian — stale facts in top-5: 0 / 4
   Pure-cosine (mem0-style) — stale facts visible: 4 / 4
 
 Benchmark 2 — Supersession classification (12-pair labeled set)
@@ -197,7 +197,7 @@ Benchmark 4 — Compliance auditability (SEC 17a-4 hash chain)
 ### Interactive demo (requires Docker)
 
 ```bash
-cd agentmem
+cd Lian
 docker compose up -d
 pip install httpx
 python scripts/seed_demo.py   # prints a read-only API key

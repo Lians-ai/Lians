@@ -1,22 +1,22 @@
-# AgentMem — Enterprise Compliance Reference
+﻿# Lian — Enterprise Compliance Reference
 
-**Audience**: Bank/capital markets procurement, vendor risk management, legal and compliance teams reviewing AgentMem for deployment in regulated environments.
+**Audience**: Bank/capital markets procurement, vendor risk management, legal and compliance teams reviewing Lian for deployment in regulated environments.
 
-This document maps AgentMem's technical controls to the specific regulatory obligations most commonly raised in financial-sector procurement questionnaires (DORA, EU AI Act, MiFID II, Basel III Model Risk).
+This document maps Lian's technical controls to the specific regulatory obligations most commonly raised in financial-sector procurement questionnaires (DORA, EU AI Act, MiFID II, Basel III Model Risk).
 
 ---
 
 ## 1. DORA — EU Digital Operational Resilience Act (effective Jan 17 2025)
 
-DORA Article 2 applies to financial entities and their ICT third-party service providers.  The key question for AgentMem procurement teams is: **self-hosted or managed service?**
+DORA Article 2 applies to financial entities and their ICT third-party service providers.  The key question for Lian procurement teams is: **self-hosted or managed service?**
 
 ### Self-hosted deployment (on-prem / private cloud)
 
-When you deploy AgentMem on infrastructure you operate, **you are the ICT service provider**, not AgentMem.  Your DORA Article 30 obligations (the ICT third-party risk chapter) do not flow to us — they flow inward to your own infrastructure team.
+When you deploy Lian on infrastructure you operate, **you are the ICT service provider**, not Lian.  Your DORA Article 30 obligations (the ICT third-party risk chapter) do not flow to us — they flow inward to your own infrastructure team.
 
-This is the structural reason regulated institutions prefer self-hosted AgentMem over cloud-first competitors:
+This is the structural reason regulated institutions prefer self-hosted Lian over cloud-first competitors:
 
-| Obligation | Managed SaaS vendor | Self-hosted AgentMem |
+| Obligation | Managed SaaS vendor | Self-hosted Lian |
 |------------|--------------------|--------------------|
 | DORA Art. 30 — ICT contract requirements | Must negotiate with vendor | Internal policy; you control it |
 | DORA Art. 28 — Concentration risk (cloud) | Applies if using cloud-hosted SaaS | Eliminated when on-prem |
@@ -26,9 +26,9 @@ This is the structural reason regulated institutions prefer self-hosted AgentMem
 
 > **Note:** Zep (the primary alternative) removed its self-hosted Community Edition in 2025, making it a cloud-only offering. Self-hosted deployment is available exclusively via the raw open-source Graphiti library, which provides no compliance stack, no audit API, and no managed schema.
 
-### DORA operational resilience — AgentMem technical controls
+### DORA operational resilience — Lian technical controls
 
-| DORA Requirement | AgentMem Control |
+| DORA Requirement | Lian Control |
 |-----------------|-----------------|
 | ICT incident detection and classification | Prometheus metrics (`/metrics`), OpenTelemetry trace export, structured JSON logs |
 | Business continuity — RTO/RPO | Postgres streaming replication + WAL archiving; Redis for cache only (stateless degradation) |
@@ -40,13 +40,13 @@ This is the structural reason regulated institutions prefer self-hosted AgentMem
 
 ## 2. EU AI Act — High-Risk AI Systems (Art. 9–13, compliance deadline Aug 2026)
 
-The EU AI Act classifies AI systems used in credit scoring, insurance underwriting, and employment as **high-risk** (Annex III). AgentMem is a memory layer, not an AI system itself, but it is a component of high-risk AI pipelines and must meet the record-keeping obligations imposed on those pipelines.
+The EU AI Act classifies AI systems used in credit scoring, insurance underwriting, and employment as **high-risk** (Annex III). Lian is a memory layer, not an AI system itself, but it is a component of high-risk AI pipelines and must meet the record-keeping obligations imposed on those pipelines.
 
 ### Article 12 — Record-keeping
 
 > "High-risk AI systems shall be designed and developed with capabilities enabling the automatic recording of events ('logs') throughout the lifetime of the AI system."
 
-| Requirement | AgentMem Implementation |
+| Requirement | Lian Implementation |
 |------------|------------------------|
 | Automatic event recording | Every memory write, recall, supersession, and erasure writes an immutable audit event |
 | Tamper-evident logs | SHA-256 serial hash chain; `GET /v1/admin/audit/verify` returns `{"chain_valid": true/false}` |
@@ -71,7 +71,7 @@ MiFID II Article 16(7) requires investment firms to maintain records of all serv
 
 ### Hash-chain audit trail — MiFID II alignment
 
-| MiFID II Requirement | AgentMem Implementation |
+| MiFID II Requirement | Lian Implementation |
 |---------------------|------------------------|
 | Record all transactions and services | Every memory write and recall is an audit event |
 | Records must be stored in a medium that prevents alteration | Hash chain; each event commits to the hash of the prior event — altering any record breaks `chain_valid` |
@@ -109,7 +109,7 @@ The most common model risk failure mode for AI agents is **look-ahead bias**: th
 
 Response flags every memory fact the agent possessed that was **ingested after** `simulation_as_of` — direct evidence for the model validation report that the backtest is clean.
 
-| SR 11-7 Requirement | AgentMem Control |
+| SR 11-7 Requirement | Lian Control |
 |--------------------|-----------------|
 | Model identification and inventory | Agent namespaces provide a natural model registry; `GET /v1/agents` lists all deployed agent IDs |
 | Conceptual soundness | Supersession rule engine (SUPERSEDES/CONFIRMS/ADDS/CONTRADICTS) documents the agent's belief-update logic |
@@ -125,7 +125,7 @@ Response flags every memory fact the agent possessed that was **ingested after**
 
 When a single AI deployment serves a firm's investment banking desk and its equity research desk simultaneously, the information barrier between them must extend to the memory layer. It is not sufficient to configure barriers at the application layer — an application-layer bug or misconfiguration can expose deal-sensitive information to research analysts.
 
-AgentMem's information barriers are enforced **at the PostgreSQL layer** via `FORCE ROW LEVEL SECURITY`, meaning:
+Lian's information barriers are enforced **at the PostgreSQL layer** via `FORCE ROW LEVEL SECURITY`, meaning:
 
 1. A misconfigured application cannot read across barrier groups — the DB policy rejects the query
 2. A compromised application service with valid DB credentials still cannot read cross-barrier — the RLS policy runs under the table owner's security context, not the session user
@@ -150,7 +150,7 @@ POST /v1/admin/agents
 }
 ```
 
-Each write and recall sets `SET LOCAL agentmem.barrier_group = <group>` in the DB session, so the RLS policy enforces isolation without any application-layer check.
+Each write and recall sets `SET LOCAL Lian.barrier_group = <group>` in the DB session, so the RLS policy enforces isolation without any application-layer check.
 
 ---
 
@@ -160,7 +160,7 @@ GDPR Article 17 (Right to Erasure / "Right to be Forgotten") requires the abilit
 
 Crypto-shred satisfies Article 17 without requiring physical deletion of backup media:
 
-| GDPR Requirement | AgentMem Implementation |
+| GDPR Requirement | Lian Implementation |
 |-----------------|------------------------|
 | Erasure of personal data | `POST /v1/erase` destroys the per-subject DEK; all content encrypted under that key is immediately irrecoverable |
 | Backup/archive coverage | Future restores that decrypt content will fail — the key is gone. Audit rows survive (no personal data in audit schema; only hashes). |
@@ -177,7 +177,7 @@ Common questions from bank information security and vendor risk management teams
 | Question | Response |
 |----------|----------|
 | Where is data stored? | Self-hosted: your Postgres + Redis on your infrastructure. No data leaves your network. |
-| Who has access to encryption keys? | Customer controls the master key (KMS_PROVIDER). AgentMem never sees the plaintext key in cloud deployment. |
+| Who has access to encryption keys? | Customer controls the master key (KMS_PROVIDER). Lian never sees the plaintext key in cloud deployment. |
 | Is the codebase auditable? | Yes — fully open source. Security teams can audit the full implementation before deployment. |
 | Is there a SOC 2 report? | Not currently; planned. The compliance controls mapped here are technically equivalent to many SOC 2 CC requirements. Enterprise customers may conduct their own audit of the self-hosted deployment. |
 | Can we do a penetration test? | Yes — self-hosted deployment is your environment; no approval needed. |

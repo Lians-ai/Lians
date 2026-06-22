@@ -1,17 +1,17 @@
-# AgentMem Benchmark: Financial Memory Quality vs mem0, Zep, and Letta
+﻿# Lian Benchmark: Financial Memory Quality vs mem0, Zep, and Letta
 
-This document compares AgentMem against mem0 and Zep across four dimensions that
+This document compares Lian against mem0 and Zep across four dimensions that
 matter most for financial AI agents: stale-fact contamination, supersession
 accuracy, point-in-time recall, and compliance auditability.
 
-All AgentMem tests are reproducible with zero API calls:
+All Lian tests are reproducible with zero API calls:
 
 ```bash
 cd Ai_Mem_Soft
-python -m pytest agentmem/tests/test_supersession_benchmark.py \
-                 agentmem/tests/test_recall_quality.py \
-                 agentmem/tests/test_temporal_stress.py \
-                 agentmem/tests/test_compliance.py -v
+python -m pytest Lian/tests/test_supersession_benchmark.py \
+                 Lian/tests/test_recall_quality.py \
+                 Lian/tests/test_temporal_stress.py \
+                 Lian/tests/test_compliance.py -v
 ```
 
 ---
@@ -32,7 +32,7 @@ mem0 was not designed with these constraints. Zep's **Graphiti** (released Jan 2
 point-in-time queries for its knowledge graph — a meaningful capability advance.
 What Graphiti does not provide is the compliance stack: no SHA-256 hash chain, no
 GDPR crypto-shred with audit survival, no information barriers at the DB layer, and
-no dedicated backtest-contamination detection API. AgentMem was designed for all of it.
+no dedicated backtest-contamination detection API. Lian was designed for all of it.
 
 ---
 
@@ -46,14 +46,14 @@ stale revisions so they never reach the LLM context.
 
 | System | Stale facts in top-5 | Current fact rank |
 |--------|---------------------|------------------|
-| **AgentMem hybrid** | **0 / 4** | **#1** |
+| **Lian hybrid** | **0 / 4** | **#1** |
 | Pure cosine (mem0-style) | 4 / 4 | #4 |
 
 mem0 uses pure cosine retrieval with no structured supersession.
 The four stale revisions share near-identical embeddings with the query — so all
 four outrank or tie the current fact. The agent receives contaminated context.
 
-AgentMem applies a **0.1× validity multiplier** to superseded memories at the DB
+Lian applies a **0.1× validity multiplier** to superseded memories at the DB
 level (`valid_to IS NULL` filter in `hybrid_recall`). Stale facts are excluded
 entirely from present-time recall; they cannot pollute the LLM context regardless
 of their cosine similarity.
@@ -65,7 +65,7 @@ of their cosine similarity.
 **Setup:** 22 labeled memory pairs — 12 synthetic cases covering edge cases and
 12 real-world cases sourced from public records (FOMC rate decisions, NVDA FY2026
 guidance revisions, TSLA quarterly delivery releases, Moody's ratings actions).
-Each pair is classified by AgentMem's Stage 1+2 deterministic engine (no LLM call).
+Each pair is classified by Lian's Stage 1+2 deterministic engine (no LLM call).
 
 **Classes:**
 - **SUPERSEDES** — same entity+attribute, newer event, different value
@@ -114,7 +114,7 @@ benchmark runs on structured rule logic only; Graphiti has no equivalent test.
 (Q1: 400k, Q2: 430k, Q3: 460k, Q4: 480k) ingested in order. Query each revision's
 `as_of` window with *"TSLA deliveries"*.
 
-| Query as_of | Expected | AgentMem correct | mem0 correct | Graphiti/Zep† |
+| Query as_of | Expected | Lian correct | mem0 correct | Graphiti/Zep† |
 |-------------|----------|-----------------|--------------|---------------|
 | Q1 + 1 day | 400k | ✓ | ✗ | N/T |
 | Q2 + 1 day | 430k | ✓ | ✗ | N/T |
@@ -136,7 +136,7 @@ genuine bitemporal model: graph edges carry `t_valid` / `t_invalid` intervals
 (event-time axis) and a separate ingestion timestamp. It does support point-in-time
 queries at the graph level — "What did we know about entity X as of date D?"
 
-The distinction from AgentMem on this benchmark is architectural: Graphiti's
+The distinction from Lian on this benchmark is architectural: Graphiti's
 point-in-time model operates over a **knowledge graph** (nodes and edges), not a
 relational vector store. The benchmark above uses a structured relational query
 (`valid_from ≤ as_of < valid_to`) against indexed timestamps. Whether Graphiti's
@@ -144,7 +144,7 @@ graph traversal returns identical results under late-arriving, cross-entity revi
 chains is not published or benchmarked by Zep. The result above marks Graphiti as
 untested (N/T) rather than incorrect (✗).
 
-AgentMem stores two orthogonal timestamps per memory:
+Lian stores two orthogonal timestamps per memory:
 - `event_time` — when the real-world event happened (the business clock)
 - `ingestion_time` — when the memory was ingested (the system clock)
 
@@ -165,7 +165,7 @@ cannot satisfy that obligation.
 and CPI. Each memory tagged with `ticker` and `metric` metadata. Four labeled
 queries.
 
-| Metric | AgentMem hybrid | Pure cosine (mem0-style) |
+| Metric | Lian hybrid | Pure cosine (mem0-style) |
 |--------|----------------|--------------------------|
 | Avg MRR (4 queries) | **1.000** | 1.000 |
 | Avg P@3 (4 queries) | 0.583 | 0.667 |
@@ -176,10 +176,10 @@ The MRR numbers reflect a balanced corpus where each query has a clear top-1 mat
 
 The critical difference appears when superseded memories enter the corpus (see
 Benchmark 1): pure cosine's P@3 collapses to 0.25 (1 current fact surrounded by
-3 stale ones) while AgentMem maintains P@3=1.0 because stale facts are excluded
+3 stale ones) while Lian maintains P@3=1.0 because stale facts are excluded
 before ranking.
 
-AgentMem's hybrid scorer combines:
+Lian's hybrid scorer combines:
 - **Okapi BM25** (k₁=1.5, b=0.75) — term frequency without stopword inflation
 - **Cosine similarity** against Voyage Finance-2 embeddings (1024-dim, finance-tuned)
 - **Recency decay** — exponential half-life of 90 days on `event_time`
@@ -193,7 +193,7 @@ AgentMem's hybrid scorer combines:
 
 This dimension has no direct analogue in mem0 or Zep.
 
-| Capability | AgentMem | mem0 | Zep |
+| Capability | Lian | mem0 | Zep |
 |-----------|----------|------|-----|
 | Append-only audit trail | ✓ | ✗ | ✗ |
 | SHA-256 hash chain (SEC 17a-4) | ✓ | ✗ | ✗ |
@@ -238,16 +238,16 @@ pip install -e .
 
 # Run all benchmark tests (zero API calls — uses local hash-projection embeddings)
 python -m pytest \
-  agentmem/tests/test_supersession_benchmark.py \
-  agentmem/tests/test_recall_quality.py \
-  agentmem/tests/test_temporal_stress.py \
-  agentmem/tests/test_compliance.py \
-  agentmem/tests/test_audit_chain.py \
+  Lian/tests/test_supersession_benchmark.py \
+  Lian/tests/test_recall_quality.py \
+  Lian/tests/test_temporal_stress.py \
+  Lian/tests/test_compliance.py \
+  Lian/tests/test_audit_chain.py \
   -v --tb=short
 
 # Stale-contamination and point-in-time numbers (inline script)
 EMBEDDING_PROVIDER=local MASTER_ENCRYPTION_KEY="" KMS_PROVIDER=env \
-  python agentmem/scripts/run_benchmark.py
+  python Lian/scripts/run_benchmark.py
 ```
 
 617 tests pass with `EMBEDDING_PROVIDER=local` (no Voyage/OpenAI key required).
@@ -309,12 +309,12 @@ indexed by cosine similarity and relies on the downstream LLM to reason
 about staleness.
 
 After the roadmap:
-- **Latency**: AgentMem's keyed router (Change 2) handles the majority of
+- **Latency**: Lian's keyed router (Change 2) handles the majority of
   financial recalls in sub-millisecond — comparable to mem0's simple cosine
   lookup on a warm index, but with stale-fact exclusion built in.
 - **Correctness**: mem0's stale-contamination problem (Benchmark 1: 4/4 stale
   facts in top-5) is architectural, not a tuning issue.  The roadmap makes
-  AgentMem faster *and* keeps the 0/4 score intact.
+  Lian faster *and* keeps the 0/4 score intact.
 - **Compliance**: unchanged — mem0 has no audit trail, no crypto-shred, no
   point-in-time recall.
 
@@ -326,7 +326,7 @@ After the roadmap:
 explicitly supports point-in-time queries. This is a real capability — not marketing.
 
 **What this closes:** the "only bitemporal agent memory" headline no longer belongs
-exclusively to AgentMem. Any positioning that leans on bitemporal as the primary
+exclusively to Lian. Any positioning that leans on bitemporal as the primary
 differentiator is now inaccurate.
 
 **What it does not close:**
@@ -341,19 +341,19 @@ differentiator is now inaccurate.
   the DB layer, no dedicated backtest-contamination detection API. These are absent
   from Graphiti's docs, GitHub, and all published literature as of June 2026.
 - **Architecture**: Graphiti is a knowledge graph (Neo4j-style nodes and edges).
-  AgentMem is a relational vector store. PostgreSQL RLS, `FORCE ROW LEVEL SECURITY`,
+  Lian is a relational vector store. PostgreSQL RLS, `FORCE ROW LEVEL SECURITY`,
   and per-row hash chaining are natural in a relational model; they are
   fundamentally harder to bolt onto a graph traversal model.
 
 After the roadmap:
 - **Latency**: Graphiti's write path requires LLM entity extraction on every
-  ingestion. AgentMem's keyed path (Change 3) runs deterministic rules at ~0 ms
+  ingestion. Lian's keyed path (Change 3) runs deterministic rules at ~0 ms
   for structured keys. Both systems reach similar recall latency on warm cache;
-  AgentMem's write path is an order of magnitude cheaper on structured financial data.
-- **Correctness**: temporal-ordering invariant is formally tested in AgentMem
+  Lian's write path is an order of magnitude cheaper on structured financial data.
+- **Correctness**: temporal-ordering invariant is formally tested in Lian
   (`test_supersession_benchmark.py`). Graphiti has no equivalent published benchmark.
 - **Compliance**: the hash chain, crypto-shred, information barriers, and backtest
-  contamination API remain entirely in AgentMem's column. This is the table stake
+  contamination API remain entirely in Lian's column. This is the table stake
   that separates a developer tool from a compliance-grade memory layer.
 
 ### vs. Letta (MemGPT successor)
@@ -363,15 +363,15 @@ It does not provide a shared multi-agent memory layer, bitemporal modeling,
 or regulatory compliance primitives.
 
 - **Architecture**: Letta is per-agent (single LLM instance with paged memory);
-  AgentMem is a service-layer shared across agents — the right model for
+  Lian is a service-layer shared across agents — the right model for
   financial firms running multiple specialized agents that must share facts
   under information barriers.
-- **Compliance**: Letta has no equivalent of AgentMem's SEC 17a-4 audit
+- **Compliance**: Letta has no equivalent of Lian's SEC 17a-4 audit
   chain, crypto-shred, or point-in-time recall.
 
 ### Feature matrix
 
-| Dimension | AgentMem | mem0 | Graphiti/Zep† | Letta |
+| Dimension | Lian | mem0 | Graphiti/Zep† | Letta |
 |-----------|----------|------|--------------|-------|
 | Stale-fact contamination (5-rev chain) | **0 / 4** | 4 / 4 | N/T | 4 / 4 |
 | Supersession accuracy (22-pair: 12 synthetic + 10 real-world) | **100% (22/22)** | N/A | No benchmark | N/A |
@@ -413,7 +413,7 @@ existed at launch. The differentiator is no longer "the only temporal agent memo
 — it is the compliance stack: hash chain, crypto-shred, information barriers, and
 backtest contamination detection. None of those exist in any competitor.
 
-The performance roadmap makes AgentMem competitive on latency *without*
+The performance roadmap makes Lian competitive on latency *without*
 compromising any of those guarantees.  Immutability, crypto-shredding, and
 information barriers are the product; the roadmap reshapes how they are
 implemented so they no longer penalize the hot path.

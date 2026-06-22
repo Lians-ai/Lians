@@ -38,6 +38,10 @@ Thumbs.db
 # Internal working documents (not client-facing)
 SCALE.md
 BUILD.md
+MARKET.md
+
+# Personal files
+*.pdf
 
 # Node
 node_modules/
