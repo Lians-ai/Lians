@@ -1,15 +1,15 @@
 """
-AgentMemClient — synchronous wrapper around AsyncAgentMemClient.
+LianClient — synchronous wrapper around AsyncLianClient.
 
 For scripts, CLIs, and any non-async context.  In async code (FastAPI
-handlers, Jupyter with a running loop) use AsyncAgentMemClient directly.
+handlers, Jupyter with a running loop) use AsyncLianClient directly.
 
 Usage::
 
-    from agentmem_sdk import AgentMemClient
+    from lian import LianClient
     from datetime import datetime, timezone
 
-    with AgentMemClient(base_url="http://localhost:8000", api_key="...") as client:
+    with LianClient(base_url="http://localhost:8000", api_key="...") as client:
         client.add(
             agent_id="my-agent",
             content="NVDA guidance $36B",
@@ -26,11 +26,11 @@ import asyncio
 from datetime import datetime
 from typing import Any, Optional
 
-from .client import AsyncAgentMemClient
+from .client import AsyncLianClient
 
 
-class AgentMemClient:
-    """Synchronous HTTP client for the AgentMem REST API."""
+class LianClient:
+    """Synchronous HTTP client for the Lian REST API."""
 
     def __init__(
         self,
@@ -39,7 +39,7 @@ class AgentMemClient:
         admin_secret: str = "",
         timeout: float = 30.0,
     ):
-        self._async = AsyncAgentMemClient(
+        self._async = AsyncLianClient(
             base_url=base_url,
             api_key=api_key,
             admin_secret=admin_secret,
@@ -49,7 +49,7 @@ class AgentMemClient:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    def __enter__(self) -> "AgentMemClient":
+    def __enter__(self) -> "LianClient":
         return self
 
     def __exit__(self, *_: Any) -> None:

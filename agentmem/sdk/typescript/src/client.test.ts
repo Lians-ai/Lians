@@ -1,15 +1,15 @@
-/**
+﻿/**
  * AgentMem TypeScript SDK — unit tests
  *
  * All tests use a mock fetch so no real API is needed.  The mock validates that:
  *   1. The client sends the correct HTTP method, path, and body.
  *   2. Timestamps are serialised to ISO 8601 strings.
- *   3. Error responses are surfaced as AgentMemError with status + body.
+ *   3. Error responses are surfaced as LianError with status + body.
  *   4. Admin endpoints include the X-Admin-Secret header.
  *   5. Query parameters are serialised correctly for GET requests.
  */
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
-import { AgentMemClient, AgentMemError } from "./client.js";
+import { LianClient, LianError } from "./client.js";
 
 // ── Mock fetch ───────────────────────────────────────────────────────────────
 
@@ -50,10 +50,10 @@ const MEMORY_FIXTURE = {
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
-let client: AgentMemClient;
+let client: LianClient;
 
 beforeEach(() => {
-  client = new AgentMemClient({
+  client = new LianClient({
     baseUrl: "https://mem.example.com",
     apiKey: "test-key",
     adminSecret: "admin-secret",
@@ -63,9 +63,9 @@ beforeEach(() => {
 
 // ── Client construction ──────────────────────────────────────────────────────
 
-describe("AgentMemClient construction", () => {
+describe("LianClient construction", () => {
   it("strips trailing slash from baseUrl", async () => {
-    const c = new AgentMemClient({ baseUrl: "https://mem.example.com/", apiKey: "k" });
+    const c = new LianClient({ baseUrl: "https://mem.example.com/", apiKey: "k" });
     const fetchMock = mockFetch({ ok: true, status: 200, body: MEMORY_FIXTURE });
     await c.addMemory({ agent_id: "a", content: "x", event_time: "2026-01-01T00:00:00Z" });
     const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -298,9 +298,9 @@ describe("verifyChain()", () => {
   });
 });
 
-// ── AgentMemError ─────────────────────────────────────────────────────────────
+// ── LianError ─────────────────────────────────────────────────────────────
 
-describe("AgentMemError", () => {
+describe("LianError", () => {
   it("is thrown with status and body on 4xx", async () => {
     mockFetch({ ok: false, status: 401, body: { detail: "Invalid or missing X-API-Key" } });
 
@@ -311,8 +311,8 @@ describe("AgentMemError", () => {
       caught = e;
     }
 
-    expect(caught).toBeInstanceOf(AgentMemError);
-    const err = caught as AgentMemError;
+    expect(caught).toBeInstanceOf(LianError);
+    const err = caught as LianError;
     expect(err.status).toBe(401);
     expect(err.message).toMatch(/401/);
   });
@@ -322,6 +322,6 @@ describe("AgentMemError", () => {
 
     await expect(
       client.addMemory({ agent_id: "a", content: "x", event_time: "2026-01-01T00:00:00Z" }),
-    ).rejects.toBeInstanceOf(AgentMemError);
+    ).rejects.toBeInstanceOf(LianError);
   });
 });

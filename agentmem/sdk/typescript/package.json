@@ -1,7 +1,7 @@
 {
-  "name": "agentmem-sdk",
+  "name": "lian",
   "version": "0.2.0",
-  "description": "TypeScript/JavaScript SDK for AgentMem — financial-grade AI memory",
+  "description": "TypeScript/JavaScript SDK for Lian — financial-grade AI memory with compliance built in",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

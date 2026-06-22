@@ -1,5 +1,5 @@
-"""
-LangGraph integration for AgentMem.
+﻿"""
+LangGraph integration for Lian.
 
 Provides node factory functions for LangGraph state machines.  Each factory
 returns an async callable with the signature ``async (state: dict) -> dict``
@@ -7,15 +7,15 @@ that LangGraph expects for graph nodes.
 
 Install::
 
-    pip install agentmem-sdk[langgraph]
+    pip install lian[langgraph]
 
 Usage — inject memories into a ReAct agent graph::
 
     from langgraph.graph import StateGraph, END
-    from agentmem_sdk import LocalAgentMemClient
-    from agentmem_sdk.langgraph_integration import create_recall_node, create_remember_node
+    from lian import LocalLianClient
+    from lian.langgraph_integration import create_recall_node, create_remember_node
 
-    client = LocalAgentMemClient()
+    client = LocalLianClient()
 
     recall_node  = create_recall_node(client,  agent_id="analyst")
     remember_node = create_remember_node(client, agent_id="analyst")
@@ -67,8 +67,8 @@ def create_recall_node(
     Parameters
     ----------
     client:
-        Any AgentMem client (``LocalAgentMemClient``, ``AgentMemClient``, or
-        ``AsyncAgentMemClient``).  Both sync and async clients are supported.
+        Any Lian client (``LocalLianClient``, ``LianClient``, or
+        ``AsyncLianClient``).  Both sync and async clients are supported.
     agent_id:
         The agent namespace to recall from.
     query_key:
@@ -132,7 +132,7 @@ def create_remember_node(
     result_key: str = "memory_stored",
 ):
     """
-    Create a LangGraph node that stores a fact from state into AgentMem.
+    Create a LangGraph node that stores a fact from state into Lian.
 
     The node reads ``state[content_key]`` and ``state[event_time_key]``.
     It writes ``state[result_key]`` with the created MemoryOut dict (or ``None``
@@ -141,7 +141,7 @@ def create_remember_node(
     Parameters
     ----------
     client:
-        Any AgentMem client.
+        Any Lian client.
     agent_id:
         The agent namespace to store into.
     content_key:

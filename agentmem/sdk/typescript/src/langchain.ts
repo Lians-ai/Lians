@@ -1,18 +1,18 @@
-/**
+﻿/**
  * LangChain.js integration for AgentMem.
  *
  * Install the optional peer dep first:
  *   npm install @langchain/core
  *
  * @example
- * import { AgentMemClient } from "agentmem-sdk";
- * import { createRecallTool, createRememberTool } from "agentmem-sdk/langchain";
+ * import { LianClient } from "lian";
+ * import { createRecallTool, createRememberTool } from "lian/langchain";
  *
- * const client = new AgentMemClient({ baseUrl: "...", apiKey: "..." });
+ * const client = new LianClient({ baseUrl: "...", apiKey: "..." });
  * const tools  = [createRecallTool(client, "equity-desk"), createRememberTool(client, "equity-desk")];
  */
 
-import type { AgentMemClient } from "./client.js";
+import type { LianClient } from "./client.js";
 
 type DynamicTool = { name: string; description: string; func: (input: string) => Promise<string> };
 
@@ -23,7 +23,7 @@ async function getDynamicTool(): Promise<new (fields: DynamicTool) => DynamicToo
     return (mod as any).DynamicTool;
   } catch {
     throw new Error(
-      "agentmem-sdk: @langchain/core is not installed. " +
+      "lian: @langchain/core is not installed. " +
       "Run `npm install @langchain/core` to use LangChain integration.",
     );
   }
@@ -34,7 +34,7 @@ async function getDynamicTool(): Promise<new (fields: DynamicTool) => DynamicToo
  * The tool accepts a plain-text query string and returns formatted results.
  */
 export async function createRecallTool(
-  client: AgentMemClient,
+  client: LianClient,
   agentId: string,
   opts: { k?: number } = {},
 ): Promise<DynamicTool> {
@@ -59,7 +59,7 @@ export async function createRecallTool(
  * The tool accepts a plain-text string describing the fact to remember.
  */
 export async function createRememberTool(
-  client: AgentMemClient,
+  client: LianClient,
   agentId: string,
 ): Promise<DynamicTool> {
   const DynamicTool = await getDynamicTool();

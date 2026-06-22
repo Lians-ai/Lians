@@ -1,11 +1,11 @@
-"""
+﻿"""
 AgentMem Python SDK — unit tests.
 
 All tests use respx to mock httpx so no real API is needed.
 Validates:
   1. Correct HTTP method, path, and JSON body for each method.
   2. Timestamps serialised to ISO-8601 strings.
-  3. AgentMemError raised with status + body on non-2xx.
+  3. LianError raised with status + body on non-2xx.
   4. Admin endpoints include X-Admin-Secret header.
   5. Query parameters serialised correctly for GET requests.
   6. Response models parsed correctly via Pydantic.
@@ -19,8 +19,8 @@ import pytest
 import respx
 import httpx
 
-from agentmem_sdk import AgentMemClient, AgentMemError, verify_webhook_signature, parse_webhook_payload
-from agentmem_sdk.types import MemoryOut, RecallResult, ContaminationReport, KnowledgeSnapshot
+from lian import LianClient, LianError, verify_webhook_signature, parse_webhook_payload
+from lian.types import MemoryOut, RecallResult, ContaminationReport, KnowledgeSnapshot
 
 BASE = "https://mem.test"
 KEY = "test-api-key"
@@ -49,7 +49,7 @@ MEMORY_FIXTURE = {
 
 @pytest.fixture
 def client():
-    return AgentMemClient(BASE, KEY, admin_secret=ADMIN, http2=False)
+    return LianClient(BASE, KEY, admin_secret=ADMIN, http2=False)
 
 
 # ── add_memory ────────────────────────────────────────────────────────────────
@@ -227,13 +227,13 @@ async def test_verify_chain_sends_admin_secret(client):
         assert route.calls[0].request.headers.get("x-admin-secret") == ADMIN
 
 
-# ── AgentMemError ─────────────────────────────────────────────────────────────
+# ── LianError ─────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_error_on_4xx(client):
     with respx.mock(base_url=BASE) as mock:
         mock.post("/v1/memories").mock(return_value=httpx.Response(401, text="Unauthorized"))
-        with pytest.raises(AgentMemError) as exc_info:
+        with pytest.raises(LianError) as exc_info:
             await client.add_memory(agent_id="a", content="c", event_time="2026-01-01T00:00:00Z")
         assert exc_info.value.status == 401
         assert "Unauthorized" in exc_info.value.body
@@ -243,7 +243,7 @@ async def test_error_on_4xx(client):
 async def test_error_on_500(client):
     with respx.mock(base_url=BASE) as mock:
         mock.post("/v1/recall").mock(return_value=httpx.Response(500, text="Internal Server Error"))
-        with pytest.raises(AgentMemError) as exc_info:
+        with pytest.raises(LianError) as exc_info:
             await client.recall(agent_id="a", query="q")
         assert exc_info.value.status == 500
 
@@ -284,7 +284,7 @@ def test_parse_webhook_payload_bad_sig():
 
 @pytest.mark.asyncio
 async def test_context_manager():
-    async with AgentMemClient(BASE, KEY, http2=False) as client:
+    async with LianClient(BASE, KEY, http2=False) as client:
         with respx.mock(base_url=BASE) as mock:
             mock.post("/v1/recall").mock(
                 return_value=httpx.Response(200, json={"memories": [], "as_of": None, "total_candidates": 0})

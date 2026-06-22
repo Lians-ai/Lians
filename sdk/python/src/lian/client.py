@@ -1,4 +1,4 @@
-"""
+﻿"""
 AgentMem Python SDK — async HTTP client.
 
 AgentMem is a financial-grade AI memory layer providing:
@@ -14,10 +14,10 @@ Requires: httpx>=0.27, pydantic>=2.0
 Example::
 
     import asyncio
-    from agentmem_sdk import AgentMemClient
+    from lian import LianClient
 
     async def main():
-        async with AgentMemClient(
+        async with LianClient(
             base_url="https://mem.yourfirm.internal",
             api_key=os.environ["AGENTMEM_API_KEY"],
         ) as client:
@@ -51,7 +51,7 @@ from .types import (
 )
 
 
-class AgentMemError(Exception):
+class LianError(Exception):
     """Raised when the server returns a non-2xx response."""
     def __init__(self, status: int, body: str, message: str) -> None:
         super().__init__(message)
@@ -59,18 +59,18 @@ class AgentMemError(Exception):
         self.body = body
 
 
-class AgentMemClient:
+class LianClient:
     """
     Async HTTP client for the AgentMem REST API.
 
     Use as an async context manager to manage the underlying httpx session::
 
-        async with AgentMemClient(base_url=..., api_key=...) as client:
+        async with LianClient(base_url=..., api_key=...) as client:
             await client.add_memory(...)
 
     Or manage the lifecycle manually::
 
-        client = AgentMemClient(base_url=..., api_key=...)
+        client = LianClient(base_url=..., api_key=...)
         await client.add_memory(...)
         await client.aclose()
     """
@@ -96,7 +96,7 @@ class AgentMemClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def __aenter__(self) -> AgentMemClient:
+    async def __aenter__(self) -> LianClient:
         return self
 
     async def __aexit__(self, *_: Any) -> None:
@@ -133,7 +133,7 @@ class AgentMemClient:
         )
         if not response.is_success:
             body = response.text
-            raise AgentMemError(
+            raise LianError(
                 response.status_code,
                 body,
                 f"AgentMem {method} {path} → {response.status_code}: {body}",

@@ -1,5 +1,5 @@
-"""
-AutoGen v0.4 integration for AgentMem.
+﻿"""
+AutoGen v0.4 integration for Lian.
 
 Provides function tools for AutoGen agents (autogen-agentchat >= 0.4 /
 autogen-core >= 0.4).  Works with both the ConversableAgent and the newer
@@ -7,17 +7,17 @@ AssistantAgent + function_tool pattern.
 
 Install::
 
-    pip install agentmem-sdk[autogen]
+    pip install lian[autogen]
     # or: pip install autogen-agentchat autogen-core
 
 Usage — AssistantAgent with function tools (AutoGen v0.4 async)::
 
     from autogen_agentchat.agents import AssistantAgent
     from autogen_ext.models import OpenAIChatCompletionClient
-    from agentmem_sdk import AsyncAgentMemClient
-    from agentmem_sdk.autogen_integration import build_autogen_tools
+    from lian import AsyncLianClient
+    from lian.autogen_integration import build_autogen_tools
 
-    client = AsyncAgentMemClient(base_url="https://mem.firm.internal", api_key="...")
+    client = AsyncLianClient(base_url="https://mem.firm.internal", api_key="...")
     tools  = build_autogen_tools(client, agent_id="equity-desk")
 
     model_client = OpenAIChatCompletionClient(model="gpt-4o")
@@ -31,10 +31,10 @@ Usage — AssistantAgent with function tools (AutoGen v0.4 async)::
 Usage — ConversableAgent (AutoGen v0.2 / classic)::
 
     from autogen import ConversableAgent
-    from agentmem_sdk import LocalAgentMemClient
-    from agentmem_sdk.autogen_integration import build_autogen_functions
+    from lian import LocalLianClient
+    from lian.autogen_integration import build_autogen_functions
 
-    client = LocalAgentMemClient()
+    client = LocalLianClient()
     functions, function_map = build_autogen_functions(client, agent_id="analyst")
 
     agent = ConversableAgent(
@@ -68,8 +68,8 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
     Parameters
     ----------
     client:
-        Any AgentMem client — ``LocalAgentMemClient``, ``AgentMemClient``, or
-        ``AsyncAgentMemClient``.  Async clients are detected automatically.
+        Any Lian client — ``LocalLianClient``, ``LianClient``, or
+        ``AsyncLianClient``.  Async clients are detected automatically.
     agent_id:
         The agent namespace to read/write memories under.
 
@@ -81,14 +81,14 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
     ------
     ImportError
         If ``autogen-core`` is not installed.
-        Install with: ``pip install agentmem-sdk[autogen]``
+        Install with: ``pip install lian[autogen]``
     """
     try:
         from autogen_core.tools import FunctionTool  # type: ignore[import]
     except ImportError:
         raise ImportError(
             "autogen-core is required for AutoGen integration.\n"
-            "Install with: pip install agentmem-sdk[autogen]\n"
+            "Install with: pip install lian[autogen]\n"
             "or: pip install autogen-core"
         )
 
@@ -116,7 +116,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
         importance: float = 0.5,
     ) -> str:
         """
-        Store a fact in AgentMem persistent memory.
+        Store a fact in Lian persistent memory.
 
         Use event_time_iso for when the event occurred (not now). Add structured
         metadata for precision recall: ticker, metric, entity, source, jurisdiction.
@@ -150,7 +150,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
 
     async def agentmem_recall(query: str, k: int = 5) -> str:
         """
-        Retrieve current relevant facts from AgentMem.
+        Retrieve current relevant facts from Lian.
 
         Superseded facts are excluded at the DB layer. Only the most recent
         valid value for each fact is returned — your agent never sees stale context.
@@ -204,7 +204,7 @@ def build_autogen_functions(
     Parameters
     ----------
     client:
-        Any synchronous AgentMem client (LocalAgentMemClient or AgentMemClient).
+        Any synchronous Lian client (LocalLianClient or LianClient).
     agent_id:
         The agent namespace to read/write memories under.
 
@@ -239,7 +239,7 @@ def build_autogen_functions(
     functions = [
         {
             "name": "agentmem_remember",
-            "description": "Store a fact with its event timestamp in AgentMem persistent memory.",
+            "description": "Store a fact with its event timestamp in Lian persistent memory.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -253,7 +253,7 @@ def build_autogen_functions(
         },
         {
             "name": "agentmem_recall",
-            "description": "Retrieve current relevant facts from AgentMem (superseded facts excluded).",
+            "description": "Retrieve current relevant facts from Lian (superseded facts excluded).",
             "parameters": {
                 "type": "object",
                 "properties": {

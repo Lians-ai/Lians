@@ -3,10 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentmem-sdk"
+name = "lian"
 version = "0.1.0"
-description = "Python SDK for AgentMem — financial-grade AI memory layer"
-license = { text = "MIT" }
+description = "Financial-grade AI memory — bitemporal facts, SEC 17a-4 audit chain, GDPR crypto-shred"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 keywords = [
     "ai", "memory", "agents", "finance", "compliance",
@@ -16,7 +16,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -34,16 +34,16 @@ http2 = ["httpx[http2]>=0.27"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
-    "respx>=0.21",       # httpx mock library
+    "respx>=0.21",
 ]
 
 [project.urls]
-Homepage = "https://agentmem.dev"
-Repository = "https://github.com/agentmem/agentmem"
-Documentation = "https://docs.agentmem.dev"
+Homepage      = "https://github.com/ebeirne/AI_Memory_Software_lotus"
+Repository    = "https://github.com/ebeirne/AI_Memory_Software_lotus"
+Documentation = "https://github.com/ebeirne/AI_Memory_Software_lotus#readme"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentmem_sdk"]
+packages = ["src/lian"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

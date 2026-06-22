@@ -1,9 +1,9 @@
-"""
+﻿"""
 Demo: research agent tracking earnings revisions with AgentMem.
 
 Shows two modes:
-  - Local mode  (LocalAgentMemClient): zero setup, in-memory SQLite, no server
-  - HTTP mode   (AgentMemClient):      sync client -> real AgentMem server
+  - Local mode  (LocalLianClient): zero setup, in-memory SQLite, no server
+  - HTTP mode   (LianClient):      sync client -> real Lian server
 
 Run local mode immediately::
 
@@ -85,14 +85,14 @@ def main():
     args = parser.parse_args()
 
     if args.mode == "local":
-        from agentmem_sdk import LocalAgentMemClient
+        from lian import LocalLianClient
         print("=== Local mode (no server needed) ===\n")
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             run_demo(mem)
     else:
-        from agentmem_sdk import AgentMemClient
+        from lian import LianClient
         print(f"=== HTTP mode -> {args.base_url} ===\n")
-        with AgentMemClient(base_url=args.base_url, api_key=args.api_key) as mem:
+        with LianClient(base_url=args.base_url, api_key=args.api_key) as mem:
             run_demo(mem)
 
 

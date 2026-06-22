@@ -1,13 +1,13 @@
-"""
+﻿"""
 Extended SDK tests covering the methods added in this session:
 
-  LocalAgentMemClient:
+  LocalLianClient:
     - batch_add
     - recall_at
     - review_supersessions
     - confirm_supersession / reject_supersession
 
-  AgentMemClient (sync HTTP):
+  LianClient (sync HTTP):
     - batch_add delegation
     - recall_at delegation
     - review_supersessions / confirm / reject delegation
@@ -25,7 +25,7 @@ Extended SDK tests covering the methods added in this session:
     - recall_facts_at returns point-in-time snapshot
     - ImportError raised when crewai not installed
 
-All LocalAgentMemClient tests run against real in-memory SQLite (no mocking,
+All LocalLianClient tests run against real in-memory SQLite (no mocking,
 no server).  HTTP client tests mock the async layer to stay fast.
 """
 import json
@@ -37,7 +37,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
 
-from agentmem_sdk import LocalAgentMemClient, AgentMemClient
+from lian import LocalLianClient, LianClient
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 T1 = datetime(2026, 5, 10, tzinfo=timezone.utc)
@@ -45,13 +45,13 @@ T2 = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 
 # ===========================================================================
-# LocalAgentMemClient — batch_add
+# LocalLianClient — batch_add
 # ===========================================================================
 
 class TestLocalBatchAdd:
 
     def test_batch_add_single_item(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             result = mem.batch_add([{
                 "agent_id": "a",
                 "content": "NVDA guidance $36B",
@@ -63,7 +63,7 @@ class TestLocalBatchAdd:
         assert result["memories"][0]["content"] == "NVDA guidance $36B"
 
     def test_batch_add_multiple_items(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             result = mem.batch_add([
                 {"agent_id": "a", "content": "AAPL revenue $90B",
                  "event_time": T0, "metadata": {"ticker": "AAPL", "metric": "revenue"}},
@@ -74,7 +74,7 @@ class TestLocalBatchAdd:
 
     def test_batch_add_later_item_supersedes_earlier(self):
         """Within a batch, a later revision should supersede an earlier one."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.batch_add([
                 {"agent_id": "a", "content": "NVDA guidance $32B",
                  "event_time": T0, "metadata": {"ticker": "NVDA", "metric": "guidance"}},
@@ -87,13 +87,13 @@ class TestLocalBatchAdd:
         assert "$36B" in top
 
     def test_batch_add_empty_list_returns_zero(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             result = mem.batch_add([])
         assert result["added"] == 0
 
     def test_batch_add_recalled_individually(self):
         """Each item from a batch should be individually retrievable."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             tickers = ["AAPL", "TSLA", "NVDA"]
             mem.batch_add([
                 {"agent_id": "a", "content": f"{t} EPS $3.00",
@@ -107,13 +107,13 @@ class TestLocalBatchAdd:
 
 
 # ===========================================================================
-# LocalAgentMemClient — recall_at
+# LocalLianClient — recall_at
 # ===========================================================================
 
 class TestLocalRecallAt:
 
     def test_recall_at_returns_past_snapshot(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="TSLA deliveries 400k",
                     event_time=T0, metadata={"ticker": "TSLA", "metric": "deliveries"})
             mem.add(agent_id="a", content="TSLA deliveries 450k",
@@ -127,7 +127,7 @@ class TestLocalRecallAt:
         assert not any("450k" in c for c in contents)
 
     def test_recall_at_present_returns_current(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="TSLA deliveries 400k",
                     event_time=T0, metadata={"ticker": "TSLA", "metric": "deliveries"})
             mem.add(agent_id="a", content="TSLA deliveries 450k",
@@ -140,7 +140,7 @@ class TestLocalRecallAt:
 
     def test_recall_at_matches_recall_with_as_of(self):
         """recall_at must produce identical results to recall(as_of=...)."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="FED rate 5.25%",
                     event_time=T0, metadata={})
 
@@ -151,13 +151,13 @@ class TestLocalRecallAt:
 
 
 # ===========================================================================
-# LocalAgentMemClient — supersession review / confirm / reject
+# LocalLianClient — supersession review / confirm / reject
 # ===========================================================================
 
 class TestLocalSupersessionReview:
 
     def test_review_supersessions_returns_result_shape(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             # Low-importance add so it might land in review queue
             mem.add(agent_id="a", content="NVDA guidance $32B",
                     event_time=T0, metadata={"ticker": "NVDA", "metric": "guidance"})
@@ -173,7 +173,7 @@ class TestLocalSupersessionReview:
 
     def test_review_supersessions_custom_threshold(self):
         """Passing threshold=1.0 should return all supersession events."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="AAPL EPS $1.50",
                     event_time=T0, metadata={"ticker": "AAPL", "metric": "eps"})
             mem.add(agent_id="a", content="AAPL EPS $1.60",
@@ -185,7 +185,7 @@ class TestLocalSupersessionReview:
 
     def test_confirm_supersession_on_review_item(self):
         """confirm_supersession should succeed for a real supersession event."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="NVDA guidance $32B",
                     event_time=T0, metadata={"ticker": "NVDA", "metric": "guidance"})
             new = mem.add(agent_id="a", content="NVDA guidance $36B",
@@ -202,7 +202,7 @@ class TestLocalSupersessionReview:
 
     def test_reject_supersession_restores_old_memory(self):
         """After reject, the old memory should reappear in present-time recall."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             old = mem.add(agent_id="a", content="NVDA guidance $32B",
                           event_time=T0, metadata={"ticker": "NVDA", "metric": "guidance"})
             mem.add(agent_id="a", content="NVDA guidance $36B",
@@ -218,13 +218,13 @@ class TestLocalSupersessionReview:
 
 
 # ===========================================================================
-# AgentMemClient (sync HTTP) — new method delegation
+# LianClient (sync HTTP) — new method delegation
 # ===========================================================================
 
 class TestSyncHTTPClientExtended:
 
     def _client(self):
-        return AgentMemClient(base_url="http://fake", api_key="k", admin_secret="s")
+        return LianClient(base_url="http://fake", api_key="k", admin_secret="s")
 
     def test_batch_add_delegates(self):
         client = self._client()
@@ -338,9 +338,9 @@ class TestLangGraphIntegration:
 
     def test_recall_node_injects_memories(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_recall_node
+        from lian.langgraph_integration import create_recall_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             client.add(agent_id="lg", content="NVDA guidance $36B",
                        event_time=T0, metadata={"ticker": "NVDA"})
 
@@ -354,9 +354,9 @@ class TestLangGraphIntegration:
 
     def test_recall_node_empty_query_returns_empty(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_recall_node
+        from lian.langgraph_integration import create_recall_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             recall = create_recall_node(client, agent_id="lg2")
             result = asyncio.run(recall({"query": ""}))
 
@@ -364,9 +364,9 @@ class TestLangGraphIntegration:
 
     def test_recall_node_custom_keys(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_recall_node
+        from lian.langgraph_integration import create_recall_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             client.add(agent_id="lg3", content="FED rate 5.25%",
                        event_time=T0, metadata={})
 
@@ -382,9 +382,9 @@ class TestLangGraphIntegration:
 
     def test_recall_node_as_of_key(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_recall_node
+        from lian.langgraph_integration import create_recall_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             client.add(agent_id="lg4", content="TSLA deliveries 400k",
                        event_time=T0, metadata={"ticker": "TSLA"})
             client.add(agent_id="lg4", content="TSLA deliveries 450k",
@@ -406,9 +406,9 @@ class TestLangGraphIntegration:
 
     def test_remember_node_stores_memory(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_remember_node
+        from lian.langgraph_integration import create_remember_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             remember = create_remember_node(client, agent_id="lg5")
             state = {
                 "memory_content": "JPM net income $13B",
@@ -424,9 +424,9 @@ class TestLangGraphIntegration:
 
     def test_remember_node_no_content_returns_none(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_remember_node
+        from lian.langgraph_integration import create_remember_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             remember = create_remember_node(client, agent_id="lg6")
             result = asyncio.run(remember({}))
 
@@ -435,9 +435,9 @@ class TestLangGraphIntegration:
     def test_remember_node_default_event_time(self):
         """When event_time_key is absent, node defaults to now()."""
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_remember_node
+        from lian.langgraph_integration import create_remember_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             remember = create_remember_node(client, agent_id="lg7")
             result = asyncio.run(remember({"memory_content": "test fact"}))
 
@@ -445,9 +445,9 @@ class TestLangGraphIntegration:
 
     def test_batch_remember_node(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_batch_remember_node
+        from lian.langgraph_integration import create_batch_remember_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             batch_node = create_batch_remember_node(client, agent_id="lg8")
             state = {
                 "memories_to_store": [
@@ -463,16 +463,16 @@ class TestLangGraphIntegration:
 
     def test_batch_remember_node_empty_list(self):
         import asyncio
-        from agentmem_sdk.langgraph_integration import create_batch_remember_node
+        from lian.langgraph_integration import create_batch_remember_node
 
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             batch_node = create_batch_remember_node(client, agent_id="lg9")
             result = asyncio.run(batch_node({}))
 
         assert result["batch_stored"]["added"] == 0
 
     def test_format_memories_for_prompt(self):
-        from agentmem_sdk.langgraph_integration import format_memories_for_prompt
+        from lian.langgraph_integration import format_memories_for_prompt
 
         memories = [
             {"event_time": "2026-05-10T00:00:00Z", "content": "NVDA guidance $36B"},
@@ -484,11 +484,11 @@ class TestLangGraphIntegration:
         assert "FED" in text
 
     def test_format_memories_empty(self):
-        from agentmem_sdk.langgraph_integration import format_memories_for_prompt
+        from lian.langgraph_integration import format_memories_for_prompt
         assert format_memories_for_prompt([]) == "No relevant memories."
 
     def test_format_memories_erased_content(self):
-        from agentmem_sdk.langgraph_integration import format_memories_for_prompt
+        from lian.langgraph_integration import format_memories_for_prompt
         memories = [{"event_time": "2026-01-01T00:00:00Z", "content": None}]
         text = format_memories_for_prompt(memories)
         assert "[erased]" in text
@@ -502,35 +502,35 @@ class TestLangGraphIntegration:
 class TestCrewAIIntegration:
 
     def test_returns_three_tools(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = build_crewai_tools(client, agent_id="crew")
         assert len(tools) == 3
 
     def test_tool_names(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = build_crewai_tools(client, agent_id="crew")
         names = {t.name for t in tools}
         assert names == {"remember_fact", "recall_facts", "recall_facts_at"}
 
     def test_tools_have_descriptions(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = build_crewai_tools(client, agent_id="crew")
         for tool in tools:
             assert tool.description and len(tool.description) > 20
 
     def test_tools_have_args_schema(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = build_crewai_tools(client, agent_id="crew")
         for tool in tools:
             assert tool.args_schema is not None, f"{tool.name} missing args_schema"
 
     def test_remember_fact_stores_memory(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_crewai_tools(client, agent_id="crew2")}
             result = tools["remember_fact"]._run(
                 content="NVDA Q3 guidance $36B",
@@ -543,8 +543,8 @@ class TestCrewAIIntegration:
         assert any("$36B" in (m.get("content") or "") for m in memories)
 
     def test_recall_facts_finds_stored_memory(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_crewai_tools(client, agent_id="crew3")}
             tools["remember_fact"]._run(
                 content="AAPL gross margin 46%",
@@ -556,16 +556,16 @@ class TestCrewAIIntegration:
         assert "46%" in result
 
     def test_recall_facts_no_results(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_crewai_tools(client, agent_id="crew4")}
             result = tools["recall_facts"]._run(query="nonexistent zzzxxx", k=3)
 
         assert "No relevant memories" in result
 
     def test_recall_facts_at_point_in_time(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_crewai_tools(client, agent_id="crew5")}
 
             tools["remember_fact"]._run(
@@ -589,8 +589,8 @@ class TestCrewAIIntegration:
         assert "$36B" not in result
 
     def test_recall_facts_at_header_contains_date(self):
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        with LocalAgentMemClient() as client:
+        from lian.crewai_integration import build_crewai_tools
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_crewai_tools(client, agent_id="crew6")}
             tools["remember_fact"]._run(
                 content="Test fact",
@@ -606,8 +606,8 @@ class TestCrewAIIntegration:
 
     def test_import_error_without_crewai(self):
         """build_crewai_tools raises ImportError when crewai is absent."""
-        from agentmem_sdk.crewai_integration import build_crewai_tools
-        import agentmem_sdk.crewai_integration as mod
+        from lian.crewai_integration import build_crewai_tools
+        import lian.crewai_integration as mod
         original = mod._CREWAI_AVAILABLE
         mod._CREWAI_AVAILABLE = False
         try:

@@ -1,7 +1,7 @@
-"""
+﻿"""
 LangChain integration tests.
 
-All tests run against LocalAgentMemClient (real SQLite, no server).
+All tests run against LocalLianClient (real SQLite, no server).
 Skips cleanly if langchain-core is not installed.
 """
 import sys
@@ -15,9 +15,9 @@ langchain_core = pytest.importorskip("langchain_core")
 
 from langchain_core.messages import HumanMessage, AIMessage
 
-from agentmem_sdk import LocalAgentMemClient
-from agentmem_sdk.langchain_integration import (
-    AgentMemChatHistory,
+from lian import LocalLianClient
+from lian.langchain_integration import (
+    LianChatHistory,
     AgentMemTools,
     build_tools,
 )
@@ -28,19 +28,19 @@ T2 = datetime(2026, 6, 1, tzinfo=timezone.utc)
 
 
 # ===========================================================================
-# AgentMemChatHistory
+# LianChatHistory
 # ===========================================================================
 
-class TestAgentMemChatHistory:
+class TestLianChatHistory:
 
     def test_empty_history_returns_empty_list(self):
-        with LocalAgentMemClient() as client:
-            history = AgentMemChatHistory(client=client, session_id="s1")
+        with LocalLianClient() as client:
+            history = LianChatHistory(client=client, session_id="s1")
             assert history.messages == []
 
     def test_add_and_retrieve_messages(self):
-        with LocalAgentMemClient() as client:
-            history = AgentMemChatHistory(client=client, session_id="s2")
+        with LocalLianClient() as client:
+            history = LianChatHistory(client=client, session_id="s2")
             history.add_messages([
                 HumanMessage(content="What is NVDA guidance?"),
                 AIMessage(content="NVDA Q3 guidance is $36B as of May 2026."),
@@ -53,8 +53,8 @@ class TestAgentMemChatHistory:
         assert "$36B" in msgs[1].content
 
     def test_messages_returned_in_chronological_order(self):
-        with LocalAgentMemClient() as client:
-            history = AgentMemChatHistory(client=client, session_id="s3")
+        with LocalLianClient() as client:
+            history = LianChatHistory(client=client, session_id="s3")
             history.add_messages([HumanMessage(content="first")])
             history.add_messages([AIMessage(content="second")])
             history.add_messages([HumanMessage(content="third")])
@@ -63,9 +63,9 @@ class TestAgentMemChatHistory:
 
     def test_session_isolation(self):
         """Messages from different sessions must not bleed across."""
-        with LocalAgentMemClient() as client:
-            h1 = AgentMemChatHistory(client=client, session_id="alice")
-            h2 = AgentMemChatHistory(client=client, session_id="bob")
+        with LocalLianClient() as client:
+            h1 = LianChatHistory(client=client, session_id="alice")
+            h2 = LianChatHistory(client=client, session_id="bob")
             h1.add_messages([HumanMessage(content="Alice's secret")])
             h2.add_messages([HumanMessage(content="Bob's message")])
             alice_msgs = h1.messages
@@ -77,16 +77,16 @@ class TestAgentMemChatHistory:
 
     def test_clear_is_noop(self):
         """clear() must not raise (audit trail is immutable)."""
-        with LocalAgentMemClient() as client:
-            history = AgentMemChatHistory(client=client, session_id="s4")
+        with LocalLianClient() as client:
+            history = LianChatHistory(client=client, session_id="s4")
             history.add_messages([HumanMessage(content="hello")])
             history.clear()
             # Messages still in the immutable audit trail
             assert len(history.messages) >= 0   # does not raise
 
     def test_multiple_turns_roundtrip(self):
-        with LocalAgentMemClient() as client:
-            history = AgentMemChatHistory(client=client, session_id="s5")
+        with LocalLianClient() as client:
+            history = LianChatHistory(client=client, session_id="s5")
             turns = [
                 HumanMessage(content=f"turn {i}") for i in range(5)
             ]
@@ -103,19 +103,19 @@ class TestAgentMemChatHistory:
 class TestAgentMemTools:
 
     def test_build_tools_returns_three_tools(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = build_tools(client, agent_id="a")
         names = {t.name for t in tools}
         assert names == {"remember", "recall", "recall_at"}
 
     def test_agentmemtools_as_tools(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             provider = AgentMemTools(client=client, agent_id="a")
             tools = provider.as_tools()
         assert len(tools) == 3
 
     def test_remember_tool_stores_memory(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_tools(client, agent_id="a")}
             result = tools["remember"].invoke({
                 "content": "NVDA Q3 guidance raised to $36B",
@@ -127,7 +127,7 @@ class TestAgentMemTools:
         assert any("$36B" in (m.get("content") or "") for m in memories)
 
     def test_recall_tool_finds_remembered_fact(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_tools(client, agent_id="b")}
             tools["remember"].invoke({
                 "content": "AAPL gross margin 46%",
@@ -139,7 +139,7 @@ class TestAgentMemTools:
 
     def test_recall_at_returns_point_in_time_snapshot(self):
         """recall_at must exclude memories with event_time after as_of."""
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_tools(client, agent_id="c")}
 
             # Store two sequential guidance values
@@ -165,14 +165,14 @@ class TestAgentMemTools:
         assert "$36B" not in result
 
     def test_recall_no_results_returns_message(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_tools(client, agent_id="d")}
             result = tools["recall"].invoke({"query": "nonexistent zzzxxx", "k": 3})
         assert "No relevant memories" in result
 
     def test_remember_tool_metadata_filter(self):
         """metadata passed to remember is available for recall filtering."""
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_tools(client, agent_id="e")}
             tools["remember"].invoke({
                 "content": "AMD gross margin 50%",
@@ -189,7 +189,7 @@ class TestAgentMemTools:
         assert "AMD" in result or "NVDA" in result
 
     def test_recall_at_header_contains_date(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = {t.name: t for t in build_tools(client, agent_id="f")}
             tools["remember"].invoke({
                 "content": "Test fact",
@@ -204,14 +204,14 @@ class TestAgentMemTools:
 
     def test_tools_have_descriptions(self):
         """Tool descriptions must be non-empty so LLMs know how to use them."""
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = build_tools(client, agent_id="g")
         for tool in tools:
             assert tool.description, f"{tool.name} has no description"
             assert len(tool.description) > 20
 
     def test_tools_have_args_schema(self):
-        with LocalAgentMemClient() as client:
+        with LocalLianClient() as client:
             tools = build_tools(client, agent_id="h")
         for tool in tools:
             assert tool.args_schema is not None, f"{tool.name} missing args_schema"

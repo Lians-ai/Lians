@@ -1,7 +1,7 @@
-export { AgentMemClient, AgentMemError } from "./client.js";
+﻿export { LianClient, LianError } from "./client.js";
 export { verifyWebhookSignature, parseWebhookPayload } from "./webhooks.js";
 export type {
-  AgentMemClientOptions,
+  LianClientOptions,
   MemoryAdd,
   MemoryOut,
   MemoryBatchResult,

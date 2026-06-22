@@ -1,17 +1,17 @@
-"""
-LangChain integration for AgentMem.
+﻿"""
+LangChain integration for Lian.
 
 Two integration patterns:
 
-1. AgentMemChatHistory — BaseChatMessageHistory for RunnableWithMessageHistory.
-   Stores conversation turns as AgentMem memories; supports per-session isolation.
+1. LianChatHistory — BaseChatMessageHistory for RunnableWithMessageHistory.
+   Stores conversation turns as Lian memories; supports per-session isolation.
 
-2. AgentMemTools / build_tools — three StructuredTools for ReAct agents and
+2. LianTools / build_tools — three StructuredTools for ReAct agents and
    LangGraph nodes: remember, recall, recall_at.  The recall_at tool is the
    differentiating one — it answers "what did we know on date X?" which plain
    vector stores cannot.
 
-Both work with any AgentMem client (LocalAgentMemClient for dev, AgentMemClient
+Both work with any Lian client (LocalLianClient for dev, LianClient
 for production) and require no changes to swap between them.
 
 Install langchain support::
@@ -21,25 +21,25 @@ Install langchain support::
 
 Usage — chat history::
 
-    from agentmem_sdk import LocalAgentMemClient
-    from agentmem_sdk.langchain_integration import AgentMemChatHistory
+    from lian import LocalLianClient
+    from lian.langchain_integration import LianChatHistory
     from langchain_core.runnables.history import RunnableWithMessageHistory
 
-    client = LocalAgentMemClient()
+    client = LocalLianClient()
 
     chain_with_history = RunnableWithMessageHistory(
         your_chain,
-        lambda session_id: AgentMemChatHistory(client=client, session_id=session_id),
+        lambda session_id: LianChatHistory(client=client, session_id=session_id),
         input_messages_key="input",
         history_messages_key="history",
     )
 
 Usage — agent tools::
 
-    from agentmem_sdk import LocalAgentMemClient
-    from agentmem_sdk.langchain_integration import build_tools
+    from lian import LocalLianClient
+    from lian.langchain_integration import build_tools
 
-    client = LocalAgentMemClient()
+    client = LocalLianClient()
     tools = build_tools(client, agent_id="research-agent")
 
     # Pass tools to any LangChain agent / LangGraph node
@@ -58,14 +58,14 @@ from datetime import timedelta
 
 
 # ---------------------------------------------------------------------------
-# AgentMemChatHistory
+# LianChatHistory
 # ---------------------------------------------------------------------------
 
-class AgentMemChatHistory(BaseChatMessageHistory):
+class LianChatHistory(BaseChatMessageHistory):
     """
-    LangChain chat message history backed by AgentMem.
+    LangChain chat message history backed by Lian.
 
-    Each conversation turn is stored as an AgentMem memory with:
+    Each conversation turn is stored as a Lian memory with:
       - agent_id = agent_id (default "chat")
       - metadata = {"session_id": session_id, "msg_type": "human" | "ai"}
 
@@ -73,10 +73,10 @@ class AgentMemChatHistory(BaseChatMessageHistory):
 
     Example::
 
-        history = AgentMemChatHistory(client=LocalAgentMemClient(), session_id="user-123")
+        history = LianChatHistory(client=LocalLianClient(), session_id="user-123")
         chain = RunnableWithMessageHistory(
             chain,
-            lambda sid: AgentMemChatHistory(client=client, session_id=sid),
+            lambda sid: LianChatHistory(client=client, session_id=sid),
         )
     """
 
@@ -136,13 +136,13 @@ class AgentMemChatHistory(BaseChatMessageHistory):
             )
 
     def clear(self) -> None:
-        # AgentMem's audit trail is immutable — nothing to delete.
+        # Lian's audit trail is immutable — nothing to delete.
         # For GDPR erasure use client.erase(subject_id=...) explicitly.
         pass
 
 
 # ---------------------------------------------------------------------------
-# AgentMemTools
+# LianTools
 # ---------------------------------------------------------------------------
 
 class _RememberInput(BaseModel):
@@ -196,7 +196,7 @@ def _format_memories(memories: list[dict]) -> str:
 
 def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
     """
-    Return three LangChain tools wired to the given AgentMem client.
+    Return three LangChain tools wired to the given Lian client.
 
     remember   — store a fact with its event timestamp
     recall     — retrieve current relevant memories by semantic search
@@ -204,7 +204,7 @@ def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
 
     Example::
 
-        tools = build_tools(LocalAgentMemClient(), agent_id="research-agent")
+        tools = build_tools(LocalLianClient(), agent_id="research-agent")
         agent = create_react_agent(llm, tools, prompt)
     """
 
@@ -268,13 +268,13 @@ def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
     return [remember_tool, recall_tool, recall_at_tool]
 
 
-class AgentMemTools:
+class LianTools:
     """
     Convenience wrapper — holds a client and builds tools on demand.
 
     Example::
 
-        tools_provider = AgentMemTools(client=LocalAgentMemClient(), agent_id="agent-1")
+        tools_provider = LianTools(client=LocalLianClient(), agent_id="agent-1")
         agent = create_react_agent(llm, tools_provider.as_tools(), prompt)
     """
 

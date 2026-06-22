@@ -1,13 +1,13 @@
-/**
+﻿/**
  * Webhook receiver utilities for AgentMem.
  *
- * Every AgentMem webhook POST includes an `X-AgentMem-Signature` header of the
+ * Every AgentMem webhook POST includes an `X-Lian-Signature` header of the
  * form `sha256=<hex>`.  Use `verifyWebhookSignature` to authenticate the
  * request before processing the payload.
  *
  * @example
  * // Express handler
- * import { verifyWebhookSignature, WebhookPayload } from "agentmem-sdk/webhooks";
+ * import { verifyWebhookSignature, WebhookPayload } from "lian/webhooks";
  *
  * app.post("/webhooks/agentmem", express.raw({ type: "application/json" }), (req, res) => {
  *   const sig = req.headers["x-agentmem-signature"] as string;
@@ -29,7 +29,7 @@ export type { WebhookPayload, WebhookEventType };
  * Verify the HMAC-SHA256 signature on an incoming webhook.
  *
  * @param body    - Raw request body as a Buffer or UTF-8 string
- * @param header  - Value of the `X-AgentMem-Signature` header (e.g. `sha256=abc123…`)
+ * @param header  - Value of the `X-Lian-Signature` header (e.g. `sha256=abc123…`)
  * @param secret  - The webhook secret returned when the endpoint was registered
  * @returns true if the signature is valid, false otherwise
  */
@@ -54,7 +54,7 @@ export function verifyWebhookSignature(
  * Throws if the signature is invalid or the body is not valid JSON.
  *
  * @param body    - Raw request body as a Buffer or UTF-8 string
- * @param header  - Value of the `X-AgentMem-Signature` header
+ * @param header  - Value of the `X-Lian-Signature` header
  * @param secret  - Webhook secret
  */
 export function parseWebhookPayload<T = Record<string, unknown>>(

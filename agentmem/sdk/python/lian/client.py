@@ -1,5 +1,5 @@
 """
-AgentMem Python SDK — async HTTP client for the REST API.
+Lian Python SDK — async HTTP client for the REST API.
 """
 from __future__ import annotations
 from datetime import datetime
@@ -7,9 +7,9 @@ from typing import Any, Optional
 import httpx
 
 
-class AsyncAgentMemClient:
+class AsyncLianClient:
     """
-    Async HTTP client for the AgentMem REST API.
+    Async HTTP client for the Lian REST API.
 
     Parameters
     ----------

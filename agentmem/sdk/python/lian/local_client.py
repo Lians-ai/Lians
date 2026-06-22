@@ -1,16 +1,16 @@
 """
-LocalAgentMemClient — zero-setup local mode.
+LocalLianClient — zero-setup local mode.
 
-Calls the AgentMem service layer directly against an in-memory (or file-based)
+Calls the Lian service layer directly against an in-memory (or file-based)
 SQLite database.  No server, no Docker, no API key.  Perfect for prototyping,
 notebooks, and CI.
 
 Usage::
 
-    from agentmem_sdk import LocalAgentMemClient
+    from lian import LocalLianClient
     from datetime import datetime, timezone
 
-    with LocalAgentMemClient() as mem:
+    with LocalLianClient() as mem:
         mem.add(
             agent_id="research",
             content="NVDA Q3 guidance raised to $36B",
@@ -22,12 +22,12 @@ Usage::
 
 Persistent mode::
 
-    mem = LocalAgentMemClient(db_path="~/.agentmem/local.db")
+    mem = LocalLianClient(db_path="~/.lian/local.db")
 
 Switching to the hosted API later requires only changing the client class::
 
-    # from agentmem_sdk import LocalAgentMemClient as AgentMemClient   # dev
-    from agentmem_sdk import AgentMemClient                             # prod
+    # from lian import LocalLianClient   # dev
+    from lian import LianClient          # prod
 """
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def _ensure_src_importable() -> None:
     This is a no-op once agentmem is installed as a proper package
     (in which case ``from agentmem.xxx import ...`` takes over).
     Structure assumption: this file lives at
-      <pkg_root>/sdk/python/agentmem_sdk/local_client.py
+      <pkg_root>/sdk/python/lian/local_client.py
     so parents[3] == <pkg_root>.
     """
     import sys as _sys
@@ -60,9 +60,9 @@ def _ensure_src_importable() -> None:
 _ensure_src_importable()
 
 
-class LocalAgentMemClient:
+class LocalLianClient:
     """
-    Synchronous AgentMem client backed by local SQLite — no server required.
+    Synchronous Lian client backed by local SQLite — no server required.
 
     Parameters
     ----------
@@ -136,7 +136,7 @@ class LocalAgentMemClient:
 
         await load_master_key()
 
-    def __enter__(self) -> "LocalAgentMemClient":
+    def __enter__(self) -> "LocalLianClient":
         return self
 
     def __exit__(self, *_: Any) -> None:

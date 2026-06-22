@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AgentMem TypeScript SDK — async HTTP client for the REST API.
  *
  * AgentMem is a financial-grade AI memory layer that provides:
@@ -16,7 +16,7 @@
  *    that can be verified at any time with verifyChain().
  *
  * @example
- * const client = new AgentMemClient({
+ * const client = new LianClient({
  *   baseUrl: "https://mem.yourfirm.internal",
  *   apiKey:  process.env.AGENTMEM_API_KEY!,
  *   adminSecret: process.env.AGENTMEM_ADMIN_SECRET,
@@ -25,7 +25,7 @@
  */
 
 import type {
-  AgentMemClientOptions,
+  LianClientOptions,
   MemoryAdd,
   MemoryOut,
   MemoryBatchResult,
@@ -53,15 +53,15 @@ import type {
 
 // ── Error class ───────────────────────────────────────────────────────────────
 
-/** Thrown by AgentMemClient when the server returns a non-2xx response. */
-export class AgentMemError extends Error {
+/** Thrown by LianClient when the server returns a non-2xx response. */
+export class LianError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: string,
     message: string,
   ) {
     super(message);
-    this.name = "AgentMemError";
+    this.name = "LianError";
   }
 }
 
@@ -75,13 +75,13 @@ interface ReqOpts {
 
 // ── Client ────────────────────────────────────────────────────────────────────
 
-export class AgentMemClient {
+export class LianClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly adminSecret: string | undefined;
   private readonly timeoutMs: number;
 
-  constructor(options: AgentMemClientOptions) {
+  constructor(options: LianClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.apiKey = options.apiKey;
     this.adminSecret = options.adminSecret;
@@ -135,7 +135,7 @@ export class AgentMemClient {
 
     if (!res.ok) {
       const body = await res.text().catch(() => res.statusText);
-      throw new AgentMemError(
+      throw new LianError(
         res.status,
         body,
         `AgentMem ${method} ${path} → ${res.status}: ${body}`,
@@ -275,7 +275,7 @@ export class AgentMemClient {
   /**
    * Register a webhook endpoint.
    * The returned `secret` is shown exactly once — store it to verify signatures.
-   * Every delivery is HMAC-SHA256-signed: `X-AgentMem-Signature: sha256=<hex>`
+   * Every delivery is HMAC-SHA256-signed: `X-Lian-Signature: sha256=<hex>`
    */
   registerWebhook(req: WebhookRegisterRequest): Promise<WebhookRegisterResult> {
     return this._req<WebhookRegisterResult>("POST", "/v1/webhooks", { json: req });

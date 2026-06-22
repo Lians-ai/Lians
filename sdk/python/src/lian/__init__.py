@@ -1,18 +1,18 @@
-"""
-agentmem-sdk — Python client for AgentMem, the financial-grade AI memory layer.
+﻿"""
+lian — Python client for Lian, the financial-grade AI memory layer.
 
 Install::
 
-    pip install agentmem-sdk
+    pip install lian
 
 Quick start::
 
     import asyncio
     import os
-    from agentmem_sdk import AgentMemClient
+    from lian import LianClient
 
     async def main():
-        async with AgentMemClient(
+        async with LianClient(
             base_url=os.environ["AGENTMEM_URL"],
             api_key=os.environ["AGENTMEM_API_KEY"],
         ) as client:
@@ -43,7 +43,7 @@ Quick start::
 
     asyncio.run(main())
 """
-from .client import AgentMemClient, AgentMemError
+from .client import LianClient, LianError
 from .webhooks import verify_webhook_signature, parse_webhook_payload
 from .types import (
     MemoryOut,
@@ -69,8 +69,8 @@ from .types import (
 
 __version__ = "0.1.0"
 __all__ = [
-    "AgentMemClient",
-    "AgentMemError",
+    "LianClient",
+    "LianError",
     "verify_webhook_signature",
     "parse_webhook_payload",
     # Types

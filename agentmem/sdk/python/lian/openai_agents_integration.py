@@ -1,22 +1,22 @@
-"""
-OpenAI Agents SDK integration for AgentMem.
+﻿"""
+OpenAI Agents SDK integration for Lian.
 
 Provides FunctionTool wrappers for the OpenAI Agents SDK (openai-agents >= 0.1).
-Works with any AgentMem client (LocalAgentMemClient for dev, AgentMemClient for
+Works with any Lian client (LocalLianClient for dev, LianClient for
 production).
 
 Install::
 
-    pip install agentmem-sdk[openai-agents]
+    pip install lian[openai-agents]
     # or: pip install openai-agents
 
 Usage::
 
     from openai_agents import Agent, Runner
-    from agentmem_sdk import LocalAgentMemClient
-    from agentmem_sdk.openai_agents_integration import build_openai_agent_tools
+    from lian import LocalLianClient
+    from lian.openai_agents_integration import build_openai_agent_tools
 
-    client = LocalAgentMemClient()
+    client = LocalLianClient()
     tools  = build_openai_agent_tools(client, agent_id="equity-desk")
 
     agent = Agent(
@@ -50,8 +50,8 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
     Parameters
     ----------
     client:
-        Any synchronous AgentMem client — ``LocalAgentMemClient`` or
-        ``AgentMemClient``.
+        Any synchronous Lian client — ``LocalLianClient`` or
+        ``LianClient``.
     agent_id:
         The agent namespace to read/write memories under.
 
@@ -64,14 +64,14 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
     ------
     ImportError
         If ``openai-agents`` is not installed.
-        Install with: ``pip install agentmem-sdk[openai-agents]``
+        Install with: ``pip install lian[openai-agents]``
     """
     try:
         from agents import function_tool  # type: ignore[import]
     except ImportError:
         raise ImportError(
             "openai-agents is required for the OpenAI Agents SDK integration.\n"
-            "Install with: pip install agentmem-sdk[openai-agents]\n"
+            "Install with: pip install lian[openai-agents]\n"
             "or: pip install openai-agents"
         )
 
@@ -91,7 +91,7 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         importance: float = 0.5,
     ) -> str:
         """
-        Store a fact or observation in AgentMem persistent memory.
+        Store a fact or observation in Lian persistent memory.
 
         Always use event_time_iso for when the event *occurred*, not when you are
         recording it. Add ticker/metric metadata when storing financial facts to
@@ -132,7 +132,7 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
     @function_tool
     def agentmem_recall(query: str, k: int = 5) -> str:
         """
-        Retrieve the most relevant *current* facts from AgentMem for a query.
+        Retrieve the most relevant *current* facts from Lian for a query.
 
         Superseded facts are excluded at the database layer — only the latest
         valid value is returned. Use before answering any question that depends

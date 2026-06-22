@@ -1,17 +1,17 @@
-# AgentMem
+# Lian (蓮)
 
 **Financial-grade agent memory** — the only memory layer designed for regulated environments.
 
 When a financial AI agent accumulates facts over time, those facts **change**. Last quarter's guidance is wrong today. A central bank rate decision supersedes the previous one. A price target gets revised. Systems like mem0 return all of these with equal rank — your LLM gets contaminated context. Graphiti/Zep (Zep's open-source temporal graph, 20k+ stars) has a genuine bitemporal model but no compliance stack.
 
-AgentMem is the **compliance-grade layer**: every fact carries both *when it happened* (business time) and *when it was ingested* (system time). Superseded facts are excluded at the database layer. Every write is recorded in a tamper-evident SHA-256 hash chain (SEC 17a-4). Per-subject encryption keys can be destroyed for GDPR erasure while the audit hash survives. Information barriers are enforced at the PostgreSQL RLS layer, not the application layer.
+Lian is the **compliance-grade layer**: every fact carries both *when it happened* (business time) and *when it was ingested* (system time). Superseded facts are excluded at the database layer. Every write is recorded in a tamper-evident SHA-256 hash chain (SEC 17a-4). Per-subject encryption keys can be destroyed for GDPR erasure while the audit hash survives. Information barriers are enforced at the PostgreSQL RLS layer, not the application layer.
 
 ---
 
 ## The number that matters most
 
-| What | AgentMem | mem0 | Graphiti/Zep† |
-|------|----------|------|--------------|
+| What | Lian | mem0 | Graphiti/Zep† |
+|------|------|------|--------------|
 | Stale facts in top-5 (5-revision NVDA chain) | **0 / 4** | 4 / 4 | N/T |
 | Supersession accuracy (22-pair: synthetic + real-world) | **100%** | N/A | No benchmark |
 | Point-in-time recall (4 quarterly queries)    | **4 / 4** | 0 / 4 | Partial‡ |
@@ -37,7 +37,7 @@ cd AI_Memory_Software_lotus/agentmem
 # Copy the zero-credential demo config
 cp .env.demo .env
 
-# Start Postgres + Redis + AgentMem (first run builds the image, ~2 min)
+# Start Postgres + Redis + Lian (first run builds the image, ~2 min)
 docker compose up --build -d
 
 # Seed the demo dataset (NVDA guidance chain, TSLA deliveries, Fed rates)
@@ -62,14 +62,14 @@ The seed script prints a **read-only API key**. Open `demo/index.html` in your b
 ## Quickstart (Python SDK)
 
 ```bash
-pip install agentmem-sdk[local]   # zero-setup local SQLite mode — no Docker needed
+pip install lian[local]   # zero-setup local SQLite mode — no Docker needed
 ```
 
 ```python
-from agentmem_sdk import LocalAgentMemClient
+from lian import LocalLianClient
 from datetime import datetime, timezone
 
-mem = LocalAgentMemClient()
+mem = LocalLianClient()
 
 # Store a fact with its real-world event timestamp
 mem.add(
@@ -103,7 +103,7 @@ result = mem.recall_at(
 )
 
 # Switching to the hosted API requires only changing the import:
-# from agentmem_sdk import AgentMemClient as LocalAgentMemClient
+# from lian import LianClient as LocalLianClient
 ```
 
 ---
@@ -112,12 +112,12 @@ result = mem.recall_at(
 
 | Framework | Install | Import |
 |-----------|---------|--------|
-| **LangChain** | `pip install agentmem-sdk[langchain]` | `from agentmem_sdk.langchain_integration import AgentMemChatHistory, build_tools` |
-| **LangGraph** | `pip install agentmem-sdk[langgraph]` | `from agentmem_sdk.langgraph_integration import create_recall_node, create_remember_node` |
-| **CrewAI** | `pip install agentmem-sdk[crewai]` | `from agentmem_sdk.crewai_integration import build_crewai_tools` |
-| **OpenAI Agents SDK** | `pip install agentmem-sdk[openai-agents]` | `from agentmem_sdk.openai_agents_integration import build_openai_agent_tools` |
-| **AutoGen v0.4** | `pip install agentmem-sdk[autogen]` | `from agentmem_sdk.autogen_integration import build_autogen_tools` |
-| **TypeScript / Node** | `npm install agentmem-sdk` | `import { AgentMemClient } from "agentmem-sdk"` |
+| **LangChain** | `pip install lian[langchain]` | `from lian.langchain_integration import LianChatHistory, build_tools` |
+| **LangGraph** | `pip install lian[langgraph]` | `from lian.langgraph_integration import create_recall_node, create_remember_node` |
+| **CrewAI** | `pip install lian[crewai]` | `from lian.crewai_integration import build_crewai_tools` |
+| **OpenAI Agents SDK** | `pip install lian[openai-agents]` | `from lian.openai_agents_integration import build_openai_agent_tools` |
+| **AutoGen v0.4** | `pip install lian[autogen]` | `from lian.autogen_integration import build_autogen_tools` |
+| **TypeScript / Node** | `npm install lian` | `import { LianClient } from "lian"` |
 
 All integrations expose the same three tools: `remember`, `recall`, `recall_at`. The `recall_at` tool is the compliance differentiator — it answers "what did the agent know at T?" with a verifiable hash chain.
 
@@ -131,7 +131,7 @@ All integrations expose the same three tools: `remember`, `recall`, `recall_at`.
                     └──────┬───────┘
                            │  REST / MCP
                ┌───────────▼────────────┐
-               │      AgentMem API      │  FastAPI · rate-limit · OTEL
+               │       Lian API         │  FastAPI · rate-limit · OTEL
                └──┬────────────────┬────┘
           ┌───────▼──────┐  ┌──────▼───────┐
           │   memories    │  │  event_log   │
@@ -190,8 +190,8 @@ fly secrets set \
   MASTER_ENCRYPTION_KEY="$(python -c 'import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())')" \
   ADMIN_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')" \
   VOYAGE_API_KEY="pa-..."
-fly postgres create --name agentmem-db
-fly postgres attach agentmem-db
+fly postgres create --name lian-db
+fly postgres attach lian-db
 fly deploy
 ```
 
@@ -239,6 +239,11 @@ Interactive docs: `http://localhost:8000/docs`
 | Retention policies | Per-namespace TTL with legal hold override; automated prune scheduler |
 | KMS integration | AWS KMS · Azure Key Vault · HashiCorp Vault · env (dev) |
 | Air-gapped deployment | `AIRGAP_MODE=true` enforces sentence-transformers + no LLM stage at startup |
+| HIPAA §164.312 | Access control, audit controls, integrity, authentication, transmission security |
+| DORA Article 30 | Self-hosted deployment = bank is the operator; fewer third-party ICT obligations |
+| EU AI Act Art. 12 | Hash chain maps directly to high-risk AI record-keeping requirement |
+
+Full compliance documentation: [COMPLIANCE_ENTERPRISE.md](COMPLIANCE_ENTERPRISE.md) · [HIPAA_SAFEGUARDS.md](HIPAA_SAFEGUARDS.md)
 
 ---
 
@@ -253,13 +258,10 @@ python -m pytest -v
 python -m pytest tests/test_supersession_benchmark.py tests/test_recall_quality.py -v
 ```
 
-557 tests pass. 30 skipped (require `TEST_DATABASE_URL` pointing to a live Postgres + pgvector instance).
+617 tests pass. 30 skipped (require `TEST_DATABASE_URL` pointing to a live Postgres + pgvector instance).
 
 ---
 
-## Integrations
+## License
 
-- **MCP server** — `src/agentmem/mcp_server.py` (stdio transport, 8 tools: remember, recall, recall_at, reconstruct, list_conflicts, memory_lineage, fact_history, backtest_check)
-- **LangChain.js** — `sdk/typescript/src/langchain.ts` (`buildAgentMemTools`, `AgentMemChatHistory`)
-- **TypeScript SDK** — `sdk/typescript/` (native fetch, no runtime dependencies, Node 18+)
-- **OpenTelemetry** — `memory.add` and `memory.recall` spans; plug into Datadog / Grafana Tempo / Honeycomb
+Apache 2.0 — see [LICENSE](LICENSE).

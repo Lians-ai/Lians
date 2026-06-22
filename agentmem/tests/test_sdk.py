@@ -1,10 +1,10 @@
-"""
+﻿"""
 SDK tests.
 
-LocalAgentMemClient: real in-memory SQLite — proves the zero-setup path works
+LocalLianClient: real in-memory SQLite — proves the zero-setup path works
 end-to-end with no server and no mocking.
 
-AgentMemClient (sync HTTP): httpx MockTransport — proves the sync wrapper
+LianClient (sync HTTP): httpx MockTransport — proves the sync wrapper
 drives the async client correctly without needing a live server.
 """
 import json
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 # Make the SDK importable from the test runner's working directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
 
-from agentmem_sdk import LocalAgentMemClient, AgentMemClient
+from lian import LocalLianClient, LianClient
 
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -26,13 +26,13 @@ T2 = datetime(2027, 1, 1, tzinfo=timezone.utc)   # far-future for audit trail
 
 
 # ===========================================================================
-# LocalAgentMemClient
+# LocalLianClient
 # ===========================================================================
 
 class TestLocalClient:
 
     def test_add_returns_memory_dict(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             result = mem.add(
                 agent_id="agent-1",
                 content="NVDA Q3 guidance $36B",
@@ -45,7 +45,7 @@ class TestLocalClient:
         assert result["namespace"] == "local"
 
     def test_recall_finds_added_memory(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="AAPL gross margin 46%",
                     event_time=T0, metadata={"ticker": "AAPL", "metric": "gross_margin"})
             result = mem.recall(agent_id="a", query="AAPL gross margin")
@@ -53,7 +53,7 @@ class TestLocalClient:
         assert "AAPL" in result["memories"][0]["content"]
 
     def test_supersession_closes_old_memory(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             old = mem.add(agent_id="a", content="NVDA guidance $32B",
                           event_time=T0,
                           metadata={"ticker": "NVDA", "metric": "guidance"})
@@ -67,7 +67,7 @@ class TestLocalClient:
         assert "$36B" in top
 
     def test_as_of_returns_past_snapshot(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="TSLA deliveries 400k",
                     event_time=T0, metadata={"ticker": "TSLA", "metric": "deliveries"})
             mem.add(agent_id="a", content="TSLA deliveries 450k",
@@ -85,7 +85,7 @@ class TestLocalClient:
         assert present_contents[0] and "450k" in present_contents[0]
 
     def test_metadata_filter(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="NVDA revenue $18B",
                     event_time=T0, metadata={"ticker": "NVDA", "metric": "revenue"})
             mem.add(agent_id="a", content="AMD revenue $6B",
@@ -97,7 +97,7 @@ class TestLocalClient:
         assert all("NVDA" in m["content"] for m in result["memories"])
 
     def test_reconstruct_returns_event_trail(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a", content="MSFT EPS $3.10",
                     event_time=T0, metadata={"ticker": "MSFT", "metric": "eps"})
             result = mem.reconstruct(agent_id="a", as_of=T2)
@@ -107,7 +107,7 @@ class TestLocalClient:
         assert any(e["op"] == "add" for e in result["event_trail"])
 
     def test_erase_removes_content(self):
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a",
                     content="Client Jane Doe, portfolio $500k",
                     event_time=T0,
@@ -120,7 +120,7 @@ class TestLocalClient:
 
     def test_erase_audit_trail_preserved(self):
         """After erasure the audit trail still contains add + erase ops."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a",
                     content="Client Bob Smith, SSN 123-45-6789",
                     event_time=T0,
@@ -134,9 +134,9 @@ class TestLocalClient:
         assert "erase" in ops
 
     def test_namespace_isolation(self):
-        """Two LocalAgentMemClient instances with different namespaces are isolated."""
-        with LocalAgentMemClient(namespace="tenant-a") as a:
-            with LocalAgentMemClient(namespace="tenant-b") as b:
+        """Two LocalLianClient instances with different namespaces are isolated."""
+        with LocalLianClient(namespace="tenant-a") as a:
+            with LocalLianClient(namespace="tenant-b") as b:
                 a.add(agent_id="ag", content="Secret from A",
                       event_time=T0, metadata={})
                 result = b.recall(agent_id="ag", query="Secret from A")
@@ -145,14 +145,14 @@ class TestLocalClient:
 
     def test_context_manager_closes_cleanly(self):
         """Exiting the context manager should not raise."""
-        mem = LocalAgentMemClient()
+        mem = LocalLianClient()
         with mem:
             mem.add(agent_id="a", content="test", event_time=T0, metadata={})
         # If we reach here the loop and engine were closed cleanly
 
     def test_pii_memory_recalled_with_content(self):
         """PII memories encrypted at rest should be decrypted on recall."""
-        with LocalAgentMemClient() as mem:
+        with LocalLianClient() as mem:
             mem.add(agent_id="a",
                     content="Client Alice, balance $1M",
                     event_time=T0,
@@ -165,7 +165,7 @@ class TestLocalClient:
 
 
 # ===========================================================================
-# AgentMemClient (sync HTTP — mocked transport)
+# LianClient (sync HTTP — mocked transport)
 # ===========================================================================
 
 class TestSyncHTTPClient:
@@ -179,7 +179,7 @@ class TestSyncHTTPClient:
         """Sync add() calls the underlying async add() exactly once."""
         from unittest.mock import AsyncMock
 
-        client = AgentMemClient(base_url="http://fake", api_key="key")
+        client = LianClient(base_url="http://fake", api_key="key")
         expected = {"id": "test-id", "content": "NVDA guidance $36B"}
         client._async.add = AsyncMock(return_value=expected)
 
@@ -195,7 +195,7 @@ class TestSyncHTTPClient:
     def test_recall_delegates_to_async_client(self):
         from unittest.mock import AsyncMock
 
-        client = AgentMemClient(base_url="http://fake", api_key="key")
+        client = LianClient(base_url="http://fake", api_key="key")
         expected = {"memories": [], "as_of": None, "total_candidates": 0}
         client._async.recall = AsyncMock(return_value=expected)
 
@@ -209,7 +209,7 @@ class TestSyncHTTPClient:
 
     def test_context_manager_closes_loop(self):
         """Exiting the context manager closes the event loop."""
-        client = AgentMemClient(base_url="http://fake", api_key="key")
+        client = LianClient(base_url="http://fake", api_key="key")
         with client:
             assert not client._loop.is_closed()
         assert client._loop.is_closed()
