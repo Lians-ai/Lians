@@ -1,4 +1,4 @@
-[build-system]
+﻿[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
@@ -36,9 +36,9 @@ all           = [
 ]
 
 [project.urls]
-Homepage      = "https://github.com/ebeirne/AI_Memory_Software_lotus"
-Repository    = "https://github.com/ebeirne/AI_Memory_Software_lotus"
-Documentation = "https://github.com/ebeirne/AI_Memory_Software_lotus#readme"
+Homepage      = "https://github.com/ebeirne/Lian"
+Repository    = "https://github.com/ebeirne/Lian"
+Documentation = "https://github.com/ebeirne/Lian#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lian"]

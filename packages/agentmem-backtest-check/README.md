@@ -1,4 +1,4 @@
-# agentmem-backtest-check
+﻿# agentmem-backtest-check
 
 **Detect lookahead bias in AI agent backtests. Zero dependencies.**
 
@@ -176,7 +176,7 @@ This library makes contamination auditable in a single call, with no database or
 
 ## Full AgentMem
 
-This package is a thin primitive extracted from [AgentMem](https://github.com/ebeirne/AI_Memory_Software_lotus) — a bitemporal memory layer for regulated AI agents. AgentMem adds:
+This package is a thin primitive extracted from [AgentMem](https://github.com/ebeirne/Lian) — a bitemporal memory layer for regulated AI agents. AgentMem adds:
 
 - Bitemporal storage with automatic supersession (old facts can't contaminate recall)
 - Point-in-time reconstruction of any agent's full knowledge state

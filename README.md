@@ -31,8 +31,8 @@ Lian is the **compliance-grade layer**: every fact carries both *when it happene
 **Requirements:** Docker Desktop
 
 ```bash
-git clone https://github.com/ebeirne/AI_Memory_Software_lotus.git
-cd AI_Memory_Software_lotus/agentmem
+git clone https://github.com/ebeirne/Lian.git
+cd Lian/agentmem
 
 # Copy the zero-credential demo config
 cp .env.demo .env

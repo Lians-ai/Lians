@@ -1,4 +1,4 @@
-[build-system]
+﻿[build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
@@ -27,8 +27,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ebeirne/AI_Memory_Software_lotus"
-"Bug Tracker" = "https://github.com/ebeirne/AI_Memory_Software_lotus/issues"
+Homepage = "https://github.com/ebeirne/Lian"
+"Bug Tracker" = "https://github.com/ebeirne/Lian/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agentmem_backtest_check"]

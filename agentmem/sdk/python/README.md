@@ -93,4 +93,4 @@ from lian import LianClient
 mem = LianClient(base_url="https://mem.yourfirm.internal", api_key="...")
 ```
 
-Full documentation: [github.com/ebeirne/AI_Memory_Software_lotus](https://github.com/ebeirne/AI_Memory_Software_lotus)
+Full documentation: [github.com/ebeirne/Lian](https://github.com/ebeirne/Lian)
