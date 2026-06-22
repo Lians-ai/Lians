@@ -35,5 +35,9 @@ Thumbs.db
 # Claude Code local settings
 .claude/
 
+# Internal working documents (not client-facing)
+SCALE.md
+BUILD.md
+
 # Node
 node_modules/
