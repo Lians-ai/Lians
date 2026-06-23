@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for POST/GET/DELETE/POST-rotate admin API key endpoints.
 
 Uses httpx.AsyncClient with dependency_overrides to inject an in-memory
@@ -28,15 +28,15 @@ async def app_client(monkeypatch):
     """
     monkeypatch.setenv("ADMIN_SECRET", ADMIN_SECRET)
 
-    from src.agentmem.config import get_settings
+    from src.lian.config import get_settings
     get_settings.cache_clear()
     monkeypatch.setenv("ADMIN_SECRET", ADMIN_SECRET)
     # Re-clear after setting env var (lru_cache reads env at call time)
     get_settings.cache_clear()
 
-    from src.agentmem.models import Base as AppBase
-    from src.agentmem.main import app
-    from src.agentmem.db import get_db
+    from src.lian.models import Base as AppBase
+    from src.lian.main import app
+    from src.lian.db import get_db
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -140,7 +140,7 @@ class TestProvision:
             json={"agent_id": "bot-1", "query": "test", "k": 1},
             headers={"X-API-Key": raw_key},
         )
-        # 200 means auth passed (empty results expected — no memories yet)
+        # 200 means auth passed (empty results expected â€” no memories yet)
         assert recall_resp.status_code == 200
 
     @pytest.mark.asyncio

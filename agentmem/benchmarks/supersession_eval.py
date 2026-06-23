@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
 from datetime import datetime, timezone
@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.agentmem.supersession import classify_relation
+from src.lian.supersession import classify_relation
 
 # (old_content, new_content, old_t, new_t, old_meta, new_meta, expected_relation)
 CASES = [
@@ -99,7 +99,7 @@ CASES = [
         {"ticker": "GOOGL", "metric": "eps_estimate"},
         "SUPERSEDES",
     ),
-    # --- Different tickers, same metric — should NOT supersede at Stage 2 ---
+    # --- Different tickers, same metric â€” should NOT supersede at Stage 2 ---
     # (Stage 1 would block this because ticker values differ; documenting Stage 2 behavior)
     (
         "NVDA Q3 guidance $32B",
@@ -108,12 +108,12 @@ CASES = [
         datetime(2026, 5, 1, tzinfo=timezone.utc),
         {"ticker": "NVDA", "metric": "guidance"},
         {"ticker": "AMD", "metric": "guidance"},
-        # Stage 2 only sees content + event_time; same metric, new_is_later → SUPERSEDES.
+        # Stage 2 only sees content + event_time; same metric, new_is_later â†’ SUPERSEDES.
         # Stage 1 prevents this pair from ever reaching Stage 2 in production.
         # Mark as SUPERSEDES to reflect Stage 2 behavior in isolation.
         "SUPERSEDES",
     ),
-    # --- Backdated memory (new has older event_time) — should NOT supersede ---
+    # --- Backdated memory (new has older event_time) â€” should NOT supersede ---
     (
         "META Q2 revenue $42B",
         "META Q2 revenue guidance (pre-quarter) $38B",
@@ -121,7 +121,7 @@ CASES = [
         datetime(2026, 4, 1, tzinfo=timezone.utc),   # guidance was pre-quarter
         {"ticker": "META", "metric": "revenue"},
         {"ticker": "META", "metric": "revenue"},
-        "ADDS",  # new is older — don't supersede the actuals
+        "ADDS",  # new is older â€” don't supersede the actuals
     ),
     # --- Restatement: same event_time, different value (contradiction) ---
     (
@@ -136,17 +136,17 @@ CASES = [
 ]
 
 # ---------------------------------------------------------------------------
-# REAL_WORLD_CASES — sourced from public records (FOMC minutes, SEC EDGAR,
+# REAL_WORLD_CASES â€” sourced from public records (FOMC minutes, SEC EDGAR,
 # Bloomberg consensus). These supplement the synthetic CASES above and form
 # the basis of the "real data" supersession claim in BENCHMARK.md.
 # ---------------------------------------------------------------------------
 
 REAL_WORLD_CASES = [
-    # ── FOMC rate decisions (Federal Reserve, public record) ─────────────────
-    # Sep 18 2024: first cut in the cycle — hold → cut
+    # â”€â”€ FOMC rate decisions (Federal Reserve, public record) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Sep 18 2024: first cut in the cycle â€” hold â†’ cut
     (
-        "Federal funds rate target range: 5.25%–5.50% (held, Jul 2024 FOMC)",
-        "Federal funds rate cut to 5.00%–5.25% (Sep 18 2024 FOMC decision)",
+        "Federal funds rate target range: 5.25%â€“5.50% (held, Jul 2024 FOMC)",
+        "Federal funds rate cut to 5.00%â€“5.25% (Sep 18 2024 FOMC decision)",
         datetime(2024, 7, 31, tzinfo=timezone.utc),
         datetime(2024, 9, 18, tzinfo=timezone.utc),
         {"entity": "federal_reserve", "metric": "fed_funds_rate"},
@@ -155,8 +155,8 @@ REAL_WORLD_CASES = [
     ),
     # Nov 7 2024: second consecutive cut
     (
-        "Federal funds rate target range: 5.00%–5.25% (Sep 2024 FOMC)",
-        "Federal funds rate cut to 4.75%–5.00% (Nov 7 2024 FOMC decision)",
+        "Federal funds rate target range: 5.00%â€“5.25% (Sep 2024 FOMC)",
+        "Federal funds rate cut to 4.75%â€“5.00% (Nov 7 2024 FOMC decision)",
         datetime(2024, 9, 18, tzinfo=timezone.utc),
         datetime(2024, 11, 7, tzinfo=timezone.utc),
         {"entity": "federal_reserve", "metric": "fed_funds_rate"},
@@ -165,19 +165,19 @@ REAL_WORLD_CASES = [
     ),
     # Dec 18 2024: third consecutive cut
     (
-        "Federal funds rate target range: 4.75%–5.00% (Nov 2024 FOMC)",
-        "Federal funds rate cut to 4.50%–4.75% (Dec 18 2024 FOMC decision)",
+        "Federal funds rate target range: 4.75%â€“5.00% (Nov 2024 FOMC)",
+        "Federal funds rate cut to 4.50%â€“4.75% (Dec 18 2024 FOMC decision)",
         datetime(2024, 11, 7, tzinfo=timezone.utc),
         datetime(2024, 12, 18, tzinfo=timezone.utc),
         {"entity": "federal_reserve", "metric": "fed_funds_rate"},
         {"entity": "federal_reserve", "metric": "fed_funds_rate"},
         "SUPERSEDES",
     ),
-    # Jan 29 2025: hold — different value, different decision → CONTRADICTS_SAME_TIME
+    # Jan 29 2025: hold â€” different value, different decision â†’ CONTRADICTS_SAME_TIME
     # (two reports from different sources on the same day)
     (
         "Analyst A: FOMC will cut 25 bps at Jan 2025 meeting",
-        "FOMC holds federal funds rate at 4.25%–4.50% (Jan 29 2025)",
+        "FOMC holds federal funds rate at 4.25%â€“4.50% (Jan 29 2025)",
         datetime(2025, 1, 29, tzinfo=timezone.utc),
         datetime(2025, 1, 29, tzinfo=timezone.utc),
         {"entity": "federal_reserve", "metric": "fed_funds_rate"},
@@ -185,7 +185,7 @@ REAL_WORLD_CASES = [
         "CONTRADICTS_SAME_TIME",
     ),
 
-    # ── NVDA guidance revisions (public earnings calls / SEC filings) ─────────
+    # â”€â”€ NVDA guidance revisions (public earnings calls / SEC filings) â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # FY2026 revenue guidance raised four times across earnings calls
     (
         "NVDA FY2026 revenue guidance: $28B (Nov 2024 earnings call)",
@@ -215,7 +215,7 @@ REAL_WORLD_CASES = [
         "SUPERSEDES",
     ),
 
-    # ── TSLA delivery counts (quarterly actual releases, public) ────────────
+    # â”€â”€ TSLA delivery counts (quarterly actual releases, public) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     (
         "TSLA Q2 2024 deliveries: 443,956 vehicles (Jul 2 2024)",
         "TSLA Q3 2024 deliveries: 462,890 vehicles (Oct 2 2024)",
@@ -223,7 +223,7 @@ REAL_WORLD_CASES = [
         datetime(2024, 10, 2, tzinfo=timezone.utc),
         {"ticker": "TSLA", "metric": "quarterly_deliveries"},
         {"ticker": "TSLA", "metric": "quarterly_deliveries"},
-        # Different quarters — additive, not supersession
+        # Different quarters â€” additive, not supersession
         "ADDS",
     ),
     (
@@ -233,11 +233,11 @@ REAL_WORLD_CASES = [
         datetime(2024, 10, 2, tzinfo=timezone.utc),
         {"ticker": "TSLA", "metric": "q3_2024_deliveries"},
         {"ticker": "TSLA", "metric": "q3_2024_deliveries"},
-        # Estimate vs. actual — same metric, later actual supersedes estimate
+        # Estimate vs. actual â€” same metric, later actual supersedes estimate
         "SUPERSEDES",
     ),
 
-    # ── Moody's upgrade (public, Dec 2023 ratings action) ────────────────────
+    # â”€â”€ Moody's upgrade (public, Dec 2023 ratings action) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     (
         "Moody's rates JPMorgan Chase Aa2 (stable outlook)",
         "Moody's affirms JPMorgan Chase Aa2, upgrades outlook to positive",
@@ -268,7 +268,7 @@ def run_eval(cases=None) -> list[dict]:
             new_meta=new_meta,
         )
         results.append({
-            "case": f"{old[:40]} → {new[:40]}",
+            "case": f"{old[:40]} â†’ {new[:40]}",
             "expected": expected,
             "got": actual,
             "confidence": confidence,

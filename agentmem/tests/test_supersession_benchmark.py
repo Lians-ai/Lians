@@ -1,32 +1,32 @@
-"""
+﻿"""
 Supersession classification accuracy benchmark.
 
 Evaluates Stage 1+2 of the supersession engine against a labeled dataset
 of 30 memory pairs covering the full taxonomy:
 
-  SUPERSEDES           — same entity+attribute, newer event, different value
-  CONFIRMS             — same entity+attribute, same value (duplicate source)
-  ADDS                 — related topic or different attribute
-  CONTRADICTS_SAME_TIME — conflicting values at the same event time
+  SUPERSEDES           â€” same entity+attribute, newer event, different value
+  CONFIRMS             â€” same entity+attribute, same value (duplicate source)
+  ADDS                 â€” related topic or different attribute
+  CONTRADICTS_SAME_TIME â€” conflicting values at the same event time
 
 Metrics reported: per-class Precision, Recall, F1; overall Accuracy.
-Target: Accuracy >= 0.90, F1(SUPERSEDES) >= 0.90 — the class that matters
+Target: Accuracy >= 0.90, F1(SUPERSEDES) >= 0.90 â€” the class that matters
 most for preventing stale data from reaching the agent.
 
 Comparison notes:
-  mem0         — no structured supersession; relies on the LLM to avoid hallucination
+  mem0         â€” no structured supersession; relies on the LLM to avoid hallucination
                  from stale memories.  That's prompt engineering, not memory hygiene.
-  Graphiti/Zep — extracts entity graph edges with an LLM pass and marks them
+  Graphiti/Zep â€” extracts entity graph edges with an LLM pass and marks them
                  invalid on contradiction; has no typed relation taxonomy
                  (SUPERSEDES/CONFIRMS/ADDS/CONTRADICTS_SAME_TIME), no
                  temporal-ordering invariant test, and no cross-attribute guard rails.
-  AgentMem     — deterministic Stage 1+2 with no LLM call; Stage 3 is additive.
+  AgentMem     â€” deterministic Stage 1+2 with no LLM call; Stage 3 is additive.
 """
 from __future__ import annotations
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from src.agentmem.supersession import classify_relation, _metadata_overlap
+from src.lian.supersession import classify_relation, _metadata_overlap
 
 # ---------------------------------------------------------------------------
 # Labeled dataset
@@ -71,9 +71,9 @@ LABELED_PAIRS = [
     ("Fed rate 4.75%", "Fed rate hiked to 5.00%",
      _FED_RT, _FED_RT, T0, T1, "SUPERSEDES"),
 
-    ("Fed rate 5.00%", "Fed rate held at 5.00% — vote 12-0",
-     # same value? No — "held" means different info (decision vs level)
-     # new_content differs from old → SUPERSEDES
+    ("Fed rate 5.00%", "Fed rate held at 5.00% â€” vote 12-0",
+     # same value? No â€” "held" means different info (decision vs level)
+     # new_content differs from old â†’ SUPERSEDES
      _FED_RT, _FED_RT, T1, T2, "SUPERSEDES"),
 
     ("BlackRock AUM $9T", "BlackRock AUM $10T Q2 record",
@@ -114,7 +114,7 @@ LABELED_PAIRS = [
      _AAPL_M, _AAPL_M, T2, T3, "CONFIRMS"),
 
     # ---- ADDS (6 cases) -----------------------------------------------
-    # New memory is actually older — temporal direction reversed
+    # New memory is actually older â€” temporal direction reversed
     ("NVDA Q2 guidance $38B", "NVDA Q1 guidance $30B",
      _NVDA_G, _NVDA_G, T1, T0, "ADDS"),
 
@@ -125,7 +125,7 @@ LABELED_PAIRS = [
     ("AAPL Q2 revenue $95B", "AAPL Q2 gross margin 46%",
      _AAPL_R, _AAPL_M, T1, T2, "ADDS"),
 
-    # Different entity entirely — Stage 2 only sees "metric" overlap
+    # Different entity entirely â€” Stage 2 only sees "metric" overlap
     # (Stage 1 would filter by structured key mismatch for cross-ticker pairs)
     ("TSLA deliveries 400k", "TSLA production 490k",
      _TSLA_D, _TSLA_P, T0, T1, "ADDS"),
@@ -229,12 +229,12 @@ class TestSupersessionAccuracy:
         )
 
     def test_no_class_has_zero_recall(self):
-        """Every class must be detected at least once — no total blind spot."""
+        """Every class must be detected at least once â€” no total blind spot."""
         result = _run_benchmark()
         for cls, m in result["per_class"].items():
             if m["support"] > 0:
                 assert m["recall"] > 0.0, (
-                    f"Zero recall on class {cls!r} with {m['support']} samples — "
+                    f"Zero recall on class {cls!r} with {m['support']} samples â€” "
                     "the engine has a complete blind spot for this case"
                 )
 
@@ -260,7 +260,7 @@ class TestSupersessionAccuracy:
 
     def test_same_value_never_supersedes(self):
         """
-        Identical content cannot supersede — it can only CONFIRM.
+        Identical content cannot supersede â€” it can only CONFIRM.
         Prevents spurious invalidation when the same fact arrives twice.
         """
         same_value_cases = [
@@ -334,17 +334,17 @@ class TestSupersessionAccuracy:
                 _NVDA_G, _NVDA_G,
             )
             assert got == "SUPERSEDES", (
-                f"Step {i}→{i+1}: expected SUPERSEDES, got {got!r} "
-                f"({values[i]} → {values[i+1]})"
+                f"Step {i}â†’{i+1}: expected SUPERSEDES, got {got!r} "
+                f"({values[i]} â†’ {values[i+1]})"
             )
-            assert conf >= 0.8, f"Low confidence {conf} at step {i}→{i+1}"
+            assert conf >= 0.8, f"Low confidence {conf} at step {i}â†’{i+1}"
 
 
 class TestMetadataOverlapCoverage:
     """Unit tests for the _metadata_overlap helper used in Stage 1 candidate filtering."""
 
     def test_all_structured_keys_recognized(self):
-        from src.agentmem.supersession import _STRUCTURED_KEYS
+        from src.lian.supersession import _STRUCTURED_KEYS
         expected = {"ticker", "metric", "entity", "instrument", "cusip", "isin", "field"}
         assert _STRUCTURED_KEYS == expected, (
             f"Structured key set changed: {_STRUCTURED_KEYS} vs {expected}"
@@ -372,7 +372,7 @@ class TestMetadataOverlapCoverage:
     def test_value_mismatch_excluded_from_overlap(self):
         m1 = {"ticker": "AAPL", "metric": "revenue"}
         m2 = {"ticker": "TSLA", "metric": "revenue"}
-        # ticker keys match by name but NOT by value → excluded
+        # ticker keys match by name but NOT by value â†’ excluded
         overlap = _metadata_overlap(m1, m2)
         assert "ticker" not in overlap
         assert "metric" in overlap

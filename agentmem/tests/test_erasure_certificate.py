@@ -1,5 +1,5 @@
-"""
-Tests for GET /v1/erase/{subject_id}/certificate — cryptographic proof-of-erasure.
+﻿"""
+Tests for GET /v1/erase/{subject_id}/certificate â€” cryptographic proof-of-erasure.
 
 Covers: 404 before erasure, all certificate fields present after erasure,
 content_hashes preserved, chain_status ok, certificate_id stability,
@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 TEST_NS = "cert-test-ns"
 TEST_KEY = "cert-test-key-xyz"
@@ -68,7 +68,7 @@ async def _cert(client, subject_id):
     return await client.get(f"/v1/erase/{subject_id}/certificate", headers=_h())
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_certificate_404_before_erasure(client):

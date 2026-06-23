@@ -1,5 +1,5 @@
-"""
-Tests for POST /v1/backtest/check — lookahead-bias contamination detection.
+﻿"""
+Tests for POST /v1/backtest/check â€” lookahead-bias contamination detection.
 
 Covers: clean report, future_event detection, late_revision detection,
 mixed contamination, erased memories excluded, cross-agent isolation,
@@ -12,16 +12,16 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 TEST_NS = "backtest-test-ns"
 TEST_KEY = "backtest-test-key-xyz"
 AGENT = "quant-desk"
 
 # SIM_DATE is a future checkpoint so that test-time ingestion_time (today)
-# is always BEFORE the simulation date — avoiding spurious LATE_REVISION flags.
+# is always BEFORE the simulation date â€” avoiding spurious LATE_REVISION flags.
 SIM_DATE = datetime(2030, 1, 1, tzinfo=timezone.utc)       # simulation checkpoint
 PAST     = datetime(2025, 6, 1, tzinfo=timezone.utc)       # before sim (event + ingest)
 FUTURE   = datetime(2031, 6, 1, tzinfo=timezone.utc)       # clearly after sim
@@ -66,7 +66,7 @@ async def _check(client, agent=AGENT, sim_as_of=SIM_DATE):
     }, headers=_h())
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_clean_report_no_memories(client):

@@ -1,9 +1,9 @@
-"""
+﻿"""
 Concurrency and write-serialisation tests.
 
 The core invariant: for any (namespace, agent_id, structured-key-set), there
 must be at most ONE memory with valid_to IS NULL at any point in time.
-Violating this produces "ghost current facts" — the agent sees two conflicting
+Violating this produces "ghost current facts" â€” the agent sees two conflicting
 values for the same metric.
 
 On PostgreSQL, this is enforced by a transaction-level advisory lock acquired
@@ -13,7 +13,7 @@ level, but the state invariant must still hold after concurrent asyncio tasks.
 
 Each concurrent call gets its own session (mirroring production where each HTTP
 request gets its own session from get_db()).  With StaticPool the underlying
-SQLite connection is shared, so operations serialise at the connection level —
+SQLite connection is shared, so operations serialise at the connection level â€”
 this validates the invariant without truly exercising the advisory lock.
 The advisory lock is exercised against PostgreSQL in test_pgvector.py.
 """
@@ -25,15 +25,15 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
-from src.agentmem.schemas import MemoryAdd, RecallRequest
-from src.agentmem.memory_service import add_memory, recall_memories, _write_lock_keys
+from src.lian.schemas import MemoryAdd, RecallRequest
+from src.lian.memory_service import add_memory, recall_memories, _write_lock_keys
 
 NS    = "concurrency-ns"
 AGENT = "concurrency-agent"
 
 
 # ---------------------------------------------------------------------------
-# Session-factory fixture — each call returns a fresh session on the same DB
+# Session-factory fixture â€” each call returns a fresh session on the same DB
 # ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
@@ -43,10 +43,10 @@ async def session_factory(test_settings):
     Mirrors production: each add_memory call uses its own session,
     just as each HTTP request uses its own get_db() session.
     """
-    from src.agentmem.models import Base as AppBase
+    from src.lian.models import Base as AppBase
 
     # Use SQLite shared-cache URI so each session gets its own connection
-    # but all sessions share the same in-memory database — avoids StaticPool's
+    # but all sessions share the same in-memory database â€” avoids StaticPool's
     # single-connection limit when multiple sessions run concurrently.
     engine = create_async_engine(
         "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true",
@@ -80,7 +80,7 @@ def _t(month: int) -> datetime:
 class TestWriteLockKeys:
 
     def test_keys_are_stable(self):
-        """Same input always produces the same keys — no PYTHONHASHSEED dependence."""
+        """Same input always produces the same keys â€” no PYTHONHASHSEED dependence."""
         k1a, k2a = _write_lock_keys("tenant-x", "agent-1")
         k1b, k2b = _write_lock_keys("tenant-x", "agent-1")
         assert (k1a, k2a) == (k1b, k2b)
@@ -144,7 +144,7 @@ class TestSequentialConsistency:
         ))
 
         from sqlalchemy import select
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         open_mems = (await db.execute(
             select(MemModel).where(
@@ -166,7 +166,7 @@ class TestSequentialConsistency:
         Each memory in the chain points to its successor via superseded_by.
         The chain must be acyclic and terminate at the current memory.
         """
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         meta = {"ticker": "AAPL", "metric": "revenue"}
         mems = []
@@ -195,7 +195,7 @@ class TestSequentialConsistency:
 class TestConcurrentAsyncioWrites:
     """
     asyncio.gather fires concurrent add_memory coroutines, each with its own
-    session — mirroring production where each HTTP request gets its own
+    session â€” mirroring production where each HTTP request gets its own
     get_db() session.
 
     On SQLite + StaticPool, the underlying connection is shared, so operations
@@ -208,10 +208,10 @@ class TestConcurrentAsyncioWrites:
     async def test_two_concurrent_adds_leave_one_open_memory(self, session_factory):
         """
         Two concurrent adds for the same metric must leave exactly one open
-        (valid_to=None) memory — no ghost current facts.
+        (valid_to=None) memory â€” no ghost current facts.
         """
         from sqlalchemy import select
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         meta = {"ticker": "TSLA", "metric": "deliveries"}
 
@@ -251,10 +251,10 @@ class TestConcurrentAsyncioWrites:
     async def test_concurrent_adds_different_metrics_independent(self, session_factory):
         """
         Concurrent adds for DIFFERENT metrics on the same ticker must not
-        interfere — both end up as open memories.
+        interfere â€” both end up as open memories.
         """
         from sqlalchemy import select
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         agent = f"{AGENT}-diff"
 
@@ -286,10 +286,10 @@ class TestConcurrentAsyncioWrites:
     @pytest.mark.asyncio
     async def test_five_concurrent_adds_single_winner(self, session_factory):
         """
-        Five concurrent adds for the same metric — exactly one must be open.
+        Five concurrent adds for the same metric â€” exactly one must be open.
         """
         from sqlalchemy import select
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         meta  = {"ticker": "NVDA", "metric": "guidance"}
         agent = f"{AGENT}-five"
@@ -328,7 +328,7 @@ class TestConcurrentAsyncioWrites:
         This test validates the isolation invariant using separate sessions.
         """
         from sqlalchemy import select
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         meta = {"ticker": "MSFT", "metric": "cloud_revenue"}
 

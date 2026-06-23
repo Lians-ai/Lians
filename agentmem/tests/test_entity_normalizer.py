@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for financial entity normalization.
 
 Covers: direct ticker lookup, company name aliases, ISIN resolution,
@@ -8,10 +8,10 @@ with the keyed supersession router.
 import pytest
 from datetime import datetime, timezone
 
-from src.agentmem.entity_normalizer import normalize_ticker, normalize_entity_value, cached_normalize
+from src.lian.entity_normalizer import normalize_ticker, normalize_entity_value, cached_normalize
 
 
-# ── Unit tests: normalize_ticker ─────────────────────────────────────────────
+# â”€â”€ Unit tests: normalize_ticker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.parametrize("raw,expected", [
     # Exact ticker passthrough
@@ -23,7 +23,7 @@ from src.agentmem.entity_normalizer import normalize_ticker, normalize_entity_va
     ("aapl",  "AAPL"),
     ("msft",  "MSFT"),
     ("nvda",  "NVDA"),
-    # Company name → ticker
+    # Company name â†’ ticker
     ("Apple",             "AAPL"),
     ("Apple Inc.",        "AAPL"),
     ("apple inc",         "AAPL"),
@@ -139,7 +139,7 @@ def test_cached_normalize_is_consistent():
     assert cached_normalize("ticker", "037833100") == "AAPL"
 
 
-# ── Integration: cross-identifier supersession ────────────────────────────────
+# â”€â”€ Integration: cross-identifier supersession â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 T1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
@@ -148,8 +148,8 @@ T1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
 @pytest.mark.asyncio
 async def test_name_alias_triggers_supersession(db):
     """Memory stored with 'ticker=Apple' is superseded by 'ticker=AAPL' (newer)."""
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
 
     old = await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
@@ -165,8 +165,8 @@ async def test_name_alias_triggers_supersession(db):
         metadata={"ticker": "AAPL", "metric": "eps"},
     ))
 
-    # Reload old — should be invalidated
-    from src.agentmem.models import Memory
+    # Reload old â€” should be invalidated
+    from src.lian.models import Memory
     from sqlalchemy import select
     row = (await db.execute(select(Memory).where(Memory.id == old.id))).scalar_one()
     assert row.valid_to is not None, "Old memory with 'Apple' ticker must be superseded by 'AAPL' memory"
@@ -176,9 +176,9 @@ async def test_name_alias_triggers_supersession(db):
 @pytest.mark.asyncio
 async def test_isin_alias_triggers_supersession(db):
     """Memory stored with ISIN is superseded by matching ticker (newer)."""
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
-    from src.agentmem.models import Memory
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
+    from src.lian.models import Memory
     from sqlalchemy import select
 
     old = await add_memory(db, "test-ns", MemoryAdd(
@@ -203,9 +203,9 @@ async def test_isin_alias_triggers_supersession(db):
 @pytest.mark.asyncio
 async def test_cusip_alias_triggers_supersession(db):
     """Memory stored with CUSIP is superseded by canonical ticker."""
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
-    from src.agentmem.models import Memory
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
+    from src.lian.models import Memory
     from sqlalchemy import select
 
     old = await add_memory(db, "test-ns", MemoryAdd(
@@ -230,9 +230,9 @@ async def test_cusip_alias_triggers_supersession(db):
 @pytest.mark.asyncio
 async def test_different_entities_no_supersession(db):
     """Memories for different companies are never cross-superseded."""
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
-    from src.agentmem.models import Memory
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
+    from src.lian.models import Memory
     from sqlalchemy import select
 
     aapl = await add_memory(db, "test-ns", MemoryAdd(
@@ -242,7 +242,7 @@ async def test_different_entities_no_supersession(db):
         metadata={"ticker": "AAPL", "metric": "eps"},
     ))
 
-    # Storing MSFT memory — different entity, same metric, later time
+    # Storing MSFT memory â€” different entity, same metric, later time
     await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
         content="Microsoft EPS $2.80",
@@ -256,10 +256,10 @@ async def test_different_entities_no_supersession(db):
 
 @pytest.mark.asyncio
 async def test_same_time_isin_vs_ticker_flags_conflict(db):
-    """Same entity (ISIN vs ticker), same event_time, different value → conflict flag."""
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
-    from src.agentmem.models import ConflictFlag
+    """Same entity (ISIN vs ticker), same event_time, different value â†’ conflict flag."""
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
+    from src.lian.models import ConflictFlag
     from sqlalchemy import select
 
     await add_memory(db, "test-ns", MemoryAdd(

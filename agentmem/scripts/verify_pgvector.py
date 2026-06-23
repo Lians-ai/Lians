@@ -1,4 +1,4 @@
-"""
+﻿"""
 Standalone pgvector verification script.
 
 Connects to Postgres, runs a battery of checks, and reports what works and
@@ -13,8 +13,8 @@ Usage::
     python scripts/verify_pgvector.py --url postgresql+asyncpg://user:pw@host/db
 
 Exit codes:
-    0 — all checks passed
-    1 — one or more checks failed
+    0 â€” all checks passed
+    1 â€” one or more checks failed
 """
 import asyncio
 import argparse
@@ -59,13 +59,13 @@ async def run(url: str) -> bool:
     engine = create_async_engine(url, pool_pre_ping=True)
 
     try:
-        # ── 1. Basic connectivity ─────────────────────────────────────────
+        # â”€â”€ 1. Basic connectivity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         async with engine.connect() as conn:
             result = await conn.execute(text("SELECT version()"))
             version = result.scalar()
         _ok(f"Connected to Postgres ({version.split(',')[0].strip()})")
 
-        # ── 2. pgvector extension ─────────────────────────────────────────
+        # â”€â”€ 2. pgvector extension â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         async with engine.connect() as conn:
             result = await conn.execute(
                 text("SELECT extversion FROM pg_extension WHERE extname='vector'")
@@ -76,7 +76,7 @@ async def run(url: str) -> bool:
         else:
             _fail("pgvector extension", "Run: CREATE EXTENSION vector;  (or: alembic upgrade head)")
 
-        # ── 3. vector text protocol (string bind/result — no binary codec needed)
+        # â”€â”€ 3. vector text protocol (string bind/result â€” no binary codec needed)
         try:
             async with engine.connect() as conn:
                 v = _vec(8)
@@ -89,7 +89,7 @@ async def run(url: str) -> bool:
         except Exception as exc:
             _fail("vector text protocol", str(exc))
 
-        # ── 4. Schema — memories table ────────────────────────────────────
+        # â”€â”€ 4. Schema â€” memories table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         async with engine.connect() as conn:
             result = await conn.execute(
                 text("SELECT column_name, data_type FROM information_schema.columns "
@@ -101,7 +101,7 @@ async def run(url: str) -> bool:
         else:
             _fail("memories.embedding column", "Run: alembic upgrade head")
 
-        # ── 5. HNSW index ─────────────────────────────────────────────────
+        # â”€â”€ 5. HNSW index â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         async with engine.connect() as conn:
             result = await conn.execute(
                 text("SELECT indexname FROM pg_indexes "
@@ -113,25 +113,25 @@ async def run(url: str) -> bool:
         else:
             _fail("HNSW index on memories.embedding", "Run: alembic upgrade head")
 
-        # ── 6. Vector INSERT + SELECT round-trip ──────────────────────────
+        # â”€â”€ 6. Vector INSERT + SELECT round-trip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             original = _vec(1024)
             session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
             async with session_factory() as db:
-                from src.agentmem.memory_service import add_memory
-                from src.agentmem.schemas import MemoryAdd
+                from src.lian.memory_service import add_memory
+                from src.lian.schemas import MemoryAdd
                 result = await add_memory(db, "_verify_ns_", MemoryAdd(
                     agent_id="_verify_agent_",
                     content="pgvector verification ping",
                     event_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
                     metadata={"_verify": "true"},
                 ))
-            _ok(f"add_memory() round-trip (id={str(result.id)[:8]}…)")
+            _ok(f"add_memory() round-trip (id={str(result.id)[:8]}â€¦)")
         except Exception as exc:
             _fail("add_memory() round-trip", str(exc))
 
-        # ── 7. ANN query via <=> ──────────────────────────────────────────
+        # â”€â”€ 7. ANN query via <=> â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             q = _vec(1024)
             async with engine.connect() as conn:
@@ -142,7 +142,7 @@ async def run(url: str) -> bool:
         except Exception as exc:
             _fail("ANN query via <=>", str(exc))
 
-        # ── 8. HNSW index actually used (EXPLAIN) ─────────────────────────
+        # â”€â”€ 8. HNSW index actually used (EXPLAIN) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             q = _vec(1024)
             async with engine.connect() as conn:
@@ -154,8 +154,8 @@ async def run(url: str) -> bool:
             if "Index Scan" in plan or "Bitmap" in plan:
                 _ok("HNSW index scan used by planner")
             else:
-                # Table might be empty — planner chooses Seq Scan for small tables
-                _ok("HNSW index exists (planner chose Seq Scan — expected for empty table)")
+                # Table might be empty â€” planner chooses Seq Scan for small tables
+                _ok("HNSW index exists (planner chose Seq Scan â€” expected for empty table)")
         except Exception as exc:
             _fail("EXPLAIN ANN query", str(exc))
 
@@ -164,7 +164,7 @@ async def run(url: str) -> bool:
     finally:
         await engine.dispose()
 
-    # ── Summary ───────────────────────────────────────────────────────────
+    # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     passed = sum(1 for _, ok in CHECKS if ok)
     total = len(CHECKS)
     print(f"\n{'='*50}")
@@ -187,7 +187,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Ensure src.agentmem is importable
+    # Ensure src.lian is importable
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

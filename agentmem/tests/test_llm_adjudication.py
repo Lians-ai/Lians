@@ -1,7 +1,7 @@
-"""
+﻿"""
 Stage 3 LLM adjudication tests.
 
-All LLM calls are mocked — these tests verify caching behaviour, error
+All LLM calls are mocked â€” these tests verify caching behaviour, error
 handling, correct integration with run_supersession, and the contract
 that Stage 3 can override a Stage 2 SUPERSEDES verdict.
 """
@@ -10,7 +10,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.agentmem.llm_adjudication import llm_adjudicate, _CACHE, _pair_key
+from src.lian.llm_adjudication import llm_adjudicate, _CACHE, _pair_key
 
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -87,7 +87,7 @@ async def test_genuine_supersedes_confirmed_by_llm():
 
 @pytest.mark.asyncio
 async def test_cache_hit_calls_llm_only_once():
-    """Identical pair → second call returns cached result, LLM not called again."""
+    """Identical pair â†’ second call returns cached result, LLM not called again."""
     with patch("anthropic.AsyncAnthropic") as MockCls:
         inst = AsyncMock()
         MockCls.return_value = inst
@@ -120,7 +120,7 @@ async def test_different_pairs_each_call_llm():
 
 @pytest.mark.asyncio
 async def test_llm_api_error_falls_back_gracefully():
-    """Network/API error returns a safe fallback — the write path must not break."""
+    """Network/API error returns a safe fallback â€” the write path must not break."""
     with patch("anthropic.AsyncAnthropic") as MockCls:
         inst = AsyncMock()
         MockCls.return_value = inst
@@ -158,14 +158,14 @@ async def test_llm_invalid_json_falls_back():
 
 @pytest.mark.asyncio
 async def test_stage3_disabled_by_default_llm_never_called(db):
-    """supersession_llm_stage defaults to False — llm_adjudicate is never invoked."""
-    from src.agentmem.supersession import run_supersession
-    from src.agentmem.embeddings import get_embedding_provider
+    """supersession_llm_stage defaults to False â€” llm_adjudicate is never invoked."""
+    from src.lian.supersession import run_supersession
+    from src.lian.embeddings import get_embedding_provider
 
     provider = get_embedding_provider()
     emb = await provider.embed_one("NVDA Q3 guidance raised to $36B")
 
-    with patch("src.agentmem.supersession.llm_adjudicate") as mock_llm:
+    with patch("src.lian.supersession.llm_adjudicate") as mock_llm:
         await run_supersession(
             db=db,
             namespace="test-ns",
@@ -184,11 +184,11 @@ async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
     """Change 3: keyed facts (full structured-key match) supersede deterministically
     by event_time. Stage 3 LLM is never called, even when supersession_llm_stage=True.
     """
-    from src.agentmem.supersession import run_supersession
-    from src.agentmem.embeddings import get_embedding_provider
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
-    from src.agentmem.config import get_settings
+    from src.lian.supersession import run_supersession
+    from src.lian.embeddings import get_embedding_provider
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
+    from src.lian.config import get_settings
 
     await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
@@ -203,7 +203,7 @@ async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
     provider = get_embedding_provider()
     emb = await provider.embed_one("Nvidia raised Q3 outlook to thirty-six billion")
 
-    with patch("src.agentmem.supersession.llm_adjudicate") as mock_llm:
+    with patch("src.lian.supersession.llm_adjudicate") as mock_llm:
         result = await run_supersession(
             db=db,
             namespace="test-ns",
@@ -211,7 +211,7 @@ async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
             new_content="Nvidia raised Q3 outlook to thirty-six billion",
             new_meta={"ticker": "NVDA", "metric": "guidance"},
             new_embedding=emb,
-            new_event_time=T1,  # newer → deterministic SUPERSEDES
+            new_event_time=T1,  # newer â†’ deterministic SUPERSEDES
         )
 
     get_settings.cache_clear()
@@ -225,16 +225,16 @@ async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_keyed_facts_same_time_flags_conflict(db, monkeypatch):
-    """Keyed facts with equal event_time and different content → CONTRADICTS_SAME_TIME.
+    """Keyed facts with equal event_time and different content â†’ CONTRADICTS_SAME_TIME.
 
     Neither memory is superseded (superseded_ids stays empty), but a conflict
     flag is raised so a human can decide which source to trust.  This is the
     correct behavior for same-time disagreement between data sources.
     """
-    from src.agentmem.supersession import run_supersession
-    from src.agentmem.embeddings import get_embedding_provider
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
+    from src.lian.supersession import run_supersession
+    from src.lian.embeddings import get_embedding_provider
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
 
     mem = await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
@@ -253,7 +253,7 @@ async def test_keyed_facts_same_time_flags_conflict(db, monkeypatch):
         new_content="Nvidia Q3 outlook thirty-six billion",
         new_meta={"ticker": "NVDA", "metric": "guidance"},
         new_embedding=emb,
-        new_event_time=T0,  # same timestamp, different value → conflict
+        new_event_time=T0,  # same timestamp, different value â†’ conflict
     )
 
     assert result.relation == "CONTRADICTS_SAME_TIME"
@@ -265,10 +265,10 @@ async def test_keyed_facts_same_time_flags_conflict(db, monkeypatch):
 @pytest.mark.asyncio
 async def test_stage3_event_log_records_stage_number(db, monkeypatch):
     """Keyed supersession records adjudication_stage=2 (deterministic) in the event log."""
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory
-    from src.agentmem.models import EventLog
-    from src.agentmem.config import get_settings
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory
+    from src.lian.models import EventLog
+    from src.lian.config import get_settings
     from sqlalchemy import select
 
     monkeypatch.setenv("SUPERSESSION_LLM_STAGE", "true")
@@ -282,7 +282,7 @@ async def test_stage3_event_log_records_stage_number(db, monkeypatch):
     ))
 
     # Keyed fast path: llm_adjudicate is NOT called regardless of the patch
-    with patch("src.agentmem.supersession.llm_adjudicate", new=AsyncMock(
+    with patch("src.lian.supersession.llm_adjudicate", new=AsyncMock(
         return_value=("SUPERSEDES", 0.97, "Value changed from $32B to $36B")
     )):
         await add_memory(db, "test-ns", MemoryAdd(
@@ -300,7 +300,7 @@ async def test_stage3_event_log_records_stage_number(db, monkeypatch):
     log_row = result.scalar_one()
     payload = dict(log_row.payload)
 
-    # Change 3: keyed path is deterministic — adjudication_stage=2, no LLM rationale
+    # Change 3: keyed path is deterministic â€” adjudication_stage=2, no LLM rationale
     assert payload["adjudication_stage"] == 2
     assert payload.get("rationale") is None
     assert payload["confidence"] == 1.0

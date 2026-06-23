@@ -1,4 +1,4 @@
-"""
+﻿"""
 Memory lineage API tests.
 
 Coverage:
@@ -21,9 +21,9 @@ from uuid import uuid4
 
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 T1 = datetime(2026, 4, 1, tzinfo=timezone.utc)
@@ -37,7 +37,7 @@ OTHER_KEY = "lineage-other-key"
 OTHER_NS = "lineage-other-ns"
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
+# â”€â”€ Fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest_asyncio.fixture
 async def client(db):
@@ -87,7 +87,7 @@ async def _lineage(client, memory_id: str, key=TEST_KEY) -> dict:
     return r
 
 
-# ── Single memory ─────────────────────────────────────────────────────────────
+# â”€â”€ Single memory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_single_memory_lineage(client):
@@ -110,7 +110,7 @@ async def test_single_memory_lineage(client):
     assert node["erased_at"] is None
 
 
-# ── Two-node chain ────────────────────────────────────────────────────────────
+# â”€â”€ Two-node chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_two_node_chain_from_root(client):
@@ -149,7 +149,7 @@ async def test_two_node_chain_from_tip(client):
     assert data["queried_id"] == b["id"]
 
 
-# ── Three-node chain ──────────────────────────────────────────────────────────
+# â”€â”€ Three-node chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_three_node_chain_root_tip_depth(client):
@@ -200,7 +200,7 @@ async def test_three_node_chain_queried_from_tip(client):
     assert data["tip_id"] == c["id"]
 
 
-# ── Edge metadata ─────────────────────────────────────────────────────────────
+# â”€â”€ Edge metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_edge_has_required_fields(client):
@@ -248,7 +248,7 @@ async def test_three_node_chain_has_two_edges(client):
     assert data["edges"][1]["to_id"] == c["id"]
 
 
-# ── Content and node fields ───────────────────────────────────────────────────
+# â”€â”€ Content and node fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_node_content_is_present(client):
@@ -286,7 +286,7 @@ async def test_superseded_node_has_valid_to_set(client):
     assert nodes[1]["valid_to"] is None
 
 
-# ── Erased memory in chain ────────────────────────────────────────────────────
+# â”€â”€ Erased memory in chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_erased_node_content_is_none(client):
@@ -318,7 +318,7 @@ async def test_erased_node_content_is_none(client):
     assert erased_node["erased_at"] is not None
 
 
-# ── Error cases ───────────────────────────────────────────────────────────────
+# â”€â”€ Error cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_unknown_memory_id_returns_404(client):
@@ -335,7 +335,7 @@ async def test_namespace_isolation(client):
     assert r.status_code == 404
 
 
-# ── Agent isolation ───────────────────────────────────────────────────────────
+# â”€â”€ Agent isolation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_different_agents_do_not_merge_chains(client):
@@ -356,7 +356,7 @@ async def test_different_agents_do_not_merge_chains(client):
     assert rb.json()["tip_id"] == mb["id"]
 
 
-# ── Response structure ────────────────────────────────────────────────────────
+# â”€â”€ Response structure â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_lineage_response_has_all_top_level_fields(client):

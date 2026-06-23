@@ -1,11 +1,11 @@
-"""
+﻿"""
 Recall quality benchmarks: Precision@k, Recall@k, MRR.
 
 Demonstrates AgentMem's advantages over naive retrieval approaches:
 
 1. Hybrid scoring beats pure-cosine: recency + importance + validity weight
    correctly surface current facts over stale ones.
-2. Supersession exclusion: stale facts get a 0.1× validity penalty; pure
+2. Supersession exclusion: stale facts get a 0.1Ã— validity penalty; pure
    retrieval systems (mem0-style cosine search) return them at full rank.
 3. Temporal filtering: point-in-time recall returns the right revision.
    mem0 has no bitemporal model. Graphiti/Zep has temporal graph queries but
@@ -20,8 +20,8 @@ import pytest
 import pytest_asyncio
 from datetime import datetime, timedelta, timezone
 
-from src.agentmem.schemas import MemoryAdd, RecallRequest
-from src.agentmem.memory_service import add_memory, recall_memories
+from src.lian.schemas import MemoryAdd, RecallRequest
+from src.lian.memory_service import add_memory, recall_memories
 
 # ---------------------------------------------------------------------------
 # Metric helpers
@@ -55,12 +55,12 @@ def mrr(retrieved_ids: list, relevant_ids: set) -> float:
 async def _pure_cosine_ranking(db, namespace: str, agent_id: str, query: str) -> list:
     """
     Simulate mem0-style pure cosine retrieval: rank ALL non-erased memories by
-    cosine similarity only — no validity penalty, no recency, no importance.
+    cosine similarity only â€” no validity penalty, no recency, no importance.
     Returns list of (memory, cosine_score, content).
     """
     from sqlalchemy import select, and_
-    from src.agentmem.models import Memory
-    from src.agentmem.embeddings import get_embedding_provider
+    from src.lian.models import Memory
+    from src.lian.embeddings import get_embedding_provider
 
     provider = get_embedding_provider()
     q_emb = await provider.embed_one(query)
@@ -114,13 +114,13 @@ class TestHybridVsPureSemantic:
         """
         Two memories with identical content have identical cosine similarity.
         Hybrid scorer ranks the more recent, higher-importance one first.
-        Pure cosine treats them as tied — no reliable ordering.
+        Pure cosine treats them as tied â€” no reliable ordering.
 
         This is the everyday case: a financial agent ingests the same figure
         from two sources with different freshness. Returning the stale one
         first erodes trust in the agent's answers.
         """
-        # Same text → same embedding → same cosine with any query
+        # Same text â†’ same embedding â†’ same cosine with any query
         content = "NVDA Q3 FY2026 guidance raised to $40B"
         meta = {"ticker": "NVDA", "metric": "guidance"}
 
@@ -131,7 +131,7 @@ class TestHybridVsPureSemantic:
             importance=0.9,
             metadata=meta,
         ))
-        # Older event_time → classify_relation returns ADDS (not supersedes)
+        # Older event_time â†’ classify_relation returns ADDS (not supersedes)
         # so both remain valid (valid_to=None)
         m_old = await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT,
@@ -156,18 +156,18 @@ class TestHybridVsPureSemantic:
     async def test_supersession_penalty_prevents_stale_recall(self, db):
         """
         After supersession, the verbose old memory has higher cosine with the
-        query than the terse new memory.  Hybrid's 0.1× validity multiplier
+        query than the terse new memory.  Hybrid's 0.1Ã— validity multiplier
         ensures the current fact wins.
 
-        mem0-style pure cosine would return the stale memory at rank 1 —
+        mem0-style pure cosine would return the stale memory at rank 1 â€”
         this test proves AgentMem does not make that mistake.
         """
-        # Verbose old content → many shared tokens with the query
+        # Verbose old content â†’ many shared tokens with the query
         old_content = (
             "NVDA Q3 FY2026 guidance: management raised the revenue outlook "
             "to $36B, a significant increase from prior analyst day forecast"
         )
-        # Terse new content → fewer shared tokens with the query
+        # Terse new content â†’ fewer shared tokens with the query
         new_content = "NVDA Q3 FY2026 guidance $40B"
         meta = {"ticker": "NVDA", "metric": "guidance"}
 
@@ -181,7 +181,7 @@ class TestHybridVsPureSemantic:
         ))
 
         # The new memory should have superseded the old one
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
         old_db = await db.execute(
             __import__("sqlalchemy", fromlist=["select"]).select(MemModel).where(
                 MemModel.agent_id == AGENT,
@@ -195,15 +195,15 @@ class TestHybridVsPureSemantic:
         # Query contains tokens from the OLD content (would win on pure cosine)
         query = "NVDA guidance raised outlook $36B forecast analyst revenue"
 
-        # Pure cosine ranking — old content should rank first
+        # Pure cosine ranking â€” old content should rank first
         pure_ranked = await _pure_cosine_ranking(db, NS, AGENT, query)
         pure_ids = [r[0].id for r in pure_ranked]
         assert pure_ids[0] == superseded.id, (
-            "Pure cosine returns the verbose stale memory first — "
+            "Pure cosine returns the verbose stale memory first â€” "
             "this is the failure mode this benchmark is designed to expose"
         )
 
-        # Hybrid ranking — current content must rank first despite lower cosine
+        # Hybrid ranking â€” current content must rank first despite lower cosine
         hybrid_recall = await recall_memories(db, NS, RecallRequest(
             agent_id=AGENT, query=query, k=5,
         ))
@@ -297,7 +297,7 @@ class TestTemporalFilterPrecision:
 
     mem0 has no event_time concept and cannot do this.  Graphiti/Zep (Jan 2025)
     has a bitemporal graph model but no compliance audit API backed by a hash chain.
-    This test exercises the SQL-level `valid_from ≤ as_of < valid_to` path.
+    This test exercises the SQL-level `valid_from â‰¤ as_of < valid_to` path.
     AgentMem answers this exactly and in isolation of ingestion order.
     """
 
@@ -354,7 +354,7 @@ class TestTemporalFilterPrecision:
         """
         5 revisions of the same metric.  Present-time recall returns ONLY the
         5th revision.  A pure retrieval system (mem0) would return all 5 with
-        similar cosine scores — flooding the context with stale data.
+        similar cosine scores â€” flooding the context with stale data.
         """
         agent = f"{AGENT}-chain5"
         meta = {"ticker": "NVDA", "metric": "guidance"}
@@ -388,9 +388,9 @@ class TestTemporalFilterPrecision:
         # Compare with pure cosine (mem0-style): would surface all 5
         pure = await _pure_cosine_ranking(db, NS, agent, "NVDA guidance FY2026")
         pure_superseded = {r[0].id for r in pure[:5]} & superseded_ids
-        # Pure cosine returns stale memories — this documents the difference
+        # Pure cosine returns stale memories â€” this documents the difference
         assert len(pure_superseded) > 0, (
-            "Pure cosine should return some superseded memories — "
+            "Pure cosine should return some superseded memories â€” "
             "this proves the baseline failure mode that AgentMem avoids"
         )
 

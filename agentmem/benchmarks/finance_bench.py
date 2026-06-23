@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import sys
@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from src.agentmem.db import Base
-from src.agentmem.memory_service import add_memory, recall_memories
-from src.agentmem.schemas import MemoryAdd, RecallRequest
+from src.lian.db import Base
+from src.lian.memory_service import add_memory, recall_memories
+from src.lian.schemas import MemoryAdd, RecallRequest
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ async def seed(db, ns: str, agent: str) -> None:
                   event_time=t(2026, 2, 1),
                   metadata={"ticker": "AAPL", "metric": "services_revenue"}),
 
-        # Credit rating — entity-keyed
+        # Credit rating â€” entity-keyed
         MemoryAdd(agent_id=agent, content="Moody's rates XYZ Corp Baa2",
                   event_time=t(2026, 3, 1),
                   metadata={"entity": "xyz_corp", "metric": "credit_rating"}),
@@ -79,7 +79,7 @@ CASES = [
     Case("AAPL gross margin", datetime(2026, 8, 1, tzinfo=timezone.utc),
          "47.5%", "AAPL margin after update"),
     Case("AAPL services revenue", datetime(2026, 4, 1, tzinfo=timezone.utc),
-         "$26B", "AAPL services — unaffected by margin update"),
+         "$26B", "AAPL services â€” unaffected by margin update"),
 
     # --- Credit rating ---
     Case("XYZ Corp credit rating", datetime(2026, 5, 1, tzinfo=timezone.utc),

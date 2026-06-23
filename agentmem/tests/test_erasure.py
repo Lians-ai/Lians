@@ -1,8 +1,8 @@
-"""
+﻿"""
 Erasure: crypto-shred renders content unreadable; audit trail (hashes) survive.
 """
 import pytest
-from src.agentmem.crypto import (
+from src.lian.crypto import (
     generate_subject_key,
     wrap_subject_key,
     unwrap_subject_key,
@@ -23,7 +23,7 @@ def test_shred_makes_content_unreadable():
 
 
 def test_content_hash_survives_erasure():
-    """The hash is derived from plaintext before encryption — it's always available."""
+    """The hash is derived from plaintext before encryption â€” it's always available."""
     import hashlib
     plaintext = "sensitive content"
     key = generate_subject_key()

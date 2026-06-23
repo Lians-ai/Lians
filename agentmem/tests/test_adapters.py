@@ -1,5 +1,5 @@
-"""
-Tests for the domain adapter system (SCALE.md §3 — core/adapter boundary).
+﻿"""
+Tests for the domain adapter system (SCALE.md Â§3 â€” core/adapter boundary).
 
 Verifies:
 - Finance adapter returns correct structured_keys
@@ -12,12 +12,12 @@ Verifies:
 """
 import pytest
 
-from src.agentmem.adapters import get_adapter, register_adapter
-from src.agentmem.adapters.finance import FinanceAdapter
-from src.agentmem.adapters.passthrough import PassthroughAdapter
-from src.agentmem.adapters.healthcare import HealthcareAdapter
-from src.agentmem.adapters.legal import LegalAdapter
-from src.agentmem._types import (
+from src.lian.adapters import get_adapter, register_adapter
+from src.lian.adapters.finance import FinanceAdapter
+from src.lian.adapters.passthrough import PassthroughAdapter
+from src.lian.adapters.healthcare import HealthcareAdapter
+from src.lian.adapters.legal import LegalAdapter
+from src.lian._types import (
     _FINANCE_STRUCTURED_KEYS,
     _PASSTHROUGH_STRUCTURED_KEYS,
     _HEALTHCARE_STRUCTURED_KEYS,
@@ -25,7 +25,7 @@ from src.agentmem._types import (
 )
 
 
-# ── Finance adapter ───────────────────────────────────────────────────────────
+# â”€â”€ Finance adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_finance_adapter_structured_keys():
     adapter = FinanceAdapter()
@@ -76,7 +76,7 @@ def test_finance_adapter_non_ticker_key_identity():
     assert adapter.normalize("metric", "  revenue  ") == "revenue"
 
 
-# ── Passthrough adapter ───────────────────────────────────────────────────────
+# â”€â”€ Passthrough adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_passthrough_adapter_empty_structured_keys():
     adapter = PassthroughAdapter()
@@ -91,26 +91,26 @@ def test_passthrough_adapter_normalize_strips_whitespace():
 
 def test_passthrough_adapter_no_ticker_normalization():
     adapter = PassthroughAdapter()
-    # Passthrough does NOT map Apple Inc → AAPL (no finance logic)
+    # Passthrough does NOT map Apple Inc â†’ AAPL (no finance logic)
     assert adapter.normalize("ticker", "Apple Inc.") == "Apple Inc."
 
 
-# ── Protocol compliance ───────────────────────────────────────────────────────
+# â”€â”€ Protocol compliance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_finance_adapter_implements_protocol():
-    from src.agentmem.adapters import DomainAdapter
+    from src.lian.adapters import DomainAdapter
     assert isinstance(FinanceAdapter(), DomainAdapter)
 
 
 def test_passthrough_adapter_implements_protocol():
-    from src.agentmem.adapters import DomainAdapter
+    from src.lian.adapters import DomainAdapter
     assert isinstance(PassthroughAdapter(), DomainAdapter)
 
 
-# ── get_adapter() factory ─────────────────────────────────────────────────────
+# â”€â”€ get_adapter() factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_get_adapter_returns_finance_by_default(monkeypatch):
-    from src.agentmem.adapters import _registry
+    from src.lian.adapters import _registry
     _registry.clear()
     # Default DOMAIN_ADAPTER is "finance"
     adapter = get_adapter()
@@ -118,8 +118,8 @@ def test_get_adapter_returns_finance_by_default(monkeypatch):
 
 
 def test_get_adapter_returns_passthrough_when_configured(monkeypatch):
-    from src.agentmem.config import get_settings
-    from src.agentmem.adapters import _registry
+    from src.lian.config import get_settings
+    from src.lian.adapters import _registry
     _registry.clear()
     monkeypatch.setattr(get_settings(), "domain_adapter", "passthrough", raising=False)
     # Directly instantiate to avoid settings cache issues in tests
@@ -138,14 +138,14 @@ def test_custom_adapter_can_be_registered():
             return value.strip().lower()
 
     register_adapter("healthcare", HealthcareAdapter())
-    from src.agentmem.adapters import _registry
+    from src.lian.adapters import _registry
     assert "healthcare" in _registry
     adapter = _registry["healthcare"]
     assert "patient_id" in adapter.structured_keys
     assert adapter.normalize("condition", "  Hypertension  ") == "hypertension"
 
 
-# ── Types module ──────────────────────────────────────────────────────────────
+# â”€â”€ Types module â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_finance_structured_keys_constant():
     assert _FINANCE_STRUCTURED_KEYS == frozenset({
@@ -157,7 +157,7 @@ def test_passthrough_structured_keys_constant():
     assert _PASSTHROUGH_STRUCTURED_KEYS == frozenset()
 
 
-# ── Healthcare adapter ────────────────────────────────────────────────────────
+# â”€â”€ Healthcare adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestHealthcareAdapter:
     def setup_method(self):
@@ -229,11 +229,11 @@ class TestHealthcareAdapter:
         assert self.adapter.key_aliases("unknown_key") == ["unknown_key"]
 
     def test_implements_protocol(self):
-        from src.agentmem.adapters import DomainAdapter
+        from src.lian.adapters import DomainAdapter
         assert isinstance(self.adapter, DomainAdapter)
 
 
-# ── Legal adapter ─────────────────────────────────────────────────────────────
+# â”€â”€ Legal adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestLegalAdapter:
     def setup_method(self):
@@ -289,11 +289,11 @@ class TestLegalAdapter:
         assert self.adapter.key_aliases("unknown_key") == ["unknown_key"]
 
     def test_implements_protocol(self):
-        from src.agentmem.adapters import DomainAdapter
+        from src.lian.adapters import DomainAdapter
         assert isinstance(self.adapter, DomainAdapter)
 
 
-# ── Types module — new constants ──────────────────────────────────────────────
+# â”€â”€ Types module â€” new constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_healthcare_structured_keys_constant():
     assert _HEALTHCARE_STRUCTURED_KEYS == frozenset({

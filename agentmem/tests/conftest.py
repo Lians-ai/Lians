@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test fixtures: in-memory SQLite-equivalent via async SQLAlchemy.
 We use an in-process PG via pytest-postgresql or a real local PG for integration tests.
 For unit tests we mock the DB session with an in-memory approach.
@@ -14,9 +14,9 @@ from unittest.mock import AsyncMock, MagicMock
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
-from src.agentmem.db import Base
-from src.agentmem.config import get_settings, Settings
-import src.agentmem.kms as _kms
+from src.lian.db import Base
+from src.lian.config import get_settings, Settings
+import src.lian.kms as _kms
 
 _COMPOSE_DIR = Path(__file__).parent.parent
 _DB_URL = "postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem"
@@ -66,7 +66,7 @@ def pytest_configure(config):
             break
         time.sleep(1)
     else:
-        return  # timed out — skip gracefully
+        return  # timed out â€” skip gracefully
 
     # Run migrations (no-op when already at head)
     env = {**os.environ, "DATABASE_URL": _DB_URL}
@@ -108,7 +108,7 @@ async def db():
     )
 
     # Drop PG-only indexes before table creation so SQLite doesn't choke
-    from src.agentmem.models import Base as AppBase
+    from src.lian.models import Base as AppBase
     import sqlalchemy as sa
     pg_indexes = [
         idx for table in AppBase.metadata.tables.values()

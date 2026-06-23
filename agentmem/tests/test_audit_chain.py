@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the SEC 17a-4 audit log hash chain.
 
 
@@ -22,10 +22,10 @@ from datetime import datetime, timezone
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import select, text
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey, EventLog
-from src.agentmem.audit_chain import (
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey, EventLog
+from src.lian.audit_chain import (
     chain_log,
     compute_row_hash,
     get_chain_tip,
@@ -66,7 +66,7 @@ def _mem(content: str) -> dict:
     }
 
 
-# ── Unit tests: chain_log + verify_chain ────────────────────────────────────
+# â”€â”€ Unit tests: chain_log + verify_chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestChainLogUnit:
 
@@ -86,7 +86,7 @@ class TestChainLogUnit:
         assert r2.prev_hash == r1.row_hash
 
     def test_row_hash_is_deterministic(self):
-        """compute_row_hash is a pure function — same inputs always give same output."""
+        """compute_row_hash is a pure function â€” same inputs always give same output."""
         row = EventLog()
         row.id = uuid.UUID("12345678-1234-5678-1234-567812345678")
         row.namespace = "test-ns"
@@ -140,7 +140,7 @@ class TestChainLogUnit:
         assert rb.prev_hash == GENESIS_HASH
 
 
-# ── Unit tests: verify_chain ────────────────────────────────────────────────
+# â”€â”€ Unit tests: verify_chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestVerifyChain:
 
@@ -172,7 +172,7 @@ class TestVerifyChain:
         await db.commit()
 
         # Simulate a DBA silently changing the op field.
-        # SQLite stores UUIDs as hex without dashes — use .hex to match.
+        # SQLite stores UUIDs as hex without dashes â€” use .hex to match.
         await db.execute(
             text("UPDATE event_log SET op='FORGED' WHERE id=:id"),
             {"id": r1.id.hex},
@@ -200,7 +200,7 @@ class TestVerifyChain:
         await db.commit()
 
         # Delete the middle row (r2, i.e. the recall).
-        # SQLite stores UUIDs as hex without dashes — use .hex to match.
+        # SQLite stores UUIDs as hex without dashes â€” use .hex to match.
         await db.execute(
             text("DELETE FROM event_log WHERE id != :a AND id != :b AND namespace = :ns"),
             {"a": r1.id.hex, "b": r3.id.hex, "ns": ns},
@@ -229,7 +229,7 @@ class TestVerifyChain:
         assert report["violations"] == []
 
 
-# ── Integration tests: HTTP endpoint ────────────────────────────────────────
+# â”€â”€ Integration tests: HTTP endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestVerifyEndpoint:
 
@@ -278,7 +278,7 @@ class TestVerifyEndpoint:
         )
 
         # Tamper with the first event_log row for this namespace.
-        # SQLite stores UUIDs as hex without dashes — use .hex to match.
+        # SQLite stores UUIDs as hex without dashes â€” use .hex to match.
         result = await db.execute(
             select(EventLog)
             .where(EventLog.namespace == TEST_NS)
@@ -286,7 +286,7 @@ class TestVerifyEndpoint:
             .limit(1)
         )
         row = result.scalar_one()
-        row_id_hex = row.id.hex  # 32-char hex, no dashes — matches SQLite storage
+        row_id_hex = row.id.hex  # 32-char hex, no dashes â€” matches SQLite storage
 
         await db.execute(
             text("UPDATE event_log SET op='FORGED' WHERE id=:id"),
@@ -321,12 +321,12 @@ class TestVerifyEndpoint:
         assert isinstance(body["violations"], list)
 
 
-# ── Audit export (service + HTTP endpoint) ───────────────────────────────────
+# â”€â”€ Audit export (service + HTTP endpoint) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestAuditExport:
 
     async def test_export_returns_all_events_in_namespace(self, db):
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         ns = "export-ns-1"
         await chain_log(db, ns, "a", "add",    content_hash="h1")
         await chain_log(db, ns, "a", "recall", content_hash="h2")
@@ -338,12 +338,12 @@ class TestAuditExport:
         assert result["namespace"] == ns
         assert len(result["events"]) == 3
         ops = [e["op"] for e in result["events"]]
-        # "add" is always first; "recall" and "erase" may swap if sub-µs collision
+        # "add" is always first; "recall" and "erase" may swap if sub-Âµs collision
         assert ops[0] == "add"
         assert set(ops) == {"add", "recall", "erase"}
 
     async def test_export_events_have_hash_chain_fields(self, db):
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         ns = "export-ns-2"
         await chain_log(db, ns, "a", "add", content_hash="h1")
         await db.commit()
@@ -357,7 +357,7 @@ class TestAuditExport:
 
     async def test_export_filters_by_from_dt(self, db):
         import asyncio
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         from datetime import timedelta
         ns = "export-ns-3"
         r1 = await chain_log(db, ns, "a", "add", content_hash="h1")
@@ -373,7 +373,7 @@ class TestAuditExport:
 
     async def test_export_filters_by_to_dt(self, db):
         import asyncio
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         ns = "export-ns-4"
         r1 = await chain_log(db, ns, "a", "add", content_hash="h1")
         t1 = r1.created_at
@@ -386,14 +386,14 @@ class TestAuditExport:
         assert result["events"][0]["op"] == "add"
 
     async def test_export_empty_namespace_returns_zero_rows(self, db):
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         result = await export_audit_log(db, namespace="export-empty")
         assert result["total_rows"] == 0
         assert result["events"] == []
         assert result["chain_status"] is None
 
     async def test_export_with_verify_includes_chain_status(self, db):
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         ns = "export-ns-5"
         await chain_log(db, ns, "a", "add", content_hash="h1")
         await db.commit()
@@ -403,7 +403,7 @@ class TestAuditExport:
         assert result["chain_violations"] == []
 
     async def test_export_excludes_other_namespaces(self, db):
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         await chain_log(db, "export-ns-6a", "a", "add", content_hash="h1")
         await chain_log(db, "export-ns-6b", "b", "add", content_hash="h2")
         await db.commit()

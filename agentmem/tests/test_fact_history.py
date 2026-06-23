@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for GET /v1/facts/history.
 
 Covers: empty result, time-series ordering, entity normalization (ISIN/CUSIP/
@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 TEST_NS = "fact-history-ns"
 TEST_KEY = "fact-history-test-key"
@@ -68,7 +68,7 @@ async def _history(client, ticker, metric, agent=AGENT, limit=100):
     return r
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_empty_returns_zero(client):
@@ -109,7 +109,7 @@ async def test_isin_maps_to_same_series(client):
     await _add(client, "AAPL Q1 EPS $1.52", T0, {"ticker": "AAPL", "metric": "eps"})
     await _add(client, "Apple Q2 EPS $1.78", T1, {"ticker": "AAPL", "metric": "eps"})
 
-    # Query via ISIN — should resolve to AAPL and return both records
+    # Query via ISIN â€” should resolve to AAPL and return both records
     r = await _history(client, "US0378331005", "eps")
     body = r.json()
     assert body["ticker"] == "AAPL", "ISIN should normalize to canonical ticker"
@@ -186,7 +186,7 @@ async def test_limit_respected(client):
 
 @pytest.mark.asyncio
 async def test_superseded_versions_included(client):
-    """Fact history should include all versions — active and superseded."""
+    """Fact history should include all versions â€” active and superseded."""
     mem1 = await _add(client, "AAPL Q1 EPS estimate: $1.40", T0,
                       {"ticker": "AAPL", "metric": "eps", "period": "Q1 2026"})
     # Second add supersedes first (same structured key, later event_time)

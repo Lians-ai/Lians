@@ -1,4 +1,4 @@
-"""
+﻿"""
 Webhook registration, delivery dispatch, and signature verification tests.
 
 All outbound HTTP calls are intercepted via monkeypatch so no real network
@@ -15,10 +15,10 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey, WebhookEndpoint, WebhookDelivery
-from src.agentmem.webhook_service import (
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey, WebhookEndpoint, WebhookDelivery
+from src.lian.webhook_service import (
     register_webhook, list_webhooks, delete_webhook, update_webhook,
     dispatch_event, _sign, _http_post,
     MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED, ALL_EVENTS,
@@ -51,7 +51,7 @@ async def client(db):
         app.dependency_overrides.clear()
 
 
-# ── Signing ───────────────────────────────────────────────────────────────────
+# â”€â”€ Signing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_sign_produces_sha256_prefix():
     sig = _sign("mysecret", b"hello")
@@ -80,7 +80,7 @@ def test_sign_verifiable():
     assert hmac.compare_digest(hex_part, expected)
 
 
-# ── Registration ──────────────────────────────────────────────────────────────
+# â”€â”€ Registration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_register_webhook(db):
@@ -147,7 +147,7 @@ async def test_update_webhook_events(db):
     assert set(updated.events) == {MEMORY_CONFLICT, MEMORY_ERASED}
 
 
-# ── Dispatch ──────────────────────────────────────────────────────────────────
+# â”€â”€ Dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_dispatch_calls_http_for_matching_endpoint(db):
@@ -161,7 +161,7 @@ async def test_dispatch_calls_http_for_matching_endpoint(db):
         captured.append((url, body, signature))
         return 200, ""
 
-    with patch("src.agentmem.webhook_service._http_post", side_effect=fake_http):
+    with patch("src.lian.webhook_service._http_post", side_effect=fake_http):
         # Flush so the endpoint is visible to the task
         await dispatch_event(db, TEST_NS, MEMORY_SUPERSEDED, {
             "superseded_memory_id": str(uuid.uuid4()),
@@ -200,7 +200,7 @@ async def test_dispatch_skips_disabled_endpoint(db):
         captured.append(url)
         return 200, ""
 
-    with patch("src.agentmem.webhook_service._http_post", side_effect=fake_http):
+    with patch("src.lian.webhook_service._http_post", side_effect=fake_http):
         await dispatch_event(db, TEST_NS, MEMORY_SUPERSEDED, {"dummy": True})
         import asyncio
         await asyncio.sleep(0.1)
@@ -220,7 +220,7 @@ async def test_dispatch_skips_non_matching_event(db):
         captured.append(url)
         return 200, ""
 
-    with patch("src.agentmem.webhook_service._http_post", side_effect=fake_http):
+    with patch("src.lian.webhook_service._http_post", side_effect=fake_http):
         await dispatch_event(db, TEST_NS, MEMORY_SUPERSEDED, {"dummy": True})
         import asyncio
         await asyncio.sleep(0.1)
@@ -240,7 +240,7 @@ async def test_dispatch_namespace_isolation(db):
         captured.append(url)
         return 200, ""
 
-    with patch("src.agentmem.webhook_service._http_post", side_effect=fake_http):
+    with patch("src.lian.webhook_service._http_post", side_effect=fake_http):
         await dispatch_event(db, TEST_NS, MEMORY_CONFLICT, {"dummy": True})
         import asyncio
         await asyncio.sleep(0.1)
@@ -248,7 +248,7 @@ async def test_dispatch_namespace_isolation(db):
     assert len(captured) == 0
 
 
-# ── API routes ────────────────────────────────────────────────────────────────
+# â”€â”€ API routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_api_register_webhook(client):
@@ -346,7 +346,7 @@ async def test_api_webhook_deliveries(client, db):
     assert data["deliveries"][0]["status_code"] == 200
 
 
-# ── End-to-end: supersession triggers webhook ────────────────────────────────
+# â”€â”€ End-to-end: supersession triggers webhook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_supersession_dispatches_webhook(client, db):
@@ -363,7 +363,7 @@ async def test_supersession_dispatches_webhook(client, db):
         captured.append(json.loads(body))
         return 200, ""
 
-    with patch("src.agentmem.webhook_service._http_post", side_effect=fake_http):
+    with patch("src.lian.webhook_service._http_post", side_effect=fake_http):
         # Old memory
         await client.post("/v1/memories", json={
             "agent_id": "agent-wh",
@@ -372,7 +372,7 @@ async def test_supersession_dispatches_webhook(client, db):
             "metadata": {"ticker": "AAPL", "metric": "eps"},
         }, headers=_api_h())
 
-        # New memory — supersedes old
+        # New memory â€” supersedes old
         await client.post("/v1/memories", json={
             "agent_id": "agent-wh",
             "content": "AAPL EPS revised to $1.45",

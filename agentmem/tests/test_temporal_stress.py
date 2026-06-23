@@ -1,29 +1,29 @@
-"""
+﻿"""
 Temporal correctness stress tests.
 
 These scenarios exercise the bitemporal model under conditions that expose
 gaps in systems like mem0 (no temporal model) or that distinguish AgentMem's
 relational validity-gate from Graphiti/Zep's graph-based temporal model:
 
-  1. Long revision chains  — 10 consecutive updates to the same metric
-  2. Interleaved tickers   — parallel revision chains don't cross-contaminate
-  3. Future-dated events   — event_time > ingestion_time (pre-announced data)
-  4. Out-of-order ingestion — events arrive in non-chronological order
-  5. Same-second events    — multiple events at identical timestamps
-  6. as_of boundary fences — values exactly on valid_from/valid_to boundaries
-  7. Cross-quarter tracking — four quarters of the same metric as_of each boundary
+  1. Long revision chains  â€” 10 consecutive updates to the same metric
+  2. Interleaved tickers   â€” parallel revision chains don't cross-contaminate
+  3. Future-dated events   â€” event_time > ingestion_time (pre-announced data)
+  4. Out-of-order ingestion â€” events arrive in non-chronological order
+  5. Same-second events    â€” multiple events at identical timestamps
+  6. as_of boundary fences â€” values exactly on valid_from/valid_to boundaries
+  7. Cross-quarter tracking â€” four quarters of the same metric as_of each boundary
 
 Key claim: AgentMem returns the exact state of knowledge at any requested
 point in time.  mem0 has no event_time.  Graphiti/Zep has a bitemporal graph
 model (Jan 2025) but its temporal queries operate over graph edges, not the
-relational validity-gate (`valid_from ≤ as_of < valid_to`) tested here.
+relational validity-gate (`valid_from â‰¤ as_of < valid_to`) tested here.
 """
 from __future__ import annotations
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.agentmem.schemas import MemoryAdd, RecallRequest
-from src.agentmem.memory_service import add_memory, recall_memories
+from src.lian.schemas import MemoryAdd, RecallRequest
+from src.lian.memory_service import add_memory, recall_memories
 
 NS    = "stress-ns"
 AGENT = "stress-agent"
@@ -100,7 +100,7 @@ class TestLongRevisionChain:
             future_ids = {mems[j].id for j in range(i + 1, len(mems))}
             leaked = snap_ids & future_ids
             assert not leaked, (
-                f"as_of={t.date()} leaked {len(leaked)} future revision(s) — "
+                f"as_of={t.date()} leaked {len(leaked)} future revision(s) â€” "
                 "bitemporal boundary not enforced"
             )
 
@@ -202,7 +202,7 @@ class TestFutureDatedEvents:
 
         future_mem = await add_memory(db, NS, MemoryAdd(
             agent_id=agent,
-            content="NVDA FY2027 guidance raised to $50B — CEO statement",
+            content="NVDA FY2027 guidance raised to $50B â€” CEO statement",
             event_time=future_t,
             metadata={"ticker": "NVDA", "metric": "guidance"},
         ))
@@ -272,7 +272,7 @@ class TestOutOfOrderIngestion:
         ))
 
         # The older ingested fact must not have closed the newer one
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
         from sqlalchemy import select
         db_new = await db.get(MemModel, m_new.id)
         assert db_new.valid_to is None, (
@@ -319,7 +319,7 @@ class TestOutOfOrderIngestion:
         ids = {m.id for m in result.memories}
         assert m2.id in ids, "Mem with latest event_time must appear at present"
 
-        # as_of T0+1h → m0
+        # as_of T0+1h â†’ m0
         snap0 = await recall_memories(db, NS, RecallRequest(
             agent_id=agent, query="NVDA guidance", k=5,
             as_of=_t(month=1) + timedelta(hours=1),
@@ -378,7 +378,7 @@ class TestBoundaryConditions:
     @pytest.mark.asyncio
     async def test_four_quarter_tracking(self, db):
         """
-        Full fiscal year: Q1–Q4 earnings, as_of at each quarter's end.
+        Full fiscal year: Q1â€“Q4 earnings, as_of at each quarter's end.
         Validates that the quarter boundaries don't bleed into each other.
         """
         agent = f"{AGENT}-fy2026"

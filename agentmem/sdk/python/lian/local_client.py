@@ -1,5 +1,5 @@
-"""
-LocalLianClient — zero-setup local mode.
+﻿"""
+LocalLianClient â€” zero-setup local mode.
 
 Calls the Lian service layer directly against an in-memory (or file-based)
 SQLite database.  No server, no Docker, no API key.  Perfect for prototyping,
@@ -44,7 +44,7 @@ from sqlalchemy.pool import StaticPool
 def _ensure_src_importable() -> None:
     """
     Add the agentmem package root to sys.path so that
-    ``from src.agentmem.xxx import ...`` resolves in development.
+    ``from src.lian.xxx import ...`` resolves in development.
     This is a no-op once agentmem is installed as a proper package
     (in which case ``from agentmem.xxx import ...`` takes over).
     Structure assumption: this file lives at
@@ -62,7 +62,7 @@ _ensure_src_importable()
 
 class LocalLianClient:
     """
-    Synchronous Lian client backed by local SQLite — no server required.
+    Synchronous Lian client backed by local SQLite â€” no server required.
 
     Parameters
     ----------
@@ -88,7 +88,7 @@ class LocalLianClient:
 
         # Point the settings at the local embedding provider before any import
         os.environ.setdefault("EMBEDDING_PROVIDER", embedding_provider)
-        # LocalAgentMemClient is a dev/test tool — allow running without a real key.
+        # LocalAgentMemClient is a dev/test tool â€” allow running without a real key.
         # Production deployments use AgentMemClient (HTTP) against a server that
         # enforces MASTER_ENCRYPTION_KEY at startup.
         os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
@@ -118,8 +118,8 @@ class LocalLianClient:
     # ------------------------------------------------------------------
 
     async def _init_db(self) -> None:
-        from src.agentmem.models import Base  # lazy import; avoids circular refs
-        from src.agentmem.kms import load_master_key
+        from src.lian.models import Base  # lazy import; avoids circular refs
+        from src.lian.kms import load_master_key
 
         # Drop Postgres-only indexes so SQLite doesn't choke
         pg_indexes = [
@@ -178,8 +178,8 @@ class LocalLianClient:
         ))
 
     async def _async_add(self, **kwargs) -> dict:
-        from src.agentmem.schemas import MemoryAdd
-        from src.agentmem.memory_service import add_memory
+        from src.lian.schemas import MemoryAdd
+        from src.lian.memory_service import add_memory
         req = MemoryAdd(**kwargs)
         async with self._session_factory() as db:
             result = await add_memory(db, self._namespace, req)
@@ -200,8 +200,8 @@ class LocalLianClient:
         ))
 
     async def _async_recall(self, **kwargs) -> dict:
-        from src.agentmem.schemas import RecallRequest
-        from src.agentmem.memory_service import recall_memories
+        from src.lian.schemas import RecallRequest
+        from src.lian.memory_service import recall_memories
         req = RecallRequest(**kwargs)
         async with self._session_factory() as db:
             result = await recall_memories(db, self._namespace, req)
@@ -220,7 +220,7 @@ class LocalLianClient:
         ))
 
     async def _async_reconstruct(self, **kwargs) -> dict:
-        from src.agentmem.audit import reconstruct
+        from src.lian.audit import reconstruct
         async with self._session_factory() as db:
             result = await reconstruct(db, self._namespace, **kwargs)
         return result.model_dump(mode="json")
@@ -234,7 +234,7 @@ class LocalLianClient:
         ))
 
     async def _async_erase(self, subject_id: str, request_ref: str) -> dict:
-        from src.agentmem.memory_service import erase_subject
+        from src.lian.memory_service import erase_subject
         async with self._session_factory() as db:
             count = await erase_subject(db, self._namespace, subject_id, request_ref)
         return {
@@ -268,7 +268,7 @@ class LocalLianClient:
         limit: int,
         include_chain_status: bool,
     ) -> dict:
-        from src.agentmem.audit_chain import export_audit_log
+        from src.lian.audit_chain import export_audit_log
         async with self._session_factory() as db:
             result = await export_audit_log(
                 db,
@@ -299,11 +299,11 @@ class LocalLianClient:
         return self._run(self._async_verify_chain())
 
     async def _async_verify_chain(self) -> dict:
-        from src.agentmem.audit_chain import verify_chain
+        from src.lian.audit_chain import verify_chain
         async with self._session_factory() as db:
             return await verify_chain(db, namespace=self._namespace)
 
-    # ── Batch write ───────────────────────────────────────────────────────────
+    # â”€â”€ Batch write â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def batch_add(self, memories: list[dict]) -> dict:
         """
@@ -315,8 +315,8 @@ class LocalLianClient:
         return self._run(self._async_batch_add(memories))
 
     async def _async_batch_add(self, memories: list[dict]) -> dict:
-        from src.agentmem.schemas import MemoryAdd
-        from src.agentmem.memory_service import batch_add_memories
+        from src.lian.schemas import MemoryAdd
+        from src.lian.memory_service import batch_add_memories
         items = [MemoryAdd(**m) for m in memories]
         async with self._session_factory() as db:
             result = await batch_add_memories(db, self._namespace, items)
@@ -382,7 +382,7 @@ class LocalLianClient:
             return {"added": 0, "memories": []}
         return self.batch_add(batch)
 
-    # ── Point-in-time convenience ──────────────────────────────────────────────
+    # â”€â”€ Point-in-time convenience â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def recall_at(
         self,
@@ -396,11 +396,11 @@ class LocalLianClient:
         Recall memories valid at *as_of* (point-in-time compliance query).
 
         Equivalent to ``recall(..., as_of=as_of)`` but signals intent at the
-        call site — use for audit questions rather than present-time queries.
+        call site â€” use for audit questions rather than present-time queries.
         """
         return self.recall(agent_id=agent_id, query=query, k=k, as_of=as_of, filters=filters)
 
-    # ── Supersession review ───────────────────────────────────────────────────
+    # â”€â”€ Supersession review â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def review_supersessions(
         self,
@@ -420,7 +420,7 @@ class LocalLianClient:
         threshold: Optional[float],
         limit: int,
     ) -> dict:
-        from src.agentmem.memory_service import get_pending_supersessions
+        from src.lian.memory_service import get_pending_supersessions
         async with self._session_factory() as db:
             result = await get_pending_supersessions(
                 db=db,
@@ -449,7 +449,7 @@ class LocalLianClient:
         reviewer_note: Optional[str] = None,
     ) -> dict:
         """
-        Reject a supersession — the engine was wrong.
+        Reject a supersession â€” the engine was wrong.
 
         Restores the old memory as currently valid (valid_to = NULL) and writes
         an immutable audit event.  Returns a SupersessionActionResult dict.
@@ -463,8 +463,8 @@ class LocalLianClient:
         reviewer_note: Optional[str],
     ) -> dict:
         from uuid import UUID
-        from src.agentmem.schemas import SupersessionAction
-        from src.agentmem.memory_service import apply_supersession_action
+        from src.lian.schemas import SupersessionAction
+        from src.lian.memory_service import apply_supersession_action
         body = SupersessionAction(action=action, reviewer_note=reviewer_note)
         async with self._session_factory() as db:
             result = await apply_supersession_action(
@@ -472,7 +472,7 @@ class LocalLianClient:
             )
         return result.model_dump(mode="json")
 
-    # ── Snapshot / compliance ─────────────────────────────────────────────────
+    # â”€â”€ Snapshot / compliance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def snapshot(
         self,
@@ -483,14 +483,14 @@ class LocalLianClient:
         """
         Return agent's complete knowledge state at *as_of* (exhaustive, no ANN).
 
-        Unlike ``recall()``, this is not ranked — it returns every memory that
+        Unlike ``recall()``, this is not ranked â€” it returns every memory that
         was valid at that instant, ordered by event_time ascending.  Use for
         compliance audit: "what did the agent know on date X?"
         """
         return self._run(self._async_snapshot(agent_id=agent_id, as_of=as_of, limit=limit))
 
     async def _async_snapshot(self, agent_id: str, as_of: datetime, limit: int) -> dict:
-        from src.agentmem.memory_service import get_knowledge_snapshot
+        from src.lian.memory_service import get_knowledge_snapshot
         async with self._session_factory() as db:
             items = await get_knowledge_snapshot(db, self._namespace, agent_id, as_of, limit)
         return {
@@ -517,7 +517,7 @@ class LocalLianClient:
         ))
 
     async def _async_backtest_check(self, agent_id: str, simulation_as_of: datetime) -> dict:
-        from src.agentmem.backtest import check_contamination
+        from src.lian.backtest import check_contamination
         async with self._session_factory() as db:
             report = await check_contamination(db, self._namespace, agent_id, simulation_as_of)
         return report.model_dump(mode="json")
@@ -536,7 +536,7 @@ class LocalLianClient:
         return self._run(self._async_list_conflicts(status=status, limit=limit))
 
     async def _async_list_conflicts(self, status: Optional[str], limit: int) -> dict:
-        from src.agentmem.memory_service import list_conflicts
+        from src.lian.memory_service import list_conflicts
         async with self._session_factory() as db:
             result = await list_conflicts(db, self._namespace, status=status, limit=limit)
         return result.model_dump(mode="json")
@@ -561,8 +561,8 @@ class LocalLianClient:
         self, conflict_id: str, resolution: str, note: Optional[str]
     ) -> dict:
         from uuid import UUID
-        from src.agentmem.schemas import ConflictResolveRequest
-        from src.agentmem.memory_service import resolve_conflict
+        from src.lian.schemas import ConflictResolveRequest
+        from src.lian.memory_service import resolve_conflict
         req = ConflictResolveRequest(resolution=resolution, note=note)
         async with self._session_factory() as db:
             result = await resolve_conflict(db, self._namespace, UUID(conflict_id), req)
@@ -578,7 +578,7 @@ class LocalLianClient:
         """
         Return all versions of a ticker+metric fact, ordered by event_time ascending.
 
-        Shows the full history of revisions — useful for understanding how a
+        Shows the full history of revisions â€” useful for understanding how a
         structured fact evolved over time (e.g., NVDA guidance across quarters).
         """
         return self._run(self._async_fact_history(
@@ -588,7 +588,7 @@ class LocalLianClient:
     async def _async_fact_history(
         self, agent_id: str, ticker: str, metric: str, limit: int
     ) -> list[dict]:
-        from src.agentmem.adapters.finance import FinanceAdapter
+        from src.lian.adapters.finance import FinanceAdapter
         adapter = FinanceAdapter()
         async with self._session_factory() as db:
             items = await adapter.fact_history(db, self._namespace, agent_id, ticker, metric, limit)
@@ -599,12 +599,12 @@ class LocalLianClient:
         Return a verifiable erasure certificate for a data subject.
 
         The certificate includes SHA-256 content hashes of erased memories
-        and the audit chain status — suitable for regulatory filing.
+        and the audit chain status â€” suitable for regulatory filing.
         """
         return self._run(self._async_erasure_certificate(subject_id=subject_id))
 
     async def _async_erasure_certificate(self, subject_id: str) -> dict:
-        from src.agentmem.memory_service import get_erasure_certificate
+        from src.lian.memory_service import get_erasure_certificate
         async with self._session_factory() as db:
             return await get_erasure_certificate(db, self._namespace, subject_id)
 
@@ -622,35 +622,35 @@ class LocalLianClient:
         )
 
     def register_webhook(self, *args: Any, **kwargs: Any) -> dict:  # noqa: ARG002
-        """Not available in local mode — webhooks require an HTTP server."""
+        """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
             "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
         )
 
     def list_webhooks(self, *args: Any, **kwargs: Any) -> list:  # noqa: ARG002
-        """Not available in local mode — webhooks require an HTTP server."""
+        """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
             "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
         )
 
     def update_webhook(self, *args: Any, **kwargs: Any) -> dict:  # noqa: ARG002
-        """Not available in local mode — webhooks require an HTTP server."""
+        """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
             "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
         )
 
     def delete_webhook(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-        """Not available in local mode — webhooks require an HTTP server."""
+        """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
             "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
         )
 
     def webhook_deliveries(self, *args: Any, **kwargs: Any) -> list:  # noqa: ARG002
-        """Not available in local mode — webhooks require an HTTP server."""
+        """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
             "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."

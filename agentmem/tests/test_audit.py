@@ -1,5 +1,5 @@
-"""
-Audit reconstruction tests — the compliance product.
+﻿"""
+Audit reconstruction tests â€” the compliance product.
 Property: reconstruct(as_of=T) returns the EXACT memory state + event trail
 that existed at time T.  Nothing added after T may appear; nothing erased
 before T (that was valid at T) may be missing.
@@ -7,9 +7,9 @@ before T (that was valid at T) may be missing.
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from src.agentmem.schemas import MemoryAdd
-from src.agentmem.memory_service import add_memory
-from src.agentmem.audit import reconstruct
+from src.lian.schemas import MemoryAdd
+from src.lian.memory_service import add_memory
+from src.lian.audit import reconstruct
 
 NS = "audit-ns"
 AGENT = "audit-agent"
@@ -118,7 +118,7 @@ async def test_event_trail_excludes_events_after_as_of(db):
     # reconstruct at T0+1s: only the first add event should appear
     result = await reconstruct(db, NS, AGENT, as_of=T0 + timedelta(seconds=1))
     # The event_trail reflects events whose created_at <= as_of; since both
-    # adds happen in real-time during the test (created_at ≈ now), they may
+    # adds happen in real-time during the test (created_at â‰ˆ now), they may
     # both appear.  What matters is that the MEMORY snapshot is correct.
     cutoff = T0 + timedelta(seconds=1)
     # The T2 memory has event_time=T2 > cutoff, so it must be excluded

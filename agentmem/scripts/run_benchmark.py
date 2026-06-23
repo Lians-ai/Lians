@@ -1,5 +1,5 @@
-"""
-AgentMem benchmark runner — reproducible numbers for BENCHMARK.md
+﻿"""
+AgentMem benchmark runner â€” reproducible numbers for BENCHMARK.md
 
 Runs the four benchmark dimensions entirely in-process against SQLite
 (no Postgres, no API keys, no network required).  Prints the same
@@ -33,7 +33,7 @@ os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
 os.environ.setdefault("RLS_BARRIERS_ENABLED", "false")  # SQLite has no RLS
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-# ── Colour helpers ────────────────────────────────────────────────────────────
+# â”€â”€ Colour helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _GREEN  = "\033[92m"
 _RED    = "\033[91m"
@@ -41,18 +41,18 @@ _YELLOW = "\033[93m"
 _BOLD   = "\033[1m"
 _RESET  = "\033[0m"
 
-def _ok(s):  return f"{_GREEN}✓{_RESET} {s}"
-def _fail(s): return f"{_RED}✗{_RESET} {s}"
+def _ok(s):  return f"{_GREEN}âœ“{_RESET} {s}"
+def _fail(s): return f"{_RED}âœ—{_RESET} {s}"
 def _hdr(s):  return f"\n{_BOLD}{s}{_RESET}"
 
 
-# ── In-process setup: SQLite + service layer ──────────────────────────────────
+# â”€â”€ In-process setup: SQLite + service layer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _build_db():
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from sqlalchemy.pool import StaticPool
-    from agentmem.src.agentmem.models import Base
-    from agentmem.src.agentmem.kms import load_master_key
+    from agentmem.src.lian.models import Base
+    from agentmem.src.lian.kms import load_master_key
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -77,11 +77,11 @@ def _ts(*args):
     return datetime(*args, tzinfo=timezone.utc)
 
 
-# ── Benchmark 1: stale-fact contamination ────────────────────────────────────
+# â”€â”€ Benchmark 1: stale-fact contamination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def bench_stale_fact(factory) -> dict:
-    from agentmem.src.agentmem.schemas import MemoryAdd, RecallRequest
-    from agentmem.src.agentmem.memory_service import add_memory, recall_memories
+    from agentmem.src.lian.schemas import MemoryAdd, RecallRequest
+    from agentmem.src.lian.memory_service import add_memory, recall_memories
 
     NS = "bench"
     REVISIONS = [
@@ -102,7 +102,7 @@ async def bench_stale_fact(factory) -> dict:
                 importance=0.9,
             ))
 
-    # Present-time recall (AgentMem — supersession active)
+    # Present-time recall (AgentMem â€” supersession active)
     async with factory() as db:
         result = await recall_memories(db, NS, RecallRequest(
             agent_id="analyst",
@@ -129,7 +129,7 @@ async def bench_stale_fact(factory) -> dict:
     }
 
 
-# ── Benchmark 2: supersession classification ──────────────────────────────────
+# â”€â”€ Benchmark 2: supersession classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def bench_supersession() -> dict:
     from agentmem.benchmarks.supersession_eval import CASES, REAL_WORLD_CASES, ALL_CASES, run_eval
@@ -149,11 +149,11 @@ def bench_supersession() -> dict:
     }
 
 
-# ── Benchmark 3: point-in-time recall ────────────────────────────────────────
+# â”€â”€ Benchmark 3: point-in-time recall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def bench_point_in_time(factory) -> dict:
-    from agentmem.src.agentmem.schemas import MemoryAdd, RecallRequest
-    from agentmem.src.agentmem.memory_service import add_memory, recall_memories
+    from agentmem.src.lian.schemas import MemoryAdd, RecallRequest
+    from agentmem.src.lian.memory_service import add_memory, recall_memories
 
     NS = "bench_pit"
     QUARTERS = [
@@ -197,18 +197,18 @@ async def bench_point_in_time(factory) -> dict:
     return {"total": len(QUERIES), "correct": correct}
 
 
-# ── Benchmark 4: compliance (audit chain) ─────────────────────────────────────
+# â”€â”€ Benchmark 4: compliance (audit chain) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def bench_compliance(factory) -> dict:
-    from agentmem.src.agentmem.schemas import MemoryAdd
-    from agentmem.src.agentmem.memory_service import add_memory
-    from agentmem.src.agentmem.audit_chain import verify_chain
+    from agentmem.src.lian.schemas import MemoryAdd
+    from agentmem.src.lian.memory_service import add_memory
+    from agentmem.src.lian.audit_chain import verify_chain
 
     NS = "bench_compliance"
     async with factory() as db:
         await add_memory(db, NS, MemoryAdd(
             agent_id="analyst",
-            content="Fed funds rate 4.25%–4.50%",
+            content="Fed funds rate 4.25%â€“4.50%",
             event_time=_ts(2024, 12, 18),
             metadata={"instrument": "fed_funds_rate"},
             importance=0.95,
@@ -222,7 +222,7 @@ async def bench_compliance(factory) -> dict:
     }
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def main():
     print(f"{_BOLD}AgentMem Benchmark Runner{_RESET}")
@@ -230,17 +230,17 @@ async def main():
 
     factory = await _build_db()
 
-    # ── B1: Stale-fact contamination ─────────────────────────────────────────
-    print(_hdr("Benchmark 1 — Stale-fact contamination (5-revision NVDA chain)"))
+    # â”€â”€ B1: Stale-fact contamination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    print(_hdr("Benchmark 1 â€” Stale-fact contamination (5-revision NVDA chain)"))
     b1 = await bench_stale_fact(factory)
     b1_pass = b1["agentmem_stale_in_top5"] == 0
-    print(_ok(f"AgentMem — stale facts in top-5: {b1['agentmem_stale_in_top5']} / 4")
-          if b1_pass else _fail(f"AgentMem — stale facts in top-5: {b1['agentmem_stale_in_top5']} / 4"))
-    print(f"   Pure-cosine (mem0-style) — stale facts visible: {b1['mem0_style_stale_in_top5']} / 4")
+    print(_ok(f"AgentMem â€” stale facts in top-5: {b1['agentmem_stale_in_top5']} / 4")
+          if b1_pass else _fail(f"AgentMem â€” stale facts in top-5: {b1['agentmem_stale_in_top5']} / 4"))
+    print(f"   Pure-cosine (mem0-style) â€” stale facts visible: {b1['mem0_style_stale_in_top5']} / 4")
 
-    # ── B2: Supersession classification ──────────────────────────────────────
+    # â”€â”€ B2: Supersession classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     total_pairs = 12 + 10  # synthetic + real-world
-    print(_hdr(f"Benchmark 2 — Supersession classification ({total_pairs}-pair labeled set)"))
+    print(_hdr(f"Benchmark 2 â€” Supersession classification ({total_pairs}-pair labeled set)"))
     try:
         b2 = bench_supersession()
         b2_pass = b2["correct"] == b2["total"]
@@ -250,26 +250,26 @@ async def main():
         print(f"   Real-world pairs (FOMC, NVDA, TSLA, Moody's): "
               f"{b2['realworld_correct']}/{b2['realworld_total']}")
         for f in b2["failures"]:
-            print(f"   FAIL: {f.get('case', '?')} — got {f.get('got')} expected {f.get('expected')}")
+            print(f"   FAIL: {f.get('case', '?')} â€” got {f.get('got')} expected {f.get('expected')}")
     except Exception as e:
-        print(f"   {_YELLOW}SKIP{_RESET} — could not run: {e}")
+        print(f"   {_YELLOW}SKIP{_RESET} â€” could not run: {e}")
 
-    # ── B3: Point-in-time recall ──────────────────────────────────────────────
-    print(_hdr("Benchmark 3 — Point-in-time recall (4 quarterly queries)"))
+    # â”€â”€ B3: Point-in-time recall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    print(_hdr("Benchmark 3 â€” Point-in-time recall (4 quarterly queries)"))
     b3 = await bench_point_in_time(factory)
     b3_pass = b3["correct"] == b3["total"]
     label = f"{b3['correct']}/{b3['total']}"
     print(_ok(f"Correct: {label}") if b3_pass else _fail(f"Correct: {label}"))
     print(f"   mem0 score (no as_of support): 0/{b3['total']}")
 
-    # ── B4: Compliance / audit chain ─────────────────────────────────────────
-    print(_hdr("Benchmark 4 — Compliance auditability (SEC 17a-4 hash chain)"))
+    # â”€â”€ B4: Compliance / audit chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    print(_hdr("Benchmark 4 â€” Compliance auditability (SEC 17a-4 hash chain)"))
     b4 = await bench_compliance(factory)
     b4_pass = b4["chain_status"] == "ok" and len(b4["violations"]) == 0
     print(_ok(f"Hash chain: {b4['chain_status']} ({b4['rows_checked']} rows, 0 violations)")
-          if b4_pass else _fail(f"Hash chain: {b4['chain_status']} — {b4['violations']}"))
+          if b4_pass else _fail(f"Hash chain: {b4['chain_status']} â€” {b4['violations']}"))
 
-    # ── Summary ───────────────────────────────────────────────────────────────
+    # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     passed = sum([b1_pass, b2_pass if "b2" in dir() else True, b3_pass, b4_pass])
     total  = 4
     print(f"\n{_BOLD}{'='*52}{_RESET}")

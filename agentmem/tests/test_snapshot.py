@@ -1,5 +1,5 @@
-"""
-Tests for GET /v1/snapshot — audit reconstruction (complete knowledge state at T).
+﻿"""
+Tests for GET /v1/snapshot â€” audit reconstruction (complete knowledge state at T).
 
 Covers: empty state, all-active memories, superseded memories excluded from
 present but visible in past snapshot, erased memories present as null-content,
@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 TEST_NS = "snapshot-test-ns"
 TEST_KEY = "snapshot-test-key-xyz"
@@ -67,7 +67,7 @@ async def _snapshot(client, as_of, agent=AGENT, limit=1000):
     }, headers=_h())
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_empty_snapshot(client):
@@ -111,12 +111,12 @@ async def test_snapshot_superseded_included_in_past_excluded_now(client):
     mem2 = await _add(client, "AAPL EPS revised $1.52", T2,
                       {"ticker": "AAPL", "metric": "eps", "period": "Q1"})
 
-    # Snapshot between T0 and T2 — first fact should be valid
+    # Snapshot between T0 and T2 â€” first fact should be valid
     r_past = await _snapshot(client, T1)
     ids_past = {item["id"] for item in r_past.json()["items"]}
     assert mem1["id"] in ids_past
 
-    # Snapshot at present (T3) — second fact valid, first superseded
+    # Snapshot at present (T3) â€” second fact valid, first superseded
     r_now = await _snapshot(client, T3)
     ids_now = {item["id"] for item in r_now.json()["items"]}
     assert mem2["id"] in ids_now
@@ -186,7 +186,7 @@ async def test_snapshot_missing_as_of(client):
 
 @pytest.mark.asyncio
 async def test_snapshot_at_exact_event_time_boundary(client):
-    """valid_from <= as_of — boundary memory at exactly as_of should be included."""
+    """valid_from <= as_of â€” boundary memory at exactly as_of should be included."""
     await _add(client, "Boundary event", T1)
     r = await _snapshot(client, T1)
     assert r.json()["total"] == 1

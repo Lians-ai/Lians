@@ -1,5 +1,5 @@
-"""
-API integration tests — full HTTP stack via ASGITransport.
+﻿"""
+API integration tests â€” full HTTP stack via ASGITransport.
 Proves auth, routes, and end-to-end behaviour without a real network or PG.
 
 Each test gets a fresh in-memory SQLite DB (from the db fixture in conftest)
@@ -12,12 +12,12 @@ from datetime import datetime, timezone, timedelta
 from httpx import AsyncClient, ASGITransport
 
 # Use a far-future sentinel for audit trail queries so that event_log rows
-# (created_at ≈ now) always satisfy `created_at <= AUDIT_AS_OF`.
+# (created_at â‰ˆ now) always satisfy `created_at <= AUDIT_AS_OF`.
 AUDIT_AS_OF = datetime(2099, 1, 1, tzinfo=timezone.utc)
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 
 TEST_KEY = "integration-test-key-secret"
@@ -69,7 +69,7 @@ def _mem(content: str, event_time: datetime = T0, meta: dict | None = None) -> d
 @pytest.mark.asyncio
 async def test_health(client):
     from unittest.mock import AsyncMock, patch
-    with patch("src.agentmem.cache._get_redis") as mock_redis:
+    with patch("src.lian.cache._get_redis") as mock_redis:
         mock_redis.return_value.ping = AsyncMock(return_value=True)
         resp = await client.get("/health")
     assert resp.status_code == 200
@@ -272,7 +272,7 @@ async def test_audit_reconstruct_includes_event_trail(client):
         "metadata": {"ticker": "GOOGL", "metric": "eps"},
     })
 
-    # AUDIT_AS_OF is far-future so that event_log rows (created_at ≈ now)
+    # AUDIT_AS_OF is far-future so that event_log rows (created_at â‰ˆ now)
     # satisfy the created_at <= as_of filter in audit.py.
     resp = await client.get("/v1/audit/reconstruct", headers=_h(), params={
         "agent_id": AGENT, "as_of": AUDIT_AS_OF.isoformat(),

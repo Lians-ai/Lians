@@ -1,5 +1,5 @@
-"""
-Alembic environment — async PostgreSQL via asyncpg.
+﻿"""
+Alembic environment â€” async PostgreSQL via asyncpg.
 
 Run migrations:
     cd agentmem
@@ -21,7 +21,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 
-# Ensure `src.agentmem` is importable regardless of working directory.
+# Ensure `src.lian` is importable regardless of working directory.
 # prepend_sys_path = . in alembic.ini handles the common case (running from
 # agentmem/), but adding it explicitly here too makes env.py importable from
 # other tools (pytest-alembic, CI scripts, etc.).
@@ -29,11 +29,11 @@ _pkg_root = str(Path(__file__).resolve().parents[1])
 if _pkg_root not in sys.path:
     sys.path.insert(0, _pkg_root)
 
-# Import all model classes — this registers them with Base.metadata so that
+# Import all model classes â€” this registers them with Base.metadata so that
 # autogenerate can diff the live DB against the current model definitions.
-from src.agentmem.models import Base  # noqa: E402
-from src.agentmem.config import get_settings  # noqa: E402
-from src.agentmem.db import parse_db_url  # noqa: E402
+from src.lian.models import Base  # noqa: E402
+from src.lian.config import get_settings  # noqa: E402
+from src.lian.db import parse_db_url  # noqa: E402
 
 config = context.config
 target_metadata = Base.metadata
@@ -48,7 +48,7 @@ def _db_url() -> str:
 
 
 def run_migrations_offline() -> None:
-    """Emit SQL to stdout — useful for reviewing DDL before applying."""
+    """Emit SQL to stdout â€” useful for reviewing DDL before applying."""
     context.configure(
         url=_db_url(),
         target_metadata=target_metadata,

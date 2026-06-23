@@ -1,5 +1,5 @@
 ﻿// AgentMem TypeScript SDK — type definitions
-// Mirrors the Pydantic schemas in src/agentmem/schemas.py
+// Mirrors the Pydantic schemas in src/lian/schemas.py
 
 // ── Write ────────────────────────────────────────────────────────────────────
 

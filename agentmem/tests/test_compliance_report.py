@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for GET /v1/compliance/report.
 
 Covers: empty namespace, window filtering, supersession counts,
@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey, NamespacePolicy
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey, NamespacePolicy
 
 TEST_NS = "compliance-test-ns"
 TEST_KEY = "compliance-test-key-xyz"
@@ -44,7 +44,7 @@ async def client(db):
         app.dependency_overrides.clear()
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def _add(client, content, event_time=T0, metadata=None, agent="agent-1"):
     r = await client.post("/v1/memories", json={
@@ -57,7 +57,7 @@ async def _add(client, content, event_time=T0, metadata=None, agent="agent-1"):
     return r.json()
 
 
-# ── Tests ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_empty_namespace_report(client):
@@ -124,8 +124,8 @@ async def test_report_conflict_counts(client):
 
 @pytest.mark.asyncio
 async def test_report_erasure_section(client, db):
-    from src.agentmem.schemas import MemoryAdd
-    from src.agentmem.memory_service import add_memory, erase_subject
+    from src.lian.schemas import MemoryAdd
+    from src.lian.memory_service import add_memory, erase_subject
 
     await add_memory(db, TEST_NS, MemoryAdd(
         agent_id="agent-1",

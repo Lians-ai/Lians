@@ -1,9 +1,9 @@
-"""
+﻿"""
 PostgreSQL + pgvector integration tests.
 
-These tests verify the full Postgres code path — asyncpg codec registration,
+These tests verify the full Postgres code path â€” asyncpg codec registration,
 vector INSERT/SELECT, cosine distance ordering via the HNSW index, and the
-end-to-end add_memory → recall_memories round-trip.
+end-to-end add_memory â†’ recall_memories round-trip.
 
 Prerequisites
 -------------
@@ -38,7 +38,7 @@ PG_AVAILABLE = bool(TEST_DB_URL and "postgresql" in TEST_DB_URL)
 
 pytestmark = pytest.mark.skipif(
     not PG_AVAILABLE,
-    reason="TEST_DATABASE_URL not set to a PostgreSQL URL — skipping pgvector tests",
+    reason="TEST_DATABASE_URL not set to a PostgreSQL URL â€” skipping pgvector tests",
 )
 
 
@@ -106,10 +106,10 @@ class TestAsyncpgCodec:
             text("SELECT extname FROM pg_extension WHERE extname = 'vector'")
         )
         row = result.fetchone()
-        assert row is not None, "pgvector extension not installed — run: alembic upgrade head"
+        assert row is not None, "pgvector extension not installed â€” run: alembic upgrade head"
 
     async def test_insert_and_select_vector(self, pg_db):
-        """Raw INSERT + SELECT round-trip — string protocol, no binary codec needed."""
+        """Raw INSERT + SELECT round-trip â€” string protocol, no binary codec needed."""
         from sqlalchemy import text
         vec = _random_vec(4)  # tiny vector for a quick sanity check
         vec_str = "[" + ",".join(f"{x:.8f}" for x in vec) + "]"
@@ -161,17 +161,17 @@ class TestVectorOperations:
         ))
         row = result.fetchone()
         assert row is not None, (
-            "HNSW index not found on memories.embedding — "
+            "HNSW index not found on memories.embedding â€” "
             "run: alembic upgrade head"
         )
 
 
 class TestEndToEnd:
-    """Full add_memory → recall_memories round-trip on Postgres."""
+    """Full add_memory â†’ recall_memories round-trip on Postgres."""
 
     async def test_add_memory_stores_vector(self, pg_session_factory):
-        from src.agentmem.memory_service import add_memory
-        from src.agentmem.schemas import MemoryAdd
+        from src.lian.memory_service import add_memory
+        from src.lian.schemas import MemoryAdd
 
         req = MemoryAdd(
             agent_id=AGENT,
@@ -189,8 +189,8 @@ class TestEndToEnd:
         assert result.namespace == TEST_NS
 
     async def test_recall_finds_added_memory(self, pg_session_factory):
-        from src.agentmem.memory_service import add_memory, recall_memories
-        from src.agentmem.schemas import MemoryAdd, RecallRequest
+        from src.lian.memory_service import add_memory, recall_memories
+        from src.lian.schemas import MemoryAdd, RecallRequest
 
         async with pg_session_factory() as db:
             await add_memory(db, TEST_NS, MemoryAdd(
@@ -211,12 +211,12 @@ class TestEndToEnd:
     async def test_ann_prefetch_used_on_postgres(self, pg_session_factory):
         """
         With enough rows seeded, EXPLAIN should show an Index Scan on the HNSW
-        index rather than a Seq Scan — proves the index is actually used.
+        index rather than a Seq Scan â€” proves the index is actually used.
         """
         from sqlalchemy import text
-        from src.agentmem.memory_service import add_memory
-        from src.agentmem.schemas import MemoryAdd
-        from src.agentmem.embeddings import get_embedding_provider
+        from src.lian.memory_service import add_memory
+        from src.lian.schemas import MemoryAdd
+        from src.lian.embeddings import get_embedding_provider
 
         # Seed 30 rows so the planner prefers the HNSW index over a seq scan
         seed_agent = f"ann-seed-{uuid.uuid4().hex[:6]}"
@@ -238,7 +238,7 @@ class TestEndToEnd:
         async with pg_session_factory() as db:
             await db.execute(text("ANALYZE memories"))
             # Disable seq scan so the planner is forced to use the HNSW index
-            # if one exists — standard technique for index-existence tests without
+            # if one exists â€” standard technique for index-existence tests without
             # needing millions of rows.
             await db.execute(text("SET enable_seqscan = off"))
             result = await db.execute(text(
@@ -252,9 +252,9 @@ class TestEndToEnd:
         )
 
     async def test_point_in_time_recall(self, pg_session_factory):
-        """as_of filter works on Postgres — validates bitemporal model end-to-end."""
-        from src.agentmem.memory_service import add_memory, recall_memories
-        from src.agentmem.schemas import MemoryAdd, RecallRequest
+        """as_of filter works on Postgres â€” validates bitemporal model end-to-end."""
+        from src.lian.memory_service import add_memory, recall_memories
+        from src.lian.schemas import MemoryAdd, RecallRequest
         from datetime import timedelta
 
         agent = f"pit-{uuid.uuid4().hex[:6]}"
@@ -275,7 +275,7 @@ class TestEndToEnd:
                 metadata={"ticker": "TSLA", "metric": "deliveries"},
             ))
 
-            # As of one day after t0 — should only see 400k
+            # As of one day after t0 â€” should only see 400k
             past = await recall_memories(db, TEST_NS, RecallRequest(
                 agent_id=agent,
                 query="TSLA deliveries",
@@ -329,7 +329,7 @@ class TestRLSInformationBarriers:
 
         factory = async_sessionmaker(pg_engine, expire_on_commit=False, class_=AsyncSession)
 
-        # Insert both rows — no session var set, so IS NULL branch passes for all rows.
+        # Insert both rows â€” no session var set, so IS NULL branch passes for all rows.
         async with factory() as db:
             await db.execute(text("""
                 INSERT INTO memories
@@ -343,7 +343,7 @@ class TestRLSInformationBarriers:
                        now=now, ga=group_a, gb=group_b))
             await db.commit()
 
-        # Read as group_a — must see only id_a
+        # Read as group_a â€” must see only id_a
         async with factory() as db:
             await db.execute(text("SET LOCAL agentmem.barrier_group TO :g"), {"g": group_a})
             rows = (await db.execute(
@@ -353,7 +353,7 @@ class TestRLSInformationBarriers:
 
         assert id_a in visible, "group_a must see its own memory"
         assert id_b not in visible, (
-            "RLS FAILED: group_a can read group_b memory — "
+            "RLS FAILED: group_a can read group_b memory â€” "
             "FORCE ROW LEVEL SECURITY or the IS NULL policy is broken"
         )
 
@@ -390,7 +390,7 @@ class TestRLSInformationBarriers:
             visible = {str(r[0]) for r in rows}
 
         assert id_pub in visible, (
-            "barrier_group=NULL memory must be visible to all groups — "
+            "barrier_group=NULL memory must be visible to all groups â€” "
             "the IS NULL branch of the RLS policy is not firing"
         )
 
@@ -425,7 +425,7 @@ class TestRLSInformationBarriers:
                        now=now, gx=group_x, gy=group_y))
             await db.commit()
 
-        # No SET — current_setting('agentmem.barrier_group', true) IS NULL → all rows pass
+        # No SET â€” current_setting('agentmem.barrier_group', true) IS NULL â†’ all rows pass
         async with factory() as db:
             rows = (await db.execute(
                 text("SELECT id FROM memories WHERE namespace = :ns"), {"ns": ns}
@@ -433,6 +433,6 @@ class TestRLSInformationBarriers:
             visible = {str(r[0]) for r in rows}
 
         assert id_x in visible and id_y in visible, (
-            "Admin path (no session var) must see all rows — "
+            "Admin path (no session var) must see all rows â€” "
             "IS NULL check in RLS policy is not returning TRUE for NULL setting"
         )

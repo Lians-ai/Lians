@@ -31,4 +31,4 @@ Homepage = "https://github.com/ebeirne/Lian"
 "Bug Tracker" = "https://github.com/ebeirne/Lian/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentmem_backtest_check"]
+packages = ["src/lian_backtest_check"]

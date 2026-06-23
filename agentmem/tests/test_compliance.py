@@ -1,4 +1,4 @@
-"""
+﻿"""
 Compliance and isolation guarantee tests.
 
 Financial institutions operating under SEC Rule 17a-4, MiFID II, and GDPR
@@ -6,18 +6,18 @@ Art. 17 require the following guarantees. mem0 provides none of them. Graphiti/Z
 has a bitemporal graph model but no compliance stack (no hash chain, no crypto-shred
 with audit survival, no DB-layer information barriers). AgentMem provides all six:
 
-  1. Immutable audit trail  — event_log is append-only; erasure does not
+  1. Immutable audit trail  â€” event_log is append-only; erasure does not
                               remove audit hashes.
-  2. Crypto-shred           — GDPR erasure zeroes the per-subject key; the
+  2. Crypto-shred           â€” GDPR erasure zeroes the per-subject key; the
                               ciphertext becomes permanently unreadable, but
                               the content_hash (for proof-of-existence) survives.
-  3. Namespace isolation     — Tenant A cannot read Tenant B's memories, even
+  3. Namespace isolation     â€” Tenant A cannot read Tenant B's memories, even
                               under adversarial query conditions.
-  4. Agent isolation         — Agent A cannot read Agent B's memories within
+  4. Agent isolation         â€” Agent A cannot read Agent B's memories within
                               the same namespace.
-  5. Subject key scoping     — Ciphertext encrypted with subject_key_A cannot
+  5. Subject key scoping     â€” Ciphertext encrypted with subject_key_A cannot
                               be decrypted by any other subject key.
-  6. Reconstruction accuracy — audit_reconstruct returns the exact memory state
+  6. Reconstruction accuracy â€” audit_reconstruct returns the exact memory state
                               at any requested point in time.
 
 These tests document COMPLIANCE CLAIMS that operators can point to during
@@ -28,10 +28,10 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from src.agentmem.schemas import MemoryAdd, RecallRequest
-from src.agentmem.memory_service import add_memory, recall_memories, erase_subject
-from src.agentmem.audit import reconstruct as audit_reconstruct
-from src.agentmem.schemas import AuditReconstructRequest
+from src.lian.schemas import MemoryAdd, RecallRequest
+from src.lian.memory_service import add_memory, recall_memories, erase_subject
+from src.lian.audit import reconstruct as audit_reconstruct
+from src.lian.schemas import AuditReconstructRequest
 
 NS    = "compliance-ns"
 AGENT = "compliance-agent"
@@ -217,7 +217,7 @@ class TestCryptoShred:
         The hash serves as proof-of-existence for regulators without exposing PII.
         SEC Rule 17a-4 requires the audit trail to be immutable.
         """
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
         from sqlalchemy import select
 
         subject_id = f"subject-hash-{uuid4().hex[:8]}"
@@ -283,14 +283,14 @@ class TestCryptoShred:
         ref = f"gdpr-req-{uuid4().hex}"
         await erase_subject(db, NS, subject_id, request_ref=ref)
 
-        from src.agentmem.models import EventLog
+        from src.lian.models import EventLog
         from sqlalchemy import select
         stmt = select(EventLog).where(EventLog.op == "erase")
         result_rows = await db.execute(stmt)
         erase_events = result_rows.scalars().all()
 
         assert any(ref in (e.payload or {}).get("request_ref", "") for e in erase_events), (
-            f"No erase event with request_ref={ref!r} found in event_log — "
+            f"No erase event with request_ref={ref!r} found in event_log â€” "
             "audit trail is missing the erasure record"
         )
 
@@ -305,7 +305,7 @@ class TestAuditReconstructAccuracy:
     async def test_reconstruct_exact_snapshot_at_each_quarter(self, db):
         """
         Four quarterly updates.  audit_reconstruct at each quarter-end returns
-        exactly the memories valid at that point — no leakage from future quarters,
+        exactly the memories valid at that point â€” no leakage from future quarters,
         no missing past quarters.
         """
         agent = f"{AGENT}-recon"
@@ -367,9 +367,9 @@ class TestAuditReconstructAccuracy:
         """
         After GDPR erasure, the audit event trail must contain an 'erase' op.
         The memory row persists in the DB with content_hash intact (proof-of-
-        existence) and erased_at set — verifiable without re-exposing PII.
+        existence) and erased_at set â€” verifiable without re-exposing PII.
         """
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
 
         agent = f"{AGENT}-tombstone"
         subject_id = f"subj-{uuid4().hex[:8]}"
@@ -425,8 +425,8 @@ class TestDuplicateDetection:
             event_time=T1, source="reuters", metadata=meta,
         ))
 
-        # m1 must remain valid — CONFIRMS should not close it
-        from src.agentmem.models import Memory as MemModel
+        # m1 must remain valid â€” CONFIRMS should not close it
+        from src.lian.models import Memory as MemModel
         db_m1 = await db.get(MemModel, m1.id)
         assert db_m1.valid_to is None, (
             "Exact duplicate (CONFIRMS relation) must not close the original memory"
@@ -436,7 +436,7 @@ class TestDuplicateDetection:
     async def test_near_duplicate_with_same_metadata_supersedes(self, db):
         """
         Same ticker+metric but slightly updated value must supersede, not confirm.
-        '$100B' vs '$100.5B' — the numerical value changed.
+        '$100B' vs '$100.5B' â€” the numerical value changed.
         """
         meta = {"ticker": "AAPL", "metric": "revenue"}
 
@@ -449,7 +449,7 @@ class TestDuplicateDetection:
             event_time=T2, metadata=meta,
         ))
 
-        from src.agentmem.models import Memory as MemModel
+        from src.lian.models import Memory as MemModel
         db_old = await db.get(MemModel, m_old.id)
         assert db_old.valid_to is not None, (
             "Updated value (SUPERSEDES) must close the old memory"

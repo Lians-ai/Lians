@@ -1,4 +1,4 @@
-"""
+﻿"""
 Conflict detection and resolution tests.
 
 Coverage:
@@ -25,11 +25,11 @@ from datetime import datetime, timezone
 from httpx import AsyncClient, ASGITransport
 from uuid import uuid4
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
-# Same event_time → CONTRADICTS_SAME_TIME; different event_time → SUPERSEDES
+# Same event_time â†’ CONTRADICTS_SAME_TIME; different event_time â†’ SUPERSEDES
 T_SAME = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
 T_LATER = datetime(2026, 6, 15, tzinfo=timezone.utc)
 
@@ -41,7 +41,7 @@ OTHER_KEY = "conflicts-other-key"
 OTHER_NS = "conflicts-other-ns"
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────────────
+# â”€â”€ Fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest_asyncio.fixture
 async def client(db):
@@ -114,11 +114,11 @@ async def _recall(client, query: str, key=TEST_KEY) -> list[dict]:
     return r.json()["memories"]
 
 
-# ── Conflict detection ────────────────────────────────────────────────────────
+# â”€â”€ Conflict detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_same_event_time_creates_conflict(client):
-    """Two memories with identical event_time and different content → conflict."""
+    """Two memories with identical event_time and different content â†’ conflict."""
     await _add(client, _mem("NVDA Q1 EPS $6.20", T_SAME, source="reuters"))
     await _add(client, _mem("NVDA Q1 EPS $6.45", T_SAME, source="bloomberg"))
 
@@ -211,7 +211,7 @@ async def test_both_memories_remain_valid_after_conflict_detected(client):
     assert mem_b["valid_to"] is None
 
 
-# ── Conflict list filtering ───────────────────────────────────────────────────
+# â”€â”€ Conflict list filtering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_conflict_list_default_returns_only_open(client):
@@ -244,7 +244,7 @@ async def test_conflict_list_status_filter(client):
     assert conflict_id not in open_ids
 
 
-# ── Resolution: accept_a ──────────────────────────────────────────────────────
+# â”€â”€ Resolution: accept_a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_resolve_accept_a_invalidates_memory_b(client):
@@ -273,14 +273,14 @@ async def test_resolve_accept_a_memory_a_still_live(client):
     await _resolve(client, conflict["id"], "accept_a")
 
     # Both memories are still queryable but mem_b should now have valid_to set.
-    # Verify by checking the lineage of mem_b — its valid_to won't be None.
+    # Verify by checking the lineage of mem_b â€” its valid_to won't be None.
     lin = await client.get(f"/v1/memories/{mem_b_id}/lineage", headers=_h())
     assert lin.status_code == 200
     tip_node = next(n for n in lin.json()["nodes"] if n["id"] == mem_b_id)
     assert tip_node["valid_to"] is not None  # invalidated
 
 
-# ── Resolution: accept_b ──────────────────────────────────────────────────────
+# â”€â”€ Resolution: accept_b â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_resolve_accept_b_invalidates_memory_a(client):
@@ -296,7 +296,7 @@ async def test_resolve_accept_b_invalidates_memory_a(client):
     assert data["memory_invalidated"] == conflict["memory_a_id"]
 
 
-# ── Resolution: dismiss ───────────────────────────────────────────────────────
+# â”€â”€ Resolution: dismiss â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_resolve_dismiss_leaves_both_memories_live(client):
@@ -304,7 +304,7 @@ async def test_resolve_dismiss_leaves_both_memories_live(client):
     await _add(client, _mem("OPEC cut 1000k bbl/d", T_SAME, source="ap", ticker="OPEC"))
 
     conflict = (await _conflicts(client)).json()["conflicts"][0]
-    r = await _resolve(client, conflict["id"], "dismiss", note="Sources differ — both plausible")
+    r = await _resolve(client, conflict["id"], "dismiss", note="Sources differ â€” both plausible")
     assert r.status_code == 200
 
     data = r.json()
@@ -325,7 +325,7 @@ async def test_resolve_dismiss_conflict_status_updated(client):
     assert any(c["id"] == conflict["id"] for c in dismissed)
 
 
-# ── Error cases ───────────────────────────────────────────────────────────────
+# â”€â”€ Error cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_resolve_twice_returns_409(client):
@@ -356,7 +356,7 @@ async def test_resolve_invalid_resolution_returns_422(client):
     assert r.status_code == 422
 
 
-# ── Audit trail ───────────────────────────────────────────────────────────────
+# â”€â”€ Audit trail â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_conflict_detected_event_in_audit_log(client):
@@ -391,7 +391,7 @@ async def test_conflict_resolved_event_in_audit_log(client):
     assert "conflict_resolved" in ops
 
 
-# ── Namespace isolation ───────────────────────────────────────────────────────
+# â”€â”€ Namespace isolation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_cannot_list_other_namespace_conflicts(client):

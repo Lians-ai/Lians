@@ -1,38 +1,38 @@
-"""
-Real-world supersession benchmark — harder cases than the synthetic 30-pair suite.
+﻿"""
+Real-world supersession benchmark â€” harder cases than the synthetic 30-pair suite.
 
-SCALE.md §2: "Solve and benchmark supersession on one real fund's data.  Get it
+SCALE.md Â§2: "Solve and benchmark supersession on one real fund's data.  Get it
 working on a real fund's messy data (not synthetic), benchmark it, and make the
 benchmark public."
 
 These tests cover the messy patterns that trip up naive supersession engines:
 
-1. Late-arriving data — a corrected figure arrives after the next quarter's data.
+1. Late-arriving data â€” a corrected figure arrives after the next quarter's data.
    The correction must supersede the original without clobbering the later quarter.
 
-2. Same-source revision — Bloomberg revises its own earlier report.
+2. Same-source revision â€” Bloomberg revises its own earlier report.
    The revision is by the same source; the engine must not treat it as a conflict.
 
-3. Cross-source same fact — Bloomberg and Reuters both report AAPL Q1 EPS.
-   Same event_time, different sources, same value → CONFIRMS (not conflict, not supersedes).
+3. Cross-source same fact â€” Bloomberg and Reuters both report AAPL Q1 EPS.
+   Same event_time, different sources, same value â†’ CONFIRMS (not conflict, not supersedes).
 
-4. Corporate action: ticker rename — FB → META.
+4. Corporate action: ticker rename â€” FB â†’ META.
    Memories tagged "FB" and new memories tagged "META" should be treated as the
    same entity (if the entity_normalizer knows the rename).
 
-5. Partial update — only one attribute changes; other attributes are unchanged.
+5. Partial update â€” only one attribute changes; other attributes are unchanged.
    The partial update should not supersede the unchanged attributes.
 
-6. Cascading chain — A→B→C→D, each correctly ordered by event_time.
+6. Cascading chain â€” Aâ†’Bâ†’Câ†’D, each correctly ordered by event_time.
    The tip (D) is the only active fact; A, B, C are all superseded.
 
-7. Conflicting same-time sources — Bloomberg says $1.52, Reuters says $1.48,
+7. Conflicting same-time sources â€” Bloomberg says $1.52, Reuters says $1.48,
    same event_time.  Engine must flag CONTRADICTS_SAME_TIME and open a conflict.
 
-8. Out-of-order ingestion — Q2 data arrives before Q1 data.
+8. Out-of-order ingestion â€” Q2 data arrives before Q1 data.
    After both are ingested, Q2 must supersede Q1 correctly.
 
-9. Revision before the fact — a revision arrives with event_time earlier than
+9. Revision before the fact â€” a revision arrives with event_time earlier than
    the original.  The revision must NOT supersede the original (time-ordering invariant).
 """
 import hashlib
@@ -42,9 +42,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.agentmem.main import app
-from src.agentmem.db import get_db
-from src.agentmem.models import ApiKey
+from src.lian.main import app
+from src.lian.db import get_db
+from src.lian.models import ApiKey
 
 TEST_NS = "real-world-bench-ns"
 TEST_KEY = "real-world-bench-key"
@@ -109,7 +109,7 @@ async def _snapshot(client, as_of):
     return r.json()["items"]
 
 
-# ── Benchmark 1: Late-arriving data ──────────────────────────────────────────
+# â”€â”€ Benchmark 1: Late-arriving data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_late_arriving_correction_supersedes_original(client):
@@ -118,7 +118,7 @@ async def test_late_arriving_correction_supersedes_original(client):
     A week later, Bloomberg issues a correction: Q1 EPS was actually $1.52.
 
     The Q1 correction must supersede the original Q1 figure without touching
-    the Q2 figure.  This is late-arriving data — the correction's ingestion_time
+    the Q2 figure.  This is late-arriving data â€” the correction's ingestion_time
     is after Q2, but its event_time is Q1.
     """
     q1_date = _ts(2026, 1, 28)
@@ -142,7 +142,7 @@ async def test_late_arriving_correction_supersedes_original(client):
         "Corrected Q1 EPS must be active"
 
 
-# ── Benchmark 2: Same-source revision ────────────────────────────────────────
+# â”€â”€ Benchmark 2: Same-source revision â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_same_source_revision_supersedes_cleanly(client):
@@ -163,7 +163,7 @@ async def test_same_source_revision_supersedes_cleanly(client):
     assert not any("$61.9B" in m["content"] for m in active)
 
 
-# ── Benchmark 3: Cross-source same fact (CONFIRMS) ───────────────────────────
+# â”€â”€ Benchmark 3: Cross-source same fact (CONFIRMS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_cross_source_confirms_not_supersedes(client):
@@ -177,19 +177,19 @@ async def test_cross_source_confirms_not_supersedes(client):
     second = await _add(client, "NVDA FY2026 guidance: $40B", announcement,
                         {"ticker": "NVDA", "metric": "guidance", "period": "FY2026"}, source="reuters")
 
-    # CONFIRMS should not set valid_to on either memory — both are additive sources
+    # CONFIRMS should not set valid_to on either memory â€” both are additive sources
     # (In practice the second may be superseded with relation=CONFIRMS; check it's not flagged as conflict)
     r = await client.get("/v1/conflicts", params={"status": "open"}, headers=_h())
     open_conflicts = r.json()["total"]
     assert open_conflicts == 0, f"Same-value cross-source confirmation should not open a conflict"
 
 
-# ── Benchmark 4: Cascading supersession chain ────────────────────────────────
+# â”€â”€ Benchmark 4: Cascading supersession chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_cascading_chain_tip_is_only_active_fact(client):
     """
-    5 consecutive revisions: A→B→C→D→E.
+    5 consecutive revisions: Aâ†’Bâ†’Câ†’Dâ†’E.
     Only E should be active; A, B, C, D should all be superseded.
     """
     values = [28, 32, 36, 38, 40]
@@ -208,7 +208,7 @@ async def test_cascading_chain_tip_is_only_active_fact(client):
     assert "$40B" in active[0]["content"]
 
 
-# ── Benchmark 5: Conflicting same-time sources ───────────────────────────────
+# â”€â”€ Benchmark 5: Conflicting same-time sources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_same_time_conflict_opens_review_flag(client):
@@ -226,7 +226,7 @@ async def test_same_time_conflict_opens_review_flag(client):
     assert r.json()["total"] >= 1, "Conflicting same-time facts must open a conflict flag"
 
 
-# ── Benchmark 6: Out-of-order ingestion ──────────────────────────────────────
+# â”€â”€ Benchmark 6: Out-of-order ingestion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_out_of_order_ingestion_correct_at_present(client):
@@ -245,7 +245,7 @@ async def test_out_of_order_ingestion_correct_at_present(client):
                {"ticker": "TSLA", "metric": "deliveries", "period": "Q1"})
 
     # Present: only Q2 should be in the snapshot for the same metric
-    # Q1 and Q2 have different periods so both may be active — but Q2 has later event_time
+    # Q1 and Q2 have different periods so both may be active â€” but Q2 has later event_time
     items = await _snapshot(client, _ts(2026, 12))
     active = [m for m in items
               if m["valid_to"] is None
@@ -257,14 +257,14 @@ async def test_out_of_order_ingestion_correct_at_present(client):
     assert q2_active, "Q2 deliveries must be in the present-time active snapshot"
 
 
-# ── Benchmark 7: Temporal ordering invariant ─────────────────────────────────
+# â”€â”€ Benchmark 7: Temporal ordering invariant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_older_event_time_never_supersedes_newer(client):
     """
     INVARIANT: a memory with older event_time must never supersede a newer one.
 
-    Ingestion order is irrelevant — only event_time determines supersession direction.
+    Ingestion order is irrelevant â€” only event_time determines supersession direction.
     """
     newer_date = _ts(2026, 6, 1)
     older_date = _ts(2025, 6, 1)
@@ -285,7 +285,7 @@ async def test_older_event_time_never_supersedes_newer(client):
         "Newer fact must remain active even after older fact is ingested"
 
 
-# ── Benchmark 8: ISIN/company-name cross-normalization in chain ───────────────
+# â”€â”€ Benchmark 8: ISIN/company-name cross-normalization in chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_isin_vs_ticker_supersession_chain(client):
@@ -305,14 +305,14 @@ async def test_isin_vs_ticker_supersession_chain(client):
     assert revised.get("superseded_by") is None, "ISIN-tagged revision must be the active fact"
 
 
-# ── Benchmark summary ─────────────────────────────────────────────────────────
+# â”€â”€ Benchmark summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_benchmark_scorecard_all_pass(client):
     """
     Meta-test: verifies the engine handles all 8 real-world patterns above.
     If this test passes, the supersession engine earns the
-    'works on messy real-world data' claim in SCALE.md §2.
+    'works on messy real-world data' claim in SCALE.md Â§2.
     """
     # Run a compact version of each benchmark pattern in one agent namespace
     t = lambda m, d=1: _ts(2026, m, d)
@@ -328,7 +328,7 @@ async def test_benchmark_scorecard_all_pass(client):
     await _add(client, "GS Q1 EPS: $8.20", t(2),
                {"ticker": "GS", "metric": "eps", "period": "Q1"}, source="reuters")
 
-    # Pattern: temporal ordering — older must not supersede newer
+    # Pattern: temporal ordering â€” older must not supersede newer
     await _add(client, "JPM price target $180", t(6),
                {"ticker": "JPM", "metric": "price_target"})
     await _add(client, "JPM price target $160 (old)", t(1),

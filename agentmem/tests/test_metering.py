@@ -1,7 +1,7 @@
-"""
+﻿"""
 Tests for Stripe usage metering.
 
-stripe SDK is not installed in CI — all tests inject a lightweight mock via
+stripe SDK is not installed in CI â€” all tests inject a lightweight mock via
 sys.modules, matching the pattern used in test_kms.py for boto3/hvac.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
-import src.agentmem.metering as metering_mod
+import src.lian.metering as metering_mod
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ def reset_metering(monkeypatch):
 
 @pytest_asyncio.fixture
 async def db():
-    from src.agentmem.models import Base as AppBase
+    from src.lian.models import Base as AppBase
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -85,15 +85,15 @@ async def app_client(monkeypatch):
     monkeypatch.setenv("ADMIN_SECRET", "metering-admin-secret")
     monkeypatch.setenv("STRIPE_API_KEY", "sk_test_metering")
 
-    from src.agentmem.config import get_settings
+    from src.lian.config import get_settings
     get_settings.cache_clear()
     monkeypatch.setenv("ADMIN_SECRET", "metering-admin-secret")
     monkeypatch.setenv("STRIPE_API_KEY", "sk_test_metering")
     get_settings.cache_clear()
 
-    from src.agentmem.models import Base as AppBase
-    from src.agentmem.main import app
-    from src.agentmem.db import get_db
+    from src.lian.models import Base as AppBase
+    from src.lian.main import app
+    from src.lian.db import get_db
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -136,7 +136,7 @@ class TestQueueUsageEvent:
 
     def test_noop_when_no_api_key(self, monkeypatch):
         monkeypatch.setenv("STRIPE_API_KEY", "")
-        from src.agentmem.config import get_settings
+        from src.lian.config import get_settings
         get_settings.cache_clear()
 
         q = asyncio.Queue(maxsize=10_000)
@@ -149,7 +149,7 @@ class TestQueueUsageEvent:
 
     def test_queues_event_when_api_key_set(self, monkeypatch):
         monkeypatch.setenv("STRIPE_API_KEY", "sk_test_x")
-        from src.agentmem.config import get_settings
+        from src.lian.config import get_settings
         get_settings.cache_clear()
 
         q = asyncio.Queue(maxsize=10_000)
@@ -167,7 +167,7 @@ class TestQueueUsageEvent:
 
     def test_identifier_truncated_to_100_chars(self, monkeypatch):
         monkeypatch.setenv("STRIPE_API_KEY", "sk_test_x")
-        from src.agentmem.config import get_settings
+        from src.lian.config import get_settings
         get_settings.cache_clear()
 
         q = asyncio.Queue(maxsize=10_000)
@@ -182,7 +182,7 @@ class TestQueueUsageEvent:
 
     def test_drops_when_queue_full(self, monkeypatch):
         monkeypatch.setenv("STRIPE_API_KEY", "sk_test_x")
-        from src.agentmem.config import get_settings
+        from src.lian.config import get_settings
         get_settings.cache_clear()
 
         q: asyncio.Queue = asyncio.Queue(maxsize=1)
@@ -209,7 +209,7 @@ class TestGetCustomerId:
 
     @pytest.mark.asyncio
     async def test_returns_customer_id_from_db(self, db):
-        from src.agentmem.models import NamespacePolicy
+        from src.lian.models import NamespacePolicy
         pol = NamespacePolicy(namespace="billing-ns", stripe_customer_id="cus_abc123")
         db.add(pol)
         await db.commit()
@@ -219,12 +219,12 @@ class TestGetCustomerId:
 
     @pytest.mark.asyncio
     async def test_cache_hit_after_first_lookup(self, db):
-        from src.agentmem.models import NamespacePolicy
+        from src.lian.models import NamespacePolicy
         pol = NamespacePolicy(namespace="cache-ns", stripe_customer_id="cus_xyz")
         db.add(pol)
         await db.commit()
 
-        await metering_mod.get_customer_id(db, "cache-ns")   # first call — DB hit
+        await metering_mod.get_customer_id(db, "cache-ns")   # first call â€” DB hit
         # Mutate DB (shouldn't affect cached value within TTL)
         pol.stripe_customer_id = "cus_changed"
         await db.commit()
@@ -234,7 +234,7 @@ class TestGetCustomerId:
 
     @pytest.mark.asyncio
     async def test_invalidate_clears_cache(self, db):
-        from src.agentmem.models import NamespacePolicy
+        from src.lian.models import NamespacePolicy
         pol = NamespacePolicy(namespace="inv-ns", stripe_customer_id="cus_old")
         db.add(pol)
         await db.commit()
@@ -258,7 +258,7 @@ class TestMeteringWorker:
 
     @pytest.mark.asyncio
     async def test_worker_exits_without_api_key(self):
-        """If api_key is empty the worker returns immediately — no task loop."""
+        """If api_key is empty the worker returns immediately â€” no task loop."""
         await metering_mod.run_metering_worker("", "w_ev", "r_ev")
         # no hang, no error
 
@@ -308,7 +308,7 @@ class TestMeteringWorker:
 
     @pytest.mark.asyncio
     async def test_worker_continues_after_stripe_error(self, monkeypatch):
-        """A Stripe API error must not kill the worker — next event still sent."""
+        """A Stripe API error must not kill the worker â€” next event still sent."""
         stripe_mock = _make_stripe_mock()
         call_count = 0
 

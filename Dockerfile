@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+﻿FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -40,9 +40,9 @@ COPY agentmem/ ./agentmem/
 
 # Run from agentmem/ so that:
 #   - alembic finds alembic.ini in the CWD
-#   - uvicorn resolves src.agentmem.main via the CWD on sys.path
+#   - uvicorn resolves src.lian.main via the CWD on sys.path
 WORKDIR /app/agentmem
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.agentmem.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "src.lian.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

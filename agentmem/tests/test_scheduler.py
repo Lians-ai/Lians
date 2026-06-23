@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tests for the background retention scheduler.
 
 Uses in-memory SQLite and a very short interval (0.05s) so we can observe
@@ -14,8 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
-from src.agentmem.models import Memory, NamespacePolicy, EventLog
-from src.agentmem.scheduler import _run_prune_cycle, run_retention_scheduler
+from src.lian.models import Memory, NamespacePolicy, EventLog
+from src.lian.scheduler import _run_prune_cycle, run_retention_scheduler
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ from src.agentmem.scheduler import _run_prune_cycle, run_retention_scheduler
 
 @pytest_asyncio.fixture
 async def session_factory():
-    from src.agentmem.models import Base as AppBase
+    from src.lian.models import Base as AppBase
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -237,10 +237,10 @@ class TestSchedulerTask:
 
     @pytest.mark.asyncio
     async def test_scheduler_disabled_when_interval_zero(self):
-        """Interval 0 means the task is never started — tested via config path."""
-        from src.agentmem.config import get_settings
+        """Interval 0 means the task is never started â€” tested via config path."""
+        from src.lian.config import get_settings
         settings = get_settings()
         # Verify the config field is present and 0 disables
         assert hasattr(settings, "retention_prune_interval_hours")
-        # With interval=0 main.py skips create_task — tested structurally here
+        # With interval=0 main.py skips create_task â€” tested structurally here
         assert settings.retention_prune_interval_hours > 0 or True  # config present

@@ -1,11 +1,11 @@
-"""
-Supersession engine correctness — Phase 1 cases (Stage 1+2 rules).
+﻿"""
+Supersession engine correctness â€” Phase 1 cases (Stage 1+2 rules).
 These must all pass before Phase 2 LLM adjudication is added.
 """
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from src.agentmem.supersession import classify_relation, _metadata_overlap
+from src.lian.supersession import classify_relation, _metadata_overlap
 
 
 T0 = datetime(2026, 5, 1, tzinfo=timezone.utc)
@@ -68,7 +68,7 @@ class TestClassifyRelation:
         assert relation == "CONTRADICTS_SAME_TIME"
 
     def test_adds_older_event_time(self):
-        """New memory is actually older — should not supersede."""
+        """New memory is actually older â€” should not supersede."""
         relation, _ = classify_relation(
             old_content="NVDA Q3 guidance $36B",
             new_content="NVDA earlier guidance $30B",
@@ -93,7 +93,7 @@ class TestClassifyRelation:
             assert relation == "SUPERSEDES", f"Expected SUPERSEDES for: {new_content}"
 
     def test_different_ticker_not_confused(self):
-        """NVDA guidance must NOT supersede AMD guidance — different ticker."""
+        """NVDA guidance must NOT supersede AMD guidance â€” different ticker."""
         relation, _ = classify_relation(
             old_content="AMD Q3 guidance $25B",
             new_content="NVDA Q3 guidance $36B",
@@ -102,19 +102,19 @@ class TestClassifyRelation:
             old_meta=META_AMD_GUIDANCE,
             new_meta=META_NVDA_GUIDANCE,
         )
-        # Different ticker → different entity; this pair lacks full structured key match.
+        # Different ticker â†’ different entity; this pair lacks full structured key match.
         # classify_relation sees same metric "guidance" but we only call classify_relation
-        # after Stage 1 has already filtered candidates — so in practice they'd never be paired.
+        # after Stage 1 has already filtered candidates â€” so in practice they'd never be paired.
         # Here we confirm that differing metric fields produce ADDS, not SUPERSEDES.
         # (AMD/NVDA share "metric" but differ on "ticker"; Stage 1 would find overlap on
-        # "metric" only → partial match needing cosine threshold, not full match.)
-        # classify_relation itself doesn't know about structured keys; it gets same metric →
-        # temporal ordering applies → SUPERSEDES if new_is_later.
+        # "metric" only â†’ partial match needing cosine threshold, not full match.)
+        # classify_relation itself doesn't know about structured keys; it gets same metric â†’
+        # temporal ordering applies â†’ SUPERSEDES if new_is_later.
         # The guard is in Stage 1 (find_supersession_candidates).  Document this here.
         assert relation in ("SUPERSEDES", "ADDS")  # Stage 2 alone can't distinguish tickers
 
     def test_same_metric_different_values_chain(self):
-        """Three consecutive guidance updates — each supersedes the prior."""
+        """Three consecutive guidance updates â€” each supersedes the prior."""
         v1, v2, v3 = "$32B", "$36B", "$40B"
         r12, _ = classify_relation(v1, v2, T0, T1, META_NVDA_GUIDANCE, META_NVDA_GUIDANCE)
         r23, _ = classify_relation(v2, v3, T1, T2, META_NVDA_GUIDANCE, META_NVDA_GUIDANCE)
@@ -136,14 +136,14 @@ class TestClassifyRelation:
         assert relation == "SUPERSEDES"
 
     def test_no_metadata_produces_no_overlap(self):
-        """Without structured keys, _metadata_overlap returns empty — no supersession candidate."""
-        from src.agentmem.supersession import _metadata_overlap
+        """Without structured keys, _metadata_overlap returns empty â€” no supersession candidate."""
+        from src.lian.supersession import _metadata_overlap
         overlap = _metadata_overlap({}, {"note": "free text memory"})
         assert overlap == set()
 
     def test_cusip_isin_keys_recognized(self):
         """CUSIP and ISIN are recognized structured keys."""
-        from src.agentmem.supersession import _metadata_overlap
+        from src.lian.supersession import _metadata_overlap
         meta_a = {"cusip": "037833100", "metric": "price"}
         meta_b = {"cusip": "037833100", "metric": "price"}
         overlap = _metadata_overlap(meta_a, meta_b)

@@ -1,10 +1,10 @@
-"""
+﻿"""
 Prometheus metrics scrape endpoint.
 
     GET /metrics
 
 Returns the full AgentMem metric set in Prometheus text exposition format
-(text/plain; version=0.0.4).  No authentication is required — the endpoint
+(text/plain; version=0.0.4).  No authentication is required â€” the endpoint
 is intended to be scraped by an in-cluster Prometheus server, protected at the
 network layer by the existing Kubernetes NetworkPolicy (which only admits traffic
 from the monitoring namespace).
@@ -12,14 +12,14 @@ from the monitoring namespace).
 To disable the endpoint entirely set ``METRICS_ENABLED=false`` in the
 environment.  Any scrape will receive 404 while the flag is off.
 
-Metrics emitted (see src/agentmem/metrics.py for full list):
+Metrics emitted (see src/lian/metrics.py for full list):
 
     agentmem_memory_writes_total{namespace, relation}
     agentmem_memory_recalls_total{namespace, router, cache_hit}
     agentmem_memories_erased_total{namespace}
     agentmem_erasure_requests_total{namespace}
-    agentmem_add_duration_seconds{namespace}       — histogram
-    agentmem_recall_duration_seconds{namespace}    — histogram
+    agentmem_add_duration_seconds{namespace}       â€” histogram
+    agentmem_recall_duration_seconds{namespace}    â€” histogram
 
 Prometheus scrape config (kubernetes):
 

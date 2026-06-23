@@ -1,7 +1,7 @@
-"""
+﻿"""
 Tests for the KMS master-key integration.
 
-All cloud providers (AWS, Azure, Vault) are exercised with mocks — no external
+All cloud providers (AWS, Azure, Vault) are exercised with mocks â€” no external
 network calls are made.  The env provider is tested against real in-process logic.
 """
 from __future__ import annotations
@@ -12,14 +12,14 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import src.agentmem.kms as kms
-from src.agentmem.kms import (
+import src.lian.kms as kms
+from src.lian.kms import (
     get_master_key,
     load_master_key,
     _reset_cache,
     _env_key,
 )
-from src.agentmem.config import get_settings
+from src.lian.config import get_settings
 
 
 # Helpers
@@ -35,7 +35,7 @@ def reset_kms():
     _reset_cache()
 
 
-# ── env provider ──────────────────────────────────────────────────────────────
+# â”€â”€ env provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestEnvProvider:
 
@@ -79,7 +79,7 @@ class TestEnvProvider:
 
         await load_master_key()
         first = get_master_key()
-        await load_master_key()  # second call — should be a no-op
+        await load_master_key()  # second call â€” should be a no-op
         assert get_master_key() is first
 
     def test_get_master_key_non_env_without_load_raises(self, monkeypatch):
@@ -99,7 +99,7 @@ class TestEnvProvider:
             await load_master_key()
 
 
-# ── AWS KMS provider ──────────────────────────────────────────────────────────
+# â”€â”€ AWS KMS provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestAwsProvider:
 
@@ -155,7 +155,7 @@ class TestAwsProvider:
         get_settings.cache_clear()
         _reset_cache()
 
-        # ValueError fires before boto3 is imported — no boto3 mock needed
+        # ValueError fires before boto3 is imported â€” no boto3 mock needed
         with pytest.raises(ValueError, match="KMS_AWS_ENCRYPTED_KEY"):
             await load_master_key()
 
@@ -179,7 +179,7 @@ class TestAwsProvider:
                 await load_master_key()
 
 
-# ── Azure Key Vault provider ──────────────────────────────────────────────────
+# â”€â”€ Azure Key Vault provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestAzureProvider:
 
@@ -230,7 +230,7 @@ class TestAzureProvider:
         get_settings.cache_clear()
         _reset_cache()
 
-        # ValueError fires before Azure SDK is imported — no azure mock needed
+        # ValueError fires before Azure SDK is imported â€” no azure mock needed
         with pytest.raises(ValueError, match="KMS_AZURE_VAULT_URL"):
             await load_master_key()
 
@@ -249,7 +249,7 @@ class TestAzureProvider:
                 await load_master_key()
 
 
-# ── HashiCorp Vault provider ──────────────────────────────────────────────────
+# â”€â”€ HashiCorp Vault provider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestVaultProvider:
 
@@ -299,7 +299,7 @@ class TestVaultProvider:
         get_settings.cache_clear()
         _reset_cache()
 
-        # ValueError fires before hvac is imported — no hvac mock needed
+        # ValueError fires before hvac is imported â€” no hvac mock needed
         with pytest.raises(ValueError, match="KMS_VAULT_TOKEN"):
             await load_master_key()
 
@@ -311,13 +311,13 @@ class TestVaultProvider:
                 await load_master_key()
 
 
-# ── Integration: KMS key used in crypto wrap/unwrap ───────────────────────────
+# â”€â”€ Integration: KMS key used in crypto wrap/unwrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestKmsIntegration:
 
     async def test_aws_key_used_in_crypto_wrap_unwrap(self, monkeypatch):
-        """End-to-end: key fetched from (mocked) AWS KMS → wraps/unwraps a subject key."""
-        from src.agentmem.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
+        """End-to-end: key fetched from (mocked) AWS KMS â†’ wraps/unwraps a subject key."""
+        from src.lian.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
 
         monkeypatch.setenv("KMS_PROVIDER", "aws")
         monkeypatch.setenv("KMS_AWS_ENCRYPTED_KEY", base64.b64encode(b"ct").decode())
@@ -341,7 +341,7 @@ class TestKmsIntegration:
     async def test_key_change_invalidates_wrapped_keys(self, monkeypatch):
         """Wrapping with key A and unwrapping with key B raises an error (crypto shred)."""
         from cryptography.exceptions import InvalidTag
-        from src.agentmem.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
+        from src.lian.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
 
         key_a = os.urandom(32)
         key_b = os.urandom(32)
@@ -356,7 +356,7 @@ class TestKmsIntegration:
         subject_key = generate_subject_key()
         wrapped = wrap_subject_key(subject_key)
 
-        # Switch master key to B — simulates a key rotation without re-wrapping
+        # Switch master key to B â€” simulates a key rotation without re-wrapping
         _reset_cache()
         monkeypatch.setenv("MASTER_ENCRYPTION_KEY", base64.b64encode(key_b).decode())
         get_settings.cache_clear()
