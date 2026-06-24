@@ -1,9 +1,27 @@
 {
   "name": "lians",
   "version": "0.2.0",
-  "description": "TypeScript/JavaScript SDK for Lians — financial-grade AI memory with compliance built in",
+  "description": "TypeScript/JavaScript SDK for Lians — financial-grade AI memory with bitemporal model, SEC 17a-4 audit chain, and GDPR crypto-shred",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "license": "Apache-2.0",
+  "author": "Ethan Beirne",
+  "homepage": "https://github.com/ebeirne/Lians#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ebeirne/Lians.git"
+  },
+  "keywords": [
+    "ai",
+    "memory",
+    "agents",
+    "finance",
+    "compliance",
+    "bitemporal",
+    "audit",
+    "mcp",
+    "langchain"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.js",

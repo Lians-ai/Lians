@@ -17,13 +17,13 @@
     <img src="https://img.shields.io/pypi/v/lians-sdk?color=%2334D058&label=pypi%20package" alt="PyPI version">
   </a>
   <a href="https://pypi.org/project/lians-sdk">
-    <img src="https://img.shields.io/pypi/dm/lians-sdk" alt="PyPI downloads">
+    <img src="https://img.shields.io/pypi/dm/lians-sdk?label=pypi%20downloads" alt="PyPI downloads">
   </a>
   <a href="https://github.com/ebeirne/Lians">
-    <img src="https://img.shields.io/github/commit-activity/m/ebeirne/Lians?style=flat-square" alt="GitHub commit activity">
+    <img src="https://img.shields.io/github/commit-activity/m/ebeirne/Lians/master?style=flat-square" alt="GitHub commit activity">
   </a>
   <a href="https://www.npmjs.com/package/lians">
-    <img src="https://img.shields.io/npm/v/lians" alt="npm version">
+    <img src="https://img.shields.io/npm/v/lians?label=npm" alt="npm version">
   </a>
   <a href="https://registry.modelcontextprotocol.io/servers/io.github.ebeirne/lians">
     <img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry">
