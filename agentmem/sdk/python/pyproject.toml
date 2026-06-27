@@ -40,9 +40,9 @@ all           = [
 lians-mcp = "lians.mcp_server:main"
 
 [project.urls]
-Homepage      = "https://github.com/ebeirne/Lians"
-Repository    = "https://github.com/ebeirne/Lians"
-Documentation = "https://github.com/ebeirne/Lians#readme"
+Homepage      = "https://github.com/Lians-ai/Lians"
+Repository    = "https://github.com/Lians-ai/Lians"
+Documentation = "https://github.com/Lians-ai/Lians#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lians"]

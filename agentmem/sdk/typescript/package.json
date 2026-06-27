@@ -6,10 +6,10 @@
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
   "author": "Ethan Beirne",
-  "homepage": "https://github.com/ebeirne/Lians#readme",
+  "homepage": "https://github.com/Lians-ai/Lians#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ebeirne/Lians.git"
+    "url": "https://github.com/Lians-ai/Lians.git"
   },
   "keywords": [
     "ai",

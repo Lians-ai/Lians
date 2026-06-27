@@ -296,6 +296,24 @@ Full documentation: [docs/compliance.md](docs/compliance.md) · [docs/hipaa.md](
 
 ---
 
+## Cloud & Pricing
+
+Lians is open-source and fully self-hostable. A managed cloud is also available at **[api.lians.dev](https://api.lians.dev)** — no infrastructure to run.
+
+| Tier | Price | Memories / mo | Recalls / mo | Features |
+|------|-------|---------------|--------------|----------|
+| **Free** | $0 | 10,000 | 1,000 | Memory writes · recalls · semantic search |
+| **Starter** | $15 | 100,000 | 10,000 | + Domain adapters (finance, healthcare, legal) · Audit log |
+| **Growth** | $70 | 1,000,000 | 100,000 | + Conflict detection · Webhooks · Compliance reports · Merkle audit chain |
+| **Pro** | $200 | 10,000,000 | 1,000,000 | + Information barriers · HIPAA encryption · GDPR erasure certs · Backtest · Prometheus metrics |
+| **Enterprise** | Custom | Unlimited | Unlimited | + Air-gap mode · Custom KMS (AWS / Azure / Vault) · Dedicated onboarding · SLA |
+
+The Free tier never expires and requires no credit card. Use `pip install lians-sdk` and point `LIANS_URL` at `https://api.lians.dev` with your free API key.
+
+Full pricing and billing documentation: [docs/pricing-tiers.md](docs/pricing-tiers.md) · [docs/billing.md](docs/billing.md)
+
+---
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
