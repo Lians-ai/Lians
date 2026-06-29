@@ -361,8 +361,10 @@ class TestRLSInformationBarriers:
                 visible = {str(r[0]) for r in rows}
             finally:
                 await db.execute(text("RESET ROLE"))
-                await db.execute(text(f"DROP ROLE IF EXISTS {role}"))
-                await db.rollback()  # discard the test rows; nothing persisted
+                # Roll back everything — the inserts, CREATE ROLE, and GRANT are all
+                # transactional, so nothing (including the role) persists. This also
+                # avoids DROP ROLE failing while the role still holds the GRANT.
+                await db.rollback()
 
         assert id_a in visible, "group_a must see its own memory"
         assert id_b not in visible, (
