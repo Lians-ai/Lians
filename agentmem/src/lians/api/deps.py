@@ -40,10 +40,16 @@ async def _set_rls_namespace(db: AsyncSession, namespace: str) -> None:
 
     On SQLite (unit tests) the statement fails silently; RLS is enforced
     by application-level WHERE clauses in that environment.
+
+    Uses ``set_config(..., is_local => true)`` rather than ``SET LOCAL ... = :ns``
+    because PostgreSQL's ``SET`` does not accept bind parameters — under asyncpg a
+    parameterized ``SET LOCAL`` raises a syntax error, which previously meant the
+    namespace variable was never set and namespace RLS silently never engaged for
+    non-superuser roles. ``set_config`` is the parameterizable equivalent.
     """
     try:
         await db.execute(
-            text("SET LOCAL app.current_namespace = :ns"),
+            text("SELECT set_config('app.current_namespace', :ns, true)"),
             {"ns": namespace},
         )
     except Exception:

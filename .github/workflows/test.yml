@@ -49,8 +49,8 @@ jobs:
       EMBEDDING_PROVIDER: local
       MASTER_ENCRYPTION_KEY: ""
       AGENTMEM_ALLOW_UNENCRYPTED: "true"
-      ADMIN_SECRET: ci-admin-secret
-      RECALL_CACHE_ENABLED: "false"
+      ADMIN_SECRET: dev-admin-secret-change-in-prod
+      RECALL_CACHE_ENABLED: "true"
 
     steps:
       - uses: actions/checkout@v4

@@ -66,15 +66,28 @@ ALTER TABLE live_facts NO FORCE ROW LEVEL SECURITY;
 """
 
 
+def _execute_each(sql: str) -> None:
+    """
+    Run a multi-statement SQL string one statement at a time.
+
+    asyncpg (the migration driver) rejects multiple commands in a single
+    prepared statement, so each ``;``-separated statement must be executed
+    individually — matching the one-statement-per-execute pattern in 0004.
+    """
+    for statement in (s.strip() for s in sql.split(";")):
+        if statement:
+            op.execute(statement)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return  # RLS is a Postgres feature; skip on SQLite (tests)
-    op.execute(_POLICY_SQL)
+    _execute_each(_POLICY_SQL)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
-    op.execute(_ROLLBACK_SQL)
+    _execute_each(_ROLLBACK_SQL)

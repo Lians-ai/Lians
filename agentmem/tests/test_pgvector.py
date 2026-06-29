@@ -329,6 +329,20 @@ class TestRLSInformationBarriers:
 
         factory = async_sessionmaker(pg_engine, expire_on_commit=False, class_=AsyncSession)
 
+        # RLS is bypassed entirely by superuser / BYPASSRLS roles (a PostgreSQL
+        # guarantee — FORCE ROW LEVEL SECURITY does not apply to them). The
+        # default postgres-image user is a superuser, so this denial check can
+        # only be exercised by a restricted role; skip cleanly otherwise.
+        async with factory() as db:
+            bypasses_rls = (await db.execute(text(
+                "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"
+            ))).scalar()
+        if bypasses_rls:
+            pytest.skip(
+                "connection role bypasses RLS (superuser/BYPASSRLS); barrier "
+                "isolation can only be verified by a non-privileged role"
+            )
+
         # Insert both rows â€” no session var set, so IS NULL branch passes for all rows.
         async with factory() as db:
             await db.execute(text("""
@@ -345,7 +359,7 @@ class TestRLSInformationBarriers:
 
         # Read as group_a â€” must see only id_a
         async with factory() as db:
-            await db.execute(text("SET LOCAL agentmem.barrier_group TO :g"), {"g": group_a})
+            await db.execute(text("SELECT set_config('agentmem.barrier_group', :g, true)"), {"g": group_a})
             rows = (await db.execute(
                 text("SELECT id FROM memories WHERE namespace = :ns"), {"ns": ns}
             )).fetchall()
@@ -383,7 +397,7 @@ class TestRLSInformationBarriers:
             await db.commit()
 
         async with factory() as db:
-            await db.execute(text("SET LOCAL agentmem.barrier_group TO :g"), {"g": group_a})
+            await db.execute(text("SELECT set_config('agentmem.barrier_group', :g, true)"), {"g": group_a})
             rows = (await db.execute(
                 text("SELECT id FROM memories WHERE namespace = :ns"), {"ns": ns}
             )).fetchall()

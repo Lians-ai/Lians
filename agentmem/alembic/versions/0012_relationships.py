@@ -60,15 +60,17 @@ def upgrade() -> None:
 
     if is_pg:
         # Same barrier-isolation policy as memories/live_facts (migration 0011).
+        # One statement per execute: asyncpg rejects multi-command prepared
+        # statements (see 0011 / 0004).
+        op.execute("ALTER TABLE relationships ENABLE ROW LEVEL SECURITY")
+        op.execute("ALTER TABLE relationships FORCE ROW LEVEL SECURITY")
         op.execute("""
-            ALTER TABLE relationships ENABLE ROW LEVEL SECURITY;
-            ALTER TABLE relationships FORCE ROW LEVEL SECURITY;
             CREATE POLICY barrier_isolation ON relationships
                 USING (
                     barrier_group IS NULL
                     OR current_setting('agentmem.barrier_group', true) IS NULL
                     OR barrier_group = current_setting('agentmem.barrier_group', true)
-                );
+                )
         """)
 
 
