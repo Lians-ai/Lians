@@ -103,3 +103,50 @@ jobs:
       - name: Run Jest tests
         run: npm test
         working-directory: agentmem/sdk/typescript
+
+  # ── Java SDK tests ──────────────────────────────────────────────────────────
+  java:
+    name: Java SDK (Temurin ${{ matrix.java-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: ["11", "17", "21"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java-version }}
+          cache: maven
+
+      - name: Build & test
+        run: mvn -B --no-transfer-progress verify
+        working-directory: agentmem/sdk/java
+
+  # ── C SDK tests ─────────────────────────────────────────────────────────────
+  c:
+    name: C SDK (CMake)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libcurl dev headers
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        working-directory: agentmem/sdk/c
+
+      - name: Build
+        run: cmake --build build
+        working-directory: agentmem/sdk/c
+
+      - name: Test (pure helpers)
+        run: ctest --test-dir build --output-on-failure
+        working-directory: agentmem/sdk/c
