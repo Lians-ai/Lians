@@ -18,12 +18,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, update, text, cast, Float
+from sqlalchemy import select, and_, or_, update, text, cast, Float
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import time as _time
 
-from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy
+from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy, ConflictFlag
 from .audit_chain import chain_log
 from .telemetry import tracer
 from .metrics import record_write, observe_add, record_recall, observe_recall, record_erase
@@ -34,6 +34,7 @@ from .schemas import (
     SupersessionAction, SupersessionActionResult,
     RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
     LineageNode, LineageEdge, MemoryLineageResult,
+    ConflictFlagOut, ConflictListResult, ConflictResolveRequest, ConflictResolveResult,
 )
 from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, decrypt_content, unwrap_subject_key
@@ -250,6 +251,30 @@ async def add_memory(
                         },
                     )
 
+            # Same-time contradiction: persist a ConflictFlag for human review.
+            # Both memories stay live (neither superseded) until someone resolves it.
+            for conflict_old_id in supersession.conflict_ids:
+                flag = ConflictFlag(
+                    namespace=namespace,
+                    agent_id=req.agent_id,
+                    memory_a_id=conflict_old_id,   # pre-existing memory
+                    memory_b_id=mem.id,            # newly ingested memory
+                    confidence=supersession.confidence,
+                    status="open",
+                )
+                db.add(flag)
+                await chain_log(
+                    db, namespace=namespace, agent_id=req.agent_id,
+                    op="conflict_detected", memory_id=mem.id,
+                    content_hash=mem.content_hash,
+                    payload={
+                        "memory_a_id": str(conflict_old_id),
+                        "memory_b_id": str(mem.id),
+                        "confidence": supersession.confidence,
+                        "relation": supersession.relation,
+                    },
+                )
+
             # Change 1: maintain live_facts projection
             await remove_live_facts(db, supersession.superseded_ids)
             await upsert_live_fact(db, mem, predicate_key)
@@ -266,6 +291,25 @@ async def add_memory(
                     "supersession_confidence": supersession.confidence,
                 },
             )
+
+            # Fan out webhook events for the write outcome. dispatch_event is a
+            # no-op when no endpoint subscribes, so this is safe on every write.
+            from .webhook_service import dispatch_event, MEMORY_SUPERSEDED, MEMORY_CONFLICT
+            if supersession.superseded_ids:
+                await dispatch_event(db, namespace, MEMORY_SUPERSEDED, {
+                    "agent_id": req.agent_id,
+                    "new_memory_id": str(mem.id),
+                    "superseded_ids": [str(i) for i in supersession.superseded_ids],
+                    "relation": supersession.relation,
+                    "confidence": supersession.confidence,
+                })
+            if supersession.conflict_ids:
+                await dispatch_event(db, namespace, MEMORY_CONFLICT, {
+                    "agent_id": req.agent_id,
+                    "new_memory_id": str(mem.id),
+                    "conflict_ids": [str(i) for i in supersession.conflict_ids],
+                    "confidence": supersession.confidence,
+                })
 
             await db.commit()
 
@@ -669,6 +713,15 @@ async def erase_subject(
         )
 
     await destroy_subject_key(db, subject_id)
+
+    if memories:
+        from .webhook_service import dispatch_event, MEMORY_ERASED
+        await dispatch_event(db, namespace, MEMORY_ERASED, {
+            "subject_id": subject_id,
+            "request_ref": request_ref,
+            "memories_erased": len(memories),
+        })
+
     await db.commit()
 
     # Change 6: evict destroyed key from DEK cache
@@ -679,3 +732,424 @@ async def erase_subject(
 
     record_erase(namespace, len(memories))
     return len(memories)
+
+
+async def get_knowledge_snapshot(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    as_of: datetime,
+    limit: int = 1000,
+) -> list[MemoryOut]:
+    """
+    Exhaustive point-in-time knowledge state — every memory valid at *as_of*.
+
+    Unlike :func:`recall_memories` (vector search → top-k), this returns *all*
+    memories whose validity window contains ``as_of``
+    (``valid_from <= as_of < valid_to``) and whose ``event_time <= as_of``,
+    ordered by ``event_time`` ascending. No relevance filter is applied —
+    regulators want the complete state, not the most relevant slice.
+
+    Content is decrypted where the per-subject key is still live; memories whose
+    subject key was crypto-shredded return ``content=None`` (existence and
+    metadata preserved, content unrecoverable). This is the read side of the
+    GDPR/HIPAA erasure guarantee.
+    """
+    stmt = (
+        select(Memory)
+        .where(
+            and_(
+                Memory.namespace == namespace,
+                Memory.agent_id == agent_id,
+                Memory.valid_from <= as_of,
+                or_(Memory.valid_to.is_(None), Memory.valid_to > as_of),
+                Memory.event_time <= as_of,
+                Memory.erased_at.is_(None),
+            )
+        )
+        .order_by(Memory.event_time.asc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    mems = result.scalars().all()
+
+    # Decrypt content using the namespace's live subject keys.
+    from .ranking import _decrypt
+
+    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    return [_memory_to_out(m, _decrypt(m, subject_keys)) for m in mems]
+
+
+def _lineage_node(mem: Memory, content: Optional[str]) -> LineageNode:
+    return LineageNode(
+        id=mem.id,
+        content=content,
+        content_hash=mem.content_hash,
+        event_time=mem.event_time,
+        ingestion_time=mem.ingestion_time,
+        valid_from=mem.valid_from,
+        valid_to=mem.valid_to,
+        source=mem.source,
+        importance=mem.importance,
+        supersession_confidence=mem.supersession_confidence,
+        erased_at=mem.erased_at,
+        metadata=dict(mem.metadata_ or {}),
+        # The live tip of the chain: nothing supersedes it and it is still valid.
+        is_current=(mem.superseded_by is None and mem.valid_to is None),
+    )
+
+
+async def get_memory_lineage(
+    db: AsyncSession,
+    namespace: str,
+    memory_id: UUID,
+) -> MemoryLineageResult:
+    """
+    Reconstruct the full belief-provenance chain a memory belongs to.
+
+    Walks the ``superseded_by`` pointers forward (to the current tip) and backward
+    (to the oldest ancestor), then returns every version oldest-first with the
+    supersession edges connecting them. The queried memory may sit anywhere in the
+    chain — root, tip, or middle.
+
+    Edge metadata (relation, confidence, rationale, adjudication stage) is read
+    from the tamper-evident ``supersede`` event-log rows, so the lineage is
+    backed by the same audit trail an examiner would inspect.
+    """
+    from fastapi import HTTPException
+
+    queried = await db.get(Memory, memory_id)
+    if queried is None or queried.namespace != namespace:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    # Walk forward: follow superseded_by until the live tip (superseded_by IS NULL).
+    forward: list[Memory] = []
+    cursor: Optional[Memory] = queried
+    seen: set = set()
+    while cursor is not None and cursor.id not in seen:
+        forward.append(cursor)
+        seen.add(cursor.id)
+        if cursor.superseded_by is None:
+            break
+        cursor = await db.get(Memory, cursor.superseded_by)
+
+    # Walk backward: find the memory whose superseded_by points AT the current root.
+    backward: list[Memory] = []
+    current_root = queried
+    while True:
+        stmt = select(Memory).where(
+            and_(
+                Memory.namespace == namespace,
+                Memory.superseded_by == current_root.id,
+            )
+        )
+        older = (await db.execute(stmt)).scalars().first()
+        if older is None or older.id in seen:
+            break
+        backward.append(older)
+        seen.add(older.id)
+        current_root = older
+
+    # Oldest-first: reversed backward ancestors, then the forward chain.
+    ordered = list(reversed(backward)) + forward
+
+    # Decrypt content for every node in one pass.
+    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    from .ranking import _decrypt
+    nodes = [_lineage_node(m, _decrypt(m, subject_keys)) for m in ordered]
+
+    # Build edges from the supersede event-log rows (older -> newer).
+    edges: list[LineageEdge] = []
+    for older, newer in zip(ordered, ordered[1:]):
+        log_stmt = (
+            select(EventLog)
+            .where(
+                and_(
+                    EventLog.namespace == namespace,
+                    EventLog.op == "supersede",
+                    EventLog.memory_id == older.id,
+                )
+            )
+            .order_by(EventLog.created_at.desc())
+        )
+        row = (await db.execute(log_stmt)).scalars().first()
+        payload = dict(row.payload) if row and row.payload else {}
+        edges.append(LineageEdge(
+            from_id=older.id,
+            to_id=newer.id,
+            relation=payload.get("relation", "SUPERSEDES"),
+            confidence=float(
+                payload.get("confidence", older.supersession_confidence or 1.0)
+            ),
+            rationale=payload.get("rationale"),
+            adjudication_stage=int(payload.get("adjudication_stage", 2)),
+            superseded_at=row.created_at if row else older.valid_to or older.ingestion_time,
+        ))
+
+    root = ordered[0]
+    tip = ordered[-1]
+    return MemoryLineageResult(
+        agent_id=queried.agent_id,
+        namespace=namespace,
+        queried_id=memory_id,
+        root_id=root.id,
+        tip_id=tip.id,
+        depth=len(nodes),
+        nodes=nodes,
+        edges=edges,
+    )
+
+
+async def get_structured_fact_history(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    key_values: dict[str, str],
+    adapter,
+    limit: int = 100,
+) -> list[MemoryOut]:
+    """
+    Return every recorded version of a structured fact, ordered by event_time asc.
+
+    ``key_values`` is an already-normalized structured-key map (e.g.
+    ``{"ticker": "AAPL", "metric": "eps"}`` for finance, ``{"patient_id": ...,
+    "condition": ...}`` for healthcare, ``{"matter_id": ..., "claim_type": ...}``
+    for legal). Superseded versions are included so analysts can see how the fact
+    evolved. Entity normalization is applied through the domain ``adapter`` so
+    'Apple Inc.', 'AAPL', and ISIN 'US0378331005' all collapse to one series.
+    """
+    stmt = (
+        select(Memory)
+        .where(
+            and_(
+                Memory.namespace == namespace,
+                Memory.agent_id == agent_id,
+                Memory.erased_at.is_(None),
+            )
+        )
+        .order_by(Memory.event_time.asc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+
+    # For each requested (canonical) key, accept any of its metadata aliases.
+    # e.g. for finance, 'ticker' is satisfied by metadata 'ticker' | 'entity' |
+    # 'isin' | 'cusip' — all normalized to the same canonical value.
+    alias_map = {c: adapter.key_aliases(c) for c in key_values}
+
+    matched: list[Memory] = []
+    for mem in rows:
+        meta = dict(mem.metadata_ or {})
+        ok = True
+        for canonical, want in key_values.items():
+            found = None
+            for alias in alias_map[canonical]:
+                if alias in meta:
+                    found = adapter.normalize(canonical, str(meta[alias]))
+                    break
+            if found != want:
+                ok = False
+                break
+        if ok:
+            matched.append(mem)
+            if len(matched) >= limit:
+                break
+
+    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    from .ranking import _decrypt
+    return [_memory_to_out(m, _decrypt(m, subject_keys)) for m in matched]
+
+
+# ── Conflicts ──────────────────────────────────────────────────────────────────
+
+
+async def list_conflicts(
+    db: AsyncSession,
+    namespace: str,
+    status: Optional[str] = "open",
+    limit: int = 50,
+) -> ConflictListResult:
+    """
+    List conflict flags for a namespace, newest first.
+
+    Each conflict carries the decrypted content, source, and event-time of *both*
+    disagreeing memories so a reviewer can decide which source to trust. Pass
+    ``status`` to filter (``open`` | ``accept_a`` | ``accept_b`` | ``dismissed``),
+    or ``None`` for all statuses.
+    """
+    conds = [ConflictFlag.namespace == namespace]
+    if status:
+        conds.append(ConflictFlag.status == status)
+    stmt = (
+        select(ConflictFlag)
+        .where(and_(*conds))
+        .order_by(ConflictFlag.detected_at.desc())
+        .limit(limit)
+    )
+    flags = (await db.execute(stmt)).scalars().all()
+
+    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    from .ranking import _decrypt
+
+    conflicts: list[ConflictFlagOut] = []
+    for flag in flags:
+        mem_a = await db.get(Memory, flag.memory_a_id)
+        mem_b = await db.get(Memory, flag.memory_b_id)
+        conflicts.append(ConflictFlagOut(
+            id=flag.id,
+            namespace=flag.namespace,
+            agent_id=flag.agent_id,
+            memory_a_id=flag.memory_a_id,
+            memory_b_id=flag.memory_b_id,
+            memory_a_content=_decrypt(mem_a, subject_keys) if mem_a else None,
+            memory_b_content=_decrypt(mem_b, subject_keys) if mem_b else None,
+            memory_a_source=mem_a.source if mem_a else None,
+            memory_b_source=mem_b.source if mem_b else None,
+            memory_a_event_time=mem_a.event_time if mem_a else flag.detected_at,
+            memory_b_event_time=mem_b.event_time if mem_b else flag.detected_at,
+            confidence=flag.confidence,
+            detected_at=flag.detected_at,
+            status=flag.status,
+            resolved_at=flag.resolved_at,
+            resolver_note=flag.resolver_note,
+        ))
+
+    return ConflictListResult(
+        conflicts=conflicts,
+        total=len(conflicts),
+        status_filter=status,
+    )
+
+
+async def resolve_conflict(
+    db: AsyncSession,
+    namespace: str,
+    conflict_id: UUID,
+    req: ConflictResolveRequest,
+) -> ConflictResolveResult:
+    """
+    Resolve a conflict flag and append a tamper-evident ``conflict_resolved`` event.
+
+    ``accept_a`` invalidates memory_b; ``accept_b`` invalidates memory_a;
+    ``dismiss`` leaves both live. Resolving a non-existent / cross-namespace
+    conflict raises 404; resolving an already-resolved one raises 409; an unknown
+    resolution raises 422.
+    """
+    from fastapi import HTTPException
+
+    if req.resolution not in ("accept_a", "accept_b", "dismiss"):
+        raise HTTPException(status_code=422, detail="resolution must be accept_a, accept_b, or dismiss")
+
+    flag = await db.get(ConflictFlag, conflict_id)
+    if flag is None or flag.namespace != namespace:
+        raise HTTPException(status_code=404, detail="Conflict not found")
+    if flag.status != "open":
+        raise HTTPException(status_code=409, detail="Conflict already resolved")
+
+    now = datetime.now(timezone.utc)
+    invalidated: Optional[UUID] = None
+
+    if req.resolution == "accept_a":
+        invalidated = flag.memory_b_id
+    elif req.resolution == "accept_b":
+        invalidated = flag.memory_a_id
+
+    if invalidated is not None:
+        loser = await db.get(Memory, invalidated)
+        if loser is not None:
+            loser.valid_to = now
+            await remove_live_facts(db, [invalidated])
+
+    flag.status = "dismissed" if req.resolution == "dismiss" else req.resolution
+    flag.resolved_at = now
+    flag.resolver_note = req.note
+
+    await chain_log(
+        db, namespace=namespace, agent_id=flag.agent_id,
+        op="conflict_resolved", memory_id=flag.memory_b_id,
+        content_hash=None,
+        payload={
+            "conflict_id": str(conflict_id),
+            "resolution": req.resolution,
+            "memory_invalidated": str(invalidated) if invalidated else None,
+            "note": req.note,
+            "resolved_at": now.isoformat(),
+        },
+    )
+    await db.commit()
+    invalidate_working_set(namespace, flag.agent_id)
+    await invalidate_agent(namespace, flag.agent_id)
+
+    return ConflictResolveResult(
+        conflict_id=conflict_id,
+        resolution=req.resolution,
+        resolved_at=now,
+        memory_invalidated=invalidated,
+    )
+
+
+# ── Erasure certificate ────────────────────────────────────────────────────────
+
+
+async def get_erasure_certificate(
+    db: AsyncSession,
+    namespace: str,
+    subject_id: str,
+) -> Optional[dict]:
+    """
+    Build a proof-of-erasure certificate for a crypto-shredded data subject.
+
+    Reads the ``erase`` event-log rows for the subject — their content was
+    destroyed but the SHA-256 ``content_hash`` of each survives — and reports the
+    preserved hashes plus the current audit-chain status. Returns ``None`` when no
+    erasure has been recorded for the subject (the route turns that into a 404).
+    """
+    import uuid as _uuid
+
+    stmt = (
+        select(EventLog)
+        .where(
+            and_(
+                EventLog.namespace == namespace,
+                EventLog.op == "erase",
+            )
+        )
+        .order_by(EventLog.created_at.asc())
+    )
+    rows = [
+        r for r in (await db.execute(stmt)).scalars().all()
+        if dict(r.payload or {}).get("subject_id") == subject_id
+    ]
+    if not rows:
+        return None
+
+    content_hashes = [r.content_hash for r in rows if r.content_hash]
+    erased_at = max(r.created_at for r in rows)
+    request_ref = next(
+        (dict(r.payload or {}).get("request_ref") for r in rows
+         if dict(r.payload or {}).get("request_ref")),
+        None,
+    )
+
+    from .audit_chain import verify_chain as _verify_chain
+    try:
+        chain = await _verify_chain(db, namespace=namespace)
+        chain_status = chain.get("status", "unchecked")
+    except Exception:
+        chain_status = "unchecked"
+
+    certificate_id = str(_uuid.uuid5(
+        _uuid.NAMESPACE_URL,
+        f"lians-erasure:{namespace}:{subject_id}:{erased_at.isoformat()}",
+    ))
+
+    return {
+        "certificate_id": certificate_id,
+        "subject_id": subject_id,
+        "namespace": namespace,
+        "request_ref": request_ref,
+        "erased_at": erased_at,
+        "memories_erased": len(rows),
+        "content_hashes": content_hashes,
+        "chain_status": chain_status,
+        "generated_at": datetime.now(timezone.utc),
+    }

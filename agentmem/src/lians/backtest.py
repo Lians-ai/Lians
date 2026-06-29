@@ -35,7 +35,8 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory
-from .memory_service import _memory_to_out, _decrypt_memory_content, _resolve_subject_key
+from .memory_service import _memory_to_out, _resolve_subject_key
+from .ranking import _decrypt as _decrypt_memory_content
 
 
 FUTURE_EVENT = "future_event"

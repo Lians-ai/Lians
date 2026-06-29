@@ -134,6 +134,57 @@ Switch to the hosted server with one line: `from lians import LiansClient as Loc
 
 ---
 
+## Agent harness — drop-in memory loop
+
+`LiansMemoryHarness` wraps the two operations every memory-augmented agent needs —
+recall-before and remember-after — into one object, with the compliance scoping
+(subject, source, event-time, information barrier) regulated deployments require.
+Works with any sync client (`LiansClient` or `LocalLiansClient`) and any model.
+
+```python
+from lians import LiansClient, LiansMemoryHarness
+
+harness = LiansMemoryHarness(mem, agent_id="research-desk", domain="finance")
+
+# One call: recall context, run your model, persist the response.
+answer = harness.run_turn(
+    "What is NVDA's current revenue guidance?",
+    generate=lambda context, query: call_model(f"{context}\n\nUser: {query}"),
+)
+
+# Or control each step:
+context = harness.recall_context("NVDA revenue guidance")   # ready to inject
+harness.remember("Desk note: guidance now $40B")            # write after the turn
+```
+
+Regulated scoping ties every write to one data subject and an information barrier:
+
+```python
+harness = LiansMemoryHarness(
+    mem, agent_id="care-team-3",
+    subject_id="MRN-00042",       # per-subject key — the crypto-shred target
+    barrier_group="oncology",     # information-barrier tag
+    domain="healthcare",
+)
+```
+
+Runnable end-to-end demo: [`agentmem/examples/harness_demo.py`](agentmem/examples/harness_demo.py).
+
+---
+
+## Agent integrations — Claude Code, Codex, MCP
+
+Give any coding agent persistent, compliance-grade memory:
+
+| Host | How |
+|------|-----|
+| **Claude Code** | Plugin with slash commands (`/lians-remember`, `/lians-recall`, `/lians-audit`, `/lians-integrate`) and a compliance subagent — [`integrations/lians-plugin`](integrations/lians-plugin) |
+| **Codex** | Drop-in `AGENTS.md` + MCP config — [`integrations/codex`](integrations/codex) |
+| **Skills standard** | `npx skills add https://github.com/Lians-ai/Lians --skill lians` — works in Claude Code, Codex, Cursor — [`skills/`](skills) |
+| **Any MCP host** | One-time config; eight native memory tools — see [MCP section](#mcp--native-tool-in-any-ai-client) above |
+
+---
+
 ## Why Lians
 
 Financial AI agents accumulate facts that **change over time**: rate decisions supersede prior ones, guidance gets revised, price targets change. Systems like mem0 return all versions with equal rank — your LLM gets contaminated context.
@@ -153,7 +204,7 @@ Superseded facts are excluded at the database layer. Every write is recorded in 
 | GDPR crypto-shred with audit survival | ✓ | ✗ | ✗ |
 | Information barriers (DB-layer RLS) | ✓ | ✗ | ✗ |
 
-→ Full benchmark numbers: [docs/benchmark.md](docs/benchmark.md)
+→ Full benchmark numbers: [docs/benchmark.md](docs/benchmark.md) · Feature-by-feature breakdown: [docs/compare-mem0.md](docs/compare-mem0.md)
 
 ---
 

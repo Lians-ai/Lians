@@ -47,6 +47,12 @@ Install with extras::
 from .sync_client import LiansClient
 from .client import AsyncLiansClient
 from .local_client import LocalLiansClient
+from .harness import (
+    LiansMemoryHarness,
+    RecalledMemory,
+    TurnResult,
+    MemoryClient,
+)
 
 # Backward-compatibility aliases
 AgentMemClient = LiansClient
@@ -57,6 +63,11 @@ __all__ = [
     "LiansClient",
     "AsyncLiansClient",
     "LocalLiansClient",
+    # Agent harness
+    "LiansMemoryHarness",
+    "RecalledMemory",
+    "TurnResult",
+    "MemoryClient",
     # aliases
     "AgentMemClient",
     "AsyncAgentMemClient",

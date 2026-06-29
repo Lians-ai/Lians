@@ -518,9 +518,33 @@ class LocalLiansClient:
 
     async def _async_backtest_check(self, agent_id: str, simulation_as_of: datetime) -> dict:
         from src.lians.backtest import check_contamination
+        from src.lians.schemas import ContaminationFlagOut, ContaminationReportOut
         async with self._session_factory() as db:
             report = await check_contamination(db, self._namespace, agent_id, simulation_as_of)
-        return report.model_dump(mode="json")
+        # check_contamination returns a plain dataclass; project it onto the
+        # pydantic schema so the dict shape matches the HTTP API exactly.
+        out = ContaminationReportOut(
+            agent_id=report.agent_id,
+            namespace=report.namespace,
+            simulation_as_of=report.simulation_as_of,
+            memories_checked=report.memories_checked,
+            flags=[
+                ContaminationFlagOut(
+                    memory_id=f.memory_id,
+                    event_time=f.event_time,
+                    ingestion_time=f.ingestion_time,
+                    contamination_type=f.contamination_type,
+                    delta_days=f.delta_days,
+                    content_preview=f.content_preview,
+                    source=f.source,
+                    metadata=f.metadata,
+                )
+                for f in report.flags
+            ],
+            contamination_rate=report.contamination_rate,
+            is_clean=report.is_clean,
+        )
+        return out.model_dump(mode="json")
 
     def list_conflicts(
         self,

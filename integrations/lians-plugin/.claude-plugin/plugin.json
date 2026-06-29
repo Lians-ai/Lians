@@ -1,0 +1,25 @@
+{
+  "name": "lians",
+  "description": "Financial-grade agent memory for Claude Code — bitemporal recall, SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, and information barriers. Built for finance, healthcare, and legal teams.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Lians",
+    "email": "support@lians.dev",
+    "url": "https://github.com/Lians-ai/Lians"
+  },
+  "homepage": "https://github.com/Lians-ai/Lians",
+  "repository": "https://github.com/Lians-ai/Lians",
+  "license": "Apache-2.0",
+  "keywords": [
+    "memory",
+    "agent-memory",
+    "compliance",
+    "bitemporal",
+    "audit",
+    "finance",
+    "healthcare",
+    "legal",
+    "gdpr",
+    "hipaa"
+  ]
+}

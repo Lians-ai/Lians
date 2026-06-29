@@ -24,9 +24,9 @@ class TestSentenceTransformerProvider:
 
     def _make_provider(self, model_name: str = "BAAI/bge-large-en-v1.5"):
         """Build a provider with a mocked ST model that returns 1024-dim vectors."""
-        from agentmem.embeddings import SentenceTransformerProvider
+        from src.lians.embeddings import SentenceTransformerProvider
 
-        with patch("agentmem.config.get_settings") as mock_settings:
+        with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model=model_name,
                 embedding_dim=1024,
@@ -61,9 +61,9 @@ class TestSentenceTransformerProvider:
 
     def test_model_loaded_lazily(self):
         """Provider must not load the model at construction time."""
-        from agentmem.embeddings import SentenceTransformerProvider
+        from src.lians.embeddings import SentenceTransformerProvider
 
-        with patch("agentmem.config.get_settings") as mock_settings:
+        with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model="BAAI/bge-large-en-v1.5",
                 embedding_dim=1024,
@@ -75,9 +75,9 @@ class TestSentenceTransformerProvider:
 
     def test_dim_mismatch_raises_at_load(self):
         """If the model produces wrong-dim vectors, ValueError at load time."""
-        from agentmem.embeddings import SentenceTransformerProvider
+        from src.lians.embeddings import SentenceTransformerProvider
 
-        with patch("agentmem.config.get_settings") as mock_settings:
+        with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model="some-384-dim-model",
                 embedding_dim=1024,
@@ -98,14 +98,14 @@ class TestSentenceTransformerProvider:
 
     def test_provider_registered_in_get_provider(self):
         """get_provider() must return SentenceTransformerProvider for the right key."""
-        from agentmem.embeddings import SentenceTransformerProvider
+        from src.lians.embeddings import SentenceTransformerProvider
 
-        with patch("agentmem.embeddings.get_settings") as mock_settings:
+        with patch("src.lians.embeddings.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 embedding_provider="sentence-transformers",
                 sentence_transformer_model="BAAI/bge-large-en-v1.5",
             )
-            from agentmem.embeddings import get_provider
+            from src.lians.embeddings import get_provider
             provider = get_provider()
 
         assert isinstance(provider, SentenceTransformerProvider)
@@ -128,32 +128,32 @@ class TestAirgapValidation:
         return MagicMock(**defaults)
 
     def test_valid_airgap_config_passes(self):
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         # Should not raise
         _validate_airgap(self._settings())
 
     def test_local_provider_is_also_safe(self):
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         _validate_airgap(self._settings(embedding_provider="local"))
 
     def test_voyage_provider_raises(self):
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         with pytest.raises(RuntimeError, match="EMBEDDING_PROVIDER"):
             _validate_airgap(self._settings(embedding_provider="voyage"))
 
     def test_openai_provider_raises(self):
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         with pytest.raises(RuntimeError, match="EMBEDDING_PROVIDER"):
             _validate_airgap(self._settings(embedding_provider="openai"))
 
     def test_llm_stage_enabled_raises(self):
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         with pytest.raises(RuntimeError, match="SUPERSESSION_LLM_STAGE"):
             _validate_airgap(self._settings(supersession_llm_stage=True))
 
     def test_both_violations_reported_together(self):
         """RuntimeError message should list all violations, not just the first."""
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         with pytest.raises(RuntimeError) as exc_info:
             _validate_airgap(self._settings(
                 embedding_provider="voyage",
@@ -165,7 +165,7 @@ class TestAirgapValidation:
 
     def test_airgap_false_skips_validation(self):
         """When AIRGAP_MODE=false, bad providers must not raise."""
-        from agentmem.main import _validate_airgap
+        from src.lians.main import _validate_airgap
         # _validate_airgap is only called when airgap_mode=True, so this
         # just ensures it doesn't silently run when called with bad config
         # that would otherwise be fine in non-airgap mode.
