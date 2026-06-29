@@ -8,11 +8,11 @@ from ..db import get_db
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
-    FactHistoryResult,
+    FactHistoryResult, ContextRequest, ContextResult,
 )
 from ..memory_service import (
     add_memory, add_memory_idempotent, recall_memories, batch_add_memories,
-    get_memory_lineage, get_structured_fact_history,
+    get_memory_lineage, get_structured_fact_history, assemble_context,
 )
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
@@ -126,3 +126,19 @@ async def recall(
 ):
     auth.require("read")
     return await recall_memories(db, auth.namespace, req)
+
+
+@router.post("/context", response_model=ContextResult)
+async def context(
+    req: ContextRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Build a token-budgeted, ready-to-inject context block from recall — one call
+    to get the "memory context" string for a prompt. Facts are bitemporal, so the
+    block never contains stale revisions; pass ``as_of`` for point-in-time context,
+    ``mmr: true`` for diversity reranking, and ``max_tokens`` to cap the budget.
+    """
+    auth.require("read")
+    return await assemble_context(db, auth.namespace, req)

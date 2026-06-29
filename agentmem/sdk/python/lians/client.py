@@ -256,6 +256,33 @@ class AsyncLiansClient:
             "filters": filters or {},
         })
 
+    async def context(
+        self,
+        agent_id: str,
+        query: str,
+        k: int = 10,
+        as_of: Optional[datetime] = None,
+        max_tokens: int = 1500,
+        header: Optional[str] = None,
+        mmr: bool = False,
+    ) -> dict:
+        """
+        Build a token-budgeted, ready-to-inject context block from recall.
+
+        Returns ``{context, memories, token_estimate, truncated}``. The block is
+        bitemporal — never contains stale facts. Pass ``as_of`` for point-in-time
+        context and ``mmr=True`` for diversity reranking.
+        """
+        body: dict[str, Any] = {
+            "agent_id": agent_id, "query": query, "k": k,
+            "max_tokens": max_tokens, "mmr": mmr,
+        }
+        if as_of:
+            body["as_of"] = as_of.isoformat()
+        if header:
+            body["header"] = header
+        return await self._req("POST", "/v1/context", json=body)
+
     async def recall_at(
         self,
         agent_id: str,

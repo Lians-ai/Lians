@@ -165,6 +165,25 @@ class LiansClient:
             )
         )
 
+    def context(
+        self,
+        agent_id: str,
+        query: str,
+        k: int = 10,
+        as_of: Optional[datetime] = None,
+        max_tokens: int = 1500,
+        header: Optional[str] = None,
+        mmr: bool = False,
+    ) -> dict:
+        """Build a token-budgeted, ready-to-inject context block. Returns a dict
+        ``{context, memories, token_estimate, truncated}``."""
+        return self._loop.run_until_complete(
+            self._async.context(
+                agent_id=agent_id, query=query, k=k, as_of=as_of,
+                max_tokens=max_tokens, header=header, mmr=mmr,
+            )
+        )
+
     def recall_at(
         self,
         agent_id: str,

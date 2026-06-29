@@ -48,6 +48,50 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb + 1e-9)
 
 
+def mmr_rerank(
+    results: list[tuple[Any, float, Optional[str]]],
+    lambda_: float = 0.5,
+) -> list[tuple[Any, float, Optional[str]]]:
+    """
+    Maximal Marginal Relevance reorder of recall candidates.
+
+    Greedily picks the item maximizing ``λ·relevance − (1−λ)·max_similarity_to_
+    already_selected``, where relevance is the existing fusion score and
+    similarity is cosine over the candidates' embeddings. This keeps the top-k
+    from being dominated by near-duplicate restatements of the same fact —
+    higher diversity at a small relevance cost. ``λ=1`` is pure relevance,
+    ``λ=0`` is pure diversity.
+
+    Items are reordered, never dropped; items without an embedding contribute
+    zero similarity (treated as maximally diverse).
+    """
+    lambda_ = min(1.0, max(0.0, lambda_))
+    embs: list[Optional[list[float]]] = [
+        list(r[0].embedding) if getattr(r[0], "embedding", None) is not None else None
+        for r in results
+    ]
+    remaining = list(range(len(results)))
+    order: list[int] = []
+    while remaining:
+        best_i: Optional[int] = None
+        best_val: Optional[float] = None
+        for i in remaining:
+            rel = results[i][1]
+            if order and embs[i] is not None:
+                sim = max(
+                    (_cosine(embs[i], embs[j]) for j in order if embs[j] is not None),
+                    default=0.0,
+                )
+            else:
+                sim = 0.0
+            val = lambda_ * rel - (1.0 - lambda_) * sim
+            if best_val is None or val > best_val:
+                best_val, best_i = val, i
+        order.append(best_i)  # type: ignore[arg-type]
+        remaining.remove(best_i)
+    return [results[i] for i in order]
+
+
 _BM25_K1 = 1.5
 _BM25_B = 0.75
 _BM25_AVG_DOC_LEN = 50.0

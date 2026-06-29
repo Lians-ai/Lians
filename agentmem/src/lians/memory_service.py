@@ -395,6 +395,60 @@ async def add_memory_idempotent(
     return result
 
 
+def _estimate_tokens(text: str) -> int:
+    """Cheap token estimate (~4 chars/token) — good enough for budgeting."""
+    return max(1, len(text) // 4)
+
+
+async def assemble_context(
+    db: AsyncSession,
+    namespace: str,
+    req: "ContextRequest",
+) -> "ContextResult":
+    """
+    Recall the relevant facts and assemble them into a token-budgeted, ready-to-
+    inject context block — the one-call "memory context" surface (Zep parity),
+    backed by Lians' bitemporal recall so the block never contains stale facts.
+
+    Facts are included in relevance order until ``max_tokens`` is reached; each
+    line carries event-time and source so the model can reason about recency and
+    provenance. Erased (crypto-shredded) facts are skipped.
+    """
+    from .schemas import ContextResult
+    filters: dict[str, Any] = {}
+    if req.mmr:
+        filters["_rerank"] = "mmr"
+    recall_req = RecallRequest(
+        agent_id=req.agent_id, query=req.query, k=req.k, as_of=req.as_of, filters=filters,
+    )
+    result = await recall_memories(db, namespace, recall_req)
+
+    lines = [req.header]
+    used = _estimate_tokens(req.header)
+    included: list = []
+    truncated = False
+    for m in result.memories:
+        if not m.content:
+            continue  # erased — content unrecoverable
+        stamp = m.event_time.isoformat()[:16].replace("T", " ") if m.event_time else "undated"
+        prov = f" [{m.source}]" if m.source else ""
+        line = f"- ({stamp}){prov} {m.content}"
+        t = _estimate_tokens(line)
+        if used + t > req.max_tokens:
+            truncated = True
+            break
+        lines.append(line)
+        used += t
+        included.append(m)
+
+    return ContextResult(
+        context="\n".join(lines),
+        memories=included,
+        token_estimate=used,
+        truncated=truncated,
+    )
+
+
 async def recall_memories(
     db: AsyncSession,
     namespace: str,
@@ -414,12 +468,19 @@ async def recall_memories(
         # recall cache when present (results depend on the live graph).
         near_entity: Optional[str] = None
         near_key = "ticker"
+        rerank: Optional[str] = None
+        mmr_lambda = 0.5
         if req.filters:
             near_entity = req.filters.pop("_near_entity", None)
             near_key = req.filters.pop("_near_key", "ticker")
+            rerank = req.filters.pop("_rerank", None)
+            try:
+                mmr_lambda = float(req.filters.pop("_mmr_lambda", 0.5))
+            except (TypeError, ValueError):
+                mmr_lambda = 0.5
 
         # Hot cache (Redis)
-        if settings.recall_cache_enabled and not req.as_of and not near_entity:
+        if settings.recall_cache_enabled and not req.as_of and not near_entity and not rerank:
             cached = await get_cached_recall(
                 namespace, req.agent_id, req.query, req.as_of, req.k, req.filters
             )
@@ -501,6 +562,14 @@ async def recall_memories(
             )
 
         span.set_attribute("result_count", len(results))
+
+        # MMR reranking (opt-in via filters {"_rerank": "mmr"}): reorder the
+        # candidate set to balance relevance against diversity, so the top-k isn't
+        # dominated by near-duplicate restatements of the same fact.
+        if rerank == "mmr" and len(results) > 1:
+            from .ranking import mmr_rerank
+            results = mmr_rerank(results, lambda_=mmr_lambda)
+            span.set_attribute("mmr_rerank", True)
 
         # Graph-proximity reranking: boost results whose entity sits near the
         # anchor entity in the relationship graph (Graphiti-style node-distance).

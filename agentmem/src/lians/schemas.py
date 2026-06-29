@@ -466,3 +466,24 @@ class PathResult(BaseModel):
     hops: int
     as_of: Optional[str]
     path: list[EdgeOut]
+
+
+# ── Context assembly ────────────────────────────────────────────────────────────
+
+
+class ContextRequest(BaseModel):
+    """Build a token-budgeted, ready-to-inject context block from recall."""
+    agent_id: str
+    query: str
+    k: int = Field(default=10, ge=1, le=100)
+    as_of: Optional[datetime] = None
+    max_tokens: int = Field(default=1500, ge=64, le=32000)
+    header: str = "Relevant facts from memory (most recent, non-stale):"
+    mmr: bool = False                     # diversity reranking before assembly
+
+
+class ContextResult(BaseModel):
+    context: str                          # the assembled block, ready to inject
+    memories: list[MemoryOut]             # the facts that fit the budget
+    token_estimate: int
+    truncated: bool                       # True if the budget cut off some facts

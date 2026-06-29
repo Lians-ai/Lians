@@ -386,7 +386,8 @@ Full reference: [agentmem/.env.example](agentmem/.env.example)
 |--------|------|-------------|
 | `POST` | `/v1/memories` | Add a memory (supersession check; `Idempotency-Key` header for exactly-once retries) |
 | `POST` | `/v1/memories/batch` | Batch ingest |
-| `POST` | `/v1/recall` | Hybrid BM25+cosine recall; optional `as_of` |
+| `POST` | `/v1/recall` | Hybrid BM25+cosine recall; optional `as_of`, MMR rerank (`filters._rerank=mmr`) |
+| `POST` | `/v1/context` | Token-budgeted, ready-to-inject context block (point-in-time + MMR aware) |
 | `POST` | `/v1/erase` | GDPR crypto-shred by `subject_id` |
 | `GET`  | `/v1/audit/reconstruct` | Reconstruct agent state at any past date |
 | `GET`  | `/v1/admin/audit/verify` | Verify SHA-256 hash chain integrity |
