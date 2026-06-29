@@ -201,7 +201,7 @@ mem.neighbors("analyst-1", entity="FundA", depth=2, as_of=datetime(2025, 6, 1, t
 mem.recall_near("analyst-1", query="earnings", near_entity="FundA", near_key="ticker")
 ```
 
-Endpoints: `POST /v1/graph/relate` · `/v1/graph/unrelate` · `GET /v1/graph/neighbors` · `/v1/graph/path` (all `as_of`-capable). Inspired by [Zep/Graphiti](docs/compare-zep.md), built on our compliance spine.
+Endpoints: `POST /v1/graph/relate` · `/v1/graph/unrelate` · `/v1/graph/extract` (text → edges, rule-based or opt-in LLM) · `GET /v1/graph/neighbors` · `/v1/graph/path` (all `as_of`-capable). Inspired by [Zep/Graphiti](docs/compare-zep.md), built on our compliance spine.
 
 ---
 

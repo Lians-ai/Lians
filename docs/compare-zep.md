@@ -156,7 +156,14 @@ the codebase as an additive layer — no new datastore, full compliance spine:
 This gives Lians graph reasoning **and** keeps the compliance spine — the one thing
 neither Graphiti nor Zep Cloud offers in the open.
 
+### Also shipped: text → graph extraction
+`POST /v1/graph/extract` turns unstructured text into edges — Graphiti's "build
+the graph for me" convenience — but **rule-based and deterministic by default**
+(auditable, reproducible, no model), with opt-in LLM extraction that falls back to
+rules. Every extracted edge lands in the audit chain and inside the barrier. We
+deliberately keep determinism the default rather than depending on an LLM per write.
+
 ### Still open (lower priority)
-Items 3–5 from §2 — custom entity/relationship *ontology* types, episode grouping
-with shared provenance, and (clearly-marked, non-authoritative) evolving entity
-summaries — remain future work.
+Custom entity/relationship *ontology* types, episode grouping with shared
+provenance, community detection, and (clearly-marked, non-authoritative) evolving
+entity summaries remain future work.

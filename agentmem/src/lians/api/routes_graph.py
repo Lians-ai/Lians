@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
 from ..schemas import (
     RelateRequest, UnrelateRequest, RelateResult, NeighborsResult, PathResult,
+    ExtractRequest, ExtractResult,
 )
 from .. import graph_service
 from .deps import get_auth, AuthContext
@@ -56,6 +57,27 @@ async def relate(
         event_time=edge.event_time,
         valid_to=edge.valid_to,
     )
+
+
+@router.post("/extract", response_model=ExtractResult)
+async def extract(
+    req: ExtractRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Extract relationship edges from unstructured text and write them — the
+    Graphiti-style "build the graph for me" convenience, but rule-based and
+    deterministic by default (auditable), with opt-in LLM extraction. Every
+    extracted edge lands in the audit chain and inside the information barrier.
+    """
+    auth.require("write")
+    result = await graph_service.extract_and_relate(
+        db, auth.namespace,
+        agent_id=req.agent_id, text=req.text, event_time=req.event_time,
+        normalize=req.normalize, exclusive=req.exclusive, use_llm=req.use_llm,
+    )
+    return ExtractResult(**result)
 
 
 @router.post("/unrelate")

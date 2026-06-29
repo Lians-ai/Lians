@@ -487,3 +487,27 @@ class ContextResult(BaseModel):
     memories: list[MemoryOut]             # the facts that fit the budget
     token_estimate: int
     truncated: bool                       # True if the budget cut off some facts
+
+
+# ── Graph extraction ────────────────────────────────────────────────────────────
+
+
+class ExtractRequest(BaseModel):
+    """Extract relationship edges from unstructured text and write them."""
+    agent_id: str
+    text: str
+    event_time: datetime
+    normalize: bool = False
+    exclusive: bool = False
+    use_llm: bool = False                 # opt-in LLM extraction (else rule-based)
+
+
+class ExtractedTriplet(BaseModel):
+    src: str
+    rel_type: str
+    dst: str
+
+
+class ExtractResult(BaseModel):
+    extracted: list[ExtractedTriplet]
+    edges: list[EdgeOut]

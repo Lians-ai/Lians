@@ -372,6 +372,41 @@ async def path(
     }
 
 
+async def extract_and_relate(
+    db: AsyncSession,
+    namespace: str,
+    *,
+    agent_id: str,
+    text: str,
+    event_time: datetime,
+    normalize: bool = False,
+    exclusive: bool = False,
+    use_llm: bool = False,
+) -> dict[str, Any]:
+    """
+    Extract ``(src, rel_type, dst)`` triplets from ``text`` and assert each as an
+    edge. Rule-based by default (deterministic, auditable); LLM extraction is
+    opt-in via ``use_llm`` and falls back to rules if unavailable. Returns the
+    extracted triplets and the created edges.
+    """
+    from .graph_extract import extract_relationships
+
+    triplets = await extract_relationships(text, use_llm=use_llm)
+    edges: list[dict[str, Any]] = []
+    for src, rel, dst in triplets:
+        edge = await relate(
+            db, namespace,
+            agent_id=agent_id, src_entity=src, rel_type=rel, dst_entity=dst,
+            event_time=event_time, exclusive=exclusive, normalize=normalize,
+            source="extracted",
+        )
+        edges.append(_edge_dict(edge))
+    return {
+        "extracted": [{"src": s, "rel_type": r, "dst": d} for (s, r, d) in triplets],
+        "edges": edges,
+    }
+
+
 async def entity_distances(
     db: AsyncSession,
     namespace: str,
