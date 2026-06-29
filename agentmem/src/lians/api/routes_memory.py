@@ -1,6 +1,7 @@
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -9,7 +10,10 @@ from ..schemas import (
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
     FactHistoryResult,
 )
-from ..memory_service import add_memory, recall_memories, batch_add_memories, get_memory_lineage, get_structured_fact_history
+from ..memory_service import (
+    add_memory, add_memory_idempotent, recall_memories, batch_add_memories,
+    get_memory_lineage, get_structured_fact_history,
+)
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
 
@@ -21,9 +25,15 @@ async def create_memory(
     req: MemoryAdd,
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
+    idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
 ):
+    """
+    Add a memory. Supply an ``Idempotency-Key`` header to make the write safe to
+    retry: a repeated request with the same key returns the original memory
+    instead of inserting a duplicate.
+    """
     auth.require("write")
-    return await add_memory(db, auth.namespace, req)
+    return await add_memory_idempotent(db, auth.namespace, req, idempotency_key)
 
 
 @router.post("/memories/batch", response_model=MemoryBatchResult)

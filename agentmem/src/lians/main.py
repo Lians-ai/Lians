@@ -264,3 +264,22 @@ async def health(db: AsyncSession = Depends(_get_db)):
         content={"status": "ok" if all_ok else "degraded", "checks": checks},
         status_code=200 if all_ok else 503,
     )
+
+
+@app.get("/livez", include_in_schema=False)
+async def livez():
+    """
+    Liveness probe — confirms the process is up. Intentionally cheap: it never
+    touches the database or Redis, so a transient dependency blip does not cause
+    Kubernetes to restart an otherwise-healthy pod. Use for livenessProbe.
+    """
+    return {"status": "alive"}
+
+
+@app.get("/readyz", include_in_schema=False)
+async def readyz(db: AsyncSession = Depends(_get_db)):
+    """
+    Readiness probe — deep dependency check (same as /health). A 503 takes the
+    instance out of rotation without killing the process. Use for readinessProbe.
+    """
+    return await health(db)

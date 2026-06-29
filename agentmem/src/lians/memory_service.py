@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import time as _time
 
-from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy, ConflictFlag
+from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy, ConflictFlag, IdempotencyKey
 from .audit_chain import chain_log
 from .telemetry import tracer
 from .metrics import record_write, observe_add, record_recall, observe_recall, record_erase
@@ -348,6 +348,51 @@ async def add_memory(
         observe_add(namespace, _time.perf_counter() - _add_t0)
 
         return _memory_to_out(mem, req.content)
+
+
+async def add_memory_idempotent(
+    db: AsyncSession,
+    namespace: str,
+    req: MemoryAdd,
+    idempotency_key: Optional[str],
+) -> MemoryOut:
+    """
+    Idempotent wrapper around :func:`add_memory`.
+
+    When ``idempotency_key`` is supplied, a previously-seen key (in this
+    namespace) returns the original memory instead of inserting a duplicate —
+    giving exactly-once semantics for a retried write. Without a key, behaves
+    exactly like ``add_memory``.
+
+    The SDKs send a stable key on automatic retries, so a write that succeeded
+    server-side but whose response was lost to a network blip is not duplicated.
+    """
+    if not idempotency_key:
+        return await add_memory(db, namespace, req)
+
+    existing = await db.get(IdempotencyKey, (idempotency_key, namespace))
+    if existing is not None:
+        mem = await db.get(Memory, existing.memory_id)
+        if mem is not None:
+            subject_keys = await _load_namespace_subject_keys(db, namespace)
+            from .ranking import _decrypt
+            return _memory_to_out(mem, _decrypt(mem, subject_keys))
+
+    result = await add_memory(db, namespace, req)
+    db.add(IdempotencyKey(key=idempotency_key, namespace=namespace, memory_id=result.id))
+    try:
+        await db.commit()
+    except Exception:
+        # Lost a race with a concurrent identical request — return the winner's row.
+        await db.rollback()
+        existing = await db.get(IdempotencyKey, (idempotency_key, namespace))
+        if existing is not None:
+            mem = await db.get(Memory, existing.memory_id)
+            if mem is not None:
+                subject_keys = await _load_namespace_subject_keys(db, namespace)
+                from .ranking import _decrypt
+                return _memory_to_out(mem, _decrypt(mem, subject_keys))
+    return result
 
 
 async def recall_memories(

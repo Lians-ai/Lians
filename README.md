@@ -384,14 +384,15 @@ Full reference: [agentmem/.env.example](agentmem/.env.example)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/memories` | Add a memory (triggers supersession check) |
+| `POST` | `/v1/memories` | Add a memory (supersession check; `Idempotency-Key` header for exactly-once retries) |
 | `POST` | `/v1/memories/batch` | Batch ingest |
 | `POST` | `/v1/recall` | Hybrid BM25+cosine recall; optional `as_of` |
 | `POST` | `/v1/erase` | GDPR crypto-shred by `subject_id` |
 | `GET`  | `/v1/audit/reconstruct` | Reconstruct agent state at any past date |
 | `GET`  | `/v1/admin/audit/verify` | Verify SHA-256 hash chain integrity |
 | `GET`  | `/v1/admin/audit/export` | Export audit log (SEC/FINRA/CFTC) |
-| `GET`  | `/health` | Deep health check (DB + Redis) |
+| `GET`  | `/livez` | Liveness probe (cheap; process up) |
+| `GET`  | `/readyz` · `/health` | Readiness / deep health check (DB + Redis) |
 
 Interactive docs: `http://localhost:8000/docs`
 

@@ -2,6 +2,8 @@
 Lians Python SDK — async HTTP client for the REST API.
 """
 from __future__ import annotations
+import asyncio
+import random
 from datetime import datetime
 from typing import Any, Optional
 import httpx
@@ -30,13 +32,22 @@ class AsyncLiansClient:
         api_key: str = "",
         admin_secret: str = "",
         timeout: float = 30.0,
+        max_retries: int = 2,
+        backoff_factor: float = 0.5,
     ):
         self._base = base_url.rstrip("/")
         self._headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
         self._admin_headers = {"X-Admin-Secret": admin_secret, "Content-Type": "application/json"}
         self._timeout = timeout
+        self._max_retries = max_retries
+        self._backoff_factor = backoff_factor
 
     # ── Internal ──────────────────────────────────────────────────────────────
+
+    async def _sleep_backoff(self, attempt: int) -> None:
+        # Exponential backoff with jitter: base * 2^attempt * (1 .. 1.25)
+        delay = self._backoff_factor * (2 ** attempt) * (1.0 + random.random() * 0.25)
+        await asyncio.sleep(delay)
 
     async def _req(
         self,
@@ -46,16 +57,37 @@ class AsyncLiansClient:
         json: Any = None,
         params: Optional[dict] = None,
         admin: bool = False,
+        extra_headers: Optional[dict] = None,
     ) -> dict:
-        headers = self._admin_headers if admin else self._headers
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            resp = await client.request(
-                method,
-                f"{self._base}{path}",
-                headers=headers,
-                json=json,
-                params={k: v for k, v in (params or {}).items() if v is not None},
-            )
+        headers = dict(self._admin_headers if admin else self._headers)
+        if extra_headers:
+            headers.update(extra_headers)
+        url = f"{self._base}{path}"
+        clean_params = {k: v for k, v in (params or {}).items() if v is not None}
+
+        attempt = 0
+        while True:
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    resp = await client.request(
+                        method, url, headers=headers, json=json, params=clean_params,
+                    )
+            except httpx.TransportError:
+                # Connection/read/timeout error — safe to retry (writes carry an
+                # Idempotency-Key, so a retried POST won't double-write).
+                if attempt >= self._max_retries:
+                    raise
+                await self._sleep_backoff(attempt)
+                attempt += 1
+                continue
+
+            # Retry transient server errors / throttling.
+            if resp.status_code >= 500 or resp.status_code == 429:
+                if attempt < self._max_retries:
+                    await self._sleep_backoff(attempt)
+                    attempt += 1
+                    continue
+
             resp.raise_for_status()
             return resp.json()
 
@@ -70,8 +102,16 @@ class AsyncLiansClient:
         subject_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
         importance: float = 0.5,
+        idempotency_key: Optional[str] = None,
     ) -> dict:
-        """Store a financial fact.  Returns the created MemoryOut as a dict."""
+        """
+        Store a financial fact.  Returns the created MemoryOut as a dict.
+
+        A stable ``Idempotency-Key`` is generated automatically (or pass your own)
+        so that an automatic retry after a network blip cannot create a duplicate.
+        """
+        import uuid as _uuid
+        key = idempotency_key or str(_uuid.uuid4())
         return await self._req("POST", "/v1/memories", json={
             "agent_id": agent_id,
             "content": content,
@@ -80,7 +120,7 @@ class AsyncLiansClient:
             "subject_id": subject_id,
             "metadata": metadata or {},
             "importance": importance,
-        })
+        }, extra_headers={"Idempotency-Key": key})
 
     async def batch_add(self, memories: list[dict[str, Any]]) -> dict:
         """

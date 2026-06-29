@@ -342,6 +342,21 @@ class NamespacePolicy(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
 
+class IdempotencyKey(Base):
+    """
+    Maps a client-supplied Idempotency-Key (per namespace) to the memory it
+    created, so a retried write returns the original result instead of inserting
+    a duplicate. The SDK sends the same key on automatic retries, giving
+    exactly-once write semantics across network blips.
+    """
+    __tablename__ = "idempotency_keys"
+
+    key = Column(String, primary_key=True)
+    namespace = Column(String, primary_key=True)
+    memory_id = Column(UUID(as_uuid=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+
 class Relationship(Base):
     """
     Bitemporal relationship edge between two entities — the knowledge-graph layer.
