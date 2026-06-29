@@ -1,0 +1,52 @@
+{
+  "name": "lians-sample-memory-eval",
+  "description": "Small multi-session sample in the LoCoMo/LongMemEval shape. Demonstrates single-session recall, multi-session recall, and temporal supersession (a fact that is revised across sessions). Convert real LoCoMo/LongMemEval samples to this schema to run them.",
+  "samples": [
+    {
+      "sessions": [
+        {
+          "date": "2026-01-10",
+          "turns": [
+            {"speaker": "user", "text": "I just started a new job at Acme Corp as a data scientist."},
+            {"speaker": "user", "text": "My salary at Acme is 120000 dollars per year.",
+             "metadata": {"ticker": "USER_SALARY", "metric": "amount"}}
+          ]
+        },
+        {
+          "date": "2026-03-15",
+          "turns": [
+            {"speaker": "user", "text": "Big news this week — I got a raise."},
+            {"speaker": "user", "text": "My salary at Acme is now 140000 dollars per year.",
+             "metadata": {"ticker": "USER_SALARY", "metric": "amount"}},
+            {"speaker": "user", "text": "I also moved over to the analytics team at Acme."}
+          ]
+        }
+      ],
+      "questions": [
+        {"question": "What is the user current salary at Acme",
+         "answer": "140000", "stale": "120000", "category": "temporal-supersession"},
+        {"question": "Where does the user work as a data scientist",
+         "answer": "Acme", "category": "single-session"},
+        {"question": "Which team did the user move to at Acme",
+         "answer": "analytics", "category": "multi-session"}
+      ]
+    },
+    {
+      "sessions": [
+        {
+          "date": "2026-02-01",
+          "turns": [
+            {"speaker": "user", "text": "My favorite programming language is Python."},
+            {"speaker": "user", "text": "Please remember that I am allergic to peanuts."}
+          ]
+        }
+      ],
+      "questions": [
+        {"question": "What is the user favorite programming language",
+         "answer": "Python", "category": "single-session"},
+        {"question": "What food is the user allergic to",
+         "answer": "peanuts", "category": "single-session"}
+      ]
+    }
+  ]
+}

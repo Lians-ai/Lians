@@ -417,3 +417,43 @@ The performance roadmap makes Lians competitive on latency *without*
 compromising any of those guarantees.  Immutability, crypto-shredding, and
 information barriers are the product; the roadmap reshapes how they are
 implemented so they no longer penalize the hot path.
+
+---
+
+## Memory evaluation harness (LoCoMo / LongMemEval protocol)
+
+The standard long-term-memory benchmarks — [LoCoMo](https://github.com/snap-research/locomo)
+and [LongMemEval](https://github.com/xiaowu0162/LongMemEval) — feed a model a
+multi-session conversation, then ask questions whose answers depend on
+remembering and *updating* facts across sessions, and score the generated answer
+with an LLM judge.
+
+Lians ships a harness (`agentmem/benchmarks/memory_eval.py`) that measures the
+part a memory layer is actually responsible for: **evidence retrieval** — does
+recall surface the memory containing the answer? This `answer_recall@k` metric is
+deterministic and judge-free, so it isolates the memory system from the downstream
+LLM and directly exercises the property Lians is built for: a **superseded fact
+must not be retrieved, and its current replacement must be**.
+
+Run it on the bundled sample (no external data, no API keys):
+
+```bash
+cd agentmem
+python -m benchmarks.memory_eval            # bundled sample
+python -m benchmarks.memory_eval --dataset path/to/locomo.json --k 10
+```
+
+To run the real benchmarks, convert their samples to the harness schema
+(`benchmarks/data/sample_memory_eval.json`) — sessions with dated turns, then
+questions with gold answers (and an optional `stale` value for supersession
+cases).
+
+### Our positioning
+
+mem0 markets raw recall scores (91.6 LoCoMo, 94.8 LongMemEval). Lians' thesis
+isn't "highest recall at any cost" — it's **correct, current, auditable recall**:
+the harness's supersession cases show Lians returning the *current* value and
+excluding the stale one, which a pure accumulate-everything store cannot do. The
+honest summary for a regulated buyer is *comparable retrieval plus the compliance
+stack (audit chain, crypto-shred, DB-layer barriers) that the benchmark leaders
+don't have* — see [compare-mem0.md](compare-mem0.md) and [compare-zep.md](compare-zep.md).
