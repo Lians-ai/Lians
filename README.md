@@ -265,6 +265,27 @@ closed cloud. Lians keeps the graph **and** the open compliance spine.
 
 ---
 
+## Language SDKs
+
+Lians ships native SDKs across four languages — including **Java and C, which no
+other open agent-memory layer offers** (mem0 is Python/TypeScript; Zep adds Go).
+That puts the full compliance memory layer where regulated systems actually run:
+JVM risk platforms, and native/low-latency C in trading, market-data, and on-prem
+healthcare/legal stacks.
+
+| Language | Install | Client | Docs |
+|----------|---------|--------|------|
+| **Python** | `pip install lians-sdk` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
+| **TypeScript / Node** | `npm install @ebeirne/lians` | `import { LiansClient } from "@ebeirne/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
+| **Java** (JVM 11+) | `dev.lians:lians-sdk:0.2.0` (Maven) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
+| **C** (C99 + libcurl) | `cmake --build build` | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
+
+All four cover the same REST API: recall, point-in-time `recall_at`, snapshot,
+backtest, crypto-shred erasure, audit-chain verify, and the relationship graph
+(`relate` / `neighbors` / `path`).
+
+---
+
 ## Framework integrations
 
 | Framework | Install | Import |
