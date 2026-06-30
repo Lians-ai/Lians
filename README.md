@@ -415,6 +415,24 @@ See [docs/testing.md](docs/testing.md) for the six named invariants (temporal so
 
 ---
 
+## Production & operations
+
+Built to run in a regulated production environment, not just to demo:
+
+- **Exactly-once writes** — `Idempotency-Key` on `POST /v1/memories`; the SDKs send a stable key automatically, so a retried write never duplicates.
+- **Resilient clients** — built-in retry with exponential backoff on transport errors / 5xx / 429.
+- **Kubernetes probes** — cheap `/livez` (liveness) and deep `/readyz` (readiness), so a dependency blip doesn't restart healthy pods.
+- **Rate limiting** — per-API-key sliding window (Redis), fails open.
+- **Access control** — namespace-scoped keys, `read`/`write`/`admin` scopes, **RBAC roles** (`owner`/`analyst`/`compliance`/`readonly`), and SSO via gateway forward-auth.
+- **DB-layer information barriers** — `RESTRICTIVE` PostgreSQL RLS, **proven in CI** against a non-superuser role. *Run the app as a non-superuser DB role* — superusers bypass RLS.
+- **SIEM streaming** — every audit event forwarded to Splunk HEC / Datadog / Elastic (`SIEM_URL`), fire-and-forget.
+- **Observability** — Prometheus metrics + Grafana, OpenTelemetry traces, JSON access logs with a request ID.
+- **Evaluation** — a judge-free memory-eval harness (`agentmem/benchmarks/memory_eval.py`) in the LoCoMo/LongMemEval shape.
+
+Security & procurement docs: [security-whitepaper.md](docs/security-whitepaper.md) · [threat-model.md](docs/threat-model.md) · [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md) · [sso.md](docs/sso.md) · [publishing.md](docs/publishing.md)
+
+---
+
 ## Compliance
 
 | Requirement | Feature |

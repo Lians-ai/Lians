@@ -23,13 +23,16 @@ design worth adopting — on our terms, for regulated work.
 |---|---|---|
 | Temporal model | Bitemporal **edges** (`valid_at`/`invalid_at`) | Bitemporal **facts** (`event_time` + `valid_from/valid_to`) |
 | Data shape | Entity–relationship **graph** (triplets) | Atomic facts + structured metadata |
-| Retrieval | Semantic + BM25 + **graph traversal** + node-distance rerank | Semantic + BM25 + recency + validity gate + **graph traversal + node-distance rerank** (shipped) |
+| Retrieval | Semantic + BM25 + **graph traversal** + node-distance rerank | Semantic + BM25 + recency + validity gate + graph traversal + node-distance + **MMR** rerank |
+| Text → graph | LLM extraction (always) | `/v1/graph/extract` — **rule-based default** (deterministic, auditable), LLM opt-in |
+| Context assembly | `memory.context` block | `/v1/context` — token-budgeted, ready-to-inject, point-in-time + MMR aware |
 | Fact updates | **LLM-extracted**, dedup, contradiction → invalidate edge | **Deterministic** keyed supersession; LLM only as optional adjudicator |
-| Entity model | LLM entity nodes + evolving summaries + communities | Entity *normalization* (ISIN/CUSIP/ICD-10) — no node graph |
-| Ontology | Custom entity/edge **types** (Pydantic) | Domain adapters (key normalization only) |
+| Entity model | LLM entity nodes + evolving summaries + communities | Entity *normalization* (ISIN/CUSIP/ICD-10); explicit + extracted edges (no communities/summaries yet) |
 | Tamper-evidence | Episode provenance only | SHA-256 hash chain (SEC 17a-4), `verify_chain` |
 | Right-to-erasure | Not a feature | Per-subject crypto-shred + erasure certificate |
-| Access control | None in Graphiti; Zep Cloud only | Scoped keys + PostgreSQL RLS information barriers |
+| Access control | None in Graphiti; Zep Cloud only | Scoped keys + **RBAC roles** + PostgreSQL RLS barriers (DB-layer, CI-proven) |
+| Audit egress | — | **SIEM streaming** (Splunk/Datadog/Elastic) + signed-webhook events + export |
+| Production | Managed cloud only | Self-host: idempotency keys, SDK retries, `/livez`+`/readyz`, rate limiting, air-gap |
 | Backend | Neo4j / FalkorDB / Neptune (graph DB) | Postgres 16 + pgvector (no extra infra) |
 | Determinism | Extraction-quality dependent | Reproducible; same input → same supersession |
 | Language SDKs | Python, TypeScript, Go (3) | Python, TypeScript, Go, **Java, C** (5) |

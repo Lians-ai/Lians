@@ -25,17 +25,24 @@ and **access** (who can read what, and is it provably controlled?).
 | "What did we know on date X?" | No temporal reconstruction | `recall_at` / `snapshot` — exhaustive point-in-time state |
 | Tamper-evidence | Not documented | SHA-256 hash chain (SEC 17a-4), `verify_chain()` |
 | Right-to-erasure | Delete API; no audit-preserving proof | Per-subject AES-256-GCM crypto-shred; audit trail survives; erasure certificate |
-| Access control | `user_id` filtering | Scoped API keys + PostgreSQL Row-Level Security information barriers |
+| Access control | `user_id` filtering | Scoped keys + **RBAC roles** + PostgreSQL RLS barriers (DB-layer, CI-proven against a non-superuser role) |
 | Lookahead-bias proof | None | `backtest_check` contamination report |
+| Reranking | Hybrid search + reranker | Hybrid (BM25 + cosine + recency) + opt-in **MMR diversity** rerank |
+| Context assembly | Returns a memory list | `/v1/context` — token-budgeted, ready-to-inject block (point-in-time + MMR aware) |
+| Production hardening | Managed platform | **Idempotency keys** (exactly-once writes), SDK retry/backoff, `/livez`+`/readyz`, per-key rate limiting, **SIEM audit streaming** |
+| Evaluation | Published LoCoMo/LongMemEval scores | Bundled judge-free harness (`answer_recall@k`) + the supersession invariant |
 | Regulatory export | None documented | `compliance_report`, audit export (SEC/FINRA/CFTC) |
 | Domain modeling | Generic | Finance / healthcare / legal adapters (entity normalization) |
 | Language SDKs | Python, TypeScript (2) | Python, TypeScript, **Go, Java, C** (5) |
 
 Where mem0 leads: breadth of out-of-the-box *framework* integrations (LangChain,
-CrewAI, …), a polished hosted onboarding, a browser extension, and strong
-general-chat benchmark scores (LoCoMo / LongMemEval). If you are building a consumer
-assistant, that breadth is real value. If you are building for a bank, hospital, or
-law firm, the rows above are the ones that get you through procurement and audit.
+CrewAI, …), a polished hosted onboarding, a browser extension, and *published*
+general-chat benchmark scores (LoCoMo / LongMemEval). Lians ships the eval harness
+to run those benchmarks (`agentmem/benchmarks/memory_eval.py`) but doesn't lead with
+a single recall number — its thesis is correct, current, auditable recall, not
+recall at any cost. If you are building a consumer assistant, mem0's breadth is real
+value. If you are building for a bank, hospital, or law firm, the rows above are the
+ones that get you through procurement and audit.
 
 On *language* reach, though, Lians is ahead: mem0 ships Python and TypeScript;
 Lians ships **Python, TypeScript, Go, Java, and C** — the two of those that matter
