@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     # Opt-in LLM relationship extraction for /v1/graph/extract (else rule-based).
     graph_extract_llm: bool = False
 
+    # ── Memory admission control ──────────────────────────────────────────────
+    # off     — no admission evaluation
+    # monitor — evaluate + tag + audit, always admit (default; observe first)
+    # enforce — reject injection/blocked-source writes; hold PII/PHI/MNPI for review
+    admission_mode: str = "monitor"
+    # Comma-separated source labels that are never admitted (e.g. "scraped,unverified").
+    admission_blocked_sources: str = ""
+
     # ── Performance roadmap (Changes 3 / 7 / 8) ───────────────────────────────
 
     # Change 3: async LLM adjudication worker.  When True, Stage-3 LLM verdicts

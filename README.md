@@ -374,6 +374,7 @@ client.erase(subject_id, request_ref)                    # GDPR crypto-shred
 | `ADMIN_SECRET` | — | Protects `/v1/admin/*` — **change in production** |
 | `SUPERSESSION_LLM_STAGE` | `false` | Enables Stage 3 LLM adjudication (Claude Haiku) |
 | `AIRGAP_MODE` | `false` | Hard-fails at startup if any config would send data externally |
+| `ADMISSION_MODE` | `monitor` | Admission control: `off` · `monitor` (tag+audit) · `enforce` (reject injection/blocked source, hold PII/PHI/MNPI for review) |
 | `SIEM_URL` | — | Stream every audit event to a SIEM collector (Splunk HEC / Datadog / Elastic) |
 | `STRIPE_API_KEY` | — | Enables per-namespace usage metering |
 
@@ -385,7 +386,8 @@ Full reference: [agentmem/.env.example](agentmem/.env.example)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/memories` | Add a memory (supersession check; `Idempotency-Key` header for exactly-once retries) |
+| `POST` | `/v1/memories` | Add a memory (admission control; supersession check; `Idempotency-Key` for exactly-once retries) |
+| `GET`/`POST` | `/v1/admissions` · `/{id}/resolve` | Review queue for held writes (PII/PHI/MNPI) — approve / reject |
 | `POST` | `/v1/memories/batch` | Batch ingest |
 | `POST` | `/v1/recall` | Hybrid BM25+cosine recall; optional `as_of`, MMR rerank (`filters._rerank=mmr`) |
 | `POST` | `/v1/context` | Token-budgeted, ready-to-inject context block (point-in-time + MMR aware) |
@@ -425,6 +427,7 @@ Built to run in a regulated production environment, not just to demo:
 - **Rate limiting** — per-API-key sliding window (Redis), fails open.
 - **Access control** — namespace-scoped keys, `read`/`write`/`admin` scopes, **RBAC roles** (`owner`/`analyst`/`compliance`/`readonly`), and SSO via gateway forward-auth.
 - **DB-layer information barriers** — `RESTRICTIVE` PostgreSQL RLS, **proven in CI** against a non-superuser role. *Run the app as a non-superuser DB role* — superusers bypass RLS.
+- **Memory admission control** — govern what's *allowed into* memory: PII/PHI/MNPI detection, source-trust, prompt-injection quarantine, and a high-risk review queue (`ADMISSION_MODE`). No other memory layer does this.
 - **SIEM streaming** — every audit event forwarded to Splunk HEC / Datadog / Elastic (`SIEM_URL`), fire-and-forget.
 - **Observability** — Prometheus metrics + Grafana, OpenTelemetry traces, JSON access logs with a request ID.
 - **Evaluation** — a judge-free memory-eval harness (`agentmem/benchmarks/memory_eval.py`) in the LoCoMo/LongMemEval shape.

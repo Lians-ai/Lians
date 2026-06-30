@@ -345,6 +345,34 @@ class NamespacePolicy(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
 
+class PendingAdmission(Base):
+    """
+    A memory write held for human review by admission control (enforce mode).
+
+    High-risk candidates (PII / PHI / MNPI) are parked here instead of being
+    written live; an admin approves (→ the memory is created) or rejects them.
+    Content is stored as submitted so a reviewer can see exactly what was held.
+    """
+    __tablename__ = "pending_admissions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    event_time = Column(DateTime(timezone=True), nullable=False)
+    source = Column(String, nullable=True)
+    subject_id = Column(String, nullable=True)
+    metadata_ = Column("metadata", JSON, nullable=False, server_default="{}")
+    importance = Column(Float, nullable=False, default=0.5)
+    risk_tags = Column(JSON, nullable=False, server_default="[]")
+    reasons = Column(JSON, nullable=False, server_default="[]")
+    status = Column(String, nullable=False, default="pending", index=True)  # pending|approved|rejected
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolver_note = Column(Text, nullable=True)
+    memory_id = Column(UUID(as_uuid=True), nullable=True)  # set when approved
+
+
 class IdempotencyKey(Base):
     """
     Maps a client-supplied Idempotency-Key (per namespace) to the memory it

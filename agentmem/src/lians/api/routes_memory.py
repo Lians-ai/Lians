@@ -1,10 +1,14 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Header
+from fastapi import APIRouter, Depends, Query, Header, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..config import get_settings
+from ..admission import evaluate as evaluate_admission
+from ..admission_service import record_rejection, enqueue_pending
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
@@ -29,10 +33,39 @@ async def create_memory(
 ):
     """
     Add a memory. Supply an ``Idempotency-Key`` header to make the write safe to
-    retry: a repeated request with the same key returns the original memory
-    instead of inserting a duplicate.
+    retry.
+
+    Memory admission control runs first (config ``admission_mode``): a write that
+    looks like prompt injection or comes from a blocked source is **rejected**
+    (422); one carrying PII/PHI/MNPI is **held for review** (202) in enforce mode.
+    In monitor mode (default) everything is admitted but tagged under
+    ``metadata._admission``.
     """
     auth.require("write")
+
+    settings = get_settings()
+    blocked = {s.strip().lower() for s in settings.admission_blocked_sources.split(",") if s.strip()}
+    decision = evaluate_admission(
+        req.content, req.source, mode=settings.admission_mode, blocked_sources=blocked,
+    )
+
+    if decision.action == "reject":
+        await record_rejection(db, auth.namespace, req.agent_id, decision)
+        raise HTTPException(status_code=422, detail={
+            "status": "rejected", "risk_tags": decision.risk_tags, "reasons": decision.reasons,
+        })
+
+    if decision.action == "review":
+        pending = await enqueue_pending(db, auth.namespace, req, decision)
+        return JSONResponse(status_code=202, content={
+            "status": "held_for_review", "pending_id": str(pending.id),
+            "risk_tags": decision.risk_tags, "reasons": decision.reasons,
+        })
+
+    # admitted — record any risk findings on the memory for downstream visibility
+    if decision.risk_tags:
+        req.metadata = {**(req.metadata or {}),
+                        "_admission": {"action": "admit", "risk_tags": decision.risk_tags}}
     return await add_memory_idempotent(db, auth.namespace, req, idempotency_key)
 
 

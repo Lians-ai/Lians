@@ -511,3 +511,35 @@ class ExtractedTriplet(BaseModel):
 class ExtractResult(BaseModel):
     extracted: list[ExtractedTriplet]
     edges: list[EdgeOut]
+
+
+# ── Admission control ───────────────────────────────────────────────────────────
+
+
+class PendingAdmissionOut(BaseModel):
+    id: UUID
+    namespace: str
+    agent_id: str
+    content: str
+    event_time: datetime
+    source: Optional[str]
+    subject_id: Optional[str]
+    risk_tags: list[str]
+    reasons: list[str]
+    status: str
+    created_at: datetime
+    resolved_at: Optional[datetime]
+    memory_id: Optional[UUID]
+
+    model_config = {"from_attributes": True}
+
+
+class AdmissionListResult(BaseModel):
+    pending: list[PendingAdmissionOut]
+    total: int
+    status_filter: Optional[str]
+
+
+class AdmissionResolveRequest(BaseModel):
+    action: str                       # approve | reject
+    note: Optional[str] = None
