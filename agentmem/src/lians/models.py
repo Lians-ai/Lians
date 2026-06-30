@@ -171,6 +171,9 @@ class ApiKey(Base):
     namespace = Column(String, nullable=False)
     label = Column(String, nullable=True)
     scopes = Column(JSON, nullable=False, server_default='["read"]')
+    # Optional named role (owner | analyst | compliance | readonly). When set, the
+    # role's scope set is merged with any explicit `scopes` at auth time.
+    role = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     rotated_at = Column(DateTime(timezone=True), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)

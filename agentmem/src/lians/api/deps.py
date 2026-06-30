@@ -15,9 +15,27 @@ from ..models import ApiKey
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
+# Named roles → scope sets (RBAC). A key's `role`, when set, is merged with any
+# explicit `scopes`. "compliance" gets read + admin (audit verify/export/erase)
+# but not write — it inspects and certifies, it does not author memories.
+ROLE_SCOPES: dict[str, list[str]] = {
+    "owner":      ["read", "write", "admin"],
+    "analyst":    ["read", "write"],
+    "compliance": ["read", "admin"],
+    "readonly":   ["read"],
+}
+
 
 def _hash_key(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _effective_scopes(key_row: ApiKey) -> list[str]:
+    scopes = set(key_row.scopes or [])
+    role = getattr(key_row, "role", None)
+    if role:
+        scopes.update(ROLE_SCOPES.get(role, []))
+    return sorted(scopes)
 
 
 class AuthContext:
@@ -82,5 +100,5 @@ async def get_auth(
 
     return AuthContext(
         namespace=key_row.namespace,
-        scopes=list(key_row.scopes or []),
+        scopes=_effective_scopes(key_row),
     )

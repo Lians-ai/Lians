@@ -94,6 +94,16 @@ class Settings(BaseSettings):
     # Set to True for any regulated deployment where data must not leave the network.
     airgap_mode: bool = False
 
+    # ── SIEM audit streaming ──────────────────────────────────────────────────
+    # When set, every audit-chain event is forwarded (fire-and-forget) to this
+    # HTTP collector — e.g. a Splunk HEC URL or a Datadog/Elastic intake. The
+    # token, if set, is sent as `Authorization: <siem_token>`. Empty = disabled.
+    siem_url: str = ""
+    siem_token: str = ""
+
+    # Opt-in LLM relationship extraction for /v1/graph/extract (else rule-based).
+    graph_extract_llm: bool = False
+
     # ── Performance roadmap (Changes 3 / 7 / 8) ───────────────────────────────
 
     # Change 3: async LLM adjudication worker.  When True, Stage-3 LLM verdicts

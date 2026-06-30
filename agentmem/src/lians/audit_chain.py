@@ -200,6 +200,24 @@ async def chain_log(
         except Exception:
             pass  # Merkle batching is optional — never block the hot path
 
+    # Fire-and-forget SIEM streaming — never blocks or fails the write path.
+    try:
+        from .siem import siem_enabled, stream_event
+        if siem_enabled():
+            import asyncio
+            asyncio.create_task(stream_event({
+                "id": str(row_id),
+                "namespace": namespace,
+                "agent_id": agent_id,
+                "op": op,
+                "memory_id": str(memory_id) if memory_id is not None else None,
+                "content_hash": content_hash,
+                "row_hash": row.row_hash,
+                "created_at": created_at_utc,
+            }))
+    except Exception:
+        pass
+
     return row
 
 

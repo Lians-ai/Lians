@@ -374,6 +374,7 @@ client.erase(subject_id, request_ref)                    # GDPR crypto-shred
 | `ADMIN_SECRET` | — | Protects `/v1/admin/*` — **change in production** |
 | `SUPERSESSION_LLM_STAGE` | `false` | Enables Stage 3 LLM adjudication (Claude Haiku) |
 | `AIRGAP_MODE` | `false` | Hard-fails at startup if any config would send data externally |
+| `SIEM_URL` | — | Stream every audit event to a SIEM collector (Splunk HEC / Datadog / Elastic) |
 | `STRIPE_API_KEY` | — | Enables per-namespace usage metering |
 
 Full reference: [agentmem/.env.example](agentmem/.env.example)
@@ -425,7 +426,9 @@ See [docs/testing.md](docs/testing.md) for the six named invariants (temporal so
 | Information barriers | `barrier_group` column; PostgreSQL RLS |
 | HIPAA §164.312 | Per-subject encryption, audit controls, transmission security |
 
-Full documentation: [docs/compliance.md](docs/compliance.md) · [docs/hipaa.md](docs/hipaa.md)
+Full documentation: [compliance.md](docs/compliance.md) · [hipaa.md](docs/hipaa.md) · [security-whitepaper.md](docs/security-whitepaper.md) · [threat-model.md](docs/threat-model.md) · [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md) · [sso.md](docs/sso.md)
+
+Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and RBAC roles (`owner`/`analyst`/`compliance`/`readonly`); SSO via gateway forward-auth (any OIDC/SAML IdP).
 
 ---
 
