@@ -3,7 +3,8 @@ name: Publish lians to PyPI
 on:
   push:
     tags:
-      - "lians-v*"
+      - "v*"         # unified release tag — one `vX.Y.Z` ships every language
+      - "lians-v*"   # Python-only tag (kept for back-compat)
 
 jobs:
   build:
@@ -44,3 +45,5 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true   # re-running a release tag is a no-op, not a failure

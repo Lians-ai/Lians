@@ -3,7 +3,8 @@ name: Publish lians to npm
 on:
   push:
     tags:
-      - "lians-ts-v*"
+      - "v*"            # unified release tag — one `vX.Y.Z` ships every language
+      - "lians-ts-v*"   # TypeScript-only tag (kept for back-compat)
 
 jobs:
   publish:

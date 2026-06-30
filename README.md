@@ -9,6 +9,8 @@
   -
   <a href="https://github.com/Lians-ai/Lians/tree/main/docs">Docs</a>
   -
+  <a href="docs/install.md">Install</a>
+  -
   <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
 </p>
 
@@ -344,10 +346,12 @@ healthcare/legal stacks.
 | **Python** | `pip install lians-sdk` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
 | **TypeScript / Node** | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
 | **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
-| **Java** (JVM 11+) | `dev.lians:lians-sdk:0.2.0` (Maven) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
+| **Java** (JVM 11+) | `dev.lians:lians-sdk:0.3.0` (Maven) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
 | **C** (C99 + libcurl) | `cmake --build build` | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
 
-All four cover the same REST API: recall, point-in-time `recall_at`, snapshot,
+→ **One-page install + 30-second quickstart for every language: [docs/install.md](docs/install.md)**
+
+All five cover the same REST API: recall, point-in-time `recall_at`, snapshot,
 backtest, crypto-shred erasure, audit-chain verify, and the relationship graph
 (`relate` / `neighbors` / `path`).
 

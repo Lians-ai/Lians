@@ -25,9 +25,9 @@ Pushing a `vX.Y.Z` tag triggers:
 - Python: `agentmem/sdk/python/pyproject.toml` → `version`
 - TypeScript: `agentmem/sdk/typescript/package.json` → `version`
 - Java: `agentmem/sdk/java/pom.xml` → `<version>`
-- C: `agentmem/sdk/c/src/lians.c` user-agent string
+- C: `agentmem/sdk/c/CMakeLists.txt` → `project(... VERSION ...)` **and** `src/lians.c` user-agent string
 - MCP: `server.json`; Claude plugin: `.claude-plugin/marketplace.json` + `integrations/lians-plugin/.claude-plugin/plugin.json`
-- Go: no file — the tag *is* the version
+- Go: `agentmem/sdk/go/version.go` → `Version` const (the resolvable version is still the git tag)
 
 ## Required secrets / setup (one-time)
 
