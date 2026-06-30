@@ -1,14 +1,14 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/images/banner.png" width="800px" alt="Lians — Financial-Grade Agent Memory">
+    <img src="docs/images/banner.png" width="800px" alt="Lians - Regulated AI Memory Infrastructure">
   </a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">Learn more</a>
-  ·
+  -
   <a href="https://github.com/Lians-ai/Lians/tree/main/docs">Docs</a>
-  ·
+  -
   <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
 </p>
 
@@ -34,26 +34,86 @@
 </p>
 
 <p align="center">
-  <a href="docs/benchmark.md"><strong> Benchmark: 0 stale facts in top-5 vs mem0's 4/4 — and 100% supersession accuracy →</strong></a>
+  <a href="docs/benchmark.md"><strong>Benchmark: 0 stale facts in top-5 vs mem0-style recall's 4/4, plus 100% supersession accuracy</strong></a>
 </p>
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is a **financial-grade memory layer** for AI agents — built for regulated environments where stale facts contaminate decisions, auditors demand point-in-time reconstruction, and data-subject erasure must be cryptographically provable.
+[Lians](https://github.com/Lians-ai/Lians) is **regulated AI memory infrastructure**: a memory control plane for agents that operate on time-sensitive, audited, confidential data.
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
-| **Best for** | Testing, prototyping | Teams, compliance deployments | Zero-ops production |
+| **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production |
 | **Setup** | `pip install lians-sdk[local]` | `docker compose up --build` | `pip install lians-sdk` + API key |
 | **Database** | SQLite (zero setup) | Postgres 16 + pgvector | Managed |
-| **Audit chain** | ✓ | ✓ | ✓ |
-| **GDPR erasure** | ✓ | ✓ | ✓ |
+| **Audit chain** | Yes | Yes | Yes |
+| **Crypto-shred erasure** | Yes | Yes | Yes |
+| **Information barriers** | Local checks | PostgreSQL RLS | Managed policy |
+| **Air-gap capable** | No | Yes | No |
 
 ---
 
-## MCP — Native tool in any AI client
+## The institutional memory problem
 
-Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.ebeirne/lians). Any MCP-compatible host — Claude Desktop, Cursor, VS Code, Windsurf, and others — can connect to your Lians server as a native tool with a one-time config. No SDK code, no custom adapter, no wrapper.
+Lians should be understood as a memory control plane for agents that operate on
+time-sensitive, audited, confidential data.
+
+Most memory layers help an agent remember. Lians is built for institutions that
+must also prove what the agent knew, when it knew it, where the fact came from,
+who was allowed to see it, whether stale facts were excluded, and whether erased
+content is cryptographically unrecoverable while the audit trail survives.
+
+That is the gap between useful memory and deployable memory in financial,
+medical, and legal environments.
+
+### What regulated memory must prove
+
+Generic agent memory optimizes for personalization and recall. Regulated agent
+memory has a different job: it must keep the agent's context correct, current,
+segregated, reproducible, and defensible under review.
+
+Lians is designed for the failure modes that matter in institutions:
+
+- **Stale fact contamination** - old rates, old guidance, old medication doses,
+  old damages estimates, or old client facts must not silently enter context.
+- **Point-in-time reconstruction** - an examiner, clinician, partner, or risk
+  committee may ask what the agent knew at a specific timestamp.
+- **Information barriers** - one desk, care team, or matter team must not read
+  another team's memory because of an application-layer bug.
+- **Erasure with audit survival** - private content must be removable without
+  breaking custody records, audit hashes, or legal retention evidence.
+- **Relational compliance checks** - conflicts of interest, related-party
+  exposure, and referral networks are graph questions, not plain vector search.
+
+The short competitive frame:
+
+> mem0 remembers. Zep connects. Lians proves what the agent knew, when it knew it,
+> who could see it, and whether that memory was allowed to influence a regulated
+> decision.
+
+### Built for regulated verticals
+
+| Vertical | What Lians proves | Product primitives |
+|---|---|---|
+| **Financial institutions** | No stale or future facts influenced a decision; desk barriers held; audit state is reconstructable | Bitemporal recall, backtest contamination checks, SEC/FINRA audit export, RLS information barriers, related-party graph paths |
+| **Healthcare organizations** | PHI access is scoped; care-team memory is reconstructable; patient erasure is provable | Per-subject encryption, crypto-shred certificates, HIPAA safeguard mapping, care-network graph, air-gap mode |
+| **Legal institutions** | Matter walls held; privilege cutoffs are reproducible; chain-of-custody survives erasure | Matter-level barriers, `recall_at` for privilege dates, audit reconstruction, conflict-of-interest graph paths |
+
+Procurement and technical review materials:
+
+- [Institutional proof kit](docs/institutional-proof-kit.md)
+- [Vertical pitch guide](docs/verticals.md)
+- [Competitive landscape](docs/competitive-landscape.md)
+- [Security whitepaper](docs/security-whitepaper.md)
+- [SOC 2 / HIPAA readiness](docs/soc2-hipaa-readiness.md)
+- [Threat model](docs/threat-model.md)
+- [Production deploy checklist](docs/deploy.md)
+
+---
+
+## MCP - Native tool in any AI client
+
+Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.ebeirne/lians). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can connect to your Lians server as a native tool with a one-time config. No SDK code, no custom adapter, no wrapper.
 
 Your agents get eight tools automatically:
 
@@ -220,7 +280,11 @@ Give any coding agent persistent, compliance-grade memory:
 
 ## Why Lians
 
-Financial AI agents accumulate facts that **change over time**: rate decisions supersede prior ones, guidance gets revised, price targets change. Systems like mem0 return all versions with equal rank — your LLM gets contaminated context.
+Institutional AI agents accumulate facts that **change over time**: rate decisions
+supersede prior ones, guidance gets revised, medication doses change, care plans
+evolve, damages estimates move, and matter facts are corrected during discovery.
+Systems that return every version with equal rank contaminate the LLM context with
+stale facts.
 
 Lians fixes this with a bitemporal model:
 - **event_time** — when the fact happened (business time)
@@ -454,23 +518,29 @@ Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and
 
 ---
 
-## Cloud & Pricing
+## Packaging & Pricing
 
-Lians is open-source and fully self-hostable. A managed cloud is also available at **[api.lians.dev](https://api.lians.dev)** — no infrastructure to run.
+Lians is open-source and fully self-hostable. Managed Cloud is available for
+customers whose compliance posture allows hosted processing; regulated buyers
+should choose the package by deployment boundary and evidence requirements, not
+by a consumer-style monthly tier.
 
-| Tier | Price | Memories / mo | Recalls / mo | Features |
-|------|-------|---------------|--------------|----------|
-| **Free** | $0 | 10,000 | 1,000 | Memory writes · recalls · semantic search |
-| **Starter** | $15 | 100,000 | 10,000 | + Domain adapters (finance, healthcare, legal) · Audit log |
-| **Growth** | $70 | 1,000,000 | 100,000 | + Conflict detection · Webhooks · Compliance reports · Merkle audit chain |
-| **Pro** | $200 | 10,000,000 | 1,000,000 | + Information barriers · HIPAA encryption · GDPR erasure certs · Backtest · Prometheus metrics |
-| **Enterprise** | Custom | Unlimited | Unlimited | + Air-gap mode · Custom KMS (AWS / Azure / Vault) · Dedicated onboarding · SLA |
+| Package | Best for | Deployment | Commercial model |
+|---|---|---|---|
+| **Developer** | Local prototypes, benchmarks, integrations | Local library or single-node server | Free / usage-based |
+| **Team** | Internal pilots and non-production agent workflows | Docker or small Kubernetes deployment | Usage-based or team plan |
+| **Regulated Production** | Sensitive, audited, time-dependent agent workloads | Customer cloud, private VPC, or on-prem | Annual contract |
+| **Enterprise / Air-Gap** | Banks, hospitals, law firms, insurers, government | Private cloud, on-prem, or air-gapped | Custom annual contract |
+| **Managed Cloud** | Zero-ops production where hosted processing is approved | Lians-managed environment | Contract or usage-based |
 
-The Free tier never expires and requires no credit card. Use `pip install lians-sdk` and point `LIANS_URL` at `https://api.lians.dev` with your free API key.
+Healthcare customers require an executed BAA before PHI is processed in a
+managed environment. Financial and legal customers may require customer-managed
+keys, private networking, regional residency, dedicated environments, or
+air-gapped deployment.
 
-Full pricing and billing documentation: [docs/pricing-tiers.md](docs/pricing-tiers.md) · [docs/billing.md](docs/billing.md)
+Full packaging documentation: [docs/pricing-tiers.md](docs/pricing-tiers.md) and [docs/billing.md](docs/billing.md)
 
-**Switching from another system?** [Migrate from mem0 →](docs/migrate-from-mem0.md) · [Migrate from Zep CE →](docs/migrate-from-zep.md)
+**Switching from another system?** [Migrate from mem0](docs/migrate-from-mem0.md) or [Migrate from Zep CE](docs/migrate-from-zep.md)
 
 ---
 
