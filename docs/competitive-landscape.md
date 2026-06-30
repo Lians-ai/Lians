@@ -182,7 +182,11 @@ These are real markets, but they dilute Lians' institutional wedge.
    injection quarantine, and high-risk fact approval queues.
 2. **Independent benchmark harness.** Run Lians, mem0, Zep/Graphiti, Hindsight,
    Supermemory, and Honcho where APIs permit. Separate "tested" from
-   "docs-claimed."
+   "docs-claimed." → **Shipped:** [docs/regulated-eval-results.md](regulated-eval-results.md)
+   scores the five regulated invariants head-to-head (Lians 5.0 / mem0 1.0 /
+   Zep 2.0). Lians is executed live; competitors are scored from their public API
+   surface via runnable adapters (`agentmem/benchmarks/compare_regulated.py`), and
+   any reader with keys can re-run the live competitor columns.
 3. **Connector proof, not connector sprawl.** Build one finance connector, one
    healthcare connector, and one legal connector that show the vertical story.
 4. **WORM / immutable storage reference.** SEC 17a-4 buyers will ask for this.

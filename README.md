@@ -326,6 +326,7 @@ closed cloud. Lians keeps the graph **and** the open compliance spine.
 → [docs/compare-zep.md](docs/compare-zep.md)
 
 → Full benchmark numbers: [docs/benchmark.md](docs/benchmark.md)
+→ Regulated-eval head-to-head (five compliance invariants, Lians **5.0** / Zep **2.0** / mem0 **1.0**): [docs/regulated-eval-results.md](docs/regulated-eval-results.md) — Lians executed live; competitors scored from their public API surface via runnable adapters you can re-run with keys.
 
 ---
 
