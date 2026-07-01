@@ -221,13 +221,14 @@ class TestRateLimitMiddleware:
         assert resp.status_code in (200, 503)
 
     async def test_over_limit_returns_429(self, client):
-        """When Redis returns a count above the limit, respond with 429."""
-        from src.lians.middleware import RateLimitMiddleware
+        """When Redis returns a count above the configured limit, respond with 429."""
+        from src.lians.config import get_settings
 
+        limit = get_settings().rate_limit_per_minute
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            # Simulate count already exceeding the 300 req/min default
-            r.incr = AsyncMock(return_value=301)
+            # One past the configured limit — independent of the ambient value.
+            r.incr = AsyncMock(return_value=limit + 1)
             r.expire = AsyncMock()
             mock_redis.return_value = r
 
@@ -244,9 +245,12 @@ class TestRateLimitMiddleware:
         assert resp.headers["Retry-After"] == "60"
 
     async def test_429_includes_ratelimit_headers(self, client):
+        from src.lians.config import get_settings
+
+        limit = get_settings().rate_limit_per_minute
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=999)
+            r.incr = AsyncMock(return_value=limit + 699)
             r.expire = AsyncMock()
             mock_redis.return_value = r
 
@@ -257,7 +261,9 @@ class TestRateLimitMiddleware:
             )
 
         assert resp.status_code == 429
-        assert resp.headers.get("X-RateLimit-Limit") == "300"
+        # The header reflects the *configured* limit — the regression this proves
+        # is that the middleware is wired to the setting, not the hardcoded 300.
+        assert resp.headers.get("X-RateLimit-Limit") == str(limit)
         assert resp.headers.get("X-RateLimit-Remaining") == "0"
 
     async def test_redis_down_fails_open(self, client):
@@ -296,3 +302,23 @@ class TestRateLimitMiddleware:
             )
         # Auth middleware should 401, not rate limiter 429
         assert resp.status_code == 401
+
+    def test_configured_limit_is_wired_into_the_middleware(self):
+        """RATE_LIMIT_PER_MINUTE must actually reach the middleware.
+
+        Regression: the app added RateLimitMiddleware with no argument, so the
+        middleware used its hardcoded 300 default and the documented, tunable
+        RATE_LIMIT_PER_MINUTE setting had no effect in any deployment.
+        """
+        from src.lians.main import app
+        from src.lians.middleware import RateLimitMiddleware
+        from src.lians.config import get_settings
+
+        entry = next(m for m in app.user_middleware if m.cls is RateLimitMiddleware)
+        wired = entry.kwargs.get("requests_per_minute")
+        if wired is None and entry.args:
+            wired = entry.args[0]
+        assert wired == get_settings().rate_limit_per_minute, (
+            "RateLimitMiddleware is not wired to the configured limit — "
+            "RATE_LIMIT_PER_MINUTE is being ignored"
+        )
