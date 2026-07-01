@@ -544,6 +544,7 @@ async def recall_memories(
                             ks.set_attribute("keyed_hit", True)
                             span.set_attribute("router", "keyed")
                             mem_out = _memory_to_out(mem, content)
+                            mem_out.score = 1.0  # exact keyed match
                             result = RecallResult(
                                 memories=[mem_out],
                                 as_of=None,
@@ -624,9 +625,11 @@ async def recall_memories(
 
         # hybrid_recall always returns Memory objects (Change 1 fetch-back ensures this)
         with tracer.start_as_current_span("recall.assemble"):
-            memories_out: list[MemoryOut] = [
-                _memory_to_out(mem, content) for mem, _score, content in results
-            ]
+            memories_out: list[MemoryOut] = []
+            for mem, _score, content in results:
+                mem_out = _memory_to_out(mem, content)
+                mem_out.score = _score
+                memories_out.append(mem_out)
 
         recall_log = await chain_log(
             db, namespace=namespace, agent_id=req.agent_id,

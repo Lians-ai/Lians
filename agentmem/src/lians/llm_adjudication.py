@@ -40,6 +40,7 @@ Metadata: {meta}
 
 Classify the relationship. Choose exactly one:
 - SUPERSEDES  : NEW has a genuinely different value — the old fact is now stale.
+- REFINES     : NEW keeps the old value but narrows it (adds scope, segment, or precision).
 - CONFIRMS    : NEW expresses the same underlying value as OLD (paraphrase, rounding, unit variant).
 - ADDS        : NEW is a related but distinct attribute — both facts remain valid.
 - CONTRADICTS_SAME_TIME : conflicting values with no clear temporal ordering.
@@ -47,8 +48,9 @@ Classify the relationship. Choose exactly one:
 Rules:
 1. A paraphrase or restatement of the same number → CONFIRMS, never SUPERSEDES.
 2. A different numeric value (beyond rounding) → SUPERSEDES.
-3. When uncertain, prefer SUPERSEDES in finance — missing a real update is worse than a false confirm.
-4. Rationale must be one sentence max.
+3. Same value with added qualification or scope → REFINES, not CONFIRMS.
+4. When uncertain, prefer SUPERSEDES in finance — missing a real update is worse than a false confirm.
+5. Rationale must be one sentence max.
 
 Return ONLY valid JSON, no markdown fences:
 {{"relation":"...","confidence":0.0,"rationale":"..."}}"""

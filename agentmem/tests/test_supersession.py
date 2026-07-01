@@ -149,3 +149,102 @@ class TestClassifyRelation:
         overlap = _metadata_overlap(meta_a, meta_b)
         assert "cusip" in overlap
         assert "metric" in overlap
+
+
+class TestRefines:
+    """REFINES — narrowing relation harvested from the Memory Governor vocabulary."""
+
+    def test_narrowing_newer_fact_refines(self):
+        relation, conf = classify_relation(
+            old_content="NVDA Q3 guidance $36B",
+            new_content="NVDA Q3 guidance $36B for the data-center segment only",
+            old_event_time=T0,
+            new_event_time=T1,
+            old_meta=META_NVDA_GUIDANCE,
+            new_meta=META_NVDA_GUIDANCE,
+        )
+        assert relation == "REFINES"
+        assert conf >= 0.7
+
+    def test_narrowing_same_time_refines_not_contradicts(self):
+        """A same-time narrowing agrees with the old fact — it must not raise a conflict."""
+        relation, _ = classify_relation(
+            old_content="NVDA Q3 guidance $36B",
+            new_content="NVDA Q3 guidance $36B excluding China exports",
+            old_event_time=T1,
+            new_event_time=T1,
+            old_meta=META_NVDA_GUIDANCE,
+            new_meta=META_NVDA_GUIDANCE,
+        )
+        assert relation == "REFINES"
+
+    def test_changed_value_still_supersedes(self):
+        """A genuine value update breaks token containment — SUPERSEDES, not REFINES."""
+        relation, _ = classify_relation(
+            old_content="NVDA Q3 guidance $32B",
+            new_content="NVDA Q3 guidance raised to $36B",
+            old_event_time=T0,
+            new_event_time=T1,
+            old_meta=META_NVDA_GUIDANCE,
+            new_meta=META_NVDA_GUIDANCE,
+        )
+        assert relation == "SUPERSEDES"
+
+    def test_older_narrowing_does_not_refine(self):
+        """An out-of-order (earlier) narrowing cannot refine the current state."""
+        relation, _ = classify_relation(
+            old_content="NVDA Q3 guidance $36B",
+            new_content="NVDA Q3 guidance $36B for data-center only",
+            old_event_time=T1,
+            new_event_time=T0,  # new is earlier
+            old_meta=META_NVDA_GUIDANCE,
+            new_meta=META_NVDA_GUIDANCE,
+        )
+        assert relation == "ADDS"
+
+    def test_identical_content_confirms_not_refines(self):
+        """Equality is CONFIRMS; REFINES requires strictly more detail."""
+        relation, _ = classify_relation(
+            old_content="NVDA Q3 guidance $36B",
+            new_content="NVDA Q3 guidance $36B",
+            old_event_time=T0,
+            new_event_time=T1,
+            old_meta=META_NVDA_GUIDANCE,
+            new_meta=META_NVDA_GUIDANCE,
+        )
+        assert relation == "CONFIRMS"
+
+
+@pytest.mark.asyncio
+async def test_free_text_narrowing_refines_end_to_end(db):
+    """Unkeyed free-text facts find candidates by embedding similarity alone,
+    and a narrowing closes the old validity window under the REFINES label.
+
+    Before this path existed, run_supersession only reached Stage 1 for facts
+    with no structured keys — but Stage 1 required structured-key overlap, so
+    free-text supersession could never fire at all.
+    """
+    from src.lians.schemas import MemoryAdd
+    from src.lians.memory_service import add_memory
+    from src.lians.supersession import run_supersession
+    from src.lians.embeddings import get_embedding_provider
+
+    old = await add_memory(db, "test-ns", MemoryAdd(
+        agent_id="agent-1",
+        content="the fund prefers renewable infrastructure holdings",
+        event_time=T0,
+        metadata={},
+    ))
+
+    provider = get_embedding_provider()
+    emb = await provider.embed_one("the fund prefers renewable infrastructure holdings")
+
+    result = await run_supersession(
+        db=db, namespace="test-ns", agent_id="agent-1",
+        new_content="the fund prefers renewable infrastructure holdings in southeast asia only",
+        new_meta={},
+        new_embedding=emb,
+        new_event_time=T1,
+    )
+    assert result.relation == "REFINES"
+    assert result.superseded_ids == [old.id]

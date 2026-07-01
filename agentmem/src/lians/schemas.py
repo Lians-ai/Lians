@@ -33,6 +33,10 @@ class MemoryOut(BaseModel):
     content_hash: str
     erased_at: Optional[datetime]
     metadata: dict[str, Any]
+    # Relevance score (hybrid semantic+lexical fusion) — populated on recall
+    # responses only; None on write/snapshot surfaces. Additive for API
+    # consumers that rank or threshold on similarity (e.g. the Memory Governor).
+    score: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -97,7 +101,7 @@ class ApiKeyCreated(ApiKeyOut):
 
 
 class SupersessionResult(BaseModel):
-    relation: str           # SUPERSEDES | CONFIRMS | ADDS | CONTRADICTS_SAME_TIME
+    relation: str           # SUPERSEDES | REFINES | CONFIRMS | ADDS | CONTRADICTS_SAME_TIME
     confidence: float
     superseded_ids: list[UUID] = Field(default_factory=list)
     conflict_ids: list[UUID] = Field(default_factory=list)  # memories that CONTRADICTS_SAME_TIME

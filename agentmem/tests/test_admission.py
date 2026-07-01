@@ -46,6 +46,27 @@ def test_decision_modes():
     assert d.action == "reject" and "source:blocked" in d.risk_tags
 
 
+def test_vagueness_prefilter():
+    """Too-vague candidates are tagged, and rejected in enforce mode
+    (harvested from the Memory Governor's IGNORE action — governor-integration Phase 3)."""
+    from src.lians.admission import is_too_vague
+    assert is_too_vague("ok")
+    assert is_too_vague("yes boss")
+    assert not is_too_vague("NVDA guidance $36B")
+
+    assert "vague" in detect_risk_tags("ok then")
+    assert "vague" not in detect_risk_tags("the quarterly review went well")
+
+    d = evaluate("ok then", "chat", mode="enforce")
+    assert d.action == "reject"
+    assert "too vague to be a durable memory" in d.reasons
+    # Monitor mode observes but still admits.
+    assert evaluate("ok then", "chat", mode="monitor").action == "admit"
+    # Unsafe findings outrank vagueness in the reject reason.
+    d = evaluate("hi", "scraped", mode="enforce", blocked_sources={"scraped"})
+    assert "block list" in d.reasons[0]
+
+
 # ── Endpoint ────────────────────────────────────────────────────────────────────
 
 

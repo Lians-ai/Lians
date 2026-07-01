@@ -94,7 +94,11 @@ async def test_event_trail_included_in_reconstruction(db):
                   metadata={"ticker": "NVDA", "metric": "guidance"}),
     )
 
-    result = await reconstruct(db, NS, AGENT, as_of=T2)
+    # The event trail filters on created_at (wall-clock ingestion time), so the
+    # as_of must be in the *real* future — a fixed date is a time bomb that
+    # starts failing the day the calendar catches up with it (it did: 2026-07-01).
+    result = await reconstruct(db, NS, AGENT,
+                               as_of=datetime.now(timezone.utc) + timedelta(days=1))
     assert len(result.event_trail) >= 1
     ops = [e["op"] for e in result.event_trail]
     assert "add" in ops, "Event trail must contain the add operation"

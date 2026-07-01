@@ -11,9 +11,16 @@ for unkeyed free-text is moved to an async worker (off the write path) when
 
 Relations:
   SUPERSEDES           — same entity+attribute, newer event_time, values differ
+  REFINES              — new fact narrows the old (contains everything the old
+                         said, plus detail); old validity closes like SUPERSEDES
+                         but the audit trail records a narrowing, not a stale value
   CONFIRMS             — same entity+attribute, same value
   ADDS                 — related topic, distinct attribute
   CONTRADICTS_SAME_TIME — conflicting values, no clear temporal ordering
+
+REFINES is harvested from the Memory Governor's proposal vocabulary
+(docs/governor-integration.md Phase 3) so Governor proposals and engine
+relations stay interoperable.
 """
 from __future__ import annotations
 
@@ -151,6 +158,22 @@ def _metadata_overlap(old_meta: dict, new_meta: dict) -> set[str]:
     return {k for k in shared if old_n[k] == new_n[k]}
 
 
+def _narrows(old_content: Optional[str], new_content: str) -> bool:
+    """True when NEW restates everything OLD said and adds detail (a narrowing).
+
+    Token-set containment, same tokenizer as the Governor's similarity(): the
+    old fact's tokens must be a *proper* subset of the new fact's. A changed
+    value breaks containment (the old value's token is missing), so genuine
+    updates still classify as SUPERSEDES.
+    """
+    if not old_content:
+        return False
+    import re as _re
+    old_tokens = set(_re.findall(r"[a-z0-9]+", old_content.lower()))
+    new_tokens = set(_re.findall(r"[a-z0-9]+", new_content.lower()))
+    return bool(old_tokens) and old_tokens < new_tokens
+
+
 def _cosine(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
@@ -255,7 +278,13 @@ async def find_supersession_candidates(
     new_embedding: list[float],
     new_event_time: datetime,
 ) -> list[Memory]:
-    """Stage 1: find prior valid memories sharing structured keys + high cosine sim."""
+    """Stage 1: find prior valid memories sharing structured keys + high cosine sim.
+
+    Keyed facts require structured-key overlap. Unkeyed (free-text) facts fall
+    back to pure embedding similarity — without this, free-text memories could
+    never supersede or refine each other, because run_supersession only routes
+    here when the new fact has no structured keys.
+    """
     stmt = select(Memory).where(
         and_(
             Memory.namespace == namespace,
@@ -267,22 +296,18 @@ async def find_supersession_candidates(
     result = await db.execute(stmt)
     candidates = result.scalars().all()
 
+    new_structured = _norm_meta(new_meta or {})
     filtered = []
     for mem in candidates:
-        if not new_meta or mem.metadata_ is None:
-            continue
-        old_meta = dict(mem.metadata_)
-        overlap = _metadata_overlap(old_meta, new_meta)
-        if not overlap:
-            continue
+        old_meta = dict(mem.metadata_ or {})
 
-        new_structured = _norm_meta(new_meta)
-        old_structured = _norm_meta(old_meta)
-        full_match = bool(new_structured) and new_structured == old_structured
-
-        if full_match:
-            filtered.append(mem)
-            continue
+        if new_structured:
+            overlap = _metadata_overlap(old_meta, new_meta)
+            if not overlap:
+                continue
+            if new_structured == _norm_meta(old_meta):
+                filtered.append(mem)
+                continue
 
         if mem.embedding is None:
             continue
@@ -325,6 +350,12 @@ def classify_relation(
 
     if same_value:
         return "CONFIRMS", 0.9
+    # Narrowing: the new fact restates the old and adds detail. Not a stale
+    # value (SUPERSEDES) and not a disagreement (CONTRADICTS) — the Governor's
+    # REFINE, now first-class here. Only when the new fact isn't older: an
+    # earlier narrowing can't refine the current state.
+    if temporal_order != "old_is_later" and _narrows(old_content, new_content):
+        return "REFINES", 0.8
     if temporal_order == "new_is_later":
         return "SUPERSEDES", 0.85
     if temporal_order == "same_time":
@@ -405,7 +436,7 @@ async def run_supersession(
 
         rationale: Optional[str] = None
         if (
-            relation == "SUPERSEDES"
+            relation in ("SUPERSEDES", "REFINES")
             and settings.supersession_llm_stage
             and old_content is not None
         ):
@@ -434,11 +465,19 @@ async def run_supersession(
             best_relation = "SUPERSEDES"
             best_confidence = confidence
             best_rationale = rationale
-        elif relation == "CONTRADICTS_SAME_TIME" and best_relation != "SUPERSEDES":
+        elif relation == "REFINES":
+            # Narrowing closes the old validity window exactly like SUPERSEDES;
+            # only the audit label differs.
+            superseded_ids.append(candidate.id)
+            if best_relation != "SUPERSEDES":
+                best_relation = "REFINES"
+                best_confidence = confidence
+                best_rationale = rationale
+        elif relation == "CONTRADICTS_SAME_TIME" and best_relation not in ("SUPERSEDES", "REFINES"):
             conflict_ids.append(candidate.id)
             best_relation = "CONTRADICTS_SAME_TIME"
             best_confidence = confidence
-        elif relation == "CONFIRMS" and best_relation not in ("SUPERSEDES", "CONTRADICTS_SAME_TIME"):
+        elif relation == "CONFIRMS" and best_relation not in ("SUPERSEDES", "REFINES", "CONTRADICTS_SAME_TIME"):
             best_relation = "CONFIRMS"
             best_confidence = confidence
             best_rationale = rationale

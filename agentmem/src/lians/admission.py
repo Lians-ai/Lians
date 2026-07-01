@@ -44,6 +44,17 @@ _INJECTION = re.compile(
     r"reveal your (?:system )?prompt|"
     r"you are now (?:a|an|in)|override your (?:instructions|guardrails))", re.I)
 
+# Vagueness pre-filter: a durable fact needs at least this many meaningful tokens.
+# Same tokenizer as the Memory Governor's vagueness rule (governor-integration
+# Phase 3) so the two layers agree on what is too vague to store.
+_TOKEN = re.compile(r"[a-z0-9]+")
+_MIN_DURABLE_TOKENS = 3
+
+
+def is_too_vague(content: str) -> bool:
+    """True when ``content`` is too vague to be a durable memory (e.g. "ok", "yes boss")."""
+    return len(set(_TOKEN.findall(content.lower()))) < _MIN_DURABLE_TOKENS
+
 
 def _luhn_ok(digits: str) -> bool:
     s = [int(c) for c in digits if c.isdigit()]
@@ -73,6 +84,8 @@ def detect_risk_tags(content: str) -> list[str]:
         tags.append("mnpi")
     if _INJECTION.search(content):
         tags.append("injection")
+    if is_too_vague(content):
+        tags.append("vague")
     return tags
 
 
@@ -98,6 +111,8 @@ def evaluate(
 
     - **injection** or a **blocked source** → reject in enforce mode (never safe to
       admit silently).
+    - **too vague** to be a durable fact → reject in enforce mode (noise control:
+      "ok", "yes boss" must not become memories).
     - **PII / PHI / MNPI** present → hold for review in enforce mode.
     - Otherwise → admit. In monitor mode everything is admitted but tagged.
     """
@@ -121,6 +136,9 @@ def evaluate(
                 reasons.append("prompt-injection / instruction-override detected")
             if "source:blocked" in tags:
                 reasons.append(f"source '{src}' is on the block list")
+            return AdmissionDecision("reject", tags, reasons)
+        if "vague" in tags:
+            reasons.append("too vague to be a durable memory")
             return AdmissionDecision("reject", tags, reasons)
         if high_risk:
             reasons.append("sensitive data (PII/PHI/MNPI) requires review before admission")
