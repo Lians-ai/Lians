@@ -5,7 +5,7 @@ services:
     plan: standard
     region: oregon
     branch: master
-    buildCommand: pip install -e ".[otel]"
+    buildCommand: pip install -e ".[otel,metrics]"
     # Render provides a bare postgresql:// URL, but the app's parse_db_url()
     # expects postgresql+asyncpg:// (SQLAlchemy async). Rewrite the scheme in
     # both the migration and start commands. Migrations run here (preDeploy),
@@ -39,6 +39,8 @@ services:
         sync: false
       - key: SUPERSESSION_LLM_STAGE
         value: "true"
+      - key: GRAPH_EXTRACT_LLM
+        value: "true"          # enable opt-in LLM graph extraction (use_llm=true)
       - key: RECALL_CACHE_ENABLED
         value: "true"
       - key: RECALL_CACHE_TTL_SECONDS

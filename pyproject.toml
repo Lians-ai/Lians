@@ -43,6 +43,9 @@ otel = [
     "opentelemetry-instrumentation-sqlalchemy>=0.45b0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.24.0",
 ]
+metrics = [
+    "prometheus-client>=0.20.0",
+]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",

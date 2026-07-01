@@ -98,3 +98,63 @@ async def llm_adjudicate(
     result: tuple[str, float, str] = (relation, confidence, rationale)
     _CACHE[key] = result
     return result
+
+
+_EXTRACT_PROMPT = """\
+You extract relationship triplets from text to build a knowledge graph for
+regulated industries (finance, legal, healthcare). Extract every relationship
+EXPLICITLY stated in the text as (source_entity, relation_type, destination_entity).
+
+Rules:
+- Entities are proper nouns (people, companies, funds, products, matters).
+  Use the shortest unambiguous surface form; drop trailing punctuation.
+- relation_type is lowercase snake_case (e.g. works_at, owns, controls, acquired,
+  subsidiary_of, has_cfo, advises, represents, adverse_to, referred, director_of).
+- Only extract what is explicitly stated. Do NOT infer or hallucinate.
+- Return an empty list if there are no clear relationships.
+
+TEXT:
+{text}
+
+Return ONLY valid JSON, no markdown fences:
+{{"triplets":[{{"src":"...","rel":"...","dst":"..."}}]}}"""
+
+
+async def extract_triplets(text: str) -> list[tuple[str, str, str]]:
+    """
+    LLM relationship extraction for the graph builder (Graphiti-style, opt-in).
+
+    Returns ``(src, rel_type, dst)`` triplets. Best-effort: any error (missing
+    key, bad JSON, network) returns an empty list so ``graph_extract`` can fall
+    back to the deterministic extractor without a hard dependency on the model.
+    """
+    settings = get_settings()
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key or None,  # None → ANTHROPIC_API_KEY env var
+        )
+        message = await client.messages.create(
+            model=settings.llm_adjudication_model,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": _EXTRACT_PROMPT.format(text=text)}],
+        )
+        raw = message.content[0].text.strip()
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+
+    out: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for t in parsed.get("triplets", []):
+        try:
+            src = str(t["src"]).strip()
+            rel = str(t["rel"]).strip().lower().replace(" ", "_")
+            dst = str(t["dst"]).strip()
+        except (KeyError, TypeError, AttributeError):
+            continue
+        triplet = (src, rel, dst)
+        if src and rel and dst and src != dst and triplet not in seen:
+            seen.add(triplet)
+            out.append(triplet)
+    return out
