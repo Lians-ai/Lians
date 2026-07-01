@@ -34,7 +34,7 @@ services:
       - key: API_SECRET_SEED
         generateValue: true  # MUST NOT be the dev default (keys become forgeable)
       - key: CORS_ORIGINS
-        sync: false          # comma-separated trusted origins, e.g. https://<your-site>
+        value: "https://lians.ai,https://www.lians.ai"
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: SUPERSESSION_LLM_STAGE
