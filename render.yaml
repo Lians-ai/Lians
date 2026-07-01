@@ -6,7 +6,12 @@ services:
     region: oregon
     branch: master
     buildCommand: pip install -e ".[otel]"
-    startCommand: uvicorn agentmem.main:app --host 0.0.0.0 --port $PORT
+    # Migrations run here (not as a separate worker): preDeploy runs after the
+    # build and before the new version goes live. alembic.ini uses relative
+    # paths (script_location=alembic, prepend_sys_path=.), so it must run from
+    # inside agentmem/.
+    preDeployCommand: cd agentmem && alembic upgrade head
+    startCommand: uvicorn lians.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -23,7 +28,7 @@ services:
       - key: VOYAGE_API_KEY
         sync: false          # set in Render dashboard
       - key: MASTER_ENCRYPTION_KEY
-        generateValue: true  # 32-byte random — generated once, pinned forever
+        generateValue: true  # base64 256-bit — decodes to 32 bytes; pinned forever
       - key: ADMIN_SECRET
         generateValue: true
       - key: ANTHROPIC_API_KEY
@@ -41,29 +46,16 @@ services:
       - key: PYTHONPATH
         value: agentmem/src
 
-  - type: worker
-    name: agentmem-migrate
-    runtime: python
+  # Redis is a service (type: redis), not a database entry.
+  - type: redis
+    name: agentmem-redis
     plan: starter
-    branch: master
-    buildCommand: pip install -e .
-    startCommand: alembic -c agentmem/alembic.ini upgrade head
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: agentmem-pg
-          property: connectionString
-      - key: PYTHONPATH
-        value: agentmem/src
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
 
 databases:
   - name: agentmem-pg
     plan: standard
+    region: oregon
     databaseName: agentmem
     user: agentmem
-
-# Redis
-  - type: redis
-    name: agentmem-redis
-    plan: starter
-    maxmemoryPolicy: allkeys-lru
