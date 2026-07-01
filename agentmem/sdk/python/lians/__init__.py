@@ -46,7 +46,6 @@ Install with extras::
 """
 from .sync_client import LiansClient
 from .client import AsyncLiansClient
-from .local_client import LocalLiansClient
 from .harness import (
     LiansMemoryHarness,
     RecalledMemory,
@@ -57,7 +56,16 @@ from .harness import (
 # Backward-compatibility aliases
 AgentMemClient = LiansClient
 AsyncAgentMemClient = AsyncLiansClient
-LocalAgentMemClient = LocalLiansClient
+
+
+def __getattr__(name: str):
+    # LocalLiansClient needs the optional [local] extra (sqlalchemy/aiosqlite).
+    # Import it lazily so a plain `pip install lians-sdk` — whose only core
+    # dependency is httpx — can `import lians` without crashing.
+    if name in ("LocalLiansClient", "LocalAgentMemClient"):
+        from .local_client import LocalLiansClient
+        return LocalLiansClient
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "LiansClient",
