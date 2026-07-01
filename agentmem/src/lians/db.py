@@ -29,9 +29,11 @@ rows matching the group are visible.
 
 ``rls_barriers_enabled=True`` is the default after migration 0011 is applied.
 """
+import contextvars
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from typing import Optional
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 from .config import get_settings
@@ -84,6 +86,36 @@ def _make_engine():
 
 engine = _make_engine()
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+
+# ── Row-Level Security namespace, re-applied on every transaction ─────────────
+# get_auth() records the caller's namespace here. The begin listener below then
+# re-applies it as the transaction-local ``app.current_namespace`` GUC at the
+# start of EVERY transaction — crucially including ones autobegun after a
+# mid-request ``commit()``. Without this, commit() clears the is_local GUC and
+# the next query (e.g. ``db.refresh`` / metering after a write) runs with no
+# namespace set, so RLS hides the just-written row and the request 500s even
+# though the data committed. The ContextVar is task-local, so pooled connections
+# never leak one tenant's namespace into another request.
+current_namespace: contextvars.ContextVar = contextvars.ContextVar(
+    "agentmem_current_namespace", default=None
+)
+
+
+def set_current_namespace(namespace: Optional[str]) -> None:
+    current_namespace.set(namespace)
+
+
+@event.listens_for(engine.sync_engine, "begin")
+def _apply_rls_namespace(conn) -> None:
+    ns = current_namespace.get()
+    if not ns:
+        return
+    # Runs on the just-begun transaction inside the async greenlet. ns is an
+    # internal value (ns_<id> / __admin__); set_config takes no bind params in
+    # this raw context, so escape single quotes defensively.
+    safe = ns.replace("'", "''")
+    conn.exec_driver_sql(f"SELECT set_config('app.current_namespace', '{safe}', true)")
 
 
 async def get_db() -> AsyncSession:

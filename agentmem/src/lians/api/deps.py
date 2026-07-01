@@ -10,7 +10,7 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db
+from ..db import get_db, set_current_namespace
 from ..models import ApiKey
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -98,7 +98,11 @@ async def get_auth(
 
     # Enforce namespace isolation at the Postgres layer — any query that runs
     # on this session after this point can only see rows matching the namespace.
+    # _set_rls_namespace covers the current (already-open) transaction;
+    # set_current_namespace lets the db "begin" listener re-apply it to any
+    # later transaction autobegun after a mid-request commit().
     await _set_rls_namespace(db, key_row.namespace)
+    set_current_namespace(key_row.namespace)
 
     return AuthContext(
         namespace=key_row.namespace,
