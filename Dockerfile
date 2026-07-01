@@ -45,4 +45,7 @@ WORKDIR /app/agentmem
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.lian.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# The package is pip-installed (import name "lians") — do not reference the
+# src tree by path here; src.lian.main was a stale pre-rename path that made
+# the compose api service crash-loop while Render masked it via startCommand.
+CMD ["uvicorn", "lians.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
