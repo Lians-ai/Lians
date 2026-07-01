@@ -201,6 +201,25 @@ async def add_memory(
         provider = get_embedding_provider()
         embedding = await provider.embed_one(req.content)
 
+        # Auto-metadata (auto-supersession parity): when the caller supplied no
+        # structured keys, derive them from the content so the deterministic
+        # keyed-supersession fast path can fire on a plain-text write. Opt-in
+        # (auto_metadata_enabled); caller keys are never overridden; provenance
+        # is tagged under metadata._auto_meta. Fail-open — never blocks the write.
+        settings = get_settings()
+        if settings.auto_metadata_enabled:
+            try:
+                from .auto_metadata import enrich_metadata
+                from .adapters import get_adapter
+                enriched_meta, auto_prov = await enrich_metadata(
+                    req.content, req.metadata or {}, adapter=get_adapter(), settings=settings,
+                )
+                if auto_prov is not None:
+                    req.metadata = enriched_meta
+                    span.set_attribute("auto_metadata_keys", ",".join(auto_prov["keys"]))
+            except Exception:
+                pass  # fail-open: enrichment must never break ingestion
+
         # Change 6: DEK resolved through cache
         subject_key: Optional[bytes] = None
         if req.subject_id:

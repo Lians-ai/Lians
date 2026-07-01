@@ -104,6 +104,23 @@ class Settings(BaseSettings):
     # Opt-in LLM relationship extraction for /v1/graph/extract (else rule-based).
     graph_extract_llm: bool = False
 
+    # ── Auto-metadata extraction (auto-supersession parity) ───────────────────
+    # When True, a memory ingested WITHOUT any structured keys has them derived
+    # from its content at write time (via the active domain adapter) so the
+    # deterministic keyed-supersession fast path can fire — the mem0/Zep-style
+    # "just send text and we work out what it supersedes" convenience.
+    #
+    # Kept in the regulated-determinism posture: the extractor is rule-based by
+    # default (auditable, reproducible, no network), caller-supplied keys are
+    # never overridden, and every auto-derived key is provenance-tagged under
+    # metadata._auto_meta.  Off by default — existing deployments keep
+    # caller-only keying and identical behavior.
+    auto_metadata_enabled: bool = False
+    # Optional LLM fallback used only when the deterministic extractor finds
+    # nothing.  Requires anthropic_api_key.  Never blocks the write (fail-open).
+    auto_metadata_llm: bool = False
+    auto_metadata_model: str = "claude-haiku-4-5-20251001"
+
     # ── Memory admission control ──────────────────────────────────────────────
     # off     — no admission evaluation
     # monitor — evaluate + tag + audit, always admit (default; observe first)

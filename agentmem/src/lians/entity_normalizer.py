@@ -343,3 +343,14 @@ def normalize_entity_value(key: str, value: str) -> str:
 def cached_normalize(key: str, value: str) -> str:
     """LRU-cached wrapper around normalize_entity_value for hot paths."""
     return normalize_entity_value(key, value)
+
+
+def known_aliases() -> frozenset[str]:
+    """
+    Every lowercased entity alias the normalizer recognizes — canonical tickers
+    plus all name aliases (and any AGENTMEM_ENTITY_OVERRIDES additions).
+
+    The finance adapter's auto-metadata extractor uses this to spot known
+    entities inside free text without hardcoding a company list of its own.
+    """
+    return frozenset(_TICKER_MAP.keys())

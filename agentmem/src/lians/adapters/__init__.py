@@ -65,6 +65,23 @@ class DomainAdapter(Protocol):
         """
         ...
 
+    # ── Optional, duck-typed convention (not part of the required interface) ──
+    #
+    # An adapter MAY additionally define:
+    #
+    #     def extract_structured_keys(self, content: str) -> dict[str, str]: ...
+    #
+    # which derives a subset of ``structured_keys`` from free-text content for the
+    # auto-metadata / auto-supersession path (config ``auto_metadata_enabled``) —
+    # e.g. finance maps "AAPL price target raised to $250" → {"ticker": "AAPL",
+    # "metric": "price_target"}, returning {} when nothing is recognized.
+    #
+    # It is intentionally NOT declared as a Protocol member so that adapters
+    # (including custom third-party ones) which don't provide it still satisfy
+    # ``isinstance(x, DomainAdapter)``.  The core probes for it via ``getattr``
+    # and keeps caller-only keying when it is absent.  Implementations must be
+    # deterministic.
+
 
 # ── Adapter registry ──────────────────────────────────────────────────────────
 

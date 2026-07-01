@@ -90,3 +90,93 @@ async def test_extract_writes_edges_and_path_connects(client):
     assert p.status_code == 200
     assert p.json()["connected"] is True
     assert p.json()["hops"] == 2
+
+
+# ── LLM extractor (extract_triplets) ────────────────────────────────────────────
+
+import json as _json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from src.lians.config import get_settings
+from src.lians.llm_adjudication import extract_triplets, _TRIPLET_CACHE
+from src.lians.graph_extract import extract_llm, extract_relationships
+
+
+def _mock_triplet_response(triplets):
+    block = MagicMock()
+    block.text = _json.dumps(triplets)
+    msg = MagicMock()
+    msg.content = [block]
+    return msg
+
+
+@pytest.fixture(autouse=True)
+def _clear_triplet_cache():
+    _TRIPLET_CACHE.clear()
+    yield
+    _TRIPLET_CACHE.clear()
+
+
+@pytest.mark.asyncio
+async def test_extract_triplets_parses_and_normalizes():
+    with patch("anthropic.AsyncAnthropic") as MockCls:
+        inst = AsyncMock()
+        MockCls.return_value = inst
+        inst.messages.create = AsyncMock(return_value=_mock_triplet_response(
+            [["Alice", "works at", "Acme"], ["Fund A", "OWNS", "Issuer X"]]
+        ))
+        trips = await extract_triplets("Alice works at Acme. Fund A owns Issuer X.")
+
+    # Relations lowercased + snake_cased ("works at" → "works_at").
+    assert ("Alice", "works_at", "Acme") in trips
+    assert ("Fund A", "owns", "Issuer X") in trips
+
+
+@pytest.mark.asyncio
+async def test_extract_triplets_caches_per_text():
+    with patch("anthropic.AsyncAnthropic") as MockCls:
+        inst = AsyncMock()
+        MockCls.return_value = inst
+        inst.messages.create = AsyncMock(return_value=_mock_triplet_response(
+            [["A", "advises", "B"]]
+        ))
+        await extract_triplets("A advises B.")
+        await extract_triplets("A advises B.")
+
+    assert inst.messages.create.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_extract_llm_uses_triplets_when_enabled(monkeypatch):
+    monkeypatch.setenv("GRAPH_EXTRACT_LLM", "true")
+    get_settings.cache_clear()
+    try:
+        with patch("anthropic.AsyncAnthropic") as MockCls:
+            inst = AsyncMock()
+            MockCls.return_value = inst
+            # A relationship the rule-based extractor would MISS, proving the LLM ran.
+            inst.messages.create = AsyncMock(return_value=_mock_triplet_response(
+                [["Zeta Capital", "backs", "Orion Labs"]]
+            ))
+            trips = await extract_relationships(
+                "Zeta Capital quietly backs Orion Labs.", use_llm=True
+            )
+        assert ("Zeta Capital", "backs", "Orion Labs") in trips
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_extract_llm_falls_back_to_rules_on_api_error(monkeypatch):
+    monkeypatch.setenv("GRAPH_EXTRACT_LLM", "true")
+    get_settings.cache_clear()
+    try:
+        with patch("anthropic.AsyncAnthropic") as MockCls:
+            inst = AsyncMock()
+            MockCls.return_value = inst
+            inst.messages.create = AsyncMock(side_effect=RuntimeError("connection refused"))
+            # extract_triplets raises → extract_llm falls back to the rule-based extractor.
+            trips = await extract_llm("Alice works at Acme.")
+        assert ("Alice", "works_at", "Acme") in trips
+    finally:
+        get_settings.cache_clear()

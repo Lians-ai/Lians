@@ -100,61 +100,82 @@ async def llm_adjudicate(
     return result
 
 
+# ── LLM relationship extraction (opt-in graph builder) ────────────────────────
+#
+# Backs graph_extract.extract_llm (GRAPH_EXTRACT_LLM / use_llm=true). Turns free
+# text into (src, rel_type, dst) triplets. Steered toward the same snake_case
+# vocabulary the deterministic extractor emits so LLM- and rule-derived edges are
+# interchangeable for path/neighbor queries. Unlike adjudication, this RAISES on
+# failure so the caller (extract_llm) cleanly falls back to the rule-based
+# extractor instead of silently returning an empty graph.
+
+# In-process cache: text hash -> triplets (same text never re-extracted per process).
+_TRIPLET_CACHE: dict[str, list[tuple[str, str, str]]] = {}
+
+# The relation vocabulary the rule-based extractor produces; the model is asked to
+# prefer these but may emit other snake_case verbs for relationships they don't cover.
+_KNOWN_RELS = [
+    "works_at", "owns", "controls", "subsidiary_of", "represents",
+    "adverse_to", "referred", "advises", "director_of",
+]
+
 _EXTRACT_PROMPT = """\
-You extract relationship triplets from text to build a knowledge graph for
-regulated industries (finance, legal, healthcare). Extract every relationship
-EXPLICITLY stated in the text as (source_entity, relation_type, destination_entity).
+Extract the explicit relationships stated in the text as directed triplets.
+
+Text: {text}
 
 Rules:
-- Entities are proper nouns (people, companies, funds, products, matters).
-  Use the shortest unambiguous surface form; drop trailing punctuation.
-- relation_type is lowercase snake_case (e.g. works_at, owns, controls, acquired,
-  subsidiary_of, has_cfo, advises, represents, adverse_to, referred, director_of).
-- Only extract what is explicitly stated. Do NOT infer or hallucinate.
-- Return an empty list if there are no clear relationships.
+1. One triplet per stated relationship: [subject, relation, object].
+2. subject and object are proper-noun entities exactly as written (people, firms, funds, issuers).
+3. relation is a lowercase snake_case verb phrase. Prefer these when they fit: {rels}.
+4. Only extract relationships the text actually asserts — never infer or invent.
+5. If the text asserts no relationships, return [].
 
-TEXT:
-{text}
-
-Return ONLY valid JSON, no markdown fences:
-{{"triplets":[{{"src":"...","rel":"...","dst":"..."}}]}}"""
+Return ONLY a JSON array of [subject, relation, object] arrays, no markdown fences. Example:
+[["Alice","works_at","Acme"],["Fund A","owns","Issuer X"]]"""
 
 
 async def extract_triplets(text: str) -> list[tuple[str, str, str]]:
     """
-    LLM relationship extraction for the graph builder (Graphiti-style, opt-in).
+    Extract ``(src, rel_type, dst)`` triplets from free text via the LLM.
 
-    Returns ``(src, rel_type, dst)`` triplets. Best-effort: any error (missing
-    key, bad JSON, network) returns an empty list so ``graph_extract`` can fall
-    back to the deterministic extractor without a hard dependency on the model.
+    Raises on any API/parse failure so the caller can fall back to the
+    deterministic extractor.  A successful call that finds nothing returns [].
     """
-    settings = get_settings()
-    try:
-        import anthropic
-        client = anthropic.AsyncAnthropic(
-            api_key=settings.anthropic_api_key or None,  # None → ANTHROPIC_API_KEY env var
-        )
-        message = await client.messages.create(
-            model=settings.llm_adjudication_model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": _EXTRACT_PROMPT.format(text=text)}],
-        )
-        raw = message.content[0].text.strip()
-        parsed = json.loads(raw)
-    except Exception:
-        return []
+    key = hashlib.sha256(text.encode()).hexdigest()[:32]
+    if key in _TRIPLET_CACHE:
+        return _TRIPLET_CACHE[key]
 
-    out: list[tuple[str, str, str]] = []
+    settings = get_settings()
+    prompt = _EXTRACT_PROMPT.format(text=text, rels=", ".join(_KNOWN_RELS))
+
+    import anthropic
+    client = anthropic.AsyncAnthropic(
+        api_key=settings.anthropic_api_key or None,  # None → reads ANTHROPIC_API_KEY env var
+    )
+    message = await client.messages.create(
+        model=settings.llm_adjudication_model,
+        max_tokens=512,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = message.content[0].text.strip()
+    # Tolerate a stray ```json fence even though we ask for none.
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        raw = raw[raw.find("[") : raw.rfind("]") + 1]
+    parsed = json.loads(raw)
+
+    triplets: list[tuple[str, str, str]] = []
     seen: set[tuple[str, str, str]] = set()
-    for t in parsed.get("triplets", []):
-        try:
-            src = str(t["src"]).strip()
-            rel = str(t["rel"]).strip().lower().replace(" ", "_")
-            dst = str(t["dst"]).strip()
-        except (KeyError, TypeError, AttributeError):
+    for item in parsed:
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
             continue
+        src, rel, dst = (str(x).strip() for x in item)
+        rel = rel.lower().replace(" ", "_").replace("-", "_")
         triplet = (src, rel, dst)
         if src and rel and dst and src != dst and triplet not in seen:
             seen.add(triplet)
-            out.append(triplet)
-    return out
+            triplets.append(triplet)
+
+    _TRIPLET_CACHE[key] = triplets
+    return triplets
