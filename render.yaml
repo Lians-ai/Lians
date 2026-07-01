@@ -52,6 +52,7 @@ services:
     plan: starter
     region: oregon
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []          # empty = internal-only (no public access)
 
 databases:
   # Postgres plan slugs are basic-256mb / basic-1gb / pro-* — NOT "standard".
