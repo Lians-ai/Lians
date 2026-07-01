@@ -6,12 +6,12 @@ services:
     region: oregon
     branch: master
     buildCommand: pip install -e ".[otel]"
-    # Migrations run here (not as a separate worker): preDeploy runs after the
-    # build and before the new version goes live. alembic.ini uses relative
-    # paths (script_location=alembic, prepend_sys_path=.), so it must run from
-    # inside agentmem/.
-    preDeployCommand: cd agentmem && alembic upgrade head
-    startCommand: uvicorn lians.main:app --host 0.0.0.0 --port $PORT
+    # Render provides a bare postgresql:// URL, but the app's parse_db_url()
+    # expects postgresql+asyncpg:// (SQLAlchemy async). Rewrite the scheme in
+    # both the migration and start commands. Migrations run here (preDeploy),
+    # from inside agentmem/ because alembic.ini uses relative paths.
+    preDeployCommand: export DATABASE_URL=$(echo "$DATABASE_URL" | sed 's#postgresql://#postgresql+asyncpg://#') && export PYTHONPATH=$PWD/agentmem/src && cd agentmem && alembic -c alembic.ini upgrade head
+    startCommand: export DATABASE_URL=$(echo "$DATABASE_URL" | sed 's#postgresql://#postgresql+asyncpg://#') && uvicorn lians.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -23,10 +23,10 @@ services:
           name: agentmem-redis
           type: redis
           property: connectionString
+      # local = hash-projection embeddings, no external API key required.
+      # Switch to "voyage" only if you also set VOYAGE_API_KEY (sync:false).
       - key: EMBEDDING_PROVIDER
-        value: voyage
-      - key: VOYAGE_API_KEY
-        sync: false          # set in Render dashboard
+        value: local
       - key: MASTER_ENCRYPTION_KEY
         generateValue: true  # base64 256-bit — decodes to 32 bytes; pinned forever
       - key: ADMIN_SECRET
@@ -54,8 +54,9 @@ services:
     maxmemoryPolicy: allkeys-lru
 
 databases:
+  # Postgres plan slugs are basic-256mb / basic-1gb / pro-* — NOT "standard".
   - name: agentmem-pg
-    plan: standard
+    plan: basic-256mb
     region: oregon
     databaseName: agentmem
     user: agentmem
