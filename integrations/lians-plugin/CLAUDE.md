@@ -116,14 +116,14 @@ const mem = new LiansClient({
   apiKey: process.env.LIANS_API_KEY!,
 });
 
-await mem.add({
-  agentId: "my-agent",
+await mem.addMemory({
+  agent_id: "my-agent",
   content: "NVDA FY2026 revenue guidance raised to $40B",
-  eventTime: new Date("2025-11-19T16:00:00Z"),
+  event_time: "2025-11-19T16:00:00Z",
   metadata: { ticker: "NVDA", metric: "revenue_guidance" },
 });
 
-const results = await mem.recall({ agentId: "my-agent", query: "NVDA revenue" });
+const results = await mem.recall({ agent_id: "my-agent", query: "NVDA revenue" });
 ```
 
 ## Key concepts

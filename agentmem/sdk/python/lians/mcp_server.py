@@ -47,7 +47,10 @@ async def _api(method: str, path: str, body: dict | None = None) -> dict:
         if method == "POST":
             r = await client.post(f"{LIANS_URL}{path}", json=body, headers=headers)
         else:
-            r = await client.get(f"{LIANS_URL}{path}", params=body or {}, headers=headers)
+            # NB: pass params=None (not {}). httpx treats an empty params dict as
+            # "replace the query string", which wipes a query already baked into
+            # `path` (e.g. fact_history) and 422s the request.
+            r = await client.get(f"{LIANS_URL}{path}", params=body, headers=headers)
         r.raise_for_status()
         return r.json()
 
