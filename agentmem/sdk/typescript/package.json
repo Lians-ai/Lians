@@ -1,6 +1,6 @@
 {
   "name": "@lians-ai/lians",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TypeScript/JavaScript SDK for Lians — financial-grade AI memory with bitemporal model, SEC 17a-4 audit chain, and GDPR crypto-shred",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

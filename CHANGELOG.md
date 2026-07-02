@@ -2,6 +2,33 @@
 
 All notable changes to Lians. Versions follow semver; SDKs are released in lock-step.
 
+## 0.3.1 — 2026-07-01
+
+Patch release. Bug fixes found while limit-testing the live stack, plus the
+governance-layer alignment (REFINES relation, vagueness admission filter).
+
+### Fixed (correctness / security)
+- **Cross-tenant subject-key isolation.** `subject_keys` was keyed by `subject_id`
+  alone, so two namespaces sharing a `subject_id` shared one AES data-encryption
+  key — and one tenant's GDPR erase crypto-shredded the other tenant's data.
+  Now keyed by `(namespace, subject_id)` (migration 0019); the in-process DEK
+  cache is namespace-scoped too.
+- **`RATE_LIMIT_PER_MINUTE` is now honored.** The rate-limit middleware was added
+  without its argument and silently pinned every deployment to 300/min.
+- **`lians-sdk` is importable on a plain install.** `import lians` crashed unless
+  the `[local]` extra was installed; `LocalLiansClient` is now imported lazily.
+  (This is the reason for the 0.3.1 SDK republish — the 0.3.0 wheel is broken.)
+- **`docker compose up` no longer crash-loops** on a stale `src.lian.main` module
+  path in the Dockerfile CMD.
+
+### Added
+- **REFINES supersession relation** — a new fact that narrows/enriches an existing
+  one closes the old validity window like SUPERSEDES but is audited as a narrowing.
+  Harvested from the Lian Memory Governor vocabulary.
+- **Vagueness admission pre-filter** — too-vague candidates are tagged and rejected
+  in enforce mode.
+- **`MemoryOut.score`** — recall responses now expose the hybrid relevance score.
+
 ## 0.3.0 — 2026-06-29
 
 The production-readiness + competitive release. Everything below is on `master`
