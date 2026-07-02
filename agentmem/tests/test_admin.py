@@ -584,3 +584,39 @@ class TestAdminAuditTrail:
         )
         assert verify.status_code == 200
         assert verify.json()["status"] == "ok"
+
+
+class TestUsageSummary:
+    @pytest.mark.asyncio
+    async def test_usage_requires_admin_secret(self, app_client):
+        resp = await app_client.get("/v1/admin/usage/ns_user1")
+        assert resp.status_code in (401, 403)
+
+    @pytest.mark.asyncio
+    async def test_usage_empty_namespace_returns_zeros(self, app_client):
+        resp = await app_client.get(
+            "/v1/admin/usage/ns_user1", headers={"X-Admin-Secret": ADMIN_SECRET}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["namespace"] == "ns_user1"
+        assert body["writes"] == 0
+        assert body["recalls"] == 0
+        assert "period_start" in body
+
+    @pytest.mark.asyncio
+    async def test_usage_counts_writes_from_event_log(self, app_client):
+        # A key creation writes an admin op to the event log, not add/recall —
+        # usage must not count admin ops as writes or recalls.
+        resp = await app_client.post(
+            "/v1/admin/api-keys",
+            headers={"X-Admin-Secret": ADMIN_SECRET},
+            json={"namespace": "ns_user2", "scopes": ["read", "write"], "label": "t"},
+        )
+        assert resp.status_code in (200, 201)
+        resp = await app_client.get(
+            "/v1/admin/usage/ns_user2", headers={"X-Admin-Secret": ADMIN_SECRET}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["writes"] == 0 and body["recalls"] == 0

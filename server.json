@@ -1,19 +1,19 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.ebeirne/lians",
-  "title": "Lians — Financial-Grade Agent Memory",
+  "title": "Lians \u2014 Financial-Grade Agent Memory",
   "description": "Bitemporal memory for AI agents. SEC 17a-4 audit chain, GDPR crypto-shred, information barriers.",
-  "version": "0.3.0",
-  "websiteUrl": "https://github.com/Lians-ai/Lians",
+  "version": "0.3.2",
+  "websiteUrl": "https://www.lians.ai",
   "repository": {
-    "url": "https://github.com/Lians-ai/Lians",
+    "url": "https://github.com/ebeirne/Lians2",
     "source": "github"
   },
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "lians-sdk",
-      "version": "0.3.0",
+      "version": "0.3.2",
       "runtimeHint": "uvx",
       "runtimeArguments": [
         {

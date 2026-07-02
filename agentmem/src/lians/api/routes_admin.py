@@ -512,3 +512,35 @@ async def set_billing(
         namespace=namespace,
         stripe_customer_id=pol.stripe_customer_id,
     )
+
+
+@router.get("/usage/{namespace}")
+async def get_usage_summary(
+    namespace: str,
+    _: None = Depends(_require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Current-calendar-month write/recall counts for a namespace — powers the
+    console's usage meters. Reads the append-only event_log (the same table the
+    audit endpoints read), so no RLS context is required.
+    """
+    from sqlalchemy import func
+
+    from ..models import EventLog
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(EventLog.op, func.count())
+        .where(EventLog.namespace == namespace, EventLog.created_at >= month_start)
+        .group_by(EventLog.op)
+    )
+    counts = {op: int(n) for op, n in result.all()}
+    return {
+        "namespace": namespace,
+        "period_start": month_start.isoformat(),
+        "writes": counts.get("add", 0) + counts.get("supersede", 0),
+        "recalls": counts.get("recall", 0),
+        "by_op": counts,
+    }
