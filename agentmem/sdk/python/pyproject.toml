@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lians-sdk"
-version = "0.3.1"
+version = "0.3.2"
 description = "Financial-grade AI memory — bitemporal facts, SEC 17a-4 audit chain, GDPR crypto-shred"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }

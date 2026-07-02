@@ -2,6 +2,27 @@
 
 All notable changes to Lians. Versions follow semver; SDKs are released in lock-step.
 
+## 0.3.2 — 2026-07-02
+
+Patch release. Cross-language + packaging validation against a live server found
+three more bugs; every SDK, the agent harness, and the MCP server now pass.
+
+### Fixed
+- **MCP server: `fact_history` and `list_conflicts` tools were broken.** The GET
+  helper passed an empty `params={}`, which httpx uses to *replace* the query
+  string — wiping queries baked into the request path, so two of the eight MCP
+  tools 422'd against any server. (Ships in `lians-sdk[mcp]`.)
+- **Java SDK could not reach the server at all.** Its `HttpClient` defaulted to
+  HTTP/2; the cleartext HTTP/1.1 server rejected the h2c upgrade as "Invalid HTTP
+  request received". Pinned `HttpClient.Version.HTTP_1_1`.
+- Plugin `CLAUDE.md` TypeScript example called a non-existent `mem.add(...)` with
+  camelCase keys; corrected to `mem.addMemory({ agent_id, event_time, ... })`.
+
+### Validated (live server)
+- All five SDKs — Python (sync + async), TypeScript, Go, Java, C.
+- Agent harness (`LiansMemoryHarness`) recall-before / remember-after loop.
+- MCP server over stdio — handshake, all 8 tools, remember/recall/fact_history.
+
 ## 0.3.1 — 2026-07-01
 
 Patch release. Bug fixes found while limit-testing the live stack, plus the

@@ -6,7 +6,7 @@
 
   <groupId>dev.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.3.0</version>
+  <version>0.3.2</version>
   <packaging>jar</packaging>
 
   <name>Lians SDK</name>
