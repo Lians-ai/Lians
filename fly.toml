@@ -4,6 +4,11 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
 [build]
   dockerfile = "Dockerfile"
 
+[processes]
+  # One worker, not the image default of two: each worker loads its own copy of
+  # the ~1.3GB sentence-transformers model, and 2×1.6GB OOM-loops a 2GB VM.
+  app = "uvicorn lians.main:app --host 0.0.0.0 --port 8000 --workers 1"
+
 [deploy]
   release_command = "alembic upgrade head"
 
@@ -38,6 +43,6 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
 
 [[vm]]
   cpu_kind  = 'shared'
-  cpus      = 1
+  cpus      = 2   # bge-large CPU inference — 1 shared core made writes ~6s
   memory    = '2gb'
   memory_mb = 2048
