@@ -56,12 +56,19 @@ async def enqueue_pending(
     return pending
 
 
+# Callers naturally reach for the write-path vocabulary ("admit" is what the
+# admission engine calls the action; the API's canonical resolve verb is
+# "approve"). Accept both spellings everywhere rather than 422ing on the synonym.
+_ACTION_ALIASES = {"admit": "approve"}
+_STATUS_ALIASES = {"admitted": "approved"}
+
+
 async def list_pending(
     db: AsyncSession, namespace: str, status: Optional[str] = "pending", limit: int = 50
 ) -> list[PendingAdmission]:
     conds = [PendingAdmission.namespace == namespace]
     if status:
-        conds.append(PendingAdmission.status == status)
+        conds.append(PendingAdmission.status == _STATUS_ALIASES.get(status, status))
     stmt = (
         select(PendingAdmission)
         .where(and_(*conds))
@@ -81,8 +88,9 @@ async def resolve_pending(
     from fastapi import HTTPException
     from .memory_service import add_memory
 
+    action = _ACTION_ALIASES.get(action, action)
     if action not in ("approve", "reject"):
-        raise HTTPException(status_code=422, detail="action must be 'approve' or 'reject'")
+        raise HTTPException(status_code=422, detail="action must be 'approve' (alias: 'admit') or 'reject'")
 
     pending = await db.get(PendingAdmission, pending_id)
     if pending is None or pending.namespace != namespace:

@@ -169,3 +169,27 @@ async def test_enforce_reject_review(client, monkeypatch):
     res = await client.post(f"/v1/admissions/{pid}/resolve", headers=_h(),
                             json={"action": "reject", "note": "MNPI — barred"})
     assert res.json()["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_resolve_accepts_admit_alias_and_admitted_status_filter(client, monkeypatch):
+    """'admit' is what the admission engine calls the action; the resolve verb is
+    'approve'. Both must work, and the history filter must find approved rows
+    under either 'approved' or 'admitted'."""
+    _enforce(monkeypatch)
+    r = await client.post("/v1/memories", headers=_h(), json={
+        "agent_id": "desk", "content": "Client SSN 123-45-6789 on file.",
+        "event_time": "2026-01-01T00:00:00Z",
+    })
+    assert r.status_code == 202, r.text
+    pid = r.json()["pending_id"]
+
+    res = await client.post(f"/v1/admissions/{pid}/resolve", headers=_h(),
+                            json={"action": "admit", "note": "alias works"})
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "approved"
+
+    for status in ("approved", "admitted"):
+        lst = await client.get("/v1/admissions", headers=_h(), params={"status": status})
+        assert lst.status_code == 200
+        assert lst.json()["total"] == 1, f"status={status} must find the approved row"
