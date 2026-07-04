@@ -5,7 +5,7 @@ Post in this order: HN first (weekday, 8–10am ET), Reddit ~2h later, LinkedIn
 same afternoon, cold outreach begins the day after (link has social proof by then).
 
 **Before posting:** extract `demo/lookahead-bias/` to a standalone public repo
-(`lians-ai/lookahead-bias-demo`) so the link lands on the README with the chart
+(`ebeirne/lookahead-bias-demo`) so the link lands on the README with the chart
 above the fold. Pin the results PNG. Confirm `python run_demo.py` works from a
 fresh `pip install lians-sdk[local]`.
 
@@ -85,7 +85,7 @@ fresh `pip install lians-sdk[local]`.
 > - Full receipts: 918 retrievals of not-yet-existing notes, each logged with
 >   decision timestamp vs note creation timestamp
 >
-> Runs in ~30s, no API keys, seeded/deterministic: https://github.com/Lians-ai/lookahead-bias-demo
+> Runs in ~30s, no API keys, seeded/deterministic: https://github.com/ebeirne/lookahead-bias-demo
 >
 > The subtle case worth knowing even if you never touch LLMs: `late_revision` —
 > the event is old but the *corrected number* arrived later (restatements,
@@ -125,7 +125,7 @@ fresh `pip install lians-sdk[local]`.
 > data. Agent memory needs the same discipline: bitemporal facts, as-of queries.
 > And the same machinery answers the examiner's question — "what did the system
 > know when it decided?" Backtest correctness and audit-readiness are the same
-> primitive. Reproducible demo (30s, no API keys): https://github.com/Lians-ai/lookahead-bias-demo
+> primitive. Reproducible demo (30s, no API keys): https://github.com/ebeirne/lookahead-bias-demo
 
 ## 4. Five-slide DM summary (for quant contacts)
 
@@ -154,7 +154,7 @@ fresh `pip install lians-sdk[local]`.
 > with and without the leak: Sharpe 4.6 vs −0.6, with a receipts table proving
 > every contaminated retrieval.
 >
-> Reproduction (30 seconds, no keys): https://github.com/Lians-ai/lookahead-bias-demo
+> Reproduction (30 seconds, no keys): https://github.com/ebeirne/lookahead-bias-demo
 >
 > If your team is putting agents anywhere near the research loop, worth 20
 > minutes? We'll run the contamination check against your memory setup — if
