@@ -1,11 +1,11 @@
-Banner image placeholder.
+Lians brand assets. Source file: lians-logo-white-on-black.png at the repo root
+(white mark on black — the canonical logo).
 
-Use an 800px-wide PNG at docs/images/banner.png.
+- logo.png    — trimmed mark with padding; used atop the SDK READMEs (PyPI/npm/pkg.go.dev)
+- banner.png  — 1600x400 mark + wordmark + tagline; used atop the main README
+- avatar.png  — 512x512 square; upload as the GitHub org avatar / social icons
+- favicon.png — 64x64; embedded as a data URI in demo/index.html
 
-Recommended banner text:
-
-Lians
-Regulated AI Memory Infrastructure
-
-Avoid finance-only language in the primary banner. The README now positions Lians
-for financial, medical, and legal institutions.
+Regenerate from the source logo if the mark changes. Keep the tagline
+industry-neutral ("Regulated AI Memory Infrastructure") — the README positions
+Lians for financial, medical, and legal institutions.

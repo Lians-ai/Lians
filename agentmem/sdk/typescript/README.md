@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/Lians-ai/Lians">
+    <img src="https://raw.githubusercontent.com/Lians-ai/Lians/HEAD/docs/images/logo.png" width="340" alt="Lians logo">
+  </a>
+</p>
+
 # @lians-ai/lians
 
 **Financial-grade AI memory for TypeScript/Node** — bitemporal facts, SEC 17a-4
