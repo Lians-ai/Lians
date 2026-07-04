@@ -24,7 +24,7 @@ npx skills add https://github.com/Lians-ai/Lians --skill lians-integrate
 - **Codex** — drop-in `AGENTS.md` and MCP config in
   [`../integrations/codex`](../integrations/codex).
 - **Any MCP host** — Lians is on the
-  [official MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.ebeirne/lians).
+  [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest).
 
 ## Why these exist
 

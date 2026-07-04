@@ -137,4 +137,4 @@ const results = await mem.recall({ agent_id: "my-agent", query: "NVDA revenue" }
 
 - Full docs: https://github.com/Lians-ai/Lians/tree/master/docs
 - Deploy guide: https://github.com/Lians-ai/Lians/blob/master/docs/deploy.md
-- MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.ebeirne/lians
+- MCP Registry: https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest

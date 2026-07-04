@@ -103,7 +103,7 @@ For production deployment (Fly.io, Kubernetes, bare Docker): [docs/deploy.md](de
 
 ## MCP server
 
-Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/servers/io.github.ebeirne/lians). Add it to Claude Desktop, Cursor, or Windsurf:
+Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest). Add it to Claude Desktop, Cursor, or Windsurf:
 
 ```json
 {
