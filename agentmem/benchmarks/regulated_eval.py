@@ -33,12 +33,30 @@ def _content(memories: list[dict]) -> list[str]:
 def run_regulated_eval(client, agent: str = "reg-eval") -> dict[str, Any]:
     results: list[dict[str, Any]] = []
 
-    def check(name: str, fn: Callable[[], tuple[bool, Any]]) -> None:
+    def check(name: str, fn: Callable[[], tuple[Any, Any]]) -> None:
+        """
+        Record a check outcome. `fn` returns (status, detail) where status is
+        True (pass), "partial" (behaviorally satisfied but missing the proof
+        artifact the invariant names), or False (fail). A thrown invariant is
+        a failure, not a crash; CapabilityAbsent is recorded distinctly so the
+        comparison layer can preserve documented-capability credit instead of
+        letting a live run unfairly zero a cell whose static score already
+        encodes "no turnkey API".
+        """
+        cap_absent = False
         try:
             ok, detail = fn()
-        except Exception as exc:  # a thrown invariant is a failure, not a crash
+        except Exception as exc:
             ok, detail = False, f"error: {type(exc).__name__}: {exc}"
-        results.append({"check": name, "passed": bool(ok), "detail": detail})
+            cap_absent = type(exc).__name__ == "CapabilityAbsent"
+        status = "partial" if ok == "partial" else ("pass" if ok else "fail")
+        results.append({
+            "check": name,
+            "passed": status == "pass",
+            "status": status,
+            "capability_absent": cap_absent,
+            "detail": detail,
+        })
 
     def stale_revision_suppression():
         a = f"{agent}-stale"
@@ -61,12 +79,23 @@ def run_regulated_eval(client, agent: str = "reg-eval") -> dict[str, Any]:
         return any("5.00" in c for c in past), {"as_of_value_retrieved": any("5.00" in c for c in past)}
 
     def erasure_proof():
+        # Full pass requires BOTH: content unrecoverable AND a proof artifact
+        # (erasure certificate / request reference). Behavioral deletion with
+        # no proof is "partial" — a bare delete_all() must not score as
+        # "provable erasure" just because retrieval stops returning the row.
         a = f"{agent}-erase"
         client.add(a, "patient record SSN 123-45-6789", _dt(2026, 1, 1), subject_id="subj-erase-1")
-        client.erase("subj-erase-1", "GDPR-REQ-1")
+        receipt = client.erase("subj-erase-1", "GDPR-REQ-1")
         after = _content(client.recall(a, "patient record SSN", k=5)["memories"])
         leaked = any("123-45-6789" in c for c in after)
-        return (not leaked), {"content_unrecoverable": not leaked}
+        proof = bool(isinstance(receipt, dict) and (
+            receipt.get("request_ref") or receipt.get("certificate_id")
+            or receipt.get("certificate")
+        ))
+        detail = {"content_unrecoverable": not leaked, "proof_artifact": proof}
+        if leaked:
+            return False, detail
+        return (True if proof else "partial"), detail
 
     def lookahead_contamination_detection():
         a = f"{agent}-look"

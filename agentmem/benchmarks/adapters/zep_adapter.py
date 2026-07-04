@@ -46,6 +46,24 @@ CAPABILITIES = {
 }
 
 
+def live_adapter():
+    """
+    Prefer executing the self-hostable engine (Graphiti OSS, its default
+    OpenAI configuration on embedded Kuzu) — that is the apples-to-apples
+    open-deployment comparison. Fall back to the Zep Cloud API if only
+    ZEP_API_KEY is present. Returns (adapter_or_None, mode_description).
+    """
+    from . import graphiti_oss_adapter
+
+    g = graphiti_oss_adapter.GraphitiOSSAdapter()
+    if g._client is not None:
+        return g, "Graphiti OSS, default OpenAI config, embedded Kuzu"
+    z = ZepAdapter()
+    if z._client is not None:
+        return z, "Zep Cloud API"
+    return None, None
+
+
 class ZepAdapter:
     """Maps the harness interface onto the Zep SDK. Live when ZEP_API_KEY is set."""
 
