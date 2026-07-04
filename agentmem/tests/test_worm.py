@@ -60,4 +60,7 @@ async def test_worm_posture_attested(client, monkeypatch):
     body = r.json()
     assert body["worm_mode"] is True
     assert body["physical_worm_attested"] is True
-    assert body["recommendation"] == "compliant posture"
+    # Attested wording must stay factual: controls attested, compliance is
+    # the operator's — the API must never self-assert "compliant".
+    assert "controls attested" in body["recommendation"]
+    assert "compliant posture" not in body["recommendation"]

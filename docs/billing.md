@@ -2,6 +2,12 @@
 
 How Clerk plans map to lians features, how to provision API keys per tier, how to gate routes and UI, and how to handle upgrades and downgrades.
 
+> **Scope:** this document describes tiering for the **managed cloud offering
+> only**. The self-hosted product is Apache 2.0 and complete — every feature
+> gated below (information barriers, crypto-shred erasure, backtest checks,
+> audit chain, air-gap mode) ships in the open-source repository with no
+> license key. Tiers here gate access to *our hosted instance*, not the software.
+
 ---
 
 ## Tier Overview

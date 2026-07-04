@@ -45,7 +45,7 @@
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
-| **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production |
+| **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production (early access) |
 | **Setup** | `pip install lians-sdk[local]` | `docker compose up --build` | `pip install lians-sdk` + API key |
 | **Database** | SQLite (zero setup) | Postgres 16 + pgvector | Managed |
 | **Audit chain** | Yes | Yes | Yes |
@@ -517,6 +517,14 @@ Security & procurement docs: [security-whitepaper.md](docs/security-whitepaper.m
 | Information barriers | `barrier_group` column; PostgreSQL RLS |
 | HIPAA §164.312 | Per-subject encryption, audit controls, transmission security |
 
+> **Scope of these claims:** Lians provides the *technical controls* mapped
+> above — it is software, not a certification. Regulatory compliance is a
+> property of your deployment and organization (retention configuration,
+> policies, attestations such as SOC 2 or a HIPAA assessment), and several
+> controls require operator configuration (WORM object-lock, non-superuser DB
+> role, KMS). Every claim links to the doc that says exactly what is and
+> isn't covered — start with [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md).
+
 Full documentation: [compliance.md](docs/compliance.md) · [hipaa.md](docs/hipaa.md) · [security-whitepaper.md](docs/security-whitepaper.md) · [threat-model.md](docs/threat-model.md) · [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md) · [sso.md](docs/sso.md) · [worm-storage.md](docs/worm-storage.md)
 
 Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and RBAC roles (`owner`/`analyst`/`compliance`/`readonly`); SSO via gateway forward-auth (any OIDC/SAML IdP).
@@ -525,10 +533,13 @@ Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and
 
 ## Packaging & Pricing
 
-Lians is open-source and fully self-hostable. Managed Cloud is available for
-customers whose compliance posture allows hosted processing; regulated buyers
-should choose the package by deployment boundary and evidence requirements, not
-by a consumer-style monthly tier.
+Lians is open-source and fully self-hostable — **the entire feature set,
+including every compliance primitive, is in this repository under Apache 2.0.**
+Paid packages sell deployment support, hardening review, and evidence
+packets around the open core, not license keys. A managed cloud is in early
+access for customers whose compliance posture allows hosted processing
+(contact us); regulated buyers should choose the package by deployment
+boundary and evidence requirements, not by a consumer-style monthly tier.
 
 | Package | Best for | Deployment | Commercial model |
 |---|---|---|---|

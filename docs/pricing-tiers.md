@@ -5,6 +5,12 @@ buyers care less about a small monthly tier ladder and more about whether memory
 can run in their environment, under their keys, with evidence their risk team can
 review.
 
+> **Open-core boundary:** every software feature named below is Apache 2.0 and
+> ships in the public repository — the packages differ in *deployment scope,
+> support, review, and evidence*, never in withheld code. Do not describe any
+> package as unlocking product features; that is mem0's model, and its absence
+> is our differentiator.
+
 ## Developer
 
 *For local prototypes, benchmarks, and framework integrations.*

@@ -9,7 +9,10 @@ sit behind the paid managed product — and you need everything to run inside
 your own infrastructure, [Lians](https://github.com/Lians-ai/Lians) is the
 Apache-2.0 alternative where **the entire feature set is in the open**: nothing
 in the memory engine, the relationship graph, the audit chain, erasure, access
-control, or admission control is gated behind a hosted tier.
+control, or admission control is gated behind a hosted tier. (Lians' managed
+cloud has usage tiers like any hosted service — but they gate access to *our
+servers*, not the software: every feature in those tiers is in the public
+repository and free to self-host.)
 
 ## Why teams look for a self-hosted mem0 alternative
 

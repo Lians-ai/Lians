@@ -56,7 +56,10 @@ a batch of audit rows existed at a point in time without trusting the database.
 curl -H "X-API-Key: $KEY" https://lians.internal/v1/compliance/worm
 # { "worm_mode": true, "audit_chain_append_only": true,
 #   "audit_chain_status": "ok", "physical_worm_attested": true,
-#   "standard": "SEC 17a-4(f)", "recommendation": "compliant posture" }
+#   "standard": "SEC 17a-4(f)",
+#   "recommendation": "logical + physical WORM controls attested; retention
+#     periods, designated-third-party access, and organizational controls
+#     remain operator responsibilities (docs/worm-storage.md)" }
 ```
 
 Set `WORM_MODE=true` only after §1 and §2 are actually in place — the flag asserts

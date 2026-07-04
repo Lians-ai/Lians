@@ -121,7 +121,13 @@ async def worm_posture(
         "physical_worm_attested": bool(worm_mode),
         "standard": "SEC 17a-4(f)",
         "recommendation": (
-            "compliant posture"
+            # Factual statement only: Lians attests its technical controls;
+            # 17a-4(f) compliance is a property of the operator's deployment
+            # (retention periods, D3P designation, org controls), not of the
+            # software. Never self-assert "compliant".
+            "logical + physical WORM controls attested; retention periods, "
+            "designated-third-party access, and organizational controls "
+            "remain operator responsibilities (docs/worm-storage.md)"
             if worm_mode else
             "set WORM_MODE=true and back the audit log with object-locked storage "
             "+ a DB role lacking UPDATE/DELETE on event_log (docs/worm-storage.md)"
