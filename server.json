@@ -3,7 +3,7 @@
   "name": "io.github.ebeirne/lians",
   "title": "Lians \u2014 Financial-Grade Agent Memory",
   "description": "Bitemporal memory for AI agents. SEC 17a-4 audit chain, GDPR crypto-shred, information barriers.",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "websiteUrl": "https://www.lians.ai",
   "repository": {
     "url": "https://github.com/ebeirne/Lians2",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "lians-sdk",
-      "version": "0.3.4",
+      "version": "0.4.0",
       "runtimeHint": "uvx",
       "runtimeArguments": [
         {

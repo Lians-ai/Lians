@@ -121,7 +121,7 @@ static lians_response_t do_request(lians_client_t *c, const char *method,
     curl_easy_setopt(h, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt(h, CURLOPT_WRITEDATA, &mb);
     curl_easy_setopt(h, CURLOPT_TIMEOUT_MS, c->timeout_ms);
-    curl_easy_setopt(h, CURLOPT_USERAGENT, "lians-c-sdk/0.3.4");
+    curl_easy_setopt(h, CURLOPT_USERAGENT, "lians-c-sdk/0.4.0");
     if (body) {
         curl_easy_setopt(h, CURLOPT_POSTFIELDS, body);
         curl_easy_setopt(h, CURLOPT_POSTFIELDSIZE, (long)strlen(body));

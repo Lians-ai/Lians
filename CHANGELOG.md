@@ -2,6 +2,42 @@
 
 All notable changes to Lians. Versions follow semver; SDKs are released in lock-step.
 
+## 0.4.0 — 2026-07-06
+
+The memory-lifecycle release: flush, resurface, decay, degrade, export.
+
+### Added
+- **Pre-compaction memory flush (SDK).** `LiansMemoryHarness.flush_before_compaction()`
+  persists durable facts into governed memory before the host framework
+  summarizes them away — explicit facts, an extract callable over the
+  transcript, or the assistant-message fallback. `CompactionGuard` tracks
+  estimated token usage and fires the flush once per window at a threshold.
+  Ships as a LangGraph `create_flush_node()` and as an `agentmem_flush` /
+  `flush_memory` tool for the OpenAI Agents SDK, CrewAI, and AutoGen. Every
+  flush is audit-tagged `_flush: "pre_compaction"`.
+- **Signed Markdown memory statement.** `GET /v1/snapshot/markdown` renders an
+  agent's exhaustive point-in-time knowledge state as a Markdown document —
+  provenance, validity window, and materiality per fact; erased facts appear
+  as explicit crypto-shred markers with existence preserved. The document's
+  SHA-256 is anchored in the audit chain as an `export_markdown` event, and an
+  integrity footer states the hash and the verification procedure. `raw=true`
+  returns bare `text/markdown`.
+- **Open conflicts resurface until adjudicated.** `/v1/context` pushes the
+  agent's open conflicts to the top of every assembled block (oldest first) as
+  explicit "X DISAGREES WITH Y" lines. Per-call opt-out via
+  `surface_conflicts=false`; bounded by `max_conflicts` with an explicit
+  "+N more" overflow line — never a silent drop.
+- **Audited degraded retrieval.** An embedding-provider outage no longer takes
+  recall down: the query proceeds lexical-only (BM25 + recency + importance)
+  and the degradation is explicit everywhere — `retrieval_degraded` on
+  `RecallResult` and `ContextResult`, in the recall audit event, and as a
+  metric label for alerting. Degraded results are never cached. Keyed lookups
+  never embed, so they never degrade.
+- **Materiality-weighted retrieval decay.** A fact's retrieval half-life
+  scales with `metadata.materiality` — low 7d / standard 30d / high 120d /
+  critical 365d. Ranking-only: storage never decays; point-in-time (`as_of`)
+  scoring honors the same weights; untagged facts keep the 30-day default.
+
 ## 0.3.4 — 2026-07-03
 
 Supersedes 0.3.3, which never reached PyPI: its wheel force-include only
