@@ -320,6 +320,19 @@ class KnowledgeSnapshot(BaseModel):
     items: list[MemoryOut]
 
 
+class MarkdownExportResult(BaseModel):
+    """A chain-anchored, human-readable memory statement (see export_markdown.py)."""
+    markdown: str                 # full document including the integrity footer
+    document_sha256: str          # SHA-256 of the document body (footer excluded)
+    audit_event_id: UUID          # export_markdown event anchoring the hash
+    audit_row_hash: str           # that event's position in the tamper-evident chain
+    namespace: str
+    agent_id: str
+    as_of: datetime
+    generated_at: datetime
+    memory_count: int
+
+
 class ContaminationFlagOut(BaseModel):
     """Single lookahead-bias flag from a backtest contamination check."""
     memory_id: UUID
