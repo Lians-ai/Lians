@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -46,6 +47,8 @@ from .config import get_settings
 from .current_facts import compute_predicate_key, upsert_live_fact, remove_live_facts, keyed_lookup
 from .dek_cache import get_cached_dek, cache_dek, evict_dek
 from .session_cache import get_working_set, set_working_set, invalidate_working_set
+
+logger = logging.getLogger("agentmem.memory_service")
 
 _IMPORTANCE_RECENCY_HALF_LIFE_DAYS = 90.0
 
@@ -478,6 +481,7 @@ async def assemble_context(
         memories=included,
         token_estimate=used,
         truncated=truncated,
+        retrieval_degraded=result.retrieval_degraded,
     )
 
 
@@ -558,9 +562,28 @@ async def recall_memories(
         span.set_attribute("router", "semantic")
 
         # Change 10: sub-spans for each recall stage
-        with tracer.start_as_current_span("recall.embed"):
+        #
+        # Degraded-retrieval mode: an unavailable embedding provider must not
+        # take recall down with it. On embed failure the query proceeds
+        # lexical-only (BM25 + recency + importance — semantic weight scores 0)
+        # and the degradation is carried on the result AND into the audit
+        # chain: a decision made under degraded recall is a fact an examiner
+        # needs, not something to silently absorb. Keyed lookups above never
+        # embed, so they never degrade.
+        retrieval_degraded = False
+        with tracer.start_as_current_span("recall.embed") as embed_span:
             provider = get_embedding_provider()
-            query_embedding = await provider.embed_one(req.query)
+            try:
+                query_embedding = await provider.embed_one(req.query)
+            except Exception as exc:
+                query_embedding = []
+                retrieval_degraded = True
+                embed_span.set_attribute("retrieval_degraded", True)
+                logger.warning(
+                    "embedding provider failed (%s: %s) — recall degrading to lexical-only",
+                    type(exc).__name__, exc,
+                )
+        span.set_attribute("retrieval_degraded", retrieval_degraded)
 
         with tracer.start_as_current_span("recall.load_keys"):
             subject_keys = await _load_namespace_subject_keys(db, namespace)
@@ -631,16 +654,19 @@ async def recall_memories(
                 mem_out.score = _score
                 memories_out.append(mem_out)
 
+        audit_payload = {
+            "query_hash": _content_hash(req.query),
+            "k": req.k,
+            "as_of": req.as_of.isoformat() if req.as_of else None,
+            "filters": req.filters,
+            "result_ids": [str(m.id) for m in memories_out],
+        }
+        if retrieval_degraded:
+            audit_payload["retrieval_degraded"] = True
         recall_log = await chain_log(
             db, namespace=namespace, agent_id=req.agent_id,
             op="recall",
-            payload={
-                "query_hash": _content_hash(req.query),
-                "k": req.k,
-                "as_of": req.as_of.isoformat() if req.as_of else None,
-                "filters": req.filters,
-                "result_ids": [str(m.id) for m in memories_out],
-            },
+            payload=audit_payload,
         )
         await db.commit()
 
@@ -648,6 +674,7 @@ async def recall_memories(
             memories=memories_out,
             as_of=req.as_of,
             total_candidates=len(results),
+            retrieval_degraded=retrieval_degraded,
         )
 
         from .metering import get_customer_id, queue_usage_event
@@ -658,14 +685,23 @@ async def recall_memories(
                 customer_id, 1, f"r:{recall_log.id}",
             )
 
-        if settings.recall_cache_enabled and not req.as_of and not near_entity and barrier_override is None:
+        # Never cache a degraded result — it would keep serving lexical-only
+        # recall after the embedding provider recovers.
+        if (
+            settings.recall_cache_enabled and not req.as_of and not near_entity
+            and barrier_override is None and not retrieval_degraded
+        ):
             await set_cached_recall(
                 namespace, req.agent_id, req.query, req.as_of, req.k, req.filters,
                 result.model_dump_json(),
                 settings.recall_cache_ttl_seconds,
             )
 
-        record_recall(namespace, router="semantic", cache_hit=False)
+        record_recall(
+            namespace,
+            router="semantic_degraded" if retrieval_degraded else "semantic",
+            cache_hit=False,
+        )
         observe_recall(namespace, _time.perf_counter() - _recall_t0)
         return result
 

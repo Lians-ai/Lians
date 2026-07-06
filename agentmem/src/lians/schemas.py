@@ -53,6 +53,11 @@ class RecallResult(BaseModel):
     memories: list[MemoryOut]
     as_of: Optional[datetime]
     total_candidates: int
+    # True when the embedding provider was unavailable and recall proceeded
+    # lexical-only (BM25 + recency + importance). The same flag is written to
+    # the audit chain, so a decision made under degraded recall is
+    # reconstructable as such.
+    retrieval_degraded: bool = False
 
 
 class AuditReconstructRequest(BaseModel):
@@ -491,6 +496,7 @@ class ContextResult(BaseModel):
     memories: list[MemoryOut]             # the facts that fit the budget
     token_estimate: int
     truncated: bool                       # True if the budget cut off some facts
+    retrieval_degraded: bool = False      # recall ran lexical-only (see RecallResult)
 
 
 # ── Graph extraction ────────────────────────────────────────────────────────────

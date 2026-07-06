@@ -150,7 +150,9 @@ def record_recall(namespace: str, router: str, cache_hit: bool) -> None:
     """
     Increment the recall counter.
 
-    *router* is one of ``"cache"``, ``"keyed"``, ``"semantic"``.
+    *router* is one of ``"cache"``, ``"keyed"``, ``"semantic"``,
+    ``"semantic_degraded"`` (embedding provider down — lexical-only recall;
+    alert on this label).
     *cache_hit* is True when the Redis cache was hit (router=="cache").
     """
     _recalls.labels(
