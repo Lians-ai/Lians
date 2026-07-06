@@ -17,11 +17,11 @@ backtest, crypto-shred erasure, audit-chain verify, relationship graph).
 | **Python** | `pip install lians-sdk` | `from lians import LiansClient` |
 | **Python (local, no server)** | `pip install lians-sdk[local]` | `from lians import LocalLiansClient` |
 | **TypeScript / Node** | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` |
-| **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.3.0` | `lians.NewClient(url, key)` |
-| **Java** (JVM 11+) | Maven `dev.lians:lians-sdk:0.3.0` | `new LiansClient(opts)` |
+| **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.0` | `lians.NewClient(url, key)` |
+| **Java** (JVM 11+) | Maven `ai.lians:lians-sdk:0.4.0` | `new LiansClient(opts)` |
 | **C** (C99 + libcurl) | `cmake -B build && cmake --build build` | `lians_client_new(...)` |
 
-All SDKs are released in lock-step at the **same version** (currently `0.3.0`).
+All SDKs are released in lock-step at the **same version** (currently `0.4.0`).
 
 ## Run the server
 
@@ -80,9 +80,9 @@ _, _ = c.AddMemory(ctx, lians.AddMemoryRequest{
 ### Java
 ```xml
 <dependency>
-  <groupId>dev.lians</groupId>
+  <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 </dependency>
 ```
 ```java
@@ -116,9 +116,9 @@ pip install lians-sdk[all]          # everything
 ## Verify a release
 
 ```bash
-pip install lians-sdk==0.3.0
+pip install lians-sdk==0.4.0
 npm view @lians-ai/lians version
-go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.3.0
+go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.0
 ```
 
 Maintainers: see [RELEASING.md](../RELEASING.md) — one `vX.Y.Z` tag ships all five.

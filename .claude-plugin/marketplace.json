@@ -2,7 +2,7 @@
   "name": "lians-plugins",
   "owner": {
     "name": "Lians",
-    "email": "support@lians.dev"
+    "email": "support@lians.ai"
   },
   "metadata": {
     "description": "Official Lians plugins for Claude"

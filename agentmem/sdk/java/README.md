@@ -20,7 +20,7 @@ Maven:
 
 ```xml
 <dependency>
-  <groupId>dev.lians</groupId>
+  <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
   <version>0.2.0</version>
 </dependency>
@@ -29,16 +29,16 @@ Maven:
 Gradle:
 
 ```groovy
-implementation "dev.lians:lians-sdk:0.2.0"
+implementation "ai.lians:lians-sdk:0.2.0"
 ```
 
 ## Quick start
 
 ```java
-import dev.lians.LiansClient;
-import dev.lians.LiansClientOptions;
-import dev.lians.model.MemoryOut;
-import dev.lians.model.RecallResult;
+import ai.lians.LiansClient;
+import ai.lians.LiansClientOptions;
+import ai.lians.model.MemoryOut;
+import ai.lians.model.RecallResult;
 import java.time.Instant;
 import java.util.Map;
 

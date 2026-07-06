@@ -1,9 +1,9 @@
-package dev.lians;
+package ai.lians;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.lians.model.MemoryOut;
-import dev.lians.model.RecallResult;
+import ai.lians.model.MemoryOut;
+import ai.lians.model.RecallResult;
 
 import java.io.IOException;
 import java.net.URI;

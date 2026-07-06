@@ -1,9 +1,9 @@
-package dev.lians;
+package ai.lians;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.sun.net.httpserver.HttpServer;
-import dev.lians.model.MemoryOut;
-import dev.lians.model.RecallResult;
+import ai.lians.model.MemoryOut;
+import ai.lians.model.RecallResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

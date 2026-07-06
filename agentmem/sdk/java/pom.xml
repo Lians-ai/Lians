@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>dev.lians</groupId>
+  <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
   <version>0.4.0</version>
   <packaging>jar</packaging>
@@ -23,7 +23,7 @@
   <developers>
     <developer>
       <name>Lians</name>
-      <email>support@lians.dev</email>
+      <email>support@lians.ai</email>
       <organization>Lians</organization>
       <organizationUrl>https://github.com/Lians-ai</organizationUrl>
     </developer>

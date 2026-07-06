@@ -1,4 +1,4 @@
-package dev.lians;
+package ai.lians;
 
 /**
  * Thrown when the Lians server returns a non-2xx response, or when a request

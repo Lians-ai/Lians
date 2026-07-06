@@ -35,7 +35,7 @@ Pushing a `vX.Y.Z` tag triggers:
 |----------|-------|
 | **PyPI** | Configure a *Trusted Publisher* for `lians-sdk` pointing at `publish-lian.yml` (no token needed). |
 | **npm** | Create the `@lians-ai` org (or your chosen scope), add repo secret `NPM_TOKEN` with publish rights. |
-| **Maven Central** | Create a [Central Portal](https://central.sonatype.com) account for `dev.lians`; add secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`, `MAVEN_GPG_KEY` (ASCII-armored private key), `MAVEN_GPG_PASSPHRASE`; set repo **variable** `PUBLISH_MAVEN_CENTRAL=true`. Until then, the jar is attached to the GitHub Release. |
+| **Maven Central** | Create a [Central Portal](https://central.sonatype.com) account for `ai.lians` (verified via a TXT record on lians.ai); add secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`, `MAVEN_GPG_KEY` (ASCII-armored private key), `MAVEN_GPG_PASSPHRASE`; set repo **variable** `PUBLISH_MAVEN_CENTRAL=true`. Until then, the jar is attached to the GitHub Release. |
 | **Go / pkg.go.dev** | Nothing — `go-tag` creates the resolvable tag automatically. |
 
 ## After a release

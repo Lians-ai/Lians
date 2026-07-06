@@ -1,4 +1,4 @@
-package dev.lians;
+package ai.lians;
 
 import java.time.Duration;
 import java.util.Objects;
