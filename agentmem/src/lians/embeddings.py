@@ -18,6 +18,15 @@ class EmbeddingProvider(ABC):
         results = await self.embed([text])
         return results[0]
 
+    async def embed_query(self, text: str) -> List[float]:
+        """Embed a retrieval *query* (as opposed to a document).
+
+        Default is identical to ``embed_one``; providers whose models are
+        trained with an asymmetric query instruction (e.g. bge) override this.
+        Document embeddings are never prefixed, so existing stores stay valid.
+        """
+        return await self.embed_one(text)
+
 
 class VoyageProvider(EmbeddingProvider):
     """Voyage finance/domain embedding model."""
@@ -103,6 +112,15 @@ class SentenceTransformerProvider(EmbeddingProvider):
             self._model = await loop.run_in_executor(None, self._load)
             return self._model
 
+    # Asymmetric retrieval models embed *queries* with a trained instruction
+    # while documents stay raw; using the wrong (or no) prompt costs real
+    # recall. Gate on model name, per each family's model card.
+    _BGE_QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
+    _QUERY_PREFIX_FAMILIES = (
+        ("snowflake-arctic-embed", "query: "),
+        ("e5-", "query: "),
+    )
+
     async def embed(self, texts: List[str]) -> List[List[float]]:
         model = await self._get_model()
         loop = asyncio.get_event_loop()
@@ -112,6 +130,21 @@ class SentenceTransformerProvider(EmbeddingProvider):
             lambda: model.encode(texts, normalize_embeddings=True).tolist(),
         )
         return result
+
+    async def embed_query(self, text: str) -> List[float]:
+        name = self._model_name.lower()
+        for marker, prefix in self._QUERY_PREFIX_FAMILIES:
+            if marker in name:
+                return await self.embed_one(prefix + text)
+        if "bge" in name:
+            # Average of the instructed and raw query embeddings, renormalized.
+            # The instruction alone helps short queries but hurts verbose ones;
+            # the average beats either endpoint on evidence-retrieval evals.
+            both = await self.embed([self._BGE_QUERY_INSTRUCTION + text, text])
+            merged = [(a + b) / 2.0 for a, b in zip(both[0], both[1])]
+            norm = sum(x * x for x in merged) ** 0.5 or 1.0
+            return [x / norm for x in merged]
+        return await self.embed_one(text)
 
 
 class LocalProvider(EmbeddingProvider):

@@ -22,6 +22,7 @@ Point-in-time queries (as_of set) still go to the ``memories`` table because
 from __future__ import annotations
 
 import math
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -35,9 +36,83 @@ from .crypto import decrypt_content
 _ANN_PREFETCH_MULTIPLIER = 20
 
 W_SEM = 0.50
-W_LEX = 0.20
+# BM25 is unbounded while cosine lives in [-1, 1]; at 0.20 a single strong
+# term overlap out-shouted real semantic matches (measured -3pts evidence
+# retrieval on LOCOMO). 0.05 keeps lexical as a tie-breaker, not a driver.
+W_LEX = 0.05
 W_REC = 0.15
 W_IMP = 0.15
+
+# Maximal-marginal-relevance selection over the candidate pool. λ trades
+# relevance against novelty: 1.0 = pure relevance (MMR off, the default —
+# measured a wash-to-negative on evidence retrieval: diversity evicts the
+# second gold turn of multi-fact questions more often than it rescues one),
+# 0.0 = pure diversity. Deterministic either way.
+MMR_LAMBDA = float(os.getenv("RECALL_MMR_LAMBDA", "1.0"))
+
+# Temporal-context smoothing: a memory inherits a fraction of its strongest
+# temporally-adjacent neighbor's semantic match. Dialogue and event streams
+# split one fact across neighboring entries (a question and its answer, a
+# statement and its reply); the low-vocabulary half then never matches the
+# query on its own. Only neighbors within CONTEXT_SMOOTHING_MAX_GAP_S count,
+# so smoothing never bleeds across sessions or unrelated days. 0 disables.
+CONTEXT_SMOOTHING = float(os.getenv("RECALL_CONTEXT_SMOOTHING", "0.3"))
+CONTEXT_SMOOTHING_MAX_GAP_S = float(os.getenv("RECALL_CONTEXT_SMOOTHING_MAX_GAP_S", "3600"))
+
+# Temporal query grounding: when the query itself names a calendar date or
+# month ("what did she mention on 3 June, 2023?"), memories whose event_time
+# falls inside that window get an additive bonus. Embeddings are nearly blind
+# to dates, so without this a date-pinned query ranks purely on topic and
+# retrieves the wrong instance. Deterministic — regex date parse, no model.
+TEMPORAL_GROUNDING_BONUS = float(os.getenv("RECALL_TEMPORAL_GROUNDING_BONUS", "0.1"))
+
+_MONTHS = ("january february march april may june july august september "
+           "october november december").split()
+_MONTH_RE = "|".join(_MONTHS)
+# "3 June, 2023" / "June 3, 2023" / "3rd of June 2023"
+_DAY_DATE = re.compile(
+    rf"\b(?:(\d{{1,2}})(?:st|nd|rd|th)?(?:\s+of)?\s+({_MONTH_RE})|({_MONTH_RE})\s+(\d{{1,2}})(?:st|nd|rd|th)?)"
+    rf"\s*,?\s+(\d{{4}})\b", re.IGNORECASE)
+# "June 2023" (month precision; only used when no day-precision date matched)
+_MONTH_DATE = re.compile(rf"\b({_MONTH_RE})\s*,?\s+(\d{{4}})\b", re.IGNORECASE)
+
+_DAY_WINDOW_S = 2 * 86400      # day-precision: date ±2 days
+_MONTH_WINDOW_S = 86400        # month-precision: month edges padded a day
+
+
+def query_time_windows(query: str) -> list[tuple[float, float]]:
+    """Extract (start_ts, end_ts) windows for explicit dates in the query."""
+    windows: list[tuple[float, float]] = []
+    for m in _DAY_DATE.finditer(query):
+        day = int(m.group(1) or m.group(4))
+        month = _MONTHS.index((m.group(2) or m.group(3)).lower()) + 1
+        year = int(m.group(5))
+        try:
+            t = datetime(year, month, day, tzinfo=timezone.utc).timestamp()
+        except ValueError:
+            continue
+        windows.append((t - _DAY_WINDOW_S, t + 2 * 86400 + _DAY_WINDOW_S))
+    if windows:
+        return windows
+    for m in _MONTH_DATE.finditer(query):
+        month = _MONTHS.index(m.group(1).lower()) + 1
+        year = int(m.group(2))
+        start = datetime(year, month, 1, tzinfo=timezone.utc).timestamp()
+        end_month = datetime(year + (month == 12), month % 12 + 1, 1,
+                             tzinfo=timezone.utc).timestamp()
+        windows.append((start - _MONTH_WINDOW_S, end_month + _MONTH_WINDOW_S))
+    return windows
+
+
+def _temporal_bonus(rows: list[Any], windows: list[tuple[float, float]]) -> list[float]:
+    if not windows or TEMPORAL_GROUNDING_BONUS <= 0:
+        return [0.0] * len(rows)
+    out = []
+    for row in rows:
+        t = _event_ts(row)
+        out.append(TEMPORAL_GROUNDING_BONUS
+                   if any(lo <= t <= hi for lo, hi in windows) else 0.0)
+    return out
 
 RECENCY_HALF_LIFE_DAYS = 30.0
 
@@ -63,7 +138,21 @@ def _materiality_half_life(metadata: Optional[dict]) -> float:
     return RECENCY_HALF_LIFE_DAYS
 
 
+try:
+    import numpy as _np
+except ImportError:  # pragma: no cover - numpy ships with the embedding stack
+    _np = None
+
+
 def _cosine(a: list[float], b: list[float]) -> float:
+    # Vectorized: this runs once per candidate row on every recall (and per
+    # selected pair in MMR), so the pure-Python loop dominated recall latency
+    # on local SQLite (~2ms per 1024-dim pair; ~30x faster under numpy).
+    if _np is not None:
+        va = _np.asarray(a, dtype=_np.float32)
+        vb = _np.asarray(b, dtype=_np.float32)
+        denom = float(_np.linalg.norm(va)) * float(_np.linalg.norm(vb)) + 1e-9
+        return float(va @ vb) / denom
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
@@ -301,34 +390,50 @@ def _decrypt(row: Any, subject_keys: dict[str, bytes]) -> Optional[str]:
     return None
 
 
-def _score_live(
-    fact: LiveFact,
+def _score_components(
+    row: Any,
     query: str,
     query_embedding: list[float],
     subject_keys: dict[str, bytes],
-) -> tuple[float, Optional[str]]:
-    content = _decrypt(fact, subject_keys)
-    emb = list(fact.embedding) if fact.embedding is not None else None
+) -> tuple[float, float, float, Optional[str]]:
+    """(sem, lex, rec_imp, content) for a LiveFact or Memory row; the caller
+    applies context smoothing to sem before blending."""
+    content = _decrypt(row, subject_keys)
+    emb = list(row.embedding) if row.embedding is not None else None
     sem = _cosine(query_embedding, emb) if emb else 0.0
     lex = _bm25_score(query, content or "") if content else 0.0
-    rec = _recency_decay(fact.event_time, _materiality_half_life(fact.metadata_))
-    score = W_SEM * sem + W_LEX * lex + W_REC * rec + W_IMP * fact.importance
-    return score, content
+    rec = _recency_decay(row.event_time, _materiality_half_life(row.metadata_))
+    return sem, lex, W_REC * rec + W_IMP * row.importance, content
 
 
-def _score_historical(
-    mem: Memory,
-    query: str,
-    query_embedding: list[float],
-    subject_keys: dict[str, bytes],
-) -> tuple[float, Optional[str]]:
-    content = _decrypt(mem, subject_keys)
-    emb = list(mem.embedding) if mem.embedding is not None else None
-    sem = _cosine(query_embedding, emb) if emb else 0.0
-    lex = _bm25_score(query, content or "") if content else 0.0
-    rec = _recency_decay(mem.event_time, _materiality_half_life(mem.metadata_))
-    score = W_SEM * sem + W_LEX * lex + W_REC * rec + W_IMP * mem.importance
-    return score, content
+def _event_ts(row: Any) -> float:
+    t = row.event_time
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.timestamp()
+
+
+def _smoothed_sems(rows: list[Any], sems: list[float]) -> list[float]:
+    """Temporal-context smoothing over the candidate pool.
+
+    Each row inherits ``CONTEXT_SMOOTHING`` × the best semantic score among
+    its immediate temporal neighbors (previous/next by event_time, within
+    ``CONTEXT_SMOOTHING_MAX_GAP_S``). Deterministic, pool-local, no extra IO.
+    """
+    if CONTEXT_SMOOTHING <= 0 or len(rows) < 2:
+        return sems
+    order = sorted(range(len(rows)), key=lambda i: (_event_ts(rows[i]), i))
+    out = list(sems)
+    for pos, i in enumerate(order):
+        best = 0.0
+        for nb_pos in (pos - 1, pos + 1):
+            if 0 <= nb_pos < len(order):
+                j = order[nb_pos]
+                if abs(_event_ts(rows[i]) - _event_ts(rows[j])) <= CONTEXT_SMOOTHING_MAX_GAP_S:
+                    if sems[j] > best:
+                        best = sems[j]
+        out[i] = sems[i] + CONTEXT_SMOOTHING * best
+    return out
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -362,10 +467,17 @@ async def hybrid_recall(
         candidates = await _fetch_historical_candidates(
             db, namespace, agent_id, barrier_group, filters, query_embedding, k, as_of
         )
-        scored: list[tuple[Memory, float, Optional[str]]] = []
-        for mem in candidates:
-            score, content = _score_historical(mem, query, query_embedding, subject_keys)
-            scored.append((mem, score, content))
+        parts = [
+            _score_components(mem, query, query_embedding, subject_keys)
+            for mem in candidates
+        ]
+        sems = _smoothed_sems(candidates, [p[0] for p in parts])
+        bonuses = _temporal_bonus(candidates, query_time_windows(query))
+        scored: list[tuple[Memory, float, Optional[str]]] = [
+            (mem, W_SEM * sem + W_LEX * lex + rest + bonus, content)
+            for mem, sem, bonus, (_, lex, rest, content)
+            in zip(candidates, sems, bonuses, parts)
+        ]
     else:
         # Present-time: use live_facts (Change 1)
         if live_facts_override is not None:
@@ -382,14 +494,75 @@ async def hybrid_recall(
                 db, namespace, agent_id, barrier_group, filters, query_embedding, k
             )
 
+        parts = [
+            _score_components(fact, query, query_embedding, subject_keys)
+            for fact in facts
+        ]
+        sems = _smoothed_sems(facts, [p[0] for p in parts])
+        bonuses = _temporal_bonus(facts, query_time_windows(query))
         # Always return Memory objects for API consistency — fetch the canonical
-        # Memory row so callers can use .id, .valid_to, .erased_at, etc.
+        # Memory rows so callers can use .id, .valid_to, .erased_at, etc.
+        # Batched: a per-fact db.get() here was one SQL round trip per live
+        # fact per recall, dominating recall latency on local SQLite.
+        mem_by_id: dict[Any, Memory] = {}
+        fact_ids = [fact.memory_id for fact in facts]
+        for i in range(0, len(fact_ids), 500):
+            chunk = fact_ids[i:i + 500]
+            rows = await db.execute(select(Memory).where(Memory.id.in_(chunk)))
+            for m in rows.scalars():
+                mem_by_id[m.id] = m
         scored = []
-        for fact in facts:
-            score, content = _score_live(fact, query, query_embedding, subject_keys)
-            mem = await db.get(Memory, fact.memory_id)
+        for fact, sem, bonus, (_, lex, rest, content) in zip(facts, sems, bonuses, parts):
+            mem = mem_by_id.get(fact.memory_id)
             if mem is not None:
-                scored.append((mem, score, content))
+                scored.append((mem, W_SEM * sem + W_LEX * lex + rest + bonus, content))
 
     scored.sort(key=lambda x: x[1], reverse=True)
-    return scored[:k]
+    return _mmr_select(scored, k)
+
+
+def _mmr_select(
+    scored: list[tuple[Any, float, Optional[str]]],
+    k: int,
+    lam: float = MMR_LAMBDA,
+) -> list[tuple[Any, float, Optional[str]]]:
+    """Select k results by maximal marginal relevance.
+
+    ``scored`` must be sorted by blended score descending. Blended scores are
+    min-max normalized within the candidate pool so the relevance and novelty
+    terms are commensurate; novelty is 1 - max cosine similarity to any
+    already-selected row. Rows without embeddings incur no similarity penalty
+    (they cannot crowd anything out semantically).
+    """
+    if lam >= 1.0 or len(scored) <= k:
+        return scored[:k]
+
+    lo = scored[-1][1]
+    span = scored[0][1] - lo or 1.0
+    embs = {
+        id(entry): list(entry[0].embedding)
+        for entry in scored
+        if getattr(entry[0], "embedding", None) is not None
+    }
+
+    selected: list[tuple[Any, float, Optional[str]]] = [scored[0]]
+    remaining = scored[1:]
+    while remaining and len(selected) < k:
+        best, best_val = None, -math.inf
+        for entry in remaining:
+            rel = (entry[1] - lo) / span
+            emb = embs.get(id(entry))
+            max_sim = 0.0
+            if emb is not None:
+                for chosen in selected:
+                    c_emb = embs.get(id(chosen))
+                    if c_emb is not None:
+                        sim = _cosine(emb, c_emb)
+                        if sim > max_sim:
+                            max_sim = sim
+            val = lam * rel - (1.0 - lam) * max_sim
+            if val > best_val:
+                best, best_val = entry, val
+        selected.append(best)
+        remaining.remove(best)
+    return selected
