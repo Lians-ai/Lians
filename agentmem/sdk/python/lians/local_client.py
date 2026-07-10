@@ -116,6 +116,9 @@ class LocalLiansClient:
         # enforces MASTER_ENCRYPTION_KEY at startup.
         os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
         os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
+        # Local mode has no Redis: every cache attempt would burn ~1-2s in
+        # connection timeouts per call. Callers can still opt back in.
+        os.environ.setdefault("RECALL_CACHE_ENABLED", "false")
 
         # Build the async engine
         if db_path is None:
@@ -207,6 +210,29 @@ class LocalLiansClient:
         async with self._session_factory() as db:
             result = await add_memory(db, self._namespace, req)
         return result.model_dump(mode="json")
+
+    def add_batch(self, agent_id: str, items: list[dict]) -> list[dict]:
+        """Add many memories in one call, embedding all contents in a single
+        batched model pass (10-20x faster than per-item ``add`` on local
+        models). Each item takes the same keys as ``add`` minus ``agent_id``.
+        Writes are applied in order; returns the created MemoryOut dicts."""
+        return self._run(self._async_add_batch(agent_id, items))
+
+    async def _async_add_batch(self, agent_id: str, items: list[dict]) -> list[dict]:
+        from src.lians.schemas import MemoryAdd
+        from src.lians.memory_service import add_memory
+        from src.lians.embeddings import get_embedding_provider
+        provider = get_embedding_provider()
+        embeddings = await provider.embed([it["content"] for it in items])
+        out = []
+        async with self._session_factory() as db:
+            for it, emb in zip(items, embeddings):
+                req = MemoryAdd(agent_id=agent_id, **it)
+                result = await add_memory(
+                    db, self._namespace, req, precomputed_embedding=emb
+                )
+                out.append(result.model_dump(mode="json"))
+        return out
 
     def recall(
         self,

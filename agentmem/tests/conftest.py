@@ -116,6 +116,10 @@ def test_settings(monkeypatch):
     monkeypatch.setenv("KMS_PROVIDER", "env")
     monkeypatch.setenv("AGENTMEM_ALLOW_UNENCRYPTED", "true")
     monkeypatch.setenv("RLS_BARRIERS_ENABLED", "false")  # SQLite has no RLS
+    # LocalLiansClient (used by eval-harness tests) setdefaults this to "false"
+    # in os.environ; pin it so later tests see the server default regardless of
+    # test order.
+    monkeypatch.setenv("RECALL_CACHE_ENABLED", "true")
     get_settings.cache_clear()
     _kms._reset_cache()
     yield

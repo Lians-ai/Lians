@@ -53,6 +53,11 @@ def _recall_key(
     return f"agentmem:recall:{namespace}:{agent_id}:{_h(query)}:{as_of_str}:{k}:{_h(filters_str)}"
 
 
+def _enabled() -> bool:
+    from .config import get_settings
+    return get_settings().recall_cache_enabled
+
+
 async def get_cached_recall(
     namespace: str,
     agent_id: str,
@@ -61,6 +66,8 @@ async def get_cached_recall(
     k: int,
     filters: Optional[dict],
 ) -> Optional[str]:
+    if not _enabled():
+        return None
     try:
         key = _recall_key(namespace, agent_id, query, as_of, k, filters)
         return await _get_redis().get(key)
@@ -78,6 +85,8 @@ async def set_cached_recall(
     payload: str,
     ttl: int,
 ) -> None:
+    if not _enabled():
+        return
     try:
         key = _recall_key(namespace, agent_id, query, as_of, k, filters)
         await _get_redis().setex(key, ttl, payload)
@@ -87,6 +96,8 @@ async def set_cached_recall(
 
 async def invalidate_agent(namespace: str, agent_id: str) -> None:
     """Delete all recall cache entries for (namespace, agent_id) after a write."""
+    if not _enabled():
+        return
     try:
         pattern = f"agentmem:recall:{namespace}:{agent_id}:*"
         r = _get_redis()

@@ -44,6 +44,13 @@ logger = logging.getLogger("agentmem.supersession")
 
 # Threshold: cosine similarity above this is considered "same topic"
 _SIM_THRESHOLD = 0.82
+# When the incoming free text explicitly announces a revision (see
+# _REVISION_CUE_RE), same-topic candidacy is admitted at a lower bar: natural
+# restatements ("I'm vegan" → "I eat fish now, call me pescatarian") land in
+# the 0.6-0.76 cosine range on doc-doc embeddings, well below 0.82. Calibrated
+# against should-not-supersede controls (additive facts, cross-topic
+# interjections), which measure ≤0.59 on the same model.
+_CUE_SIM_THRESHOLD = 0.60
 
 def _get_structured_keys() -> frozenset[str]:
     """Read structured keys from the active domain adapter — never hardcoded."""
@@ -162,6 +169,15 @@ def _has_structured_key(meta: dict) -> bool:
     return any(k in sk for k in (meta or {}))
 
 
+def _non_structured_meta(meta: dict) -> dict:
+    """Remaining discriminating metadata: everything outside the structured key
+    set and provenance/system keys (leading underscore)."""
+    from .adapters import get_adapter
+    sk = get_adapter().structured_keys
+    return {k: v for k, v in (meta or {}).items()
+            if k not in sk and not str(k).startswith("_")}
+
+
 def _metadata_overlap(old_meta: dict, new_meta: dict) -> set[str]:
     old_n = _norm_meta(old_meta)
     new_n = _norm_meta(new_meta)
@@ -185,7 +201,47 @@ def _narrows(old_content: Optional[str], new_content: str) -> bool:
     return bool(old_tokens) and old_tokens < new_tokens
 
 
+# Deterministic revision-cue lexicon for unkeyed free text. Without structured
+# keys, two differing statements are DISTINCT by default (see classify_relation's
+# guard) — but a statement that *announces itself* as a revision ("I eat fish
+# now", "switched to Pacific Time", "rate adjusted to $175") is the one case
+# where free text can supersede: high Stage-1 similarity (same topic) plus an
+# explicit change marker plus a later event_time. Rule-based, reproducible, no
+# model call — and the verdict lands at moderate confidence so it is visible in
+# review_supersessions and eligible for Stage-3 LLM adjudication when enabled.
+import re as _re_mod
+
+_REVISION_CUE_RE = _re_mod.compile(
+    r"\b(?:"
+    r"no longer|not\s+\w+\s+anymore|anymore|now|instead|actually|wait|"
+    r"correction|corrected|updated?|revised?|changed?|switch(?:ed)?|moved?|"
+    r"relocat\w+|renamed?|adjust(?:ed)?|raised?|lowered?|increas\w+|decreas\w+|"
+    r"went (?:up|down)|left|quit|resigned|started (?:as|at)|promoted|demoted|"
+    r"taken over|took over|replace[sd]?|renewal|renewed|restated|amend\w+|"
+    r"effective|from now on|these days"
+    r")\b",
+    _re_mod.IGNORECASE,
+)
+
+
+def _has_revision_cue(text: Optional[str]) -> bool:
+    return bool(text) and bool(_REVISION_CUE_RE.search(text))
+
+
+try:
+    import numpy as _np
+except ImportError:  # pragma: no cover - numpy ships with the embedding stack
+    _np = None
+
+
 def _cosine(a: list[float], b: list[float]) -> float:
+    # Vectorized: candidate generation computes this against every live memory
+    # on each unkeyed write, so the pure-Python loop dominated ingest latency.
+    if _np is not None:
+        va = _np.asarray(a, dtype=_np.float32)
+        vb = _np.asarray(b, dtype=_np.float32)
+        denom = float(_np.linalg.norm(va)) * float(_np.linalg.norm(vb)) + 1e-9
+        return float(va @ vb) / denom
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
@@ -267,6 +323,7 @@ async def _keyed_supersession(
     conflict_ids: list[UUID] = []
     confirms_close_ids: list[UUID] = []   # identical value re-stated LATER: close old window
     confirms_dupe_ids: list[UUID] = []    # identical value at the SAME time: coexisting duplicate
+    newer_existing: Optional[Memory] = None  # live same-key fact with LATER event_time
     new_et = _utc(new_event_time)
 
     for mem in candidates:
@@ -299,8 +356,24 @@ async def _keyed_supersession(
                 confirms_dupe_ids.append(mem.id)
             else:
                 conflict_ids.append(mem.id)
-        # old_et > new_et: a newer fact already exists — out-of-order ingestion,
-        # treat as ADDS so we don't overwrite newer data.
+        else:
+            # old_et > new_et: a newer same-key fact already exists — out-of-order
+            # ingestion. The incoming memory is historical on arrival: it must not
+            # stay live alongside the newer value. Track the IMMEDIATE successor
+            # (smallest event_time > new_et) so the incoming validity window
+            # closes exactly where the next value takes over.
+            #
+            # Closure demands FULL metadata equivalence, not just structured-key
+            # match: {ticker, metric} alone would let a Q2 figure close a
+            # late-arriving Q1 *correction* (period is a discriminating key even
+            # though it isn't structured). Forward supersession stays coarse —
+            # its behavior is long-established — but closing an incoming fact is
+            # only safe when nothing distinguishes the two.
+            if _non_structured_meta(old_meta) == _non_structured_meta(new_meta):
+                if newer_existing is None or _utc(mem.event_time) < _utc(newer_existing.event_time):
+                    newer_existing = mem
+
+    superseded_by_id = newer_existing.id if newer_existing is not None else None
 
     if superseded_ids:
         # A mixed batch still closes every old window (narrowed and re-confirmed
@@ -309,31 +382,36 @@ async def _keyed_supersession(
             relation="SUPERSEDES",
             confidence=1.0,
             superseded_ids=superseded_ids + refines_ids + confirms_close_ids,
+            superseded_by_id=superseded_by_id,
         )
     if refines_ids:
         return SupersessionResult(
             relation="REFINES",
             confidence=0.8,
             superseded_ids=refines_ids + confirms_close_ids,
+            superseded_by_id=superseded_by_id,
         )
     if conflict_ids:
         return SupersessionResult(
             relation="CONTRADICTS_SAME_TIME",
             confidence=0.9,
             conflict_ids=conflict_ids,
+            superseded_by_id=superseded_by_id,
         )
     if confirms_close_ids:
         return SupersessionResult(
             relation="CONFIRMS",
             confidence=1.0,
             superseded_ids=confirms_close_ids,
+            superseded_by_id=superseded_by_id,
         )
     if confirms_dupe_ids:
         return SupersessionResult(
             relation="CONFIRMS",
             confidence=1.0,
+            superseded_by_id=superseded_by_id,
         )
-    return SupersessionResult(relation="ADDS", confidence=1.0)
+    return SupersessionResult(relation="ADDS", confidence=1.0, superseded_by_id=superseded_by_id)
 
 
 # ── Stage 1: candidate generation ────────────────────────────────────────────
@@ -345,6 +423,7 @@ async def find_supersession_candidates(
     new_meta: dict[str, Any],
     new_embedding: list[float],
     new_event_time: datetime,
+    new_content: Optional[str] = None,
 ) -> list[Memory]:
     """Stage 1: find prior valid memories sharing structured keys + high cosine sim.
 
@@ -365,6 +444,13 @@ async def find_supersession_candidates(
     candidates = result.scalars().all()
 
     new_structured = _norm_meta(new_meta or {})
+    # A cued unkeyed revision qualifies for candidacy at the lower bar; the
+    # final supersession decision stays top-1-only in run_supersession.
+    unkeyed_threshold = (
+        _CUE_SIM_THRESHOLD
+        if not new_structured and _has_revision_cue(new_content)
+        else _SIM_THRESHOLD
+    )
     filtered = []
     for mem in candidates:
         old_meta = dict(mem.metadata_ or {})
@@ -380,7 +466,8 @@ async def find_supersession_candidates(
         if mem.embedding is None:
             continue
         emb = mem.embedding if isinstance(mem.embedding, list) else list(mem.embedding)
-        if _cosine(emb, new_embedding) >= _SIM_THRESHOLD:
+        threshold = _SIM_THRESHOLD if new_structured else unkeyed_threshold
+        if _cosine(emb, new_embedding) >= threshold:
             filtered.append(mem)
 
     return filtered
@@ -477,7 +564,8 @@ async def run_supersession(
 
     # Unkeyed path: Stage 1 + Stage 2
     candidates = await find_supersession_candidates(
-        db, namespace, agent_id, new_meta, new_embedding, new_event_time
+        db, namespace, agent_id, new_meta, new_embedding, new_event_time,
+        new_content=new_content,
     )
     if not candidates:
         return SupersessionResult(relation="ADDS", confidence=1.0)
@@ -487,6 +575,12 @@ async def run_supersession(
     best_relation = "ADDS"
     best_confidence = 1.0
     best_rationale: Optional[str] = None
+    # Unkeyed revision handling (see _REVISION_CUE_RE): a cued update supersedes
+    # only its single most-similar candidate — real revisions target one fact,
+    # and top-1 keeps a multi-fact utterance from mowing down its whole topic.
+    cue_candidates: list[tuple[float, Any, str]] = []   # (sim, candidate, old_content)
+    newer_closer: Optional[Any] = None                  # live newer revision → closes incoming
+    new_et = _utc(new_event_time)
 
     for candidate in candidates:
         old_content: Optional[str] = None
@@ -509,6 +603,21 @@ async def run_supersession(
             old_meta=dict(candidate.metadata_ or {}),
             new_meta=new_meta,
         )
+
+        if relation == "ADDS" and not (
+            _has_structured_key(dict(candidate.metadata_ or {})) or _has_structured_key(new_meta)
+        ):
+            old_et = _utc(candidate.event_time)
+            if old_et < new_et and _has_revision_cue(new_content) and old_content:
+                emb = candidate.embedding if isinstance(candidate.embedding, list) \
+                    else list(candidate.embedding or [])
+                if emb:
+                    cue_candidates.append((_cosine(emb, new_embedding), candidate, old_content))
+            elif old_et > new_et and _has_revision_cue(old_content):
+                # A live, later revision of this topic already exists: the
+                # incoming (backdated) statement is historical on arrival.
+                if newer_closer is None or old_et < _utc(newer_closer.event_time):
+                    newer_closer = candidate
 
         rationale: Optional[str] = None
         if (
@@ -558,10 +667,44 @@ async def run_supersession(
             best_confidence = confidence
             best_rationale = rationale
 
+    # Resolve the cued unkeyed revision: supersede the single most-similar
+    # candidate at moderate confidence (reviewable; Stage-3 eligible).
+    if cue_candidates:
+        _, chosen, chosen_old = max(cue_candidates, key=lambda t: t[0])
+        if chosen.id not in superseded_ids:
+            if settings.supersession_llm_stage:
+                if settings.llm_adjudication_async and new_memory_id is not None:
+                    try:
+                        get_llm_queue().put_nowait((
+                            namespace, agent_id,
+                            chosen.id, new_memory_id,
+                            chosen_old, new_content,
+                            dict(chosen.metadata_ or {}),
+                        ))
+                    except asyncio.QueueFull:
+                        logger.warning("LLM adjudication queue full — skipping async Stage 3")
+                    superseded_ids.append(chosen.id)
+                    if best_relation not in ("SUPERSEDES",):
+                        best_relation, best_confidence = "SUPERSEDES", 0.7
+                else:
+                    relation, confidence, rationale = await llm_adjudicate(
+                        old_content=chosen_old,
+                        new_content=new_content,
+                        meta=new_meta,
+                    )
+                    if relation in ("SUPERSEDES", "REFINES"):
+                        superseded_ids.append(chosen.id)
+                        best_relation, best_confidence, best_rationale = relation, confidence, rationale
+            else:
+                superseded_ids.append(chosen.id)
+                if best_relation not in ("SUPERSEDES",):
+                    best_relation, best_confidence = "SUPERSEDES", 0.7
+
     return SupersessionResult(
         relation=best_relation,
         confidence=best_confidence,
         superseded_ids=superseded_ids,
         conflict_ids=conflict_ids,
+        superseded_by_id=newer_closer.id if newer_closer is not None else None,
         rationale=best_rationale,
     )

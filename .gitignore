@@ -54,3 +54,7 @@ agentmem/docker-compose.override.yml
 agentmem/.env.dockerstack
 # Scratch live-smoke script used for cross-language SDK testing.
 agentmem/sdk/typescript/live_smoke.mjs
+
+# Benchmark artifacts (regenerable; checkpoint DBs run to GBs)
+agentmem/results/
+agentmem/benchmarks/data/*.sqlite

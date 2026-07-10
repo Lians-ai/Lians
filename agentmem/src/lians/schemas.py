@@ -110,6 +110,10 @@ class SupersessionResult(BaseModel):
     confidence: float
     superseded_ids: list[UUID] = Field(default_factory=list)
     conflict_ids: list[UUID] = Field(default_factory=list)  # memories that CONTRADICTS_SAME_TIME
+    # Out-of-order ingestion: an already-live fact with a LATER event_time makes
+    # the incoming memory historical on arrival — its validity window closes at
+    # that fact's event_time instead of staying open alongside it.
+    superseded_by_id: Optional[UUID] = None
     rationale: Optional[str] = None
 
 

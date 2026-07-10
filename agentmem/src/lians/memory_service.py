@@ -40,7 +40,7 @@ from .schemas import (
 from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, decrypt_content, unwrap_subject_key
 from .pii import get_or_create_subject_key, destroy_subject_key
-from .supersession import run_supersession
+from .supersession import run_supersession, _utc
 from .ranking import hybrid_recall
 from .cache import get_cached_recall, set_cached_recall, invalidate_agent
 from .config import get_settings
@@ -194,15 +194,22 @@ async def add_memory(
     req: MemoryAdd,
     *,
     barrier_override: Optional[str] = None,
+    precomputed_embedding: Optional[list[float]] = None,
 ) -> MemoryOut:
+    """``precomputed_embedding`` lets batch writers embed many contents in one
+    model call (10-20x faster on local models) and pass each vector through;
+    it must come from the same provider/model the store was built with."""
     _add_t0 = _time.perf_counter()
     with tracer.start_as_current_span("memory.add") as span:
         span.set_attribute("namespace", namespace)
         span.set_attribute("agent_id", req.agent_id)
         span.set_attribute("has_subject", bool(req.subject_id))
 
-        provider = get_embedding_provider()
-        embedding = await provider.embed_one(req.content)
+        if precomputed_embedding is not None:
+            embedding = precomputed_embedding
+        else:
+            provider = get_embedding_provider()
+            embedding = await provider.embed_one(req.content)
 
         # Auto-metadata (auto-supersession parity): when the caller supplied no
         # structured keys, derive them from the content so the deterministic
@@ -297,6 +304,31 @@ async def add_memory(
                         },
                     )
 
+            # Out-of-order ingestion: a live fact with a LATER event_time already
+            # covers this key/topic, so the incoming memory arrives historical —
+            # its validity window closes at the successor's event_time. It stays
+            # queryable via as_of/snapshot for its own era but never pollutes the
+            # current view.
+            arrived_closed = False
+            if supersession.superseded_by_id is not None:
+                newer = await db.get(Memory, supersession.superseded_by_id)
+                if newer is not None and _utc(newer.event_time) > _utc(req.event_time):
+                    mem.valid_to = newer.event_time
+                    mem.superseded_by = newer.id
+                    mem.supersession_confidence = supersession.confidence
+                    arrived_closed = True
+                    await chain_log(
+                        db, namespace=namespace, agent_id=req.agent_id,
+                        op="supersede", memory_id=mem.id,
+                        content_hash=mem.content_hash,
+                        payload={
+                            "superseded_by": str(newer.id),
+                            "confidence": supersession.confidence,
+                            "relation": supersession.relation,
+                            "backdated_arrival": True,
+                        },
+                    )
+
             # Same-time contradiction: persist a ConflictFlag for human review.
             # Both memories stay live (neither superseded) until someone resolves it.
             for conflict_old_id in supersession.conflict_ids:
@@ -321,9 +353,11 @@ async def add_memory(
                     },
                 )
 
-            # Change 1: maintain live_facts projection
+            # Change 1: maintain live_facts projection. A memory that arrived
+            # already superseded (backdated) is never live.
             await remove_live_facts(db, supersession.superseded_ids)
-            await upsert_live_fact(db, mem, predicate_key)
+            if not arrived_closed:
+                await upsert_live_fact(db, mem, predicate_key)
 
             await chain_log(
                 db, namespace=namespace, agent_id=req.agent_id,
@@ -661,7 +695,7 @@ async def recall_memories(
         with tracer.start_as_current_span("recall.embed") as embed_span:
             provider = get_embedding_provider()
             try:
-                query_embedding = await provider.embed_one(req.query)
+                query_embedding = await provider.embed_query(req.query)
             except Exception as exc:
                 query_embedding = []
                 retrieval_degraded = True
