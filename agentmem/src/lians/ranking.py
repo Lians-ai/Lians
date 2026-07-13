@@ -59,6 +59,79 @@ MMR_LAMBDA = float(os.getenv("RECALL_MMR_LAMBDA", "1.0"))
 CONTEXT_SMOOTHING = float(os.getenv("RECALL_CONTEXT_SMOOTHING", "0.3"))
 CONTEXT_SMOOTHING_MAX_GAP_S = float(os.getenv("RECALL_CONTEXT_SMOOTHING_MAX_GAP_S", "3600"))
 
+# Entity matching: a third retrieval signal alongside semantic and lexical —
+# proper nouns and quoted spans in the query anchor memories that mention
+# them. Deterministic (regex extraction, word-boundary matching), no model.
+#
+# DEFAULT OFF: measured on LOCOMO raw dialogue it is a small net negative
+# (79.0% hit@10 without vs 78.6-78.8% with, even document-frequency-gated) —
+# speaker-prefixed turns make names indiscriminate. It exists for fact-shaped
+# corpora (distilled facts, tickets, CRM rows) where entities are sparse and
+# discriminative; enable via RECALL_ENTITY_MATCH_BONUS there.
+ENTITY_MATCH_BONUS = float(os.getenv("RECALL_ENTITY_MATCH_BONUS", "0.0"))
+# Entities present in more than this fraction of the candidate pool are not
+# discriminative and never boost (a speaker's own name matches half the pool).
+ENTITY_MAX_DF = float(os.getenv("RECALL_ENTITY_MAX_DF", "0.1"))
+
+_QUOTED_SPAN = re.compile(r"[\"'“‘]([^\"'”’]{2,60})[\"'”’]")
+# Runs of adjacent capitalized words merge into one entity ("San Francisco").
+_CAPITALIZED_RUN = re.compile(r"(?<![.!?]\s)(?<!^)\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*)\b")
+_ENTITY_STOPWORDS = frozenset(
+    "the this that what when where which who whom whose why how did does was "
+    "were are is has have had will would could should monday tuesday wednesday "
+    "thursday friday saturday sunday january february march april may june july "
+    "august september october november december".split()
+)
+
+
+def query_entities(query: str) -> list[str]:
+    """Extract quoted spans and mid-sentence capitalized-word runs from a
+    query; capitalized words already inside a quoted span are not repeated."""
+    ents: list[str] = []
+    quoted_ranges: list[tuple[int, int]] = []
+    for m in _QUOTED_SPAN.finditer(query):
+        ents.append(m.group(1).strip())
+        quoted_ranges.append((m.start(), m.end()))
+    for m in _CAPITALIZED_RUN.finditer(query):
+        if any(lo <= m.start() < hi for lo, hi in quoted_ranges):
+            continue
+        run = m.group(1)
+        if run.lower() not in _ENTITY_STOPWORDS:
+            ents.append(run)
+    seen: set[str] = set()
+    out = []
+    for e in ents:
+        key = e.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(e)
+    return out
+
+
+def _entity_bonus(contents: list[Optional[str]], entities: list[str]) -> list[float]:
+    """Per-row bonus: ENTITY_MATCH_BONUS × fraction of (discriminative) query
+    entities present, word-boundary and case-insensitive. Entities appearing
+    in more than ENTITY_MAX_DF of the pool are dropped before scoring."""
+    if not entities or ENTITY_MATCH_BONUS <= 0 or not contents:
+        return [0.0] * len(contents)
+    pats = []
+    for e in entities:
+        p = re.compile(rf"\b{re.escape(e)}\b", re.IGNORECASE)
+        df = sum(1 for c in contents if c and p.search(c)) / len(contents)
+        if df <= ENTITY_MAX_DF:
+            pats.append(p)
+    if not pats:
+        return [0.0] * len(contents)
+    out = []
+    for c in contents:
+        if not c:
+            out.append(0.0)
+            continue
+        hits = sum(1 for p in pats if p.search(c))
+        out.append(ENTITY_MATCH_BONUS * hits / len(pats))
+    return out
+
+
 # Temporal query grounding: when the query itself names a calendar date or
 # month ("what did she mention on 3 June, 2023?"), memories whose event_time
 # falls inside that window get an additive bonus. Embeddings are nearly blind
@@ -245,6 +318,26 @@ _BM25_UNSEG_SPAN = re.compile(
 )
 
 
+def _light_stem(token: str) -> str:
+    """Suffix-strip English inflections so query and content conjugations
+    meet at one form ("attended"/"attending"/"attends" → "attend"). Rule-based
+    and deliberately conservative — short tokens and non-Latin scripts pass
+    through untouched, so the CJK bigram path is unaffected."""
+    if len(token) <= 4 or not token.isascii():
+        return token
+    for suffix in ("ing", "ies", "ied", "ed", "es", "s"):
+        if token.endswith(suffix):
+            stem = token[: -len(suffix)]
+            if len(stem) >= 3:
+                if suffix in ("ies", "ied"):
+                    return stem + "y"
+                # doubled final consonant from gerunds: "planning" → "plan"
+                if suffix in ("ing", "ed") and len(stem) >= 4 and stem[-1] == stem[-2]:
+                    return stem[:-1]
+                return stem
+    return token
+
+
 def _bm25_tokens(text: str) -> list[str]:
     """Shared query/content tokenizer for the lexical half of hybrid recall."""
     tokens: list[str] = []
@@ -252,7 +345,7 @@ def _bm25_tokens(text: str) -> list[str]:
         last = 0
         for m in _BM25_UNSEG_SPAN.finditer(word):
             if m.start() > last:
-                tokens.append(word[last:m.start()])
+                tokens.append(_light_stem(word[last:m.start()]))
             span = m.group(0)
             if len(span) == 1:
                 tokens.append(span)
@@ -260,7 +353,7 @@ def _bm25_tokens(text: str) -> list[str]:
                 tokens.extend(span[i:i + 2] for i in range(len(span) - 1))
             last = m.end()
         if last < len(word):
-            tokens.append(word[last:])
+            tokens.append(_light_stem(word[last:]))
     return tokens
 
 
@@ -544,13 +637,14 @@ async def hybrid_recall(
         ]
         sems = _smoothed_sems(candidates, [p[0] for p in parts])
         bonuses = _temporal_bonus(candidates, query_time_windows(query))
+        ent_bonuses = _entity_bonus([p[3] for p in parts], query_entities(query))
         scored: list[tuple[Memory, float, Optional[str]]] = [
             (mem,
-             W_SEM * sem + W_LEX * lex + rest + bonus
+             W_SEM * sem + W_LEX * lex + rest + bonus + ent
              - _stale_clause_penalty(mem.metadata_, cutoff),
              content)
-            for mem, sem, bonus, (_, lex, rest, content)
-            in zip(candidates, sems, bonuses, parts)
+            for mem, sem, bonus, ent, (_, lex, rest, content)
+            in zip(candidates, sems, bonuses, ent_bonuses, parts)
         ]
     else:
         # Present-time: use live_facts (Change 1)
@@ -574,6 +668,7 @@ async def hybrid_recall(
         ]
         sems = _smoothed_sems(facts, [p[0] for p in parts])
         bonuses = _temporal_bonus(facts, query_time_windows(query))
+        ent_bonuses = _entity_bonus([p[3] for p in parts], query_entities(query))
         # Always return Memory objects for API consistency — fetch the canonical
         # Memory rows so callers can use .id, .valid_to, .erased_at, etc.
         # Batched: a per-fact db.get() here was one SQL round trip per live
@@ -587,12 +682,13 @@ async def hybrid_recall(
                 mem_by_id[m.id] = m
         scored = []
         now = datetime.now(timezone.utc)
-        for fact, sem, bonus, (_, lex, rest, content) in zip(facts, sems, bonuses, parts):
+        for fact, sem, bonus, ent, (_, lex, rest, content) in zip(
+                facts, sems, bonuses, ent_bonuses, parts):
             mem = mem_by_id.get(fact.memory_id)
             if mem is not None:
                 scored.append((
                     mem,
-                    W_SEM * sem + W_LEX * lex + rest + bonus
+                    W_SEM * sem + W_LEX * lex + rest + bonus + ent
                     - _stale_clause_penalty(mem.metadata_, now),
                     content,
                 ))
