@@ -37,6 +37,13 @@ class MemoryOut(BaseModel):
     # responses only; None on write/snapshot surfaces. Additive for API
     # consumers that rank or threshold on similarity (e.g. the Memory Governor).
     score: Optional[float] = None
+    # Adjacent-memory context (recall with include_context=True only): the
+    # nearest same-agent memories immediately before/after this one in event
+    # time, within the context gap. Event streams split one fact across
+    # neighboring entries (a question and its answer); the neighbor routinely
+    # holds the half a consumer LLM needs to read the hit correctly.
+    context_before: Optional[str] = None
+    context_after: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +54,11 @@ class RecallRequest(BaseModel):
     k: int = Field(default=5, ge=1, le=100)
     as_of: Optional[datetime] = None
     filters: dict[str, Any] = Field(default_factory=dict)
+    # Attach each hit's temporally-adjacent neighbors (context_before/_after).
+    # Measured on LongMemEval: answer-session retrieval coverage was ~100%
+    # while judged QA sat at 89% — the failures were an answerer misreading
+    # isolated fragments whose meaning lived in the adjacent turn.
+    include_context: bool = False
 
 
 class RecallResult(BaseModel):

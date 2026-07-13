@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import hashlib
+import logging
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List
@@ -90,6 +91,13 @@ class SentenceTransformerProvider(EmbeddingProvider):
     def _load(self):
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(self._model_name)
+        # Cap the sequence length: long-context models (arctic: 8192) accept
+        # pasted-document-sized inputs whose attention buffers OOM commodity
+        # machines (one 8k-token text = ~1GB). 512 tokens is the standard
+        # retrieval cap — embeddings truncate; stored content is unaffected.
+        msl = getattr(model, "max_seq_length", None)
+        if isinstance(msl, int) and msl > 512:
+            model.max_seq_length = 512
         # Validate dimension before the first real request, not on every call.
         probe = model.encode(["probe"], normalize_embeddings=True)
         actual_dim = probe.shape[1]
@@ -185,6 +193,16 @@ def get_provider() -> EmbeddingProvider:
         case "sentence-transformers":
             return SentenceTransformerProvider()
         case _:
+            # "local" is a deterministic token-hash stub for unit tests. On
+            # LOCOMO it retrieves at 24% vs the real model's 82% — production
+            # data behind it is silently getting test-grade recall, so say so
+            # every time it is constructed.
+            logging.getLogger("agentmem.embeddings").warning(
+                "EMBEDDING_PROVIDER='local' is the deterministic TEST STUB — "
+                "semantic recall will be test-grade (24% vs 82% evidence "
+                "retrieval on LOCOMO). Install lians-sdk[local] and set "
+                "EMBEDDING_PROVIDER=sentence-transformers for real recall."
+            )
             return LocalProvider()
 
 

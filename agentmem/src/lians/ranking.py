@@ -156,6 +156,13 @@ def _cosine(a: list[float], b: list[float]) -> float:
     # Vectorized: this runs once per candidate row on every recall (and per
     # selected pair in MMR), so the pure-Python loop dominated recall latency
     # on local SQLite (~2ms per 1024-dim pair; ~30x faster under numpy).
+    #
+    # Length guard: degraded recall (embedding provider down) passes an empty
+    # query vector — the python zip loop silently returned 0.0 there, but
+    # numpy matmul raises on the shape mismatch and crashed the very outage
+    # path that exists to keep recall alive.
+    if len(a) != len(b) or not a:
+        return 0.0
     if _np is not None:
         va = _np.asarray(a, dtype=_np.float32)
         vb = _np.asarray(b, dtype=_np.float32)
@@ -278,8 +285,18 @@ def _bm25_score(query: str, content: str) -> float:
     return score / len(q_tokens)
 
 
-def _recency_decay(event_time: datetime, half_life_days: float = RECENCY_HALF_LIFE_DAYS) -> float:
-    now = datetime.now(timezone.utc)
+def _recency_decay(
+    event_time: datetime,
+    half_life_days: float = RECENCY_HALF_LIFE_DAYS,
+    anchor: Optional[datetime] = None,
+) -> float:
+    """``anchor`` re-bases the decay clock for point-in-time recall: under
+    ``as_of``, "recent" means recent *relative to the pinned moment*, not to
+    wall-clock now — otherwise every as_of query sees uniformly stale scores
+    and the recency term deadens."""
+    now = anchor or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     if event_time.tzinfo is None:
         event_time = event_time.replace(tzinfo=timezone.utc)
     age_days = (now - event_time).total_seconds() / 86400
@@ -403,14 +420,17 @@ def _score_components(
     query: str,
     query_embedding: list[float],
     subject_keys: dict[str, bytes],
+    decay_anchor: Optional[datetime] = None,
 ) -> tuple[float, float, float, Optional[str]]:
     """(sem, lex, rec_imp, content) for a LiveFact or Memory row; the caller
-    applies context smoothing to sem before blending."""
+    applies context smoothing to sem before blending. ``decay_anchor`` pins
+    the recency clock for as_of recall."""
     content = _decrypt(row, subject_keys)
     emb = list(row.embedding) if row.embedding is not None else None
     sem = _cosine(query_embedding, emb) if emb else 0.0
     lex = _bm25_score(query, content or "") if content else 0.0
-    rec = _recency_decay(row.event_time, _materiality_half_life(row.metadata_))
+    rec = _recency_decay(row.event_time, _materiality_half_life(row.metadata_),
+                         anchor=decay_anchor)
     return sem, lex, W_REC * rec + W_IMP * row.importance, content
 
 
@@ -516,13 +536,14 @@ async def hybrid_recall(
         candidates = await _fetch_historical_candidates(
             db, namespace, agent_id, barrier_group, filters, query_embedding, k, as_of
         )
+        cutoff = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
         parts = [
-            _score_components(mem, query, query_embedding, subject_keys)
+            _score_components(mem, query, query_embedding, subject_keys,
+                              decay_anchor=cutoff)
             for mem in candidates
         ]
         sems = _smoothed_sems(candidates, [p[0] for p in parts])
         bonuses = _temporal_bonus(candidates, query_time_windows(query))
-        cutoff = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
         scored: list[tuple[Memory, float, Optional[str]]] = [
             (mem,
              W_SEM * sem + W_LEX * lex + rest + bonus

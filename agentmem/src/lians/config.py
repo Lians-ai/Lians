@@ -22,7 +22,12 @@ class Settings(BaseSettings):
     embedding_dim: int = 1024
     # Model for sentence-transformers provider. Must produce 1024-dim embeddings.
     # For air-gapped deployments: pre-download and set to an absolute local path.
-    sentence_transformer_model: str = "BAAI/bge-large-en-v1.5"
+    # arctic-embed-l-v2.0 replaced bge-large-en-v1.5 as the default after
+    # scoring +10pts evidence retrieval on LOCOMO (82.4% vs 72.5% hit@10) at
+    # the same dimensionality; existing stores keep working by pinning the
+    # old model via SENTENCE_TRANSFORMER_MODEL — embeddings from different
+    # models never mix in one store.
+    sentence_transformer_model: str = "Snowflake/snowflake-arctic-embed-l-v2.0"
 
     # Crypto
     master_encryption_key: str = ""  # base64-encoded 32 bytes (used by kms_provider="env")

@@ -72,25 +72,48 @@ def _bm25_scores(query: str, doc_tf: list[dict], doc_len: list[int]) -> np.ndarr
 
 
 def build_docs(question: dict):
-    """Flatten haystack sessions into (content, iso_time, ts) doc lists."""
-    contents, times, ts = [], [], []
+    """Flatten haystack sessions into (content, iso_time, ts, pair_content).
+
+    ``pair_content`` renders the message with its adjacent counterpart in the
+    same session (user question + assistant reply), so a hit can be *scored*
+    on the message alone but *shown* to the answerer as the full exchange —
+    answers routinely live in the half of the pair that didn't match the
+    query.
+    """
+    contents, times, ts, pairs = [], [], [], []
     for sess, date_str in zip(question["haystack_sessions"], question["haystack_dates"]):
         when = _parse_session_date(date_str)
-        for j, msg in enumerate(sess):
-            text = (msg.get("content") or "").strip()
+        msgs = [(m.get("role", "user"), (m.get("content") or "").strip())
+                for m in sess]
+        for j, (role, text) in enumerate(msgs):
             if not text:
                 continue
             t = when + timedelta(seconds=j)
-            contents.append(f"{msg.get('role', 'user')}: {text}")
+            contents.append(f"{role}: {text}")
             times.append(t.isoformat())
             ts.append(t.timestamp())
-    return contents, times, np.array(ts, dtype=np.float64)
+            # partner: previous message for an assistant turn, next for a user
+            # turn — the natural QA pairing of chat transcripts
+            partner = None
+            if role == "assistant" and j > 0 and msgs[j - 1][1]:
+                partner = ("before", f"{msgs[j - 1][0]}: {msgs[j - 1][1]}")
+            elif role == "user" and j + 1 < len(msgs) and msgs[j + 1][1]:
+                partner = ("after", f"{msgs[j + 1][0]}: {msgs[j + 1][1]}")
+            if partner is None:
+                pairs.append(f"{role}: {text}")
+            elif partner[0] == "before":
+                pairs.append(f"{partner[1]}\n{role}: {text}")
+            else:
+                pairs.append(f"{role}: {text}\n{partner[1]}")
+    return contents, times, np.array(ts, dtype=np.float64), pairs
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--pair-context", action="store_true",
+                    help="render each hit with its adjacent QA-pair partner")
     args = ap.parse_args()
 
     from sentence_transformers import SentenceTransformer
@@ -114,7 +137,7 @@ def main() -> None:
         if out_path.exists():
             continue
 
-        contents, times, ts = build_docs(question)
+        contents, times, ts, pairs = build_docs(question)
 
         cache = _CACHE / f"{qid}.npz"
         if cache.exists():
@@ -162,7 +185,7 @@ def main() -> None:
 
         top = np.argsort(-scores, kind="stable")[:TOP_K]
         search_results = [{
-            "memory": contents[i],
+            "memory": (pairs[i] if args.pair_context else contents[i]),
             "score": round(float(scores[i]), 6),
             "id": f"{qid}_{i}",
             "created_at": times[i],

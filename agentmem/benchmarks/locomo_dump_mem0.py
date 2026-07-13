@@ -61,11 +61,17 @@ def _last_session_date(conversation: dict) -> str | None:
     return dated[-1][1] if dated else None
 
 
-def _load_docs(db_path: Path):
+def _load_docs(db_path: Path, table: str = "live_facts"):
+    """``table='memories'`` scores the full bitemporal log (live + superseded,
+    never erased) instead of the current view — for episodic-history QA the
+    closed rows ARE the answers ('what was X before...'), and the 2026-07-11
+    flip analysis showed supersession closures removing gold turns from the
+    live-only top-200."""
     con = sqlite3.connect(db_path)
+    where = "where erased_at is null " if table == "memories" else ""
     rows = con.execute(
-        "select id, content_encrypted, embedding, event_time, metadata "
-        "from live_facts order by event_time, rowid"
+        f"select id, content_encrypted, embedding, event_time, metadata "
+        f"from {table} {where}order by event_time, rowid"
     ).fetchall()
     con.close()
     ids, contents, embs, times, dias = [], [], [], [], []
@@ -103,6 +109,8 @@ def main() -> None:
     ap.add_argument("--convs", default="0,1,2,3,4,5,6,7,8,9")
     ap.add_argument("--dbs", default=str(_DBS),
                     help="checkpoint DB dir (e.g. enriched copies)")
+    ap.add_argument("--table", default="live_facts", choices=["live_facts", "memories"],
+                    help="recall surface: current view or full bitemporal log")
     args = ap.parse_args()
     _DBS = Path(args.dbs)
 
@@ -116,7 +124,7 @@ def main() -> None:
     total = 0
     for n in [int(x) for x in args.convs.split(",")]:
         entry = dataset[n]
-        ids, contents, doc_embs, times, dias = _load_docs(_DBS / f"conv_{n}.sqlite")
+        ids, contents, doc_embs, times, dias = _load_docs(_DBS / f"conv_{n}.sqlite", args.table)
         ref_date = _last_session_date(entry["conversation"])
 
         # temporal adjacency for smoothing: docs are sorted by event_time, and

@@ -96,18 +96,38 @@ class LocalLiansClient:
         Logical tenant namespace.  Useful when sharing one DB file across
         multiple projects.  Defaults to ``"local"``.
     embedding_provider:
-        Override the embedding provider (``"local"`` | ``"voyage"`` | ``"openai"``).
-        Defaults to ``"local"`` (deterministic word-projection, zero API calls).
+        Override the embedding provider (``"sentence-transformers"`` |
+        ``"local"`` | ``"voyage"`` | ``"openai"``). When omitted, uses the
+        real local model (``sentence-transformers``) if it is installed and
+        falls back to the deterministic test stub (``"local"``) otherwise.
+        Pass ``"local"`` explicitly for the zero-model test stub.
     """
 
     def __init__(
         self,
         db_path: Optional[str] = None,
         namespace: str = "local",
-        embedding_provider: str = "local",
+        embedding_provider: Optional[str] = None,
     ):
         self._namespace = namespace
         self._loop = asyncio.new_event_loop()
+
+        if embedding_provider is None:
+            # Defaulting to the test stub cost real users 24%-grade recall
+            # (LOCOMO: stub 24% vs real local model 82% evidence hit@10);
+            # prefer the real model whenever the [local] extra is present.
+            try:
+                import sentence_transformers  # noqa: F401
+                embedding_provider = "sentence-transformers"
+            except ImportError:
+                import warnings
+                warnings.warn(
+                    "lians: sentence-transformers is not installed, so local "
+                    "mode is using the deterministic TEST-GRADE embedding "
+                    "stub. Install lians-sdk[local] for real semantic recall.",
+                    stacklevel=2,
+                )
+                embedding_provider = "local"
 
         # Point the settings at the local embedding provider before any import
         os.environ.setdefault("EMBEDDING_PROVIDER", embedding_provider)
@@ -241,11 +261,17 @@ class LocalLiansClient:
         k: int = 5,
         as_of: Optional[datetime] = None,
         filters: Optional[dict[str, Any]] = None,
+        include_context: bool = False,
     ) -> dict:
-        """Recall memories. Returns RecallResult as a dict."""
+        """Recall memories. Returns RecallResult as a dict.
+
+        ``include_context=True`` attaches each hit's temporally-adjacent
+        neighbors as ``context_before``/``context_after`` — the other half of
+        an exchange, for consumers that feed memories to an LLM.
+        """
         return self._run(self._async_recall(
             agent_id=agent_id, query=query, k=k, as_of=as_of,
-            filters=filters or {},
+            filters=filters or {}, include_context=include_context,
         ))
 
     async def _async_recall(self, **kwargs) -> dict:

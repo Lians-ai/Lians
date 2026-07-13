@@ -639,6 +639,61 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+# Neighbors farther apart than this are different episodes, not context.
+CONTEXT_GAP_S = 3600.0
+
+
+async def _attach_context(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    memories_out: list[MemoryOut],
+    subject_keys: dict[str, bytes],
+    *,
+    as_of: Optional[datetime] = None,
+) -> None:
+    """Populate ``context_before``/``context_after`` on recall hits.
+
+    For each hit, the nearest same-agent memory strictly before/after it in
+    event time (within CONTEXT_GAP_S) — the other half of a dialogue exchange
+    or event burst. Two indexed LIMIT-1 queries per hit on
+    ix_memories_ns_agent_event; erased rows never surface, and under as_of
+    only rows already knowable at the pinned time qualify.
+    """
+    from .ranking import _decrypt
+
+    gap = timedelta(seconds=CONTEXT_GAP_S)
+    for out in memories_out:
+        base = [
+            Memory.namespace == namespace,
+            Memory.agent_id == agent_id,
+            Memory.erased_at.is_(None),
+            Memory.id != out.id,
+        ]
+        if as_of is not None:
+            base.append(Memory.event_time <= as_of)
+        before_stmt = (
+            select(Memory)
+            .where(and_(*base, Memory.event_time < out.event_time,
+                        Memory.event_time >= out.event_time - gap))
+            .order_by(Memory.event_time.desc())
+            .limit(1)
+        )
+        after_stmt = (
+            select(Memory)
+            .where(and_(*base, Memory.event_time > out.event_time,
+                        Memory.event_time <= out.event_time + gap))
+            .order_by(Memory.event_time.asc())
+            .limit(1)
+        )
+        before = (await db.execute(before_stmt)).scalars().first()
+        after = (await db.execute(after_stmt)).scalars().first()
+        if before is not None:
+            out.context_before = _decrypt(before, subject_keys)
+        if after is not None:
+            out.context_after = _decrypt(after, subject_keys)
+
+
 async def _agent_open_conflicts(
     db: AsyncSession,
     namespace: str,
@@ -867,7 +922,11 @@ async def recall_memories(
         with tracer.start_as_current_span("recall.embed") as embed_span:
             provider = get_embedding_provider()
             try:
-                query_embedding = await provider.embed_query(req.query)
+                # Custom providers written against the pre-asymmetric
+                # interface may only implement embed_one; treat that as the
+                # query embedding rather than a degradation event.
+                embed_fn = getattr(provider, "embed_query", None) or provider.embed_one
+                query_embedding = await embed_fn(req.query)
             except Exception as exc:
                 query_embedding = []
                 retrieval_degraded = True
@@ -946,6 +1005,13 @@ async def recall_memories(
                 mem_out = _memory_to_out(mem, content)
                 mem_out.score = _score
                 memories_out.append(mem_out)
+
+        if req.include_context and memories_out:
+            with tracer.start_as_current_span("recall.context"):
+                await _attach_context(
+                    db, namespace, req.agent_id, memories_out, subject_keys,
+                    as_of=req.as_of,
+                )
 
         audit_payload = {
             "query_hash": _content_hash(req.query),
