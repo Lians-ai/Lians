@@ -1034,6 +1034,8 @@ async def recall_memories(
             as_of=req.as_of,
             total_candidates=len(results),
             retrieval_degraded=retrieval_degraded,
+            token_estimate=sum(
+                _estimate_tokens(m.content) for m in memories_out if m.content),
         )
 
         from .metering import get_customer_id, queue_usage_event

@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -412,6 +412,7 @@ class LocalLiansClient:
         metadata: Optional[dict[str, Any]] = None,
         importance: float = 0.5,
         roles: Optional[list[str]] = None,
+        distill: bool = False,
     ) -> dict:
         """
         Extract and store facts from a conversation message list.
@@ -419,8 +420,20 @@ class LocalLiansClient:
         Accepts the standard OpenAI / LangChain messages format:
         ``[{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]``
 
-        Each message whose role matches *roles* (default: ``["assistant"]``) is
-        stored as a separate memory with supersession and audit-chain writes applied.
+        Each message whose role matches *roles* (default: ``["assistant"]``;
+        with ``distill=True``: user and assistant) is stored as a separate
+        memory with supersession and audit-chain writes applied.
+
+        ``distill=True`` additionally runs LLM fact distillation over the
+        whole transcript (``src.lians.enrichment``): every atomic, dated,
+        speaker-attributed fact is stored as a derived memory
+        (``metadata.derived = true``) alongside the raw messages. Recall then
+        surfaces dense facts and raw evidence together, and — unlike
+        extract-only memory layers — the verbatim transcript stays in the
+        bitemporal log as provenance for every derived fact. Opt-in: it puts
+        an LLM call in the ingest path (``OPENAI_API_KEY``, model via
+        ``LIANS_DISTILL_MODEL``) with its cost, latency, and
+        non-determinism; the default path stays LLM-free.
 
         Parameters
         ----------
@@ -429,7 +442,11 @@ class LocalLiansClient:
         event_time:
             Timestamp for all extracted memories. Defaults to now().
         roles:
-            Roles to extract from. Defaults to ``["assistant"]``.
+            Roles to extract from. Defaults to ``["assistant"]``
+            (``["user", "assistant"]`` when ``distill=True``, so derived
+            facts always have their raw provenance stored).
+        distill:
+            Also store LLM-distilled fact memories for the transcript.
         source, subject_id, metadata, importance:
             Same as ``add()``.
 
@@ -438,7 +455,10 @@ class LocalLiansClient:
         MemoryBatchResult dict: ``{"added": N, "memories": [...]}``.
         """
         from datetime import timezone as _tz
-        _roles = set(roles) if roles is not None else {"assistant"}
+        if roles is not None:
+            _roles = set(roles)
+        else:
+            _roles = {"user", "assistant"} if distill else {"assistant"}
         _event_time = event_time or datetime.now(_tz.utc)
         _meta_base = dict(metadata or {})
 
@@ -457,6 +477,29 @@ class LocalLiansClient:
                 "metadata":   {**_meta_base, "role": role, "message_index": i},
                 "importance": importance,
             })
+
+        if distill:
+            transcript = "\n".join(
+                f"{(m.get('role') or 'user')}: {(m.get('content') or '').strip()}"
+                for m in messages if (m.get("content") or "").strip()
+            )
+            if transcript:
+                from src.lians.enrichment import distill_batch
+                facts = self._run(distill_batch(
+                    transcript, _event_time.strftime("%d %B, %Y")))
+                for j, fact in enumerate(facts):
+                    batch.append({
+                        "agent_id":   agent_id,
+                        "content":    fact,
+                        # facts sort just after their transcript's raw turns
+                        "event_time": (_event_time + timedelta(
+                            seconds=len(messages) + 1 + j)).isoformat(),
+                        "source":     f"{source}:distilled" if source else "distilled",
+                        "subject_id": subject_id,
+                        "metadata":   {**_meta_base, "derived": True,
+                                       "distilled": True},
+                        "importance": importance,
+                    })
 
         if not batch:
             return {"added": 0, "memories": []}

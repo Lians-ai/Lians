@@ -70,6 +70,9 @@ class RecallResult(BaseModel):
     # the audit chain, so a decision made under degraded recall is
     # reconstructable as such.
     retrieval_degraded: bool = False
+    # Rough size of the returned memory contents (~4 chars/token) so callers
+    # can budget the prompt cost of injecting this recall into an LLM call.
+    token_estimate: int = 0
 
 
 class AuditReconstructRequest(BaseModel):
