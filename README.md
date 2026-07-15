@@ -41,7 +41,14 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is **regulated AI memory infrastructure**: a memory control plane for agents that operate on time-sensitive, audited, confidential data.
+[Lians](https://github.com/Lians-ai/Lians) is **the system of record for AI in regulated industries**: one append-only, tamper-evident, bitemporal, erasure-compatible ledger for what AI systems knew, did, and why.
+
+The platform exposes two products on the same record layer:
+
+- **Memory** — point-in-time-correct agent knowledge with supersession, provenance, information barriers, and crypto-shred erasure.
+- **Records** — first-class inference, human-oversight, system-change, data-subject, incident, memory, and consequential-decision events, plus portable Evidence Pack exports.
+
+Memory is what an agent knew. Records are what the AI system did. Either becomes evidence when a regulator, customer, validator, court, or auditor disputes an outcome.
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
@@ -55,10 +62,11 @@
 
 ---
 
-## The institutional memory problem
+## The regulated AI record problem
 
-Lians should be understood as a memory control plane for agents that operate on
-time-sensitive, audited, confidential data.
+Lians is the authoritative record layer for agents that operate on time-sensitive,
+audited, confidential data. The Memory product keeps context correct; the Records
+product captures behavior and oversight in an open, verifiable event format.
 
 Most memory layers help an agent remember. Lians is built for institutions that
 must also prove what the agent knew, when it knew it, where the fact came from,

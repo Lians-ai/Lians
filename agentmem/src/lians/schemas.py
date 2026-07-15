@@ -87,6 +87,89 @@ class AuditReconstructResult(BaseModel):
     as_of: datetime
 
 
+class DecisionCreate(BaseModel):
+    agent_id: str
+    decision_type: str = Field(min_length=1, max_length=100)
+    outcome: str = Field(min_length=1, max_length=500)
+    reason_codes: list[str] = Field(default_factory=list, max_length=100)
+    regime: Optional[str] = Field(None, max_length=100)
+    subject_id: Optional[str] = None
+    session_id: Optional[str] = None
+    model_id: Optional[str] = None
+    model_version: Optional[str] = None
+    policy_version: Optional[str] = None
+    decided_at: datetime
+    knowledge_as_of: Optional[datetime] = None
+    evidence_memory_ids: list[UUID] = Field(default_factory=list, max_length=1000)
+    input_hash: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
+    output_hash: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
+    supersedes_id: Optional[UUID] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DecisionOut(BaseModel):
+    id: UUID
+    namespace: str
+    agent_id: str
+    decision_type: str
+    outcome: str
+    reason_codes: list[str]
+    regime: Optional[str]
+    subject_id: Optional[str]
+    session_id: Optional[str]
+    model_id: Optional[str]
+    model_version: Optional[str]
+    policy_version: Optional[str]
+    decided_at: datetime
+    recorded_at: datetime
+    knowledge_as_of: datetime
+    evidence_memory_ids: list[UUID]
+    input_hash: Optional[str]
+    output_hash: Optional[str]
+    human_review_status: str
+    human_reviewer: Optional[str]
+    human_reviewed_at: Optional[datetime]
+    supersedes_id: Optional[UUID]
+    metadata: dict[str, Any]
+    record_hash: str
+
+
+class DecisionReview(BaseModel):
+    status: str = Field(pattern=r"^(requested|affirmed|overturned|withdrawn)$")
+    reviewer: str = Field(min_length=1)
+    note: Optional[str] = None
+
+
+class LedgerEventCreate(BaseModel):
+    event_type: str = Field(pattern=r"^(inference|human_oversight|system_change|data_subject|incident|memory)$")
+    agent_id: str
+    occurred_at: datetime
+    subject_id: Optional[str] = None
+    session_id: Optional[str] = None
+    decision_id: Optional[UUID] = None
+    model_id: Optional[str] = None
+    model_version: Optional[str] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    artifact_hash: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
+
+
+class LedgerEventOut(BaseModel):
+    id: UUID
+    namespace: str
+    event_type: str
+    agent_id: str
+    occurred_at: datetime
+    recorded_at: datetime
+    subject_id: Optional[str]
+    session_id: Optional[str]
+    decision_id: Optional[UUID]
+    model_id: Optional[str]
+    model_version: Optional[str]
+    payload: dict[str, Any]
+    artifact_hash: Optional[str]
+    event_hash: str
+
+
 class EraseRequest(BaseModel):
     subject_id: str
     request_ref: str

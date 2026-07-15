@@ -443,6 +443,36 @@ class LiansClient:
             self._async.compliance_report(from_dt=from_dt, to_dt=to_dt, verify_chain=verify_chain)
         )
 
+    def record_decision(self, *, agent_id: str, decision_type: str, outcome: str,
+                        decided_at: datetime, reason_codes: Optional[list[str]] = None,
+                        **fields: Any) -> dict:
+        """Append a consequential AI decision to the dispute ledger."""
+        return self._loop.run_until_complete(self._async.record_decision(
+            agent_id=agent_id, decision_type=decision_type, outcome=outcome,
+            decided_at=decided_at, reason_codes=reason_codes, **fields,
+        ))
+
+    def decisions(self, **filters: Any) -> list[dict]:
+        return self._loop.run_until_complete(self._async.decisions(**filters))
+
+    def review_decision(self, decision_id: str, status: str, reviewer: str,
+                        note: Optional[str] = None) -> dict:
+        return self._loop.run_until_complete(
+            self._async.review_decision(decision_id, status, reviewer, note)
+        )
+
+    def evidence_pack(self, decision_id: str, verify: bool = True) -> dict:
+        return self._loop.run_until_complete(self._async.evidence_pack(decision_id, verify))
+
+    def record_event(self, event_type: str, agent_id: str, occurred_at: datetime,
+                     **fields: Any) -> dict:
+        return self._loop.run_until_complete(
+            self._async.record_event(event_type, agent_id, occurred_at, **fields)
+        )
+
+    def record_events(self, **filters: Any) -> list[dict]:
+        return self._loop.run_until_complete(self._async.record_events(**filters))
+
     # ── Erasure certificate ────────────────────────────────────────────────────
 
     def erasure_certificate(self, subject_id: str) -> dict:

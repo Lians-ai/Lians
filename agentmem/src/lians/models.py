@@ -140,6 +140,70 @@ class EventLog(Base):
     row_hash = Column(String(64), nullable=True)    # SHA-256(prev_hash || this row's canonical fields)
 
 
+class DecisionRecord(Base):
+    """A consequential agent decision that may later be disputed.
+
+    The schema is intentionally industry-neutral. Vertical requirements belong
+    in ``regime`` and ``metadata``; the authoritative fields stay stable so one
+    ledger can serve regulators, consumers, validators, courts, and auditors.
+    Records are append-only at the API layer. Corrections create a new record
+    linked through ``supersedes_id`` rather than rewriting history.
+    """
+    __tablename__ = "decision_records"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    decision_type = Column(String, nullable=False, index=True)
+    outcome = Column(String, nullable=False)
+    reason_codes = Column(JSON, nullable=False, server_default="[]")
+    regime = Column(String, nullable=True, index=True)
+    subject_id = Column(String, nullable=True, index=True)
+    session_id = Column(String, nullable=True, index=True)
+    model_id = Column(String, nullable=True)
+    model_version = Column(String, nullable=True)
+    policy_version = Column(String, nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    knowledge_as_of = Column(DateTime(timezone=True), nullable=False)
+    evidence_memory_ids = Column(JSON, nullable=False, server_default="[]")
+    input_hash = Column(String(64), nullable=True)
+    output_hash = Column(String(64), nullable=True)
+    human_review_status = Column(String, nullable=False, default="not_requested")
+    human_reviewer = Column(String, nullable=True)
+    human_reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    supersedes_id = Column(UUID(as_uuid=True), nullable=True)
+    metadata_ = Column("metadata", JSON, nullable=False, server_default="{}")
+    record_hash = Column(String(64), nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_decision_ns_decided", "namespace", "decided_at"),
+        Index("ix_decision_ns_subject", "namespace", "subject_id"),
+    )
+
+
+class LedgerEvent(Base):
+    """First-class system-of-record event shared by every LIANS product."""
+    __tablename__ = "ledger_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    subject_id = Column(String, nullable=True, index=True)
+    session_id = Column(String, nullable=True, index=True)
+    decision_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    model_id = Column(String, nullable=True)
+    model_version = Column(String, nullable=True)
+    payload = Column(JSON, nullable=False, server_default="{}")
+    artifact_hash = Column(String(64), nullable=True)
+    event_hash = Column(String(64), nullable=False, index=True)
+
+    __table_args__ = (Index("ix_ledger_event_ns_time", "namespace", "occurred_at"),)
+
+
 class AgentBarrierGroup(Base):
     """
     Information barrier (Chinese wall) assignments.

@@ -683,6 +683,53 @@ class AsyncLiansClient:
             "verify": verify_chain,
         })
 
+    async def record_decision(
+        self,
+        *,
+        agent_id: str,
+        decision_type: str,
+        outcome: str,
+        decided_at: datetime,
+        reason_codes: Optional[list[str]] = None,
+        **fields: Any,
+    ) -> dict:
+        """Append a consequential AI decision to the dispute ledger."""
+        return await self._req("POST", "/v1/decisions", json={
+            "agent_id": agent_id,
+            "decision_type": decision_type,
+            "outcome": outcome,
+            "decided_at": decided_at.isoformat(),
+            "reason_codes": reason_codes or [],
+            **fields,
+        })
+
+    async def decisions(self, **filters: Any) -> list[dict]:
+        """List decision records, optionally filtered by agent, subject, or regime."""
+        return await self._req("GET", "/v1/decisions", params=filters)
+
+    async def review_decision(self, decision_id: str, status: str, reviewer: str,
+                              note: Optional[str] = None) -> dict:
+        """Record an authenticated human review of a decision."""
+        return await self._req("POST", f"/v1/decisions/{decision_id}/review", json={
+            "status": status, "reviewer": reviewer, "note": note,
+        })
+
+    async def evidence_pack(self, decision_id: str, verify: bool = True) -> dict:
+        """Export a hash-anchored Evidence Pack v1 for a decision."""
+        return await self._req("GET", f"/v1/decisions/{decision_id}/evidence-pack",
+                               params={"verify": verify})
+
+    async def record_event(self, event_type: str, agent_id: str, occurred_at: datetime,
+                           **fields: Any) -> dict:
+        """Append a first-class system-of-record event."""
+        return await self._req("POST", "/v1/records/events", json={
+            "event_type": event_type, "agent_id": agent_id,
+            "occurred_at": occurred_at.isoformat(), **fields,
+        })
+
+    async def record_events(self, **filters: Any) -> list[dict]:
+        return await self._req("GET", "/v1/records/events", params=filters)
+
     # ── Erasure certificate ────────────────────────────────────────────────────
 
     async def erasure_certificate(self, subject_id: str) -> dict:
