@@ -26,7 +26,11 @@
     "gdpr",
     "point-in-time",
     "mcp",
-    "langchain"
+    "langchain",
+    "langgraph",
+    "crewai",
+    "temporal-memory",
+    "local-first"
   ],
   "exports": {
     ".": {

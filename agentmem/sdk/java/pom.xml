@@ -10,8 +10,8 @@
   <packaging>jar</packaging>
 
   <name>Lians SDK</name>
-  <description>Financial-grade agent memory for the JVM — bitemporal recall, SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information barriers, and a relationship graph. For banks, insurers, healthcare, and legal teams on Java.</description>
-  <url>https://github.com/Lians-ai/Lians</url>
+  <description>Bitemporal agent memory for the JVM with deterministic supersession, point-in-time recall, audit history, information barriers, and relationship graphs.</description>
+  <url>https://www.lians.ai</url>
 
   <licenses>
     <license>

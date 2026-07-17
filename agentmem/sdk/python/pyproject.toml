@@ -57,6 +57,8 @@ Repository    = "https://github.com/Lians-ai/Lians"
 Documentation = "https://github.com/Lians-ai/Lians/tree/master/docs"
 Changelog     = "https://github.com/Lians-ai/Lians/releases"
 Issues        = "https://github.com/Lians-ai/Lians/issues"
+Benchmarks    = "https://github.com/Lians-ai/Lians/blob/master/docs/benchmark.md"
+MCP           = "https://github.com/Lians-ai/Lians#mcp---native-tool-in-any-ai-client"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lians"]
@@ -65,7 +67,7 @@ packages = ["lians"]
 # wheel (zero-setup local mode), not just a monorepo checkout. The SDK
 # aliases lians_engine.lians -> src.lians at import time. The wheel include
 # is a custom hook (hatch_build.py) because `python -m build` builds the
-# wheel FROM THE SDIST, where ../../src/lians doesn't exist — the hook picks
+# wheel FROM THE SDIST, where ../../src/lians doesn't exist. The hook picks
 # the engine up from the sdist's own vendored copy in that case.
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
