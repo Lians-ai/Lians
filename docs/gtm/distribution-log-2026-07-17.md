@@ -23,10 +23,15 @@ Statuses reflect verified public state, not planned activity.
 | MCPServers.org | Submitted on free tier | Review promised within 12 hours; notification routed to `support@lians.ai` |
 | MCP.Directory | Submitted for review | Submission confirmed; publication review promised within 24 hours |
 | MCP Server Hub | Submitted, listing not yet verified | Free form accepted and reset without a public confirmation ID |
+| AgentNDX | Submitted for curated review | Public form confirmed receipt and stated a 48-hour review target |
+| DeepYard | Submitted for review | Formspree confirmation page verified successful submission in the MCP Servers category |
+| AI Tools Directory | Submission failed on public form | Completed form returned `Failed to process submission`; no listing claimed |
 | ServerHub | Submission blocked by directory error | Public form returned `Cross-origin requests are not allowed` while fetching the GitHub repository |
 | Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797) |
 | PulseMCP | Awaiting manual ingestion request | Gmail draft prepared for `hello@pulsemcp.com` |
 | Glama | Manual account and CAPTCHA required | Free Add Server flow opened; no payment authorized |
+| mcpub | Not eligible for current transport | Directory requires a hosted HTTP MCP endpoint and a `/.well-known/mcp.json` resource; Lians currently publishes a local stdio server |
+| Unyly | Declined | Submission requires accepting creator marketplace terms and is oriented around hosted billing and revenue share, which is outside the zero-cost local-server campaign |
 | awesome-mcp-servers | Open PR, Glama check required | [PR 10320](https://github.com/punkpeye/awesome-mcp-servers/pull/10320) |
 | Awesome-Agent-Memory | Open PR | [PR 61](https://github.com/TeleAI-UAGI/Awesome-Agent-Memory/pull/61) |
 | awesome-ai-memory | Open PR | [PR 62](https://github.com/topoteretes/awesome-ai-memory/pull/62) |
