@@ -199,7 +199,12 @@ latency. A system that scores lower here may be superior for many agent workload
 
 LoCoMo and LongMemEval established long-horizon conversational evaluation
 \cite{locomo2024,longmemeval2024}. LongMemEval-V2 shifts attention toward memory of
-environment experience \cite{longmemevalv2_2026}. WorldDB evaluates immutable,
+environment experience \cite{longmemevalv2_2026}. Look-Ahead-Bench evaluates
+model-level temporal leakage in financial workflows by comparing performance and
+alpha decay across market regimes \cite{lookaheadbench2026}. Our lookahead invariant
+is complementary: it tests whether a memory product prevents facts that were not
+knowable at the declared decision time from entering retrieval context, even when
+the underlying model is temporally clean. WorldDB evaluates immutable,
 content-addressed worlds and write-time reconciliation \cite{worlddb2026}. TOKI
 formalizes contradiction resolution as bitemporal concurrency control with provenance
 contracts \cite{toki2026}. A-TMA separates bank maintenance, retrieval, and answer-time
