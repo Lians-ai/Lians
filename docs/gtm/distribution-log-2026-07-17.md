@@ -18,7 +18,7 @@ Statuses reflect verified public state, not planned activity.
 
 | Channel | Status | Evidence or next action |
 |---|---|---|
-| Official MCP Registry | Published | Registry name `io.github.ebeirne/lians` |
+| Official MCP Registry | 0.4.1 manifest prepared for publication | Registry name `io.github.ebeirne/lians`; canonical repository is `Lians-ai/Lians` |
 | mcp.so | Queued for review | [Lians listing](https://mcp.so/servers/lians-b81d5f) |
 | MCPServers.org | Submitted on free tier | Review promised within 12 hours; notification routed to `support@lians.ai` |
 | MCP.Directory | Submitted for review | Submission confirmed; publication review promised within 24 hours |
@@ -38,6 +38,7 @@ Statuses reflect verified public state, not planned activity.
 | awesome-ai-memory | Open PR | [PR 62](https://github.com/topoteretes/awesome-ai-memory/pull/62) |
 | Awesome-AI-Memory | Open bilingual PR | [PR 124](https://github.com/IAAR-Shanghai/Awesome-AI-Memory/pull/124) |
 | Awesome Agents | Open PR | [PR 649](https://github.com/kyrolabs/awesome-agents/pull/649) adds one factual entry at the bottom of the Frameworks section |
+| cxxz Awesome Agent Memory | Open PR | [PR 17](https://github.com/cxxz/awesome-agent-memory/pull/17) adds a maintainer-disclosed Lians entry to the MCP memory section |
 
 ## Framework documentation
 
