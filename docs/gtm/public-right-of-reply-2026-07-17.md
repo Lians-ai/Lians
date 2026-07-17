@@ -135,6 +135,6 @@ that date.
 |---|---|---|---|---|
 | Mem0 | [Discussion 6373](https://github.com/mem0ai/mem0/discussions/6373) | 2026-07-17 | Pending | Pending |
 | Graphiti | [Issue 1664](https://github.com/getzep/graphiti/issues/1664) | 2026-07-17 | Pending | Pending |
-| Letta | [Issue 3401](https://github.com/letta-ai/letta/issues/3401) | 2026-07-17 | Pending | Pending |
+| Letta | [Issue 3402](https://github.com/letta-ai/letta/issues/3402) | 2026-07-17 | Pending | Resubmitted through the required feature form after issue 3401 was automatically closed for missing disclosure fields |
 | Hindsight | [Discussion 2790](https://github.com/vectorize-io/hindsight/discussions/2790) | 2026-07-17 | Pending | Pending |
-| Supermemory | [Issue 1303](https://github.com/supermemoryai/supermemory/issues/1303) | 2026-07-17 | Pending | Pending |
+| Supermemory | [Issue 1303](https://github.com/supermemoryai/supermemory/issues/1303) | 2026-07-17 | Routed to internal ticket ENG-1070 | Publicly acknowledged the handoff and offered to rerun a vendor-supplied configuration |
