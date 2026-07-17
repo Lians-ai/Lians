@@ -1,0 +1,38 @@
+{
+  "manifest_version": "0.4",
+  "name": "lians-agent-memory",
+  "display_name": "Lians Agent Memory",
+  "version": "0.4.0",
+  "description": "Bitemporal agent memory with deterministic supersession, point-in-time recall, and local persistent storage.",
+  "author": {
+    "name": "Lians",
+    "url": "https://www.lians.ai"
+  },
+  "server": {
+    "type": "uv",
+    "entry_point": "src/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "src/server.py"]
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  },
+  "keywords": [
+    "agent-memory",
+    "bitemporal",
+    "point-in-time",
+    "local-first",
+    "audit-trail"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://www.lians.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lians-ai/Lians"
+  }
+}
