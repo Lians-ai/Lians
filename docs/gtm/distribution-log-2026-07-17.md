@@ -12,6 +12,7 @@ Statuses reflect verified public state, not planned activity.
 | Unified SDK release | Published | [Lians v0.4.1](https://github.com/Lians-ai/Lians/releases/tag/v0.4.1) includes Java and C artifacts plus the Go module tag |
 | Local-first MCP and benchmark publication | Merged | [Lians PR 23](https://github.com/Lians-ai/Lians/pull/23) |
 | Regulated-memory preprint | Draft with public review request | [Draft PR 26](https://github.com/Lians-ai/Lians/pull/26) includes a validated Lians 0.4.1 evidence artifact; [issue 40](https://github.com/Lians-ai/Lians/issues/40) requests implementation-neutral methodology review |
+| Claude Code community plugin | Package validated, manual submission required | [Lians PR 44](https://github.com/Lians-ai/Lians/pull/44) updates the plugin to 0.4.1, adds a loadable skill, removes stale absolute claims, and passes `claude plugin validate`; the Anthropic Console form requires owner sign-in and terms acceptance |
 | Website Article 12 and canonical marketing content | Merged to redesign branch | [Website PR 1](https://github.com/Ds6826/lian-website/pull/1) |
 | Website production promotion | Draft review required | [Website PR 2](https://github.com/Ds6826/lian-website/pull/2) |
 
