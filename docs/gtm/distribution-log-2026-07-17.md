@@ -40,6 +40,7 @@ Statuses reflect verified public state, not planned activity.
 | Awesome-AI-Memory | Open bilingual PR | [PR 124](https://github.com/IAAR-Shanghai/Awesome-AI-Memory/pull/124) |
 | Awesome Agents | Open PR | [PR 649](https://github.com/kyrolabs/awesome-agents/pull/649) adds one factual entry at the bottom of the Frameworks section |
 | cxxz Awesome Agent Memory | Open PR | [PR 17](https://github.com/cxxz/awesome-agent-memory/pull/17) adds a maintainer-disclosed Lians entry to the MCP memory section |
+| TensorBlock Awesome MCP Servers | Open PR | [PR 1261](https://github.com/TensorBlock/awesome-mcp-servers/pull/1261) adds a tested, maintainer-disclosed entry to the Knowledge Management & Memory category |
 
 ## Framework documentation
 
