@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">Learn more</a>
   -
-  <a href="https://github.com/Lians-ai/Lians/tree/main/docs">Docs</a>
+  <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a>
   -
   <a href="docs/install.md">Install</a>
   -
@@ -123,7 +123,7 @@ Procurement and technical review materials:
 
 ## MCP - Native tool in any AI client
 
-Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can connect to your Lians server as a native tool with a one-time config. No SDK code, no custom adapter, no wrapper.
+Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can use local persistent memory immediately or connect to a hosted Lians server. No SDK code, custom adapter, Docker service, URL, or API key is required for local mode.
 
 Your agents get eight tools automatically:
 
@@ -147,18 +147,13 @@ Add to your `claude_desktop_config.json` (or equivalent MCP config):
   "mcpServers": {
     "lians": {
       "command": "uvx",
-      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
-      "env": {
-        "LIANS_URL": "https://your-lians-server.internal",
-        "LIANS_API_KEY": "lians_...",
-        "LIANS_AGENT_ID": "trading-desk-1"
-      }
+      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"]
     }
   }
 }
 ```
 
-Restart your client and Lians memory tools appear immediately — no install step for your users beyond setting the three env vars.
+Restart your client and Lians memory tools appear immediately. Local mode persists to `~/.lians/mcp.db`. To use a hosted deployment instead, set `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID`.
 
 ### Any other MCP host
 
@@ -166,7 +161,7 @@ Restart your client and Lians memory tools appear immediately — no install ste
 uvx --from 'lians-sdk[mcp]' lians-mcp
 ```
 
-Set `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID` in the environment.
+No environment variables are needed for local mode. Set `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID` to use a remote server.
 
 ---
 

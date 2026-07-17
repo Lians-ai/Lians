@@ -688,6 +688,17 @@ class LocalLiansClient:
             result = await list_conflicts(db, self._namespace, status=status, limit=limit)
         return result.model_dump(mode="json")
 
+    def memory_lineage(self, memory_id: str) -> dict:
+        """Return every version in a memory's supersession lineage."""
+        return self._run(self._async_memory_lineage(memory_id))
+
+    async def _async_memory_lineage(self, memory_id: str) -> dict:
+        from uuid import UUID
+        from src.lians.memory_service import get_memory_lineage
+        async with self._session_factory() as db:
+            result = await get_memory_lineage(db, self._namespace, UUID(memory_id))
+        return result.model_dump(mode="json")
+
     def resolve_conflict(
         self,
         conflict_id: str,

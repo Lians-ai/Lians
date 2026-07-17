@@ -1,24 +1,30 @@
 {
   "name": "@lians-ai/lians",
   "version": "0.4.0",
-  "description": "TypeScript/JavaScript SDK for Lians — financial-grade AI memory with bitemporal model, SEC 17a-4 audit chain, and GDPR crypto-shred",
+  "description": "Bitemporal long-term memory for AI agents with point-in-time recall, tamper-evident audit trails, and GDPR crypto-erasure",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
   "author": "Ethan Beirne",
-  "homepage": "https://github.com/Lians-ai/Lians#readme",
+  "homepage": "https://www.lians.ai",
   "repository": {
     "type": "git",
     "url": "https://github.com/Lians-ai/Lians.git"
   },
+  "bugs": {
+    "url": "https://github.com/Lians-ai/Lians/issues"
+  },
   "keywords": [
     "ai",
-    "memory",
-    "agents",
+    "agent-memory",
+    "long-term-memory",
+    "ai-agents",
     "finance",
     "compliance",
     "bitemporal",
-    "audit",
+    "audit-trail",
+    "gdpr",
+    "point-in-time",
     "mcp",
     "langchain"
   ],

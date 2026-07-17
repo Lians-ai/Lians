@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use Lians in research or production evaluation, please cite this software."
+title: "Lians: bitemporal long-term memory for AI agents"
+type: software
+authors:
+  - family-names: Beirne
+    given-names: Ethan
+repository-code: "https://github.com/Lians-ai/Lians"
+url: "https://www.lians.ai"
+license: Apache-2.0
+version: 0.4.0
+date-released: 2026-07-06
+keywords:
+  - agent memory
+  - bitemporal data
+  - point-in-time recall
+  - audit trail
+  - AI compliance

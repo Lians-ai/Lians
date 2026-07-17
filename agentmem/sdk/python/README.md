@@ -18,6 +18,7 @@ pip install lians-sdk[langgraph]    # + LangGraph node factories
 pip install lians-sdk[crewai]       # + CrewAI BaseTool wrappers
 pip install lians-sdk[openai-agents] # + OpenAI Agents SDK tools
 pip install lians-sdk[autogen]      # + AutoGen v0.4 tools
+pip install lians-sdk[mcp]          # + zero-config local MCP server
 pip install lians-sdk[all]          # Everything
 ```
 

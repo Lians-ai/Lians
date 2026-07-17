@@ -11,9 +11,11 @@ Run (stdio transport — standard for local LLM integration):
     lians-mcp
 
 Environment variables:
-    LIANS_URL        Lians API base URL (default: http://localhost:8000)
-    LIANS_API_KEY    API key with read+write scopes
+    LIANS_URL        Optional Lians API base URL; omit for local mode
+    LIANS_API_KEY    API key for remote mode
     LIANS_AGENT_ID   Agent identifier / memory namespace (default: mcp-agent)
+    LIANS_LOCAL_DB   Local SQLite path (default: ~/.lians/mcp.db)
+    LIANS_NAMESPACE  Local tenant namespace (default: mcp)
 
 Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json):
     {
@@ -33,14 +35,104 @@ from __future__ import annotations
 
 import asyncio
 import os
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
-LIANS_URL = os.environ.get("LIANS_URL", "http://localhost:8000")
+LIANS_URL = os.environ.get("LIANS_URL", "").rstrip("/")
 LIANS_API_KEY = os.environ.get("LIANS_API_KEY", "")
 LIANS_AGENT_ID = os.environ.get("LIANS_AGENT_ID", "mcp-agent")
+LIANS_LOCAL_DB = os.environ.get("LIANS_LOCAL_DB", str(Path.home() / ".lians" / "mcp.db"))
+LIANS_NAMESPACE = os.environ.get("LIANS_NAMESPACE", "mcp")
+
+_LOCAL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lians-mcp-local")
+_LOCAL_CLIENT: Any = None
+
+
+def _iso(value: str) -> datetime:
+    """Parse the ISO-8601 form used by MCP clients, including a trailing Z."""
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _get_local_client() -> Any:
+    global _LOCAL_CLIENT
+    if _LOCAL_CLIENT is None:
+        from .local_client import LocalLiansClient
+        _LOCAL_CLIENT = LocalLiansClient(
+            db_path=LIANS_LOCAL_DB,
+            namespace=LIANS_NAMESPACE,
+        )
+    return _LOCAL_CLIENT
+
+
+def _local_api(method: str, path: str, body: dict | None = None) -> dict:
+    """Map the public HTTP-shaped MCP calls onto LocalLiansClient."""
+    client = _get_local_client()
+    body = body or {}
+    parsed = urlsplit(path)
+    query = parse_qs(parsed.query)
+
+    if method == "POST" and parsed.path == "/v1/memories":
+        return client.add(
+            agent_id=body["agent_id"],
+            content=body["content"],
+            event_time=_iso(body["event_time"]),
+            source=body.get("source"),
+            metadata=body.get("metadata", {}),
+        )
+    if method == "POST" and parsed.path == "/v1/recall":
+        as_of = _iso(body["as_of"]) if body.get("as_of") else None
+        return client.recall(
+            agent_id=body["agent_id"],
+            query=body["query"],
+            k=body.get("k", 5),
+            as_of=as_of,
+            filters=body.get("filters", {}),
+        )
+    if method == "POST" and parsed.path == "/v1/audit/reconstruct":
+        return client.reconstruct(
+            agent_id=body["agent_id"],
+            as_of=_iso(body["as_of"]),
+            query=body.get("query"),
+        )
+    if method == "GET" and parsed.path == "/v1/conflicts":
+        return client.list_conflicts(
+            status=query.get("status", ["open"])[0],
+            limit=int(query.get("limit", [20])[0]),
+        )
+    if (
+        method == "GET"
+        and parsed.path.startswith("/v1/memories/")
+        and parsed.path.endswith("/lineage")
+    ):
+        memory_id = parsed.path.removeprefix("/v1/memories/").removesuffix("/lineage")
+        return client.memory_lineage(memory_id)
+    if method == "GET" and parsed.path == "/v1/facts/history":
+        ticker = query.get("ticker", [""])[0]
+        return {
+            "ticker": ticker,
+            "items": client.fact_history(
+                agent_id=query.get("agent_id", [LIANS_AGENT_ID])[0],
+                ticker=ticker,
+                metric=query.get("metric", [""])[0],
+                limit=int(query.get("limit", [50])[0]),
+            ),
+        }
+    if method == "POST" and parsed.path == "/v1/backtest/check":
+        return client.backtest_check(
+            agent_id=body["agent_id"],
+            simulation_as_of=_iso(body["simulation_as_of"]),
+        )
+    raise ValueError(f"Unsupported local MCP route: {method} {parsed.path}")
 
 
 async def _api(method: str, path: str, body: dict | None = None) -> dict:
+    if not LIANS_URL:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_LOCAL_EXECUTOR, _local_api, method, path, body)
+
     import httpx
     headers = {"X-API-Key": LIANS_API_KEY, "Content-Type": "application/json"}
     async with httpx.AsyncClient(timeout=30.0) as client:

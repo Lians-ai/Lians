@@ -2,11 +2,11 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.ebeirne/lians",
   "title": "Lians \u2014 Financial-Grade Agent Memory",
-  "description": "Bitemporal memory for AI agents. SEC 17a-4 audit chain, GDPR crypto-shred, information barriers.",
+  "description": "Bitemporal long-term memory for AI agents with point-in-time recall, tamper-evident audit trails, and GDPR crypto-erasure.",
   "version": "0.4.0",
   "websiteUrl": "https://www.lians.ai",
   "repository": {
-    "url": "https://github.com/ebeirne/Lians2",
+    "url": "https://github.com/Lians-ai/Lians",
     "source": "github"
   },
   "packages": [
@@ -32,14 +32,14 @@
       "environmentVariables": [
         {
           "name": "LIANS_URL",
-          "description": "Base URL of your Lians server (self-hosted or cloud)",
-          "isRequired": true,
+          "description": "Optional base URL of a hosted or self-hosted Lians server; omit for local SQLite mode",
+          "isRequired": false,
           "isSecret": false
         },
         {
           "name": "LIANS_API_KEY",
           "description": "API key with read and write scopes",
-          "isRequired": true,
+          "isRequired": false,
           "isSecret": true
         },
         {
@@ -47,6 +47,18 @@
           "description": "Agent identifier used as the memory namespace",
           "isRequired": false,
           "default": "mcp-agent"
+        },
+        {
+          "name": "LIANS_LOCAL_DB",
+          "description": "Local SQLite path used when LIANS_URL is omitted",
+          "isRequired": false,
+          "default": "~/.lians/mcp.db"
+        },
+        {
+          "name": "LIANS_NAMESPACE",
+          "description": "Local tenant namespace",
+          "isRequired": false,
+          "default": "mcp"
         }
       ]
     }

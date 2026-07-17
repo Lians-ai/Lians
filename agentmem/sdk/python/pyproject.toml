@@ -5,11 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "lians-sdk"
 version = "0.4.0"
-description = "Financial-grade AI memory — bitemporal facts, SEC 17a-4 audit chain, GDPR crypto-shred"
+description = "Bitemporal long-term memory for AI agents with point-in-time recall, tamper-evident audit trails, and GDPR crypto-erasure"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 readme = "README.md"
-keywords = ["ai", "memory", "finance", "agents", "langchain", "langgraph", "crewai", "compliance", "bitemporal"]
+keywords = ["ai", "agent-memory", "long-term-memory", "llm", "mcp", "langchain", "langgraph", "crewai", "compliance", "audit-trail", "bitemporal", "gdpr"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -43,7 +43,7 @@ local         = [
     # import time, which requires the asyncpg dialect to be importable
     "asyncpg>=0.29",
 ]
-mcp           = ["mcp>=1.0.0", "httpx>=0.27.0"]
+mcp           = ["mcp>=1.0.0", "httpx>=0.27.0", "lians-sdk[local]"]
 all           = [
     "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,local,mcp]",
 ]
@@ -52,9 +52,11 @@ all           = [
 lians-mcp = "lians.mcp_server:main"
 
 [project.urls]
-Homepage      = "https://github.com/Lians-ai/Lians"
+Homepage      = "https://www.lians.ai"
 Repository    = "https://github.com/Lians-ai/Lians"
-Documentation = "https://github.com/Lians-ai/Lians#readme"
+Documentation = "https://github.com/Lians-ai/Lians/tree/master/docs"
+Changelog     = "https://github.com/Lians-ai/Lians/releases"
+Issues        = "https://github.com/Lians-ai/Lians/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lians"]
