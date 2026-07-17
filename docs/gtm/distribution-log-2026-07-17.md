@@ -25,6 +25,7 @@ Statuses reflect verified public state, not planned activity.
 | MCP Server Hub | Submitted, listing not yet verified | Free form accepted and reset without a public confirmation ID |
 | AgentNDX | Submitted for curated review | Public form confirmed receipt and stated a 48-hour review target |
 | DeepYard | Submitted for review | Formspree confirmation page verified successful submission in the MCP Servers category |
+| MCP Market | Submitted to free queue | Public form confirmed the $0 queue; estimated listing time is four to six weeks and no paid placement was selected |
 | AI Tools Directory | Submission failed on public form | Completed form returned `Failed to process submission`; no listing claimed |
 | ServerHub | Submission blocked by directory error | Public form returned `Cross-origin requests are not allowed` while fetching the GitHub repository |
 | Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797) |
@@ -36,6 +37,7 @@ Statuses reflect verified public state, not planned activity.
 | Awesome-Agent-Memory | Open PR | [PR 61](https://github.com/TeleAI-UAGI/Awesome-Agent-Memory/pull/61) |
 | awesome-ai-memory | Open PR | [PR 62](https://github.com/topoteretes/awesome-ai-memory/pull/62) |
 | Awesome-AI-Memory | Open bilingual PR | [PR 124](https://github.com/IAAR-Shanghai/Awesome-AI-Memory/pull/124) |
+| Awesome Agents | Open PR | [PR 649](https://github.com/kyrolabs/awesome-agents/pull/649) adds one factual entry at the bottom of the Frameworks section |
 
 ## Framework documentation
 
