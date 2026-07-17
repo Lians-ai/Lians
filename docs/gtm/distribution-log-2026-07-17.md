@@ -53,7 +53,7 @@ Statuses reflect verified public state, not planned activity.
 | Registry | Status | Evidence or blocker |
 |---|---|---|
 | PyPI | Version 0.4.1 verified live | [lians-sdk](https://pypi.org/project/lians-sdk/) exposes the new homepage, summary, README, benchmarks, and documentation links |
-| Maven Central | Deployment accepted, search indexing pending | [Release workflow](https://github.com/Lians-ai/Lians/actions/runs/29610671357) completed the Maven Central deploy job successfully |
+| Maven Central | Version 0.4.1 verified live | [Canonical POM](https://repo1.maven.org/maven2/ai/lians/lians-sdk/0.4.1/lians-sdk-0.4.1.pom) and [Sonatype artifact page](https://central.sonatype.com/artifact/ai.lians/lians-sdk/0.4.1) both returned HTTP 200 |
 | npm | Version 0.4.1 publication blocked by token authorization | [Failed publish workflow](https://github.com/Lians-ai/Lians/actions/runs/29610671394) received an npm registry 404 while 0.4.0 remains public; replace the scoped package token before rerunning |
 
 ## Vendor right of reply
