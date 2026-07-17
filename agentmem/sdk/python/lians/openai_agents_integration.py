@@ -12,7 +12,7 @@ Install::
 
 Usage::
 
-    from openai_agents import Agent, Runner
+    from agents import Agent, Runner
     from lians import LocalLiansClient
     from lians.openai_agents_integration import build_openai_agent_tools
 
@@ -28,14 +28,13 @@ Usage::
 
 Four tools are returned:
 
-- ``agentmem_remember``       — store a fact with its event timestamp and metadata
-- ``agentmem_recall``         — retrieve current facts by semantic search
-- ``agentmem_recall_at``      — retrieve facts valid at a specific past date (compliance)
-- ``agentmem_flush``          — batch-persist durable facts before context compaction
+- ``agentmem_remember``: store a fact with its event timestamp and metadata
+- ``agentmem_recall``: retrieve current facts by semantic search
+- ``agentmem_recall_at``: retrieve facts valid at a specific past date (compliance)
+- ``agentmem_flush``: batch-persist durable facts before context compaction
 
-The ``agentmem_recall_at`` tool is the compliance differentiator:
-it answers "what did the model know before the trade?" with a verifiable,
-tamper-evident hash chain — no other memory store in the OpenAI ecosystem provides this.
+The ``agentmem_recall_at`` tool answers "what did the model know before the
+trade?" from Lians' bitemporal record and tamper-evident audit chain.
 """
 from __future__ import annotations
 
@@ -46,20 +45,20 @@ from typing import Any
 
 def build_openai_agent_tools(client: Any, agent_id: str) -> list:
     """
-    Return three OpenAI Agents SDK FunctionTool instances wired to *client*.
+    Return four OpenAI Agents SDK FunctionTool instances wired to *client*.
 
     Parameters
     ----------
     client:
-        Any synchronous Lians client — ``LocalLiansClient`` or
+        Any synchronous Lians client, such as ``LocalLiansClient`` or
         ``LiansClient``.
     agent_id:
         The agent namespace to read/write memories under.
 
     Returns
     -------
-    A list of three FunctionTool instances:
-    ``[agentmem_remember, agentmem_recall, agentmem_recall_at]``.
+    A list of four FunctionTool instances:
+    ``[agentmem_remember, agentmem_recall, agentmem_recall_at, agentmem_flush]``.
 
     Raises
     ------
@@ -102,7 +101,7 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         The memory is stored with AES-256-GCM encryption and written to a SHA-256
         tamper-evident audit chain (SEC 17a-4 compliant). If a newer value for the
         same entity+attribute already exists, this fact will be marked as superseded
-        automatically — the agent always recalls the current truth.
+        automatically, so default recall returns the current truth.
 
         Parameters
         ----------
@@ -135,7 +134,7 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         """
         Retrieve the most relevant *current* facts from Lians for a query.
 
-        Superseded facts are excluded at the database layer — only the latest
+        Superseded facts are excluded at the database layer, so only the latest
         valid value is returned. Use before answering any question that depends
         on stored financial or factual data to avoid hallucinating stale figures.
 
@@ -158,11 +157,8 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         Use for compliance and audit queries: "What guidance did we have on
         2026-03-01?" or "What was the consensus before the revision?"
 
-        This is the compliance differentiator: it returns the exact fact set that
-        was valid at the given timestamp, accounting for out-of-order ingestion.
-        mem0 has no bitemporal model. Graphiti/Zep has temporal graph queries but
-        no hash-chain audit stack — there is no verifiable proof that the result
-        hasn't been altered.
+        This returns the fact set that was valid at the given timestamp under
+        Lians' recorded bitemporal history, including out-of-order ingestion.
 
         Parameters
         ----------
@@ -188,7 +184,7 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         not written here may be lost when older turns are compacted away.
         Review the conversation and extract the facts worth keeping: decisions
         made, constraints learned, client instructions, corrections, and
-        commitments — not chit-chat.
+        commitments, not chit-chat.
 
         Each write is tagged as a pre-compaction flush in the tamper-evident
         audit chain, so it is provable when the agent externalized what it knew.
