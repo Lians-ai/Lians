@@ -1,4 +1,4 @@
-﻿# Lians Benchmark: Financial Memory Quality vs mem0, Zep, and Letta
+# Lians Benchmark: Financial Memory Quality vs mem0, Zep, and Letta
 
 This document compares Lians against mem0 and Zep across four dimensions that
 matter most for financial AI agents: stale-fact contamination, supersession
@@ -29,7 +29,7 @@ quarter's guidance replaces this quarter's guidance, the agent must:
 
 mem0 was not designed with these constraints. Zep's **Graphiti** (released Jan 2025,
 20k+ GitHub stars as of June 2026) now implements a genuine bitemporal model and
-point-in-time queries for its knowledge graph — a meaningful capability advance.
+point-in-time queries for its knowledge graph - a meaningful capability advance.
 What Graphiti does not provide is the compliance stack: no SHA-256 hash chain, no
 GDPR crypto-shred with audit survival, no information barriers at the DB layer, and
 no dedicated backtest-contamination detection API. Lians was designed for all of it.
@@ -50,7 +50,7 @@ stale revisions so they never reach the LLM context.
 | Pure cosine (mem0-style) | 4 / 4 | #4 |
 
 mem0 uses pure cosine retrieval with no structured supersession.
-The four stale revisions share near-identical embeddings with the query — so all
+The four stale revisions share near-identical embeddings with the query - so all
 four outrank or tie the current fact. The agent receives contaminated context.
 
 Lians applies a **0.1× validity multiplier** to superseded memories at the DB
@@ -62,16 +62,16 @@ of their cosine similarity.
 
 ## Benchmark 2: Supersession Classification Accuracy
 
-**Setup:** 22 labeled memory pairs — 12 synthetic cases covering edge cases and
+**Setup:** 22 labeled memory pairs - 12 synthetic cases covering edge cases and
 12 real-world cases sourced from public records (FOMC rate decisions, NVDA FY2026
 guidance revisions, TSLA quarterly delivery releases, Moody's ratings actions).
 Each pair is classified by Lians's Stage 1+2 deterministic engine (no LLM call).
 
 **Classes:**
-- **SUPERSEDES** — same entity+attribute, newer event, different value
-- **CONFIRMS** — same entity+attribute, same value (duplicate source)
-- **ADDS** — different attribute or reversed temporal direction
-- **CONTRADICTS_SAME_TIME** — conflicting values at the same event timestamp
+- **SUPERSEDES** - same entity+attribute, newer event, different value
+- **CONFIRMS** - same entity+attribute, same value (duplicate source)
+- **ADDS** - different attribute or reversed temporal direction
+- **CONTRADICTS_SAME_TIME** - conflicting values at the same event timestamp
 
 | Class | Precision | Recall | F1 | Support |
 |-------|-----------|--------|----|---------|
@@ -82,10 +82,10 @@ Each pair is classified by Lians's Stage 1+2 deterministic engine (no LLM call).
 | **Overall accuracy** | | | **100% (22/22)** | |
 
 **Real-world data sources (public record):**
-- FOMC rate decisions: Sep 18 2024 (−25bp), Nov 7 2024 (−25bp), Dec 18 2024 (−25bp), Jan 29 2025 (hold) — Federal Reserve press releases
-- NVDA guidance chain: $28B (Nov 2024) → $32B (Feb 2025) → $36B (May 2025) → $40B (Nov 2025) — NVIDIA earnings calls
-- TSLA deliveries: Q2 2024 actuals vs Q3 2024 actuals; analyst consensus vs Q3 2024 actual — Tesla investor relations
-- JPMorgan Chase Moody's outlook upgrade — Moody's Dec 2023 ratings action
+- FOMC rate decisions: Sep 18 2024 (−25bp), Nov 7 2024 (−25bp), Dec 18 2024 (−25bp), Jan 29 2025 (hold) - Federal Reserve press releases
+- NVDA guidance chain: $28B (Nov 2024) → $32B (Feb 2025) → $36B (May 2025) → $40B (Nov 2025) - NVIDIA earnings calls
+- TSLA deliveries: Q2 2024 actuals vs Q3 2024 actuals; analyst consensus vs Q3 2024 actual - Tesla investor relations
+- JPMorgan Chase Moody's outlook upgrade - Moody's Dec 2023 ratings action
 
 **Invariants proven by test suite:**
 - A memory with an older `event_time` **never** supersedes a newer one (temporal ordering)
@@ -94,13 +94,13 @@ Each pair is classified by Lians's Stage 1+2 deterministic engine (no LLM call).
 - Five consecutive revisions all chain correctly: $28B→$32B→$36B→$38B→$40B
 
 **mem0** has no structured supersession engine. It relies on the downstream LLM
-to reason about stale data in its context — this is prompt engineering, not memory
+to reason about stale data in its context - this is prompt engineering, not memory
 hygiene. A stale `$28B` guidance figure passed to an LLM alongside a current `$40B`
 figure creates hallucination risk.
 
 **Zep/Graphiti** extracts entity handles and edges with an LLM pass and tracks
 temporal validity intervals per edge. Its supersession is still LLM-driven entity
-merging — it has no explicit typed relation (`SUPERSEDES` / `CONFIRMS` / `ADDS` /
+merging - it has no explicit typed relation (`SUPERSEDES` / `CONFIRMS` / `ADDS` /
 `CONTRADICTS_SAME_TIME`), no temporal-ordering invariant enforcement (older facts can
 overwrite newer ones depending on ingestion order), no `CONTRADICTS_SAME_TIME`
 distinction, and no cross-attribute guard rails. The supersession classification
@@ -127,14 +127,14 @@ relational storage model. See the section below for the architectural distinctio
 
 Point-in-time recall means answering: *"What did the agent know about X on date D?"*
 
-mem0 has no `event_time` concept and no bitemporal model — it always returns the
+mem0 has no `event_time` concept and no bitemporal model - it always returns the
 most-recently-ingested memory for a query, not the one that was valid at a given
 date. It cannot reconstruct past agent state.
 
 **Zep/Graphiti** (as of Jan 2025 paper and June 2026 releases) now implements a
 genuine bitemporal model: graph edges carry `t_valid` / `t_invalid` intervals
 (event-time axis) and a separate ingestion timestamp. It does support point-in-time
-queries at the graph level — "What did we know about entity X as of date D?"
+queries at the graph level - "What did we know about entity X as of date D?"
 
 The distinction from Lians on this benchmark is architectural: Graphiti's
 point-in-time model operates over a **knowledge graph** (nodes and edges), not a
@@ -145,11 +145,11 @@ chains is not published or benchmarked by Zep. The result above marks Graphiti a
 untested (N/T) rather than incorrect (✗).
 
 Lians stores two orthogonal timestamps per memory:
-- `event_time` — when the real-world event happened (the business clock)
-- `ingestion_time` — when the memory was ingested (the system clock)
+- `event_time` - when the real-world event happened (the business clock)
+- `ingestion_time` - when the memory was ingested (the system clock)
 
 The `as_of` filter applies to `event_time` via `valid_from ≤ as_of < valid_to`.
-Ingestion order is irrelevant — out-of-order ingestion is correctly handled
+Ingestion order is irrelevant - out-of-order ingestion is correctly handled
 (`test_temporal_stress.py::test_out_of_order_ingestion_correct_recall`).
 
 This is a regulatory requirement, not a nice-to-have. SEC Rule 17a-4 requires
@@ -180,11 +180,11 @@ Benchmark 1): pure cosine's P@3 collapses to 0.25 (1 current fact surrounded by
 before ranking.
 
 Lians's hybrid scorer combines:
-- **Okapi BM25** (k₁=1.5, b=0.75) — term frequency without stopword inflation
+- **Okapi BM25** (k₁=1.5, b=0.75) - term frequency without stopword inflation
 - **Cosine similarity** against Voyage Finance-2 embeddings (1024-dim, finance-tuned)
-- **Recency decay** — exponential half-life of 90 days on `event_time`
-- **Importance weight** — caller-provided salience blended at 0.6:0.4 ratio
-- **Validity gate** — 0.1× multiplier on superseded memories (present-time) or
+- **Recency decay** - exponential half-life of 90 days on `event_time`
+- **Importance weight** - caller-provided salience blended at 0.6:0.4 ratio
+- **Validity gate** - 0.1× multiplier on superseded memories (present-time) or
   strict `valid_from ≤ as_of < valid_to` filter (point-in-time)
 
 ---
@@ -199,7 +199,7 @@ This dimension has no direct analogue in mem0 or Zep.
 | SHA-256 hash chain (SEC 17a-4) | ✓ | ✗ | ✗ |
 | Tamper detection on any modified row | ✓ | ✗ | ✗ |
 | GDPR crypto-shred (Art. 17) | ✓ | ✗ | Partial |
-| Crypto-shred preserves audit hashes | ✓ | — | — |
+| Crypto-shred preserves audit hashes | ✓ | - | - |
 | Point-in-time audit reconstruction | ✓ | ✗ | ✗ |
 | Information barriers (Chinese walls) | ✓ | ✗ | ✗ |
 | Retention policy with legal hold | ✓ | ✗ | ✗ |
@@ -222,8 +222,8 @@ This dimension has no direct analogue in mem0 or Zep.
 - `GET /v1/admin/audit/verify` still returns `{"status": "ok"}` after erasure
 
 **Admin operation audit trail (Phase 7):**
-Every admin action — key provision, revoke, rotation, barrier assignment,
-retention policy change, billing configuration — writes a `chain_log` entry
+Every admin action - key provision, revoke, rotation, barrier assignment,
+retention policy change, billing configuration - writes a `chain_log` entry
 with `agent_id="__admin__"`. Regulators can see who provisioned what and when.
 
 ---
@@ -236,7 +236,7 @@ git clone <repo>
 cd Ai_Mem_Soft
 pip install -e .
 
-# Run all benchmark tests (zero API calls — uses local hash-projection embeddings)
+# Run all benchmark tests (zero API calls - uses local hash-projection embeddings)
 python -m pytest \
   Lians/tests/test_supersession_benchmark.py \
   Lians/tests/test_recall_quality.py \
@@ -261,11 +261,11 @@ EMBEDDING_PROVIDER=local MASTER_ENCRYPTION_KEY="" KMS_PROVIDER=env \
 **What this benchmark does not measure:**
 - Latency under load (mem0 and Zep were not installed in the test environment)
 - Embedding quality on held-out financial corpora (results use hash-projection
-  vectors, not Voyage Finance-2 — production MRR will differ)
+  vectors, not Voyage Finance-2 - production MRR will differ)
 - LLM adjudication quality (Stage 3 supersession, disabled in all benchmarks)
 - Multi-agent namespace isolation latency (tested functionally, not for throughput)
 
-**Embedding note:** All recall numbers above use the `local` provider — a
+**Embedding note:** All recall numbers above use the `local` provider - a
 deterministic hash-projection into 1024 dimensions. This provider is designed for
 test repeatability, not recall quality. Production deployments with `EMBEDDING_PROVIDER=voyage`
 (voyage-finance-2 model, finance-domain fine-tuned) will achieve higher MRR and
@@ -283,7 +283,7 @@ sequential I/O hops on the critical path:
 | Stage | Before roadmap | After roadmap (keyed) | After roadmap (semantic) |
 |-------|---------------|----------------------|--------------------------|
 | Redis cache | 1 round-trip | 1 round-trip (skipped on hit) | 1 round-trip |
-| Keyed router | — | **0 DB hops (live_facts index)** | falls through |
+| Keyed router | - | **0 DB hops (live_facts index)** | falls through |
 | Embedding | always | **skipped** | 1 async call |
 | ANN search | full ``memories`` table | **live_facts partition only** | live_facts partition |
 | DEK unwrap | 1 per subject per recall | **0 (in-process DEK cache)** | 0 |
@@ -295,7 +295,7 @@ to sub-millisecond (B-tree index on live_facts).  This path covers the
 majority of financial agent workloads where the agent knows *what* it wants.
 
 Semantic recalls drop from cold-model + full-table-scan to warm-model +
-live_facts-partition scan — roughly 3–8× fewer rows inspected.
+live_facts-partition scan - roughly 3-8× fewer rows inspected.
 
 ---
 
@@ -310,12 +310,12 @@ about staleness.
 
 After the roadmap:
 - **Latency**: Lians's keyed router (Change 2) handles the majority of
-  financial recalls in sub-millisecond — comparable to mem0's simple cosine
+  financial recalls in sub-millisecond - comparable to mem0's simple cosine
   lookup on a warm index, but with stale-fact exclusion built in.
 - **Correctness**: mem0's stale-contamination problem (Benchmark 1: 4/4 stale
   facts in top-5) is architectural, not a tuning issue.  The roadmap makes
   Lians faster *and* keeps the 0/4 score intact.
-- **Compliance**: unchanged — mem0 has no audit trail, no crypto-shred, no
+- **Compliance**: unchanged - mem0 has no audit trail, no crypto-shred, no
   point-in-time recall.
 
 ### vs. Zep / Graphiti
@@ -323,7 +323,7 @@ After the roadmap:
 **What changed (June 2026 spot-check):** Zep's Graphiti library (Jan 2025 paper,
 20k+ GitHub stars) now implements a genuine bitemporal model. Graph edges carry
 `t_valid` / `t_invalid` (event-time) and a separate ingestion timestamp. Graphiti
-explicitly supports point-in-time queries. This is a real capability — not marketing.
+explicitly supports point-in-time queries. This is a real capability - not marketing.
 
 **What this closes:** the "only bitemporal agent memory" headline no longer belongs
 exclusively to Lians. Any positioning that leans on bitemporal as the primary
@@ -363,7 +363,7 @@ It does not provide a shared multi-agent memory layer, bitemporal modeling,
 or regulatory compliance primitives.
 
 - **Architecture**: Letta is per-agent (single LLM instance with paged memory);
-  Lians is a service-layer shared across agents — the right model for
+  Lians is a service-layer shared across agents - the right model for
   financial firms running multiple specialized agents that must share facts
   under information barriers.
 - **Compliance**: Letta has no equivalent of Lians's SEC 17a-4 audit
@@ -405,12 +405,12 @@ or regulatory compliance primitives.
 | Kubernetes + HPA + PDB manifests | **✓** | ✗ | ✗ | ✗ |
 
 For financial institutions operating under SEC, FINRA, MiFID II, or CFTC
-oversight, the compliance column is not optional — it is the table stake that
+oversight, the compliance column is not optional - it is the table stake that
 separates a production-grade memory layer from a developer tool.
 
 As of June 2026, Graphiti/Zep has closed the bitemporal and point-in-time gaps that
 existed at launch. The differentiator is no longer "the only temporal agent memory"
-— it is the compliance stack: hash chain, crypto-shred, information barriers, and
+- it is the compliance stack: hash chain, crypto-shred, information barriers, and
 backtest contamination detection. None of those exist in any competitor.
 
 The performance roadmap makes Lians competitive on latency *without*
@@ -420,20 +420,47 @@ implemented so they no longer penalize the hot path.
 
 ---
 
-## Memory evaluation harness (LoCoMo / LongMemEval protocol)
+## Public memory benchmark results
 
-The standard long-term-memory benchmarks — [LoCoMo](https://github.com/snap-research/locomo)
-and [LongMemEval](https://github.com/xiaowu0162/LongMemEval) — feed a model a
-multi-session conversation, then ask questions whose answers depend on
-remembering and *updating* facts across sessions, and score the generated answer
-with an LLM judge.
+The standard long-term-memory benchmarks, [LoCoMo](https://github.com/snap-research/locomo)
+and [LongMemEval](https://github.com/xiaowu0162/LongMemEval), feed a model a
+multi-session history and ask questions whose answers depend on remembering and
+updating facts across sessions.
 
-Lians ships a harness (`agentmem/benchmarks/memory_eval.py`) that measures the
-part a memory layer is actually responsible for: **evidence retrieval** — does
-recall surface the memory containing the answer? This `answer_recall@k` metric is
-deterministic and judge-free, so it isolates the memory system from the downstream
-LLM and directly exercises the property Lians is built for: a **superseded fact
-must not be retrieved, and its current replacement must be**.
+### LoCoMo
+
+We publish deterministic evidence-retrieval results on the complete LoCoMo
+dataset. These scores isolate retrieval from answer generation and are not
+directly comparable to LLM-judged answer-accuracy scores.
+
+| Metric | Result |
+|---|---:|
+| Answerable questions | 1,536 |
+| Evidence hit at 10 | **72.5%** |
+| All evidence at 10 | **59.7%** |
+| Temporal evidence hit at 10 | **79.4%** |
+
+The run uses `LocalLiansClient`, BAAI/bge-large-en-v1.5 embeddings, default
+ranking weights, and no benchmark-specific tuning. Category 5 is excluded from
+the headline because it tests answer refusal rather than evidence retrieval.
+The complete methodology, category breakdown, limitations, and reproduction
+commands are in the [LoCoMo benchmark report](../agentmem/docs/benchmarks/locomo-v0.4.0.md).
+
+### LongMemEval and LongMemEval-V2 status
+
+The repository includes a LongMemEval-S retrieval pipeline, but no official
+answer-accuracy score is published yet. The official protocol requires a fixed
+answer model and an LLM judge after retrieval. LongMemEval-V2 also requires its
+released reader and embedding endpoints. We will publish those numbers only
+after the complete official pipelines have run, including results that are not
+category-leading.
+
+### Evaluation harness
+
+Lians also ships `agentmem/benchmarks/memory_eval.py`, a compact harness that
+measures whether recall surfaces the memory containing the answer. Its
+`answer_recall@k` metric is deterministic and judge-free, which isolates the
+memory system from the downstream model.
 
 Run it on the bundled sample (no external data, no API keys):
 
@@ -443,27 +470,17 @@ python -m benchmarks.memory_eval            # bundled sample
 python -m benchmarks.memory_eval --dataset path/to/locomo.json --k 10
 ```
 
-To run the real benchmarks, convert their samples to the harness schema
-(`benchmarks/data/sample_memory_eval.json`) — sessions with dated turns, then
+To run another dataset, convert its samples to the harness schema
+(`benchmarks/data/sample_memory_eval.json`): sessions with dated turns, then
 questions with gold answers (and an optional `stale` value for supersession
 cases).
-
-### Our positioning
-
-mem0 markets raw recall scores (91.6 LoCoMo, 94.8 LongMemEval). Lians' thesis
-isn't "highest recall at any cost" — it's **correct, current, auditable recall**:
-the harness's supersession cases show Lians returning the *current* value and
-excluding the stale one, which a pure accumulate-everything store cannot do. The
-honest summary for a regulated buyer is *comparable retrieval plus the compliance
-stack (audit chain, crypto-shred, DB-layer barriers) that the benchmark leaders
-don't have* — see [compare-mem0.md](compare-mem0.md) and [compare-zep.md](compare-zep.md).
 
 ---
 
 ## Regulated memory eval (the benchmark only compliance-grade memory passes)
 
 General benchmarks measure conversational recall. They do **not** measure what a
-regulated buyer must guarantee — and an accumulate-everything store fails those by
+regulated buyer must guarantee - and an accumulate-everything store fails those by
 design. `agentmem/benchmarks/regulated_eval.py` checks five hard invariants:
 
 | Invariant | What it proves | A plain store… |
@@ -479,7 +496,7 @@ cd agentmem
 python -m benchmarks.regulated_eval     # 5/5 invariants hold on Lians
 ```
 
-Run the *same* harness against a mem0 / Zep adapter and items 1, 3, and 4 fail —
+Run the *same* harness against a mem0 / Zep adapter and items 1, 3, and 4 fail -
 that contrast, not a recall percentage, is the regulated buyer's decision. (A sixth
-invariant — barrier-leakage isolation — is verified separately against PostgreSQL
+invariant - barrier-leakage isolation - is verified separately against PostgreSQL
 RLS with a non-superuser role; see `test_pgvector.py`.)
