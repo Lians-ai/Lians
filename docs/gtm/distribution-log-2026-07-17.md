@@ -14,7 +14,8 @@ Statuses reflect verified public state, not planned activity.
 | Regulated-memory preprint | Draft with public review request | [Draft PR 26](https://github.com/Lians-ai/Lians/pull/26) includes a validated Lians 0.4.1 evidence artifact; [issue 40](https://github.com/Lians-ai/Lians/issues/40) requests implementation-neutral methodology review |
 | Claude Code community plugin | Package validated, manual submission required | [Lians PR 44](https://github.com/Lians-ai/Lians/pull/44) updates the plugin to 0.4.1, adds a loadable skill, removes stale absolute claims, and passes `claude plugin validate`; the Anthropic Console form requires owner sign-in and terms acceptance |
 | Website Article 12 and canonical marketing content | Merged to redesign branch | [Website PR 1](https://github.com/Ds6826/lian-website/pull/1) |
-| Website production promotion | Draft review required | [Website PR 2](https://github.com/Ds6826/lian-website/pull/2) |
+| Website production promotion | Deployed | Production now serves redesign commit `05017a9f0e748f3c01c22ba689e03037d84a116a` at [lians.ai](https://www.lians.ai/) |
+| Heartwood comparison | Published | [Website PR 6](https://github.com/Ds6826/lian-website/pull/6) added the documentation-based comparison [Heartwood proves who could see it. Lians proves when you knew it.](https://www.lians.ai/compare/heartwood) |
 
 ## Directories and curated lists
 
@@ -33,10 +34,10 @@ Statuses reflect verified public state, not planned activity.
 | MCP Market | Submitted to free queue | Public form confirmed the $0 queue; estimated listing time is four to six weeks and no paid placement was selected |
 | AI Tools Directory | Submission failed on public form | Completed form returned `Failed to process submission`; no listing claimed |
 | ServerHub | Submission blocked by directory error | Public form returned `Cross-origin requests are not allowed` while fetching the GitHub repository |
-| Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797) |
+| Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797); a fresh validated 0.4.1 MCPB package reproduced the upstream `400 {"error":"No values to set"}` failure |
 | PulseMCP | Awaiting manual ingestion request | Gmail draft prepared for `hello@pulsemcp.com` |
 | Glama | Submitted for public review | Glama confirmed receipt through its free open-source server form; [Lians PR 46](https://github.com/Lians-ai/Lians/pull/46) provides a passing non-root container and verifies all eight MCP tools |
-| Glama founder outreach | Evidence-backed reply draft prepared, not sent | Frank Fiegel asked about the use case; the updated draft links the passing container proof and requests the correct claim or admin flow |
+| Glama founder outreach | Reply sent | Frank Fiegel asked about the use case; the July 17 reply links the passing container proof and requests the correct claim or admin flow |
 | mcpub | Not eligible for current transport | Directory requires a hosted HTTP MCP endpoint and a `/.well-known/mcp.json` resource; Lians currently publishes a local stdio server |
 | Unyly | Declined | Submission requires accepting creator marketplace terms and is oriented around hosted billing and revenue share, which is outside the zero-cost local-server campaign |
 | Uneed | Scheduled on free queue | Submission accepted for December 15, 2026; the $14.99 and $29.99 acceleration offers were not selected |
@@ -56,6 +57,7 @@ Statuses reflect verified public state, not planned activity.
 | Google Search Console sitemap | Successful | `https://www.lians.ai/sitemap.xml` was submitted and read on July 17, 2026; Search Console reports 30 discovered pages |
 | Compliance page | Indexed | Search Console URL Inspection reports `https://www.lians.ai/compliance` is on Google and served over HTTPS |
 | Lookahead-bias article | Indexed | Search Console URL Inspection reports `https://www.lians.ai/blog/backtest-lookahead` is on Google and served over HTTPS |
+| IndexNow | Accepted for processing | The production key file is publicly retrievable and the first ten-URL batch returned HTTP 202, the expected initial validation response |
 
 ## Framework documentation
 
@@ -85,6 +87,7 @@ The detailed templates, public URLs, and response statuses are maintained in
 |---|---|---|
 | VeritasChain | Gmail draft prepared | Execution audit trails plus bitemporal agent knowledge provenance |
 | Agent-memory roundup publishers | Research in progress | Reproducible regulated-memory evaluation and lookahead-bias demo |
+| Look-Ahead-Bench | Public research proposal opened | [Issue 1](https://github.com/benstaf/lookaheadbench/issues/1) proposes an opt-in diagnostic that separates model-weight leakage from future-invalid retrieval context; the regulated-memory preprint draft now cites the benchmark as complementary work |
 
 ## Operating constraints
 
