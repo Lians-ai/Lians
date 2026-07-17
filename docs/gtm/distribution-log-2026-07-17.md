@@ -46,6 +46,14 @@ Statuses reflect verified public state, not planned activity.
 | cxxz Awesome Agent Memory | Open PR | [PR 17](https://github.com/cxxz/awesome-agent-memory/pull/17) adds a maintainer-disclosed Lians entry to the MCP memory section |
 | TensorBlock Awesome MCP Servers | Open PR | [PR 1261](https://github.com/TensorBlock/awesome-mcp-servers/pull/1261) adds a tested, maintainer-disclosed entry to the Knowledge Management & Memory category |
 
+## Search discovery
+
+| Surface | Status | Evidence |
+|---|---|---|
+| Google Search Console sitemap | Successful | `https://www.lians.ai/sitemap.xml` was submitted and read on July 17, 2026; Search Console reports 30 discovered pages |
+| Compliance page | Indexed | Search Console URL Inspection reports `https://www.lians.ai/compliance` is on Google and served over HTTPS |
+| Lookahead-bias article | Indexed | Search Console URL Inspection reports `https://www.lians.ai/blog/backtest-lookahead` is on Google and served over HTTPS |
+
 ## Framework documentation
 
 | Framework | Status | Evidence or blocker |
