@@ -1,22 +1,28 @@
 name: Publish lians to npm
 
 on:
+  workflow_dispatch:
   push:
     tags:
-      - "v*"            # unified release tag — one `vX.Y.Z` ships every language
-      - "lians-ts-v*"   # TypeScript-only tag (kept for back-compat)
+      - "v*"            # unified release tag; one `vX.Y.Z` ships every language
+      - "lians-ts-v*"   # TypeScript-only tag kept for backward compatibility
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
       - name: Install dependencies
         working-directory: agentmem/sdk/typescript
@@ -26,8 +32,15 @@ jobs:
         working-directory: agentmem/sdk/typescript
         run: npm run build
 
+      - name: Test
+        working-directory: agentmem/sdk/typescript
+        run: npm test
+
       - name: Publish to npm
         working-directory: agentmem/sdk/typescript
         run: npm publish --access public
+        # npm CLI 11.5.1+ prefers the short-lived GitHub OIDC credential. Keep
+        # the existing token as a migration fallback until trusted publishing
+        # is verified, then remove the secret from the repository.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
