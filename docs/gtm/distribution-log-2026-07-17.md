@@ -11,6 +11,7 @@ Statuses reflect verified public state, not planned activity.
 | Package-page refresh | Merged | [Lians PR 31](https://github.com/Lians-ai/Lians/pull/31) passed all 12 CI jobs and removed stale scorecards and unsupported absolute claims |
 | Unified SDK release | Published | [Lians v0.4.1](https://github.com/Lians-ai/Lians/releases/tag/v0.4.1) includes Java and C artifacts plus the Go module tag |
 | Local-first MCP and benchmark publication | Merged | [Lians PR 23](https://github.com/Lians-ai/Lians/pull/23) |
+| Regulated-memory preprint | Draft with public review request | [Draft PR 26](https://github.com/Lians-ai/Lians/pull/26) includes a validated Lians 0.4.1 evidence artifact; [issue 40](https://github.com/Lians-ai/Lians/issues/40) requests implementation-neutral methodology review |
 | Website Article 12 and canonical marketing content | Merged to redesign branch | [Website PR 1](https://github.com/Ds6826/lian-website/pull/1) |
 | Website production promotion | Draft review required | [Website PR 2](https://github.com/Ds6826/lian-website/pull/2) |
 
