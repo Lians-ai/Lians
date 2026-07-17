@@ -22,6 +22,7 @@ Statuses reflect verified public state, not planned activity.
 |---|---|---|
 | Official MCP Registry | Version 0.4.1 published | Registry name `io.github.ebeirne/lians`; the publisher accepted 0.4.1 and rejected a verification retry as a duplicate version |
 | Docker MCP Catalog | Open PR, maintainer CI approval required | [Docker MCP Registry PR 4464](https://github.com/docker/mcp-registry/pull/4464) submits the public multi-architecture image `ghcr.io/lians-ai/lians-mcp:0.4.1`; GitHub reports `action_required` because workflows from the first-time fork require maintainer approval |
+| Cline MCP Marketplace | Submitted for curated review | [Cline issue 2050](https://github.com/cline/mcp-marketplace/issues/2050) provides the verified 400 by 400 blue lotus asset, pinned `uvx` setup, official registry and container evidence, security policy, and a successful eight-tool MCP installation test |
 | RoninForge State of MCP census | Indexed with a stale degraded result | The July 2 snapshot checked the retired `ebeirne/Lians` URL; the refreshed official registry manifest points to `Lians-ai/Lians` for the next census |
 | mcp.so | Queued for review | [Lians listing](https://mcp.so/servers/lians-b81d5f) |
 | MCPServers.org | Submitted on free tier | Review promised within 12 hours; notification routed to `support@lians.ai` |
