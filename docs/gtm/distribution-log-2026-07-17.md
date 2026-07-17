@@ -33,8 +33,11 @@ Statuses reflect verified public state, not planned activity.
 | Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797) |
 | PulseMCP | Awaiting manual ingestion request | Gmail draft prepared for `hello@pulsemcp.com` |
 | Glama | Manual account and CAPTCHA required | Free Add Server flow opened; no payment authorized |
+| Glama founder outreach | Reply draft prepared, not sent | Frank Fiegel asked about the use case; the threaded draft requests help validating the local stdio server and obtaining the required Glama score badge |
 | mcpub | Not eligible for current transport | Directory requires a hosted HTTP MCP endpoint and a `/.well-known/mcp.json` resource; Lians currently publishes a local stdio server |
 | Unyly | Declined | Submission requires accepting creator marketplace terms and is oriented around hosted billing and revenue share, which is outside the zero-cost local-server campaign |
+| Uneed | Scheduled on free queue | Submission accepted for December 15, 2026; the $14.99 and $29.99 acceleration offers were not selected |
+| PoweredByAI | Paid offer declined | Draft listing was offered publication for $12.99, outside the zero-cost campaign |
 | awesome-mcp-servers | Open PR, Glama check required | [PR 10320](https://github.com/punkpeye/awesome-mcp-servers/pull/10320) |
 | Awesome-Agent-Memory | Open PR | [PR 61](https://github.com/TeleAI-UAGI/Awesome-Agent-Memory/pull/61) |
 | awesome-ai-memory | Open PR | [PR 62](https://github.com/topoteretes/awesome-ai-memory/pull/62) |
