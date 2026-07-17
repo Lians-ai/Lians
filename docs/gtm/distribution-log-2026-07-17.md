@@ -8,6 +8,8 @@ Statuses reflect verified public state, not planned activity.
 | Asset | Status | Evidence |
 |---|---|---|
 | Package discovery metadata and local MCP bundle | Merged | [Lians PR 24](https://github.com/Lians-ai/Lians/pull/24) |
+| Package-page refresh | Merged | [Lians PR 31](https://github.com/Lians-ai/Lians/pull/31) passed all 12 CI jobs and removed stale scorecards and unsupported absolute claims |
+| Unified SDK release | Published | [Lians v0.4.1](https://github.com/Lians-ai/Lians/releases/tag/v0.4.1) includes Java and C artifacts plus the Go module tag |
 | Local-first MCP and benchmark publication | Merged | [Lians PR 23](https://github.com/Lians-ai/Lians/pull/23) |
 | Website Article 12 and canonical marketing content | Merged to redesign branch | [Website PR 1](https://github.com/Ds6826/lian-website/pull/1) |
 | Website production promotion | Draft review required | [Website PR 2](https://github.com/Ds6826/lian-website/pull/2) |
@@ -38,6 +40,14 @@ Statuses reflect verified public state, not planned activity.
 | CrewAI | Draft, maintainer-only AI label required | [PR 6584](https://github.com/crewAIInc/crewAI/pull/6584) |
 | AutoGen and Microsoft Agent Framework | Successor sample proposed | AutoGen is in maintenance mode; [Agent Framework issue 7168](https://github.com/microsoft/agent-framework/issues/7168) proposes a local bitemporal-memory MCP sample |
 | OpenAI Agents SDK | No external listing submitted | Current official docs favor first-party session and memory examples rather than a vendor directory |
+
+## Package registries
+
+| Registry | Status | Evidence or blocker |
+|---|---|---|
+| PyPI | Version 0.4.1 verified live | [lians-sdk](https://pypi.org/project/lians-sdk/) exposes the new homepage, summary, README, benchmarks, and documentation links |
+| Maven Central | Deployment accepted, search indexing pending | [Release workflow](https://github.com/Lians-ai/Lians/actions/runs/29610671357) completed the Maven Central deploy job successfully |
+| npm | Version 0.4.1 publication blocked by token authorization | [Failed publish workflow](https://github.com/Lians-ai/Lians/actions/runs/29610671394) received an npm registry 404 while 0.4.0 remains public; replace the scoped package token before rerunning |
 
 ## Vendor right of reply
 
