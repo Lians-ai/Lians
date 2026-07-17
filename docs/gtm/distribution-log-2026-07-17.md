@@ -18,7 +18,8 @@ Statuses reflect verified public state, not planned activity.
 
 | Channel | Status | Evidence or next action |
 |---|---|---|
-| Official MCP Registry | 0.4.1 manifest prepared for publication | Registry name `io.github.ebeirne/lians`; canonical repository is `Lians-ai/Lians` |
+| Official MCP Registry | Version 0.4.1 published | Registry name `io.github.ebeirne/lians`; the publisher accepted 0.4.1 and rejected a verification retry as a duplicate version |
+| RoninForge State of MCP census | Indexed with a stale degraded result | The July 2 snapshot checked the retired `ebeirne/Lians` URL; the refreshed official registry manifest points to `Lians-ai/Lians` for the next census |
 | mcp.so | Queued for review | [Lians listing](https://mcp.so/servers/lians-b81d5f) |
 | MCPServers.org | Submitted on free tier | Review promised within 12 hours; notification routed to `support@lians.ai` |
 | MCP.Directory | Submitted for review | Submission confirmed; publication review promised within 24 hours |
