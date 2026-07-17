@@ -15,6 +15,11 @@ pdflatex main.tex
 The repository does not vendor a TeX distribution. The source is intentionally
 limited to common arXiv-compatible packages.
 
+The source was also built successfully with Tectonic 0.16.9 on July 17, 2026.
+The verified output is four letter-sized pages. Text extraction reported no
+unresolved references, replacement glyphs, or Unicode em dashes. All four rendered
+pages were visually inspected after hiding PDF link borders.
+
 ## Evidence status
 
 - Lians, mem0 OSS, and Graphiti OSS were executed live.
@@ -29,6 +34,6 @@ limited to common arXiv-compatible packages.
 - Record exact dependency versions and run identifiers.
 - Archive machine-readable per-cell evidence.
 - Complete author and affiliation metadata.
-- Build and visually inspect the PDF.
+- Build and visually inspect the PDF. Completed July 17, 2026.
 - Run an external methodology review.
 
