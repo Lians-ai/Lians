@@ -87,6 +87,7 @@ The detailed templates, public URLs, and response statuses are maintained in
 |---|---|---|
 | VeritasChain | Gmail draft prepared | Execution audit trails plus bitemporal agent knowledge provenance |
 | Agent-memory roundup publishers | Research in progress | Reproducible regulated-memory evaluation and lookahead-bias demo |
+| Look-Ahead-Bench | Public research proposal opened | [Issue 1](https://github.com/benstaf/lookaheadbench/issues/1) proposes an opt-in diagnostic that separates model-weight leakage from future-invalid retrieval context; the regulated-memory preprint draft now cites the benchmark as complementary work |
 
 ## Operating constraints
 
