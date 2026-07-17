@@ -33,7 +33,7 @@ Statuses reflect verified public state, not planned activity.
 | ServerHub | Submission blocked by directory error | Public form returned `Cross-origin requests are not allowed` while fetching the GitHub repository |
 | Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797) |
 | PulseMCP | Awaiting manual ingestion request | Gmail draft prepared for `hello@pulsemcp.com` |
-| Glama | Reproducible container ready, account flow still manual | [Lians PR 46](https://github.com/Lians-ai/Lians/pull/46) adds `Dockerfile.glama`; its CI job successfully initializes the container and verifies all eight MCP tools |
+| Glama | Submitted for public review | Glama confirmed receipt through its free open-source server form; [Lians PR 46](https://github.com/Lians-ai/Lians/pull/46) provides a passing non-root container and verifies all eight MCP tools |
 | Glama founder outreach | Evidence-backed reply draft prepared, not sent | Frank Fiegel asked about the use case; the updated draft links the passing container proof and requests the correct claim or admin flow |
 | mcpub | Not eligible for current transport | Directory requires a hosted HTTP MCP endpoint and a `/.well-known/mcp.json` resource; Lians currently publishes a local stdio server |
 | Unyly | Declined | Submission requires accepting creator marketplace terms and is oriented around hosted billing and revenue share, which is outside the zero-cost local-server campaign |
