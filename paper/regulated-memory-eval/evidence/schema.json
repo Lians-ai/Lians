@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Lians-ai/Lians/blob/master/paper/regulated-memory-eval/evidence/schema.json",
+  "title": "Lians regulated-memory evaluation evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evaluation",
+    "run_id",
+    "executed_at",
+    "system",
+    "source",
+    "report"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "evaluation": { "const": "lians-regulated-memory-five-invariant" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "executed_at": { "type": "string", "format": "date-time" },
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "execution_status", "adapter", "package", "package_version", "configuration"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "execution_status": { "enum": ["executed_live", "capability_assessed"] },
+        "adapter": { "type": "string", "minLength": 1 },
+        "package": { "type": "string", "minLength": 1 },
+        "package_version": { "type": "string", "minLength": 1 },
+        "configuration": { "type": "object" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "git_commit", "harness"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "git_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "harness": { "type": "string", "minLength": 1 }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checks", "passed", "total", "score", "note"],
+      "properties": {
+        "checks": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["check", "passed", "status", "capability_absent", "detail"],
+            "properties": {
+              "check": {
+                "enum": [
+                  "stale_revision_suppression",
+                  "point_in_time_reconstruction",
+                  "erasure_proof",
+                  "lookahead_contamination_detection",
+                  "audit_state_reconstruction"
+                ]
+              },
+              "passed": { "type": "boolean" },
+              "status": { "enum": ["pass", "partial", "fail"] },
+              "capability_absent": { "type": "boolean" },
+              "detail": { "type": "object" }
+            }
+          }
+        },
+        "passed": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "total": { "const": 5 },
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
