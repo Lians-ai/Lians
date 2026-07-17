@@ -1,0 +1,70 @@
+name: Publish MCP container
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Container version tag
+        required: true
+        default: 0.4.1
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: publish-mcp-container-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/lians-ai/lians-mcp
+
+jobs:
+  publish:
+    name: Build, verify, and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build verification image
+        run: docker build --file Dockerfile.glama --tag lians-mcp-glama:test .
+
+      - name: Install MCP test client
+        run: pip install "mcp>=1,<2"
+
+      - name: Initialize server and list tools
+        run: python .github/scripts/smoke_mcp_container.py
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Publish image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.glama
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ inputs.version || github.ref_name }}
+            ${{ env.IMAGE_NAME }}:latest
+          sbom: true
+          provenance: mode=max
