@@ -176,3 +176,24 @@ jobs:
       - name: Test
         run: go test ./...
         working-directory: agentmem/sdk/go
+
+  mcp-container:
+    name: Glama MCP container
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build Glama image
+        run: docker build --file Dockerfile.glama --tag lians-mcp-glama:test .
+
+      - name: Install MCP test client
+        run: pip install "mcp>=1,<2"
+
+      - name: Initialize server and list tools
+        run: python .github/scripts/smoke_mcp_container.py

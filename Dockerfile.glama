@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+ARG LIANS_VERSION=0.4.1
+
+RUN groupadd --system lians \
+    && useradd --system --gid lians --create-home lians \
+    && mkdir -p /data \
+    && chown lians:lians /data \
+    && pip install --no-cache-dir "lians-sdk[mcp]==${LIANS_VERSION}"
+
+USER lians
+
+ENV LIANS_AGENT_ID=mcp-agent \
+    LIANS_LOCAL_DB=/data/mcp.db \
+    LIANS_NAMESPACE=mcp \
+    PYTHONUNBUFFERED=1
+
+VOLUME ["/data"]
+
+ENTRYPOINT ["lians-mcp"]
