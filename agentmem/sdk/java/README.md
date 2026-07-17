@@ -6,13 +6,9 @@
 
 # Lians Java SDK
 
-Financial-grade agent memory for the JVM — bitemporal recall, SEC 17a-4 audit
-chain, GDPR/HIPAA crypto-shred, information barriers, and a relationship graph for
-conflict-of-interest / related-party / care-network queries.
+**Bitemporal long-term memory for JVM agents.** Keep current facts clean, reconstruct what an agent knew at a past time, retain tamper-evident audit records, and query relationship graphs for conflict-of-interest and related-party workflows.
 
-Built for where Java already runs: bank and insurer risk systems, healthcare
-platforms, and legal tech. Java 11+, one dependency (Jackson); HTTP is the JDK's
-`java.net.http`.
+Java 11+, one runtime dependency on Jackson, and HTTP through the JDK.
 
 ## Install
 
@@ -22,94 +18,64 @@ Maven:
 <dependency>
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.2.0</version>
+  <version>0.4.1</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation "ai.lians:lians-sdk:0.2.0"
+implementation "ai.lians:lians-sdk:0.4.1"
 ```
 
-## Quick start
+Maven Central publication is pending. Until it is enabled, release JARs are attached to [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
+
+## Quickstart
 
 ```java
 import ai.lians.LiansClient;
 import ai.lians.LiansClientOptions;
-import ai.lians.model.MemoryOut;
 import ai.lians.model.RecallResult;
 import java.time.Instant;
 import java.util.Map;
 
 LiansClient client = new LiansClient(LiansClientOptions.builder()
-        .baseUrl("https://api.lians.dev")              // or your self-hosted server
+        .baseUrl("https://mem.yourfirm.internal")
         .apiKey(System.getenv("LIANS_API_KEY"))
-        .adminSecret(System.getenv("LIANS_ADMIN_SECRET"))   // only for /v1/admin/* audit calls
         .build());
 
-// Store a fact with its BUSINESS event-time (not now)
 client.addMemory("equity-desk", "NVDA FY2026 revenue guidance raised to $40B",
         Instant.parse("2025-11-19T16:00:00Z"),
         Map.of("ticker", "NVDA", "metric", "revenue_guidance"));
 
-// Recall current (non-stale) facts
-RecallResult r = client.recall("equity-desk", "NVDA revenue guidance", 5);
-for (MemoryOut m : r.memories) {
-    System.out.println(m.eventTime + "  " + m.content);
-}
-
-// Point-in-time — what did we know on a past date?
+RecallResult current = client.recall("equity-desk", "NVDA revenue guidance", 5);
 RecallResult past = client.recallAt("equity-desk", "NVDA revenue guidance",
         Instant.parse("2025-09-01T00:00:00Z"), 5);
 ```
 
-## Compliance & graph surfaces
+## Audit and graph surfaces
 
 ```java
-// Exhaustive knowledge state at a date (regulator demo)
 client.snapshot("equity-desk", Instant.parse("2026-03-01T00:00:00Z"), 1000);
-
-// Lookahead-bias proof before trusting a backtest
 client.backtestCheck("equity-desk", Instant.parse("2026-01-01T00:00:00Z"));
+client.eraseSubject("subject-42", "REQUEST-2026-001");
+client.verifyChain("your-namespace");
 
-// GDPR/HIPAA crypto-shred + verify the tamper-evident chain
-client.eraseSubject("MRN-00042", "GDPR-REQ-2026-001");
-client.verifyChain("your-namespace");   // requires adminSecret
-
-// Relationship graph — conflict-of-interest / related-party reachability
 client.relate("matter-7", "Attorney", "represented", "ClientX",
         Instant.parse("2026-01-01T00:00:00Z"), false, false);
-client.relate("matter-7", "ClientX", "adverse_to", "PartyY",
-        Instant.parse("2026-01-01T00:00:00Z"), false, false);
-var coi = client.path("matter-7", "Attorney", "PartyY", 4, null);
-// -> {"connected": true, "hops": 2, "path": [...]}
-
-// Graph-proximity reranking
-client.recallNear("equity-desk", "earnings", "FundA", "ticker", 5);
+var path = client.path("matter-7", "Attorney", "PartyY", 4, null);
 ```
 
-## Notes
+## Why Java and Lians
 
-- Timestamps are `java.time.Instant` (serialized as ISO-8601 UTC).
-- Errors (non-2xx) throw `LiansException` exposing `status()` and `body()`.
-- Responses with rich schemas (snapshot, graph, conflicts, audit) return Jackson
-  `JsonNode`; `addMemory`/`recall` return typed `MemoryOut` / `RecallResult`.
-- `LiansClient` is thread-safe — create one and share it.
+Java is the backbone of many financial, insurance, healthcare, and legal systems. This SDK brings Lians point-in-time recall, deterministic supersession, audit history, crypto-erasure workflow, and relationship graph to the JVM.
 
-## Why Java + Lians
+See the [published benchmark results](https://github.com/Lians-ai/Lians/blob/master/docs/benchmark.md), [regulated-memory evaluation](https://github.com/Lians-ai/Lians/blob/master/docs/regulated-eval-results.md), and [public correction ledger](https://github.com/Lians-ai/Lians/blob/master/docs/gtm/public-right-of-reply-2026-07-17.md). The evaluation includes runnable adapters so results can be reproduced and challenged.
 
-mem0 ships Python/TypeScript only; Zep adds Go. Neither offers a Java SDK — yet
-Java is the backbone of regulated back-offices. This SDK brings the full
-compliance memory layer (and the relationship graph that neither competitor pairs
-with an open compliance spine) to the JVM. See the
-[mem0](../../../docs/compare-mem0.md) and [Zep/Graphiti](../../../docs/compare-zep.md)
-comparisons.
-
-## Build & test
+## Build and test
 
 ```bash
 cd agentmem/sdk/java
-mvn test      # JUnit tests run against an in-process mock server — no live Lians needed
+mvn test
 mvn package
 ```
