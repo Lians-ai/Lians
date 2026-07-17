@@ -6,7 +6,7 @@ argument-hint: [framework: langchain | langgraph | crewai | openai-agents | auto
 # /lians-integrate
 
 Integrate Lians as the memory layer for the agent in **this** repository. Work
-test-first and keep the diff minimal — you are adding a memory layer, not
+test-first and keep the diff minimal - you are adding a memory layer, not
 rewriting the app.
 
 ## Procedure
@@ -45,4 +45,4 @@ rewriting the app.
    (`LIANS_URL`, `LIANS_API_KEY`, `LIANS_AGENT_ID`), and how to verify locally.
 
 Do not commit. Leave the branch for the user to review. If tests fail, stop and
-report — do not mark the integration done.
+report - do not mark the integration done.

@@ -54,4 +54,4 @@ Pushing a `vX.Y.Z` tag triggers:
 
 - Verify: `pip install lians-sdk==X.Y.Z`, `npm view @lians-ai/lians`, `go get github.com/Lians-ai/Lians/agentmem/sdk/go@vX.Y.Z`, and the Maven Central listing.
 - **Verify the wheel outside the monorepo**: `pip install "lians-sdk[local]==X.Y.Z"` in a clean venv and run a `LocalLiansClient` round-trip — the local mode imports the vendored engine, which only a from-scratch install exercises (the 0.3.2 wheel shipped broken because all testing ran inside the repo).
-- Update the npm scope decision if `@lians-ai` isn't your final choice — it's referenced in `package.json`, `README.md`, `docs/`, and `integrations/lians-plugin/CLAUDE.md`.
+- Update the npm scope decision if `@lians-ai` is not your final choice. It is referenced in `package.json`, `README.md`, `docs/`, and `integrations/lians-plugin/README.md`.

@@ -11,8 +11,8 @@
     {
       "name": "lians",
       "source": "./integrations/lians-plugin",
-      "description": "Lians financial-grade memory for AI agents. Persistent, bitemporal memory with SEC 17a-4 audit chain and GDPR crypto-shred.",
-      "version": "0.4.0"
+      "description": "Bitemporal memory for AI agents with deterministic supersession, point-in-time recall, local MCP, erasure proofs, and tamper-evident history.",
+      "version": "0.4.1"
     }
   ]
 }

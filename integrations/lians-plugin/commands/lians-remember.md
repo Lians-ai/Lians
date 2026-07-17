@@ -8,13 +8,13 @@ argument-hint: <fact to remember> [as of YYYY-MM-DD]
 Persist a fact to Lians memory so it survives across this and future sessions.
 Lians applies supersession automatically: if the new fact contradicts an existing
 one (same ticker+metric, same patient+condition, same matter+claim), the older
-fact is marked superseded and disappears from future recall — but stays auditable
+fact is marked superseded and disappears from future recall - but stays auditable
 via point-in-time queries.
 
 ## What to do
 
 1. Parse the fact from: **$ARGUMENTS**
-2. Determine the **event_time** — *when the fact became true* (business time), not
+2. Determine the **event_time** - *when the fact became true* (business time), not
    now. If the user wrote "as of <date>", use it. Otherwise default to today and
    say so.
 3. Infer structured metadata where obvious, so supersession can key on it:
@@ -39,5 +39,5 @@ mem.add(
 
 5. Confirm what was stored, the event_time used, and any metadata inferred.
 
-Never invent an event_time precision you don't have — if the user only gave a
+Never invent an event_time precision you don't have - if the user only gave a
 date, store the date, not a fabricated timestamp.
