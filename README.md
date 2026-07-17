@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/lians-wordmark.png" width="420" alt="Lians">
+    <img src="docs/assets/logo-blue.png" width="420" alt="Lians">
   </a>
 </p>
 
