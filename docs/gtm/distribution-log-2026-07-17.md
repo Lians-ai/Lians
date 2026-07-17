@@ -18,6 +18,7 @@ Statuses reflect verified public state, not planned activity.
 |---|---|---|
 | Official MCP Registry | Published | Registry name `io.github.ebeirne/lians` |
 | mcp.so | Queued for review | [Lians listing](https://mcp.so/servers/lians-b81d5f) |
+| MCPServers.org | Submitted on free tier | Review promised within 12 hours; notification routed to `support@lians.ai` |
 | Smithery | Server record created, deployment blocked by registry API | [Server page](https://smithery.ai/servers/info-2zyf/lians-agent-memory), [CLI issue 797](https://github.com/smithery-ai/cli/issues/797) |
 | PulseMCP | Awaiting manual ingestion request | Gmail draft prepared for `hello@pulsemcp.com` |
 | Glama | Manual account and CAPTCHA required | Free Add Server flow opened; no payment authorized |
