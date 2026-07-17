@@ -36,7 +36,7 @@ Statuses reflect verified public state, not planned activity.
 |---|---|---|
 | LangChain and LangGraph | Ready for review, reviewer tagged once | [PR 4949](https://github.com/langchain-ai/docs/pull/4949) |
 | CrewAI | Draft, maintainer-only AI label required | [PR 6584](https://github.com/crewAIInc/crewAI/pull/6584) |
-| AutoGen | No new submission | Project is in maintenance mode; active successor should be evaluated instead |
+| AutoGen and Microsoft Agent Framework | Successor sample proposed | AutoGen is in maintenance mode; [Agent Framework issue 7168](https://github.com/microsoft/agent-framework/issues/7168) proposes a local bitemporal-memory MCP sample |
 | OpenAI Agents SDK | No external listing submitted | Current official docs favor first-party session and memory examples rather than a vendor directory |
 
 ## Vendor right of reply
