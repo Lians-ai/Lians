@@ -42,6 +42,10 @@ local         = [
     # engine's db module builds its (unused-in-local-mode) default engine at
     # import time, which requires the asyncpg dialect to be importable
     "asyncpg>=0.29",
+    # LocalLiansClient defaults to this provider when it is installed. Keep it
+    # in the local extra so the documented install never falls back to the
+    # deterministic test-grade embedding stub.
+    "sentence-transformers>=3.0",
 ]
 mcp           = [
     "mcp>=1.0.0,<2",
@@ -55,6 +59,7 @@ mcp           = [
     "numpy>=1.26",
     "fastapi>=0.110",
     "asyncpg>=0.29",
+    "sentence-transformers>=3.0",
 ]
 all           = [
     "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,local,mcp]",

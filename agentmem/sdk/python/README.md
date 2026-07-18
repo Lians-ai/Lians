@@ -12,7 +12,7 @@
 
 ```bash
 pip install lians-sdk
-pip install lians-sdk[local]         # Zero-setup SQLite mode
+pip install lians-sdk[local]         # SQLite plus real local semantic embeddings
 pip install lians-sdk[mcp]           # Local MCP server
 pip install lians-sdk[langchain]     # LangChain
 pip install lians-sdk[langgraph]     # LangGraph
