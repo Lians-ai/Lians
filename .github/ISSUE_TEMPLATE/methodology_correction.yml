@@ -1,0 +1,50 @@
+name: Benchmark or methodology correction
+description: Challenge an evaluation result, adapter, default configuration, or capability claim with reproducible evidence.
+title: "methodology: "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: We will rerun and correct factual errors. Disagreement is welcome; reproducible evidence makes it actionable.
+  - type: dropdown
+    id: artifact
+    attributes:
+      label: Artifact
+      options:
+        - Regulated-memory evaluation
+        - LOCOMO judged benchmark
+        - LOCOMO retrieval benchmark
+        - LongMemEval
+        - Competitor comparison page
+        - Adapter or default configuration
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: claim
+    attributes:
+      label: Claim or result being challenged
+      placeholder: Link to the exact page, report section, row, or source line.
+    validations:
+      required: true
+  - type: textarea
+    id: correction
+    attributes:
+      label: Proposed correction
+      description: State what is wrong and what the corrected claim or configuration should be.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction evidence
+      description: Include commands, configuration, output, and public source links where possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: permission
+    attributes:
+      label: Public handling
+      options:
+        - label: Lians may link this issue from the affected public report as a right of reply.
+          required: false

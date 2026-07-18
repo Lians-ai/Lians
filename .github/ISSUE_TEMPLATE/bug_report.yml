@@ -1,0 +1,61 @@
+name: Bug report
+description: Report reproducible incorrect behavior in Lians.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Lians. Please remove secrets and personal data from logs and examples.
+  - type: input
+    id: version
+    attributes:
+      label: Lians version
+      placeholder: v0.4.1, container digest, or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Python SDK
+        - TypeScript SDK
+        - Go SDK
+        - Java SDK
+        - C SDK
+        - MCP server
+        - HTTP API
+        - Local engine
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include the observed result and the result you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest safe example or exact steps that reproduce the issue.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Operating system, runtime version, database, deployment mode
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed credentials, personal data, and confidential records.
+          required: true
+        - label: I searched existing issues for the same behavior.
+          required: true
