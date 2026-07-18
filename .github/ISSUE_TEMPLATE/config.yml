@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Lians-ai/Lians/security/policy
+    about: Report security vulnerabilities through the private process in our security policy.
+  - name: Documentation
+    url: https://www.lians.ai/docs
+    about: Read setup, SDK, MCP, and deployment documentation.

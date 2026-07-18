@@ -1,0 +1,41 @@
+name: Integration request
+description: Propose or request an SDK, framework, MCP, or deployment integration.
+title: "integration: "
+labels: [enhancement]
+body:
+  - type: input
+    id: project
+    attributes:
+      label: Framework or platform
+      placeholder: LangGraph, CrewAI, AutoGen, OpenAI Agents SDK, MCP client, or deployment platform
+    validations:
+      required: true
+  - type: input
+    id: use_case
+    attributes:
+      label: Use case
+      placeholder: What should Lians enable in this framework or platform?
+    validations:
+      required: true
+  - type: textarea
+    id: interface
+    attributes:
+      label: Expected interface
+      description: Share the API shape, configuration, or developer workflow you expect.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Relevant documentation
+      description: Link to the framework's official integration or contribution documentation.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution interest
+      options:
+        - I can help implement or test this
+        - I can test a proposed integration
+        - I am requesting maintainer implementation
+    validations:
+      required: true
