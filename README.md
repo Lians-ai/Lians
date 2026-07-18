@@ -170,7 +170,7 @@ No environment variables are needed for local mode. Set `LIANS_URL`, `LIANS_API_
 ## Quickstart
 
 ```bash
-pip install lians-sdk[local]   # zero-setup local mode (SQLite, no Docker)
+pip install lians-sdk[local]   # SQLite plus real local semantic embeddings, no Docker
 ```
 
 ```python
