@@ -5,13 +5,15 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Lians-ai/Lians">Learn more</a>
+  <a href="https://www.lians.ai/">Website</a>
   -
   <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a>
   -
   <a href="docs/install.md">Install</a>
   -
   <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
+  -
+  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
 </p>
 
 <p align="center">
