@@ -1,0 +1,228 @@
+\documentclass[10pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\usepackage{tabularx}
+
+\title{Can an Agent Memory Layer Prove What the Agent Knew?\\
+An Evaluation of Regulated-Memory Invariants}
+\author{Ethan Beirne\\Lians\\\texttt{https://www.lians.ai}}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Long-term agent-memory benchmarks primarily measure whether a system can retrieve
+useful evidence from conversational or interaction histories. Regulated uses add a
+different requirement: an operator may need to reconstruct what an agent knew at a
+past decision time, demonstrate that later facts could not influence that decision,
+and prove that erased material is no longer recoverable. We introduce an open
+evaluation of five regulated-memory invariants: stale-revision suppression,
+point-in-time recall, provable erasure, lookahead protection, and historical
+audit-state reconstruction. The harness evaluates product-level primitives rather
+than general architecture quality. Lians, mem0 OSS, and Graphiti OSS are executed
+live; Letta, Hindsight, and Supermemory are capability-assessed from their public API
+surfaces pending vendor-supplied live configurations. Under the stated scoring rule,
+Lians scores 5.0 of 5, Graphiti 2.0, Letta 1.0, Hindsight 1.0, Supermemory 1.0, and
+mem0 OSS 0.5. These results do not establish general memory superiority. They expose
+a distinct evaluation axis and provide runnable adapters, per-cell evidence, and a
+public correction process for testing it.
+\end{abstract}
+
+\section{Introduction}
+
+Persistent memory is becoming a standard component of long-running agents.
+LoCoMo and LongMemEval test long-horizon conversational recall
+\cite{locomo2024,longmemeval2024}, while LongMemEval-V2 evaluates whether agents can
+internalize environment-specific experience \cite{longmemevalv2_2026}. These tasks
+are important, but they do not directly test whether a deployed memory layer can
+serve as evidence about a past agent decision.
+
+That distinction matters when facts change. A system can answer the current question
+correctly while being unable to reconstruct the knowledge state used yesterday. It
+can delete a row while being unable to produce an erasure artifact. It can retrieve a
+highly relevant fact that was not knowable at the simulated decision time. Recent
+work has made state coordination, contradiction resolution, and bitemporal operators
+first-class memory problems \cite{toki2026,worlddb2026,atma2026}. We complement that
+work with a product-facing evaluation of auditable operational primitives.
+
+This paper contributes:
+
+\begin{enumerate}
+  \item Five falsifiable regulated-memory invariants with explicit pass, partial,
+        and absent criteria.
+  \item A runnable adapter interface that separates live behavioral evidence from
+        capability assessment.
+  \item An initial six-system comparison with per-cell evidence and public vendor
+        right of reply.
+  \item A methodology for evaluating what an agent could have known at a past time,
+        rather than only whether it can answer correctly now.
+\end{enumerate}
+
+\section{Evaluation Contract}
+
+The evaluation treats each invariant as a turnkey product primitive. A pass requires
+a supported API path that satisfies the full invariant. Partial credit indicates a
+related capability that leaves required filtering, proof construction, or state
+reconstruction to the application. Absent means that no supported primitive was
+identified. Scores are one point for pass, one half point for partial, and zero for
+absent.
+
+\subsection{Invariants}
+
+\paragraph{Stale-revision suppression.}
+After a keyed fact is revised, default retrieval must not return the superseded value
+as current context. Preserving old values for history is compatible with a pass if
+the retrieval contract distinguishes them deterministically.
+
+\paragraph{Point-in-time recall.}
+The caller can query the knowledge state as known at a prior transaction time. This
+is distinct from filtering only on when a fact was valid in the external world.
+
+\paragraph{Provable erasure.}
+Erased content becomes cryptographically unrecoverable and the system emits a proof
+artifact or stable request reference. Behavioral non-retrieval without a proof
+artifact receives partial credit.
+
+\paragraph{Lookahead protection.}
+The system prevents or flags retrieval of facts that were not knowable at a declared
+simulation or decision time.
+
+\paragraph{Historical audit-state reconstruction.}
+The caller can reproduce the complete knowledge state that was available at a past
+time, including the effect of revisions and erasures under the documented policy.
+
+\section{Systems and Execution Status}
+
+Table~\ref{tab:status} distinguishes behavioral runs from capability assessment. This
+distinction is central. A capability-assessed cell is a documented hypothesis about
+the public product surface, not a claim that the system was executed.
+
+\begin{table}[h]
+\centering
+\caption{Evidence status by system.}
+\label{tab:status}
+\begin{tabular}{lll}
+\toprule
+System & Evidence mode & Configuration \\
+\midrule
+Lians & Live & LocalLiansClient, version 0.4.0 \\
+mem0 & Live & OSS 2.0.11, documented OpenAI configuration \\
+Graphiti & Live & OSS 0.29.2, OpenAI clients, embedded Kuzu \\
+Letta & Capability-assessed & Public API and adapter \\
+Hindsight & Capability-assessed & Public API and adapter \\
+Supermemory & Capability-assessed & Public API and adapter \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The live OSS configurations follow vendor quickstarts. Any accommodation required to
+complete a run is recorded in the public results appendix. Hosted adapters switch to
+live execution when the corresponding credentials are supplied. The harness does not
+convert an unexecuted capability map into behavioral evidence.
+
+\section{Initial Results}
+
+\begin{table*}[t]
+\centering
+\caption{Initial regulated-memory results. P indicates pass, H indicates half credit,
+and A indicates absent. Capability-assessed columns remain subject to live vendor
+configuration.}
+\label{tab:results}
+\begin{tabularx}{\textwidth}{Xcccccc}
+\toprule
+Invariant & Lians & Graphiti & Letta & Hindsight & Supermemory & mem0 \\
+\midrule
+Stale revision suppressed & P & H & H & H & H & A \\
+Point-in-time recall & P & H & A & H & A & A \\
+Provable erasure & P & H & H & A & H & H \\
+Lookahead protection & P & A & A & A & A & A \\
+Audit-state snapshot & P & H & A & A & A & A \\
+\midrule
+Score & 5.0 & 2.0 & 1.0 & 1.0 & 1.0 & 0.5 \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+The results identify a product gap rather than a universal ranking. Graphiti's
+contradiction invalidation correctly backdated stale edges in the live run, but
+default retrieval returned invalidated edges unless the caller filtered them. mem0
+made erased content behaviorally unretrievable but emitted no proof artifact. These
+capabilities receive partial credit under the same rule applied to Lians and all
+other systems.
+
+\section{Reproducibility and Correction Process}
+
+The implementation, adapters, generated table, and per-cell notes are available in
+the Lians repository \cite{lians2026}. A basic run is:
+
+\begin{verbatim}
+cd agentmem
+python -m benchmarks.compare_regulated
+\end{verbatim}
+
+Optional vendor credentials activate hosted adapters. The public results document
+records exact OSS versions and accommodations. Each evaluated vendor received a
+public request to identify missed APIs, correct characterizations, or provide a
+supported configuration. Accepted corrections change the adapter and the published
+result, whether they improve or reduce a vendor's score.
+
+\section{Threats to Validity}
+
+\paragraph{Evaluator conflict of interest.}
+The evaluation is authored by the developer of Lians. Open adapters, public evidence,
+and vendor correction requests reduce but do not eliminate this conflict. Independent
+replication is required.
+
+\paragraph{Mixed evidence modes.}
+Three columns are capability-assessed rather than live. They must not be interpreted
+as behavioral measurements. The primary near-term objective is to replace these
+columns with supported live configurations.
+
+\paragraph{Configuration sensitivity.}
+Memory behavior can change with model, prompt, version, storage backend, and hosted
+product tier. Results apply only to the recorded configuration.
+
+\paragraph{Binary product criteria.}
+Turnkey primitives favor systems that expose explicit APIs over architectures from
+which an application could construct equivalent behavior. This is intentional for
+procurement analysis, but it is not a measure of theoretical expressiveness.
+
+\paragraph{No utility or latency claim.}
+The evaluation does not measure personalization quality, answer accuracy, cost, or
+latency. A system that scores lower here may be superior for many agent workloads.
+
+\section{Related Work}
+
+LoCoMo and LongMemEval established long-horizon conversational evaluation
+\cite{locomo2024,longmemeval2024}. LongMemEval-V2 shifts attention toward memory of
+environment experience \cite{longmemevalv2_2026}. Look-Ahead-Bench evaluates
+model-level temporal leakage in financial workflows by comparing performance and
+alpha decay across market regimes \cite{lookaheadbench2026}. Our lookahead invariant
+is complementary: it tests whether a memory product prevents facts that were not
+knowable at the declared decision time from entering retrieval context, even when
+the underlying model is temporally clean. WorldDB evaluates immutable,
+content-addressed worlds and write-time reconciliation \cite{worlddb2026}. TOKI
+formalizes contradiction resolution as bitemporal concurrency control with provenance
+contracts \cite{toki2026}. A-TMA separates bank maintenance, retrieval, and answer-time
+state resolution, exposing ghost-memory failures hidden by final answer accuracy
+\cite{atma2026}. Our evaluation operates at a complementary layer: whether a product
+surface exposes auditable primitives that a regulated operator can execute directly.
+
+\section{Conclusion}
+
+Agent memory has two different evaluation questions. One asks whether the agent can
+recall useful information. The other asks whether an operator can prove which
+information was available, prevent future information from leaking backward, and
+produce evidence about revision and erasure. The initial results suggest that the
+second question is not captured by current recall benchmarks or most default product
+surfaces. The proposed invariants, open harness, and correction process provide a
+starting point for independent evaluation rather than a final ranking.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}
