@@ -207,8 +207,8 @@ This dimension has no direct analogue in mem0 or Zep.
 | Row-level security (per-namespace) | ✓ | ✗ | ✗ |
 
 **Hash chain (`test_audit_chain.py`):**
-- 100% tamper detection: any single-field modification on any historical row
-  fails verification
+- 100% detection for mutations to fields covered by each row's hash version.
+  New v2 rows also protect canonical JSON payloads; legacy v1 rows did not.
 - Deleted-row detection: missing rows break `prev_hash` references throughout
   the subsequent chain
 - Legacy rows (pre-migration) are skipped without false positives

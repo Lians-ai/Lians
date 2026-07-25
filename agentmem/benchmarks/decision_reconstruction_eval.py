@@ -248,8 +248,8 @@ async def run_benchmark(repetitions: int = 10) -> dict[str, Any]:
                 else latencies_ms[0]
             )
 
-            # Deliberately corrupt a hash-covered audit field, then require
-            # verification to detect it. The database is ephemeral.
+            # Deliberately corrupt the audit payload, then require verification
+            # to detect it. The database is ephemeral.
             async with sessions() as tamper_session:
                 event = (
                     await tamper_session.execute(
@@ -259,7 +259,7 @@ async def run_benchmark(repetitions: int = 10) -> dict[str, Any]:
                         .limit(1)
                     )
                 ).scalar_one()
-                event.op = f"{event.op}_tampered"
+                event.payload = {**(event.payload or {}), "tampered": True}
                 await tamper_session.commit()
 
             tampered_pack = await _checked(
@@ -291,8 +291,7 @@ async def run_benchmark(repetitions: int = 10) -> dict[str, Any]:
                 "limitations": [
                     "Latency is local SQLite and is not a production load test.",
                     "This run proves tamper-evidence, not certified WORM storage or legal attestation.",
-                    "The current row hash covers identity, operation, memory/content references, "
-                    "timestamps, and chain linkage; EventLog.payload is not hash-covered.",
+                    "Historical v1 audit rows exclude payload; new v2 rows hash canonical JSON payload.",
                     "The GenAI span is retained and correlated by IDs in decision metadata; "
                     "automatic trace-to-decision linking is not claimed.",
                 ],

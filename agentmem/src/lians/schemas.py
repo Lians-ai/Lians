@@ -512,6 +512,7 @@ class AuditExportRow(BaseModel):
     created_at: datetime
     prev_hash: Optional[str]
     row_hash: Optional[str]
+    hash_version: int = 1
 
 
 class AuditExportResult(BaseModel):

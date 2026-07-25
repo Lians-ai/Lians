@@ -4,13 +4,17 @@ Audit log hash chain — tamper-evidence for SEC 17a-4 / FINRA 4511 compliance.
 Each event_log row stores:
   prev_hash — row_hash of the most recently committed EventLog row in this
                namespace at the time of insert (or GENESIS_HASH for the first row)
-  row_hash  — SHA-256 of the canonical string:
+  row_hash  — SHA-256 of the versioned canonical string:
                prev_hash | id | namespace | agent_id | op | memory_id |
                content_hash | created_at (UTC, no timezone suffix)
 
-Any modification or deletion of a historical row is detectable by re-running
-verify_chain(), which recomputes every row_hash from scratch and checks for
-orphaned prev_hash references (indicator of deleted rows).
+Hash format v2 additionally includes canonical JSON ``payload``. Historical v1
+rows remain verifiable without rewriting or invalidating the existing chain.
+
+Modification of a hash-covered field or deletion of a historical row is
+detectable by re-running verify_chain(), which recomputes every row_hash from
+scratch and checks for orphaned prev_hash references. V2 covers payloads; the
+legacy v1 format does not.
 
 Concurrent inserts by different agents in the same namespace may produce forks
 (two rows with the same prev_hash).  Forks are legitimate and do NOT indicate
@@ -28,6 +32,7 @@ verify_chain() recomputes identical hashes regardless of the backend.
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid as _uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -39,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .models import EventLog
 
 GENESIS_HASH = "0" * 64
+CURRENT_HASH_VERSION = 2
 
 
 # ── Datetime normalisation ───────────────────────────────────────────────────
@@ -86,12 +92,24 @@ def _canonical(
     return "|".join(fields)
 
 
+def _canonical_payload(payload: Optional[dict]) -> str:
+    """Stable JSON representation used by hash format v2."""
+    return json.dumps(
+        payload or {},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+
+
 def compute_row_hash(row: EventLog, prev_hash: str) -> str:
     """Recompute the hash for *row* using *prev_hash* as the chain predecessor.
 
     Safe to call on rows loaded from any DB backend — _fmt_dt() normalises the
     created_at representation before hashing.
     """
+    version = int(getattr(row, "hash_version", 1) or 1)
     canonical = _canonical(
         prev_hash=prev_hash,
         row_id=str(row.id),
@@ -102,6 +120,9 @@ def compute_row_hash(row: EventLog, prev_hash: str) -> str:
         content_hash=row.content_hash,
         created_at_utc=_fmt_dt(row.created_at),
     )
+    if version >= 2:
+        # Version prefix provides domain separation from the legacy format.
+        canonical = f"v{version}|{canonical}|{_canonical_payload(row.payload)}"
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
@@ -166,21 +187,11 @@ async def chain_log(
         created_at=now,
         prev_hash=prev_hash,
         row_hash="",
+        hash_version=CURRENT_HASH_VERSION,
     )
     db.add(row)
 
-    row.row_hash = hashlib.sha256(
-        _canonical(
-            prev_hash=prev_hash,
-            row_id=str(row_id),
-            namespace=namespace,
-            agent_id=agent_id,
-            op=op,
-            memory_id=str(memory_id) if memory_id is not None else None,
-            content_hash=content_hash,
-            created_at_utc=created_at_utc,
-        ).encode()
-    ).hexdigest()
+    row.row_hash = compute_row_hash(row, prev_hash)
 
     await db.flush()
 
@@ -330,6 +341,7 @@ def _row_to_dict(row: EventLog) -> dict:
         "created_at": row.created_at,
         "prev_hash": row.prev_hash,
         "row_hash": row.row_hash,
+        "hash_version": row.hash_version,
     }
 
 

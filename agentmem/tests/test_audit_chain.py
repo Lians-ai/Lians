@@ -95,10 +95,28 @@ class TestChainLogUnit:
         row.content_hash = "det"
         row.memory_id = None
         row.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        row.payload = {"b": 2, "a": 1}
+        row.hash_version = 2
         h1 = compute_row_hash(row, GENESIS_HASH)
         h2 = compute_row_hash(row, GENESIS_HASH)
         assert h1 == h2
         assert len(h1) == 64
+
+    def test_v2_payload_key_order_does_not_change_hash(self):
+        row = EventLog(
+            id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            namespace="test-ns",
+            agent_id="agent-1",
+            op="add",
+            content_hash="det",
+            memory_id=None,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            payload={"a": 1, "nested": {"x": True, "y": None}},
+            hash_version=2,
+        )
+        first = compute_row_hash(row, GENESIS_HASH)
+        row.payload = {"nested": {"y": None, "x": True}, "a": 1}
+        assert compute_row_hash(row, GENESIS_HASH) == first
 
     def test_fmt_dt_normalises_timezone_aware_and_naive_to_same_string(self):
         """Timezone-aware UTC datetime and its naive SQLite counterpart hash identically."""
@@ -188,6 +206,46 @@ class TestVerifyChain:
         assert any(v["kind"] == "hash_mismatch" for v in violations), violations
         tampered_ids = {v["row_id"] for v in violations if v["kind"] == "hash_mismatch"}
         assert str(r1.id) in tampered_ids
+
+    async def test_tampered_payload_detected_in_v2(self, db):
+        ns = "verify-payload-tamper"
+        row = await chain_log(
+            db, ns, "a", "decision_recorded", payload={"outcome": "approved"}
+        )
+        await db.commit()
+        assert row.hash_version == 2
+
+        await db.execute(
+            text("UPDATE event_log SET payload=:payload WHERE id=:id"),
+            {"payload": '{"outcome":"denied"}', "id": row.id.hex},
+        )
+        await db.commit()
+        await db.run_sync(lambda session: session.expire_all())
+
+        report = await verify_chain(db, ns)
+        assert report["status"] == "tampered"
+        assert any(v["kind"] == "hash_mismatch" for v in report["violations"])
+
+    async def test_v1_row_remains_verifiable_after_v2_upgrade(self, db):
+        ns = "verify-v1-compat"
+        row = EventLog(
+            id=uuid.uuid4(),
+            namespace=ns,
+            agent_id="legacy-agent",
+            op="add",
+            memory_id=None,
+            content_hash="legacy-content",
+            payload={"legacy": True},
+            created_at=datetime.now(timezone.utc),
+            prev_hash=GENESIS_HASH,
+            hash_version=1,
+        )
+        row.row_hash = compute_row_hash(row, GENESIS_HASH)
+        db.add(row)
+        await db.commit()
+
+        report = await verify_chain(db, ns)
+        assert report["status"] == "ok"
 
     async def test_deleted_row_detected_as_orphaned_parent(self, db):
         import asyncio
