@@ -9,13 +9,22 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .admission import AdmissionDecision
 from .audit_chain import chain_log
 from .models import PendingAdmission
 from .schemas import MemoryAdd
+from .secret_storage import PENDING_CONTENT_PURPOSE, seal_text, unseal_text
+
+
+def decrypt_pending_content(pending: PendingAdmission) -> str:
+    return unseal_text(
+        pending.content,
+        purpose=PENDING_CONTENT_PURPOSE,
+        context=pending.namespace,
+    )
 
 
 async def record_rejection(
@@ -30,13 +39,19 @@ async def record_rejection(
 
 
 async def enqueue_pending(
-    db: AsyncSession, namespace: str, req: MemoryAdd, decision: AdmissionDecision
+    db: AsyncSession, namespace: str, req: MemoryAdd, decision: AdmissionDecision,
+    barrier_override: Optional[str] = None,
 ) -> PendingAdmission:
     """Park a high-risk write for human review (enforce mode)."""
     pending = PendingAdmission(
         namespace=namespace,
         agent_id=req.agent_id,
-        content=req.content,
+        barrier_group=barrier_override,
+        content=seal_text(
+            req.content,
+            purpose=PENDING_CONTENT_PURPOSE,
+            context=namespace,
+        ),
         event_time=req.event_time,
         source=req.source,
         subject_id=req.subject_id,
@@ -64,9 +79,15 @@ _STATUS_ALIASES = {"admitted": "approved"}
 
 
 async def list_pending(
-    db: AsyncSession, namespace: str, status: Optional[str] = "pending", limit: int = 50
+    db: AsyncSession, namespace: str, status: Optional[str] = "pending", limit: int = 50,
+    barrier_override: Optional[str] = None,
 ) -> list[PendingAdmission]:
     conds = [PendingAdmission.namespace == namespace]
+    if barrier_override is not None:
+        conds.append(or_(
+            PendingAdmission.barrier_group.is_(None),
+            PendingAdmission.barrier_group == barrier_override,
+        ))
     if status:
         conds.append(PendingAdmission.status == _STATUS_ALIASES.get(status, status))
     stmt = (
@@ -79,7 +100,8 @@ async def list_pending(
 
 
 async def resolve_pending(
-    db: AsyncSession, namespace: str, pending_id: UUID, action: str, note: Optional[str] = None
+    db: AsyncSession, namespace: str, pending_id: UUID, action: str, note: Optional[str] = None,
+    barrier_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Approve (→ the memory is created) or reject a held write. Records the decision
@@ -93,7 +115,14 @@ async def resolve_pending(
         raise HTTPException(status_code=422, detail="action must be 'approve' (alias: 'admit') or 'reject'")
 
     pending = await db.get(PendingAdmission, pending_id)
-    if pending is None or pending.namespace != namespace:
+    if (
+        pending is None
+        or pending.namespace != namespace
+        or (
+            barrier_override is not None
+            and pending.barrier_group not in (None, barrier_override)
+        )
+    ):
         raise HTTPException(status_code=404, detail="Pending admission not found")
     if pending.status != "pending":
         raise HTTPException(status_code=409, detail="Already resolved")
@@ -115,7 +144,7 @@ async def resolve_pending(
     # approve → admit the memory now
     req = MemoryAdd(
         agent_id=pending.agent_id,
-        content=pending.content,
+        content=decrypt_pending_content(pending),
         event_time=pending.event_time,
         source=pending.source,
         subject_id=pending.subject_id,
@@ -123,7 +152,13 @@ async def resolve_pending(
                   "_admission": {"action": "approved", "risk_tags": list(pending.risk_tags or [])}},
         importance=pending.importance,
     )
-    mem = await add_memory(db, namespace, req)
+    # Preserve the barrier attached when the content entered the queue. An
+    # unbarriered compliance reviewer may approve another desk's item, but that
+    # must never turn the resulting memory into an unbarriered/shared record.
+    effective_barrier = pending.barrier_group or barrier_override
+    mem = await add_memory(
+        db, namespace, req, barrier_override=effective_barrier
+    )
     pending.status = "approved"
     pending.memory_id = mem.id
     await chain_log(

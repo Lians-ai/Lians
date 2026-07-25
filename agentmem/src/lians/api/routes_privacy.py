@@ -16,6 +16,7 @@ async def erase_subject(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("admin")
+    auth.require_unbarriered()
     count = await _erase_subject(db, auth.namespace, req.subject_id, req.request_ref)
     return EraseResult(
         subject_id=req.subject_id,
@@ -47,6 +48,7 @@ async def erasure_certificate(
     Returns 404 if no erasure has been recorded for this subject.
     """
     auth.require("admin")
+    auth.require_unbarriered()
     cert = await get_erasure_certificate(db, auth.namespace, subject_id)
     if not cert:
         raise HTTPException(status_code=404, detail=f"No erasure record found for subject '{subject_id}'")

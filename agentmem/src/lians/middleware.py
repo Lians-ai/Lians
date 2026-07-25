@@ -121,6 +121,64 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RequestBodyLimitMiddleware:
+    """Streaming ASGI request-body cap; also handles chunked requests."""
+
+    def __init__(self, app, max_bytes: int = 2_000_000):
+        self.app = app
+        self._max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            return await self.app(scope, receive, send)
+
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        raw_length = headers.get(b"content-length")
+        if raw_length:
+            try:
+                if int(raw_length) > self._max_bytes:
+                    return await self._reject(scope, receive, send)
+            except ValueError:
+                return await self._reject(scope, receive, send)
+
+        received = 0
+        response_started = False
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message.get("type") == "http.request":
+                received += len(message.get("body", b""))
+                if received > self._max_bytes:
+                    raise _RequestBodyTooLarge
+            return message
+
+        async def tracked_send(message):
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            return await self.app(scope, limited_receive, tracked_send)
+        except _RequestBodyTooLarge:
+            if not response_started:
+                return await self._reject(scope, receive, send)
+            raise
+
+    async def _reject(self, scope, receive, send):
+        response = Response(
+            content=json.dumps({"detail": "Request body too large"}),
+            status_code=413,
+            media_type="application/json",
+        )
+        return await response(scope, receive, send)
+
+
+class _RequestBodyTooLarge(Exception):
+    pass
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Sliding-window rate limit keyed by API key hash (300 req/min default).
@@ -144,13 +202,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         raw_key = request.headers.get("X-API-Key", "")
-        if not raw_key:
+        if raw_key:
+            discriminator = f"api:{hashlib.sha256(raw_key.encode()).hexdigest()[:16]}"
+        elif request.url.path.startswith("/v1/admin/"):
+            # Admin auth uses a separate header. Keying this bucket by the
+            # supplied secret would let an attacker evade throttling by changing
+            # every guess, so use the network client identity instead.
+            client_host = request.client.host if request.client else "unknown"
+            discriminator = (
+                "admin:"
+                + hashlib.sha256(client_host.encode()).hexdigest()[:16]
+            )
+        else:
             # Unauthenticated requests are rejected by auth middleware before
             # they reach any route handler; no need to rate-limit here.
             return await call_next(request)
 
-        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()[:16]
-        redis_key = f"agentmem:rl:{key_hash}"
+        redis_key = f"agentmem:rl:{discriminator}"
 
         try:
             from .cache import _get_redis

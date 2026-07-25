@@ -167,7 +167,10 @@ class LocalProvider(EmbeddingProvider):
 
     @staticmethod
     def _token_vec(token: str, dim: int) -> np.ndarray:
-        seed = int(hashlib.md5(token.encode()).hexdigest(), 16) % (2**31)
+        # Deterministic PRNG seeding only; MD5 is not a security primitive here.
+        seed = int(
+            hashlib.md5(token.encode(), usedforsecurity=False).hexdigest(), 16
+        ) % (2**31)
         rng = np.random.default_rng(seed)
         v = rng.standard_normal(dim).astype(np.float32)
         return v / (np.linalg.norm(v) + 1e-9)

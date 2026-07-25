@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 from typing import Annotated, Optional
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db, set_current_namespace
+from ..db import get_db, set_current_namespace, set_current_barrier_group
 from ..models import ApiKey
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -49,8 +49,19 @@ class AuthContext:
         if scope not in self.scopes:
             raise HTTPException(status_code=403, detail=f"Scope '{scope}' required")
 
+    def require_unbarriered(self) -> None:
+        if self.barrier_group is not None:
+            raise HTTPException(
+                status_code=403,
+                detail="An unbarriered compliance/owner key is required",
+            )
 
-async def _set_rls_namespace(db: AsyncSession, namespace: str) -> None:
+
+async def _set_rls_context(
+    db: AsyncSession,
+    namespace: str,
+    barrier_group: Optional[str],
+) -> None:
     """
     Set the PostgreSQL session variable used by Row-Level Security policies.
 
@@ -67,12 +78,18 @@ async def _set_rls_namespace(db: AsyncSession, namespace: str) -> None:
     namespace variable was never set and namespace RLS silently never engaged for
     non-superuser roles. ``set_config`` is the parameterizable equivalent.
     """
-    try:
+    # PostgreSQL errors intentionally propagate. Silently continuing here would
+    # turn a broken RLS configuration into an authorization bypass.
+    if db.get_bind().dialect.name == "postgresql":
         await db.execute(
             text("SELECT set_config('app.current_namespace', :ns, true)"),
             {"ns": namespace},
         )
-    except Exception:
+        await db.execute(
+            text("SELECT set_config('agentmem.barrier_group', :bg, true)"),
+            {"bg": barrier_group or ""},
+        )
+    else:
         pass  # SQLite or pre-transaction context — application-layer isolation applies
 
 
@@ -101,11 +118,13 @@ async def get_auth(
     # _set_rls_namespace covers the current (already-open) transaction;
     # set_current_namespace lets the db "begin" listener re-apply it to any
     # later transaction autobegun after a mid-request commit().
-    await _set_rls_namespace(db, key_row.namespace)
+    barrier_group = getattr(key_row, "barrier_group", None)
+    await _set_rls_context(db, key_row.namespace, barrier_group)
     set_current_namespace(key_row.namespace)
+    set_current_barrier_group(barrier_group)
 
     return AuthContext(
         namespace=key_row.namespace,
         scopes=_effective_scopes(key_row),
-        barrier_group=getattr(key_row, "barrier_group", None),
+        barrier_group=barrier_group,
     )

@@ -100,10 +100,18 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 current_namespace: contextvars.ContextVar = contextvars.ContextVar(
     "agentmem_current_namespace", default=None
 )
+current_barrier_group: contextvars.ContextVar = contextvars.ContextVar(
+    "agentmem_current_barrier_group", default=None
+)
 
 
 def set_current_namespace(namespace: Optional[str]) -> None:
     current_namespace.set(namespace)
+
+
+def set_current_barrier_group(barrier_group: Optional[str]) -> None:
+    """Record the authenticated caller's information barrier for every transaction."""
+    current_barrier_group.set(barrier_group)
 
 
 @event.listens_for(engine.sync_engine, "begin")
@@ -116,11 +124,25 @@ def _apply_rls_namespace(conn) -> None:
     # this raw context, so escape single quotes defensively.
     safe = ns.replace("'", "''")
     conn.exec_driver_sql(f"SELECT set_config('app.current_namespace', '{safe}', true)")
+    # An empty value is the explicit unbarriered/admin sentinel used by the RLS
+    # policies. Setting it on every transaction prevents a pooled connection or
+    # a mid-request commit from silently dropping the caller's barrier context.
+    barrier = current_barrier_group.get() or ""
+    safe_barrier = barrier.replace("'", "''")
+    conn.exec_driver_sql(
+        f"SELECT set_config('agentmem.barrier_group', '{safe_barrier}', true)"
+    )
 
 
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            # ContextVars are task-local, but clearing explicitly makes request
+            # teardown safe even under unusual ASGI task reuse/background work.
+            set_current_namespace(None)
+            set_current_barrier_group(None)
 
 
 async def get_db_with_barrier(barrier_group: Optional[str]) -> AsyncSession:
@@ -133,12 +155,12 @@ async def get_db_with_barrier(barrier_group: Optional[str]) -> AsyncSession:
     settings = get_settings()
     async with AsyncSessionLocal() as session:
         if settings.rls_barriers_enabled and barrier_group is not None:
-            try:
+            if session.get_bind().dialect.name == "postgresql":
                 from sqlalchemy import text as _text
                 await session.execute(
-                    _text("SET LOCAL agentmem.barrier_group = :bg"),
+                    _text("SELECT set_config('agentmem.barrier_group', :bg, true)"),
                     {"bg": barrier_group},
                 )
-            except Exception:
+            else:
                 pass  # non-PG backend — RLS not available
         yield session

@@ -4,13 +4,13 @@ reproduce the exact memory state + event-log trail behind any past decision.
 """
 from __future__ import annotations
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory, EventLog
-from .schemas import AuditReconstructResult, MemoryOut
+from .schemas import AuditReconstructResult
 from .memory_service import _memory_to_out
 from .ranking import hybrid_recall
 from .embeddings import get_embedding_provider
@@ -23,6 +23,7 @@ async def reconstruct(
     as_of: datetime,
     query: Optional[str] = None,
     k: int = 20,
+    barrier_override: Optional[str] = None,
 ) -> AuditReconstructResult:
     """
     Returns the memory state visible at as_of, plus the event log entries
@@ -40,6 +41,7 @@ async def reconstruct(
             query_embedding=q_emb,
             k=k,
             as_of=as_of,
+            barrier_group=barrier_override,
         )
         memories = [_memory_to_out(mem, content) for mem, _, content in results]
     else:
@@ -53,6 +55,10 @@ async def reconstruct(
                 Memory.erased_at.is_(None),
             )
         )
+        if barrier_override is not None:
+            stmt = stmt.where(
+                or_(Memory.barrier_group.is_(None), Memory.barrier_group == barrier_override)
+            )
         result = await db.execute(stmt)
         mems = result.scalars().all()
         memories = [_memory_to_out(m, None) for m in mems]
@@ -67,6 +73,16 @@ async def reconstruct(
     ).order_by(EventLog.created_at)
     log_result = await db.execute(log_stmt)
     log_rows = log_result.scalars().all()
+
+    if barrier_override is not None:
+        visible_ids = {
+            str(m.id)
+            for m in memories
+        }
+        log_rows = [
+            row for row in log_rows
+            if row.memory_id is not None and str(row.memory_id) in visible_ids
+        ]
 
     event_trail = [
         {

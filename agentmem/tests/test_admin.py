@@ -8,7 +8,6 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
@@ -134,7 +133,6 @@ class TestProvision:
         raw_key = resp.json()["key"]
 
         # Use the key to hit a protected endpoint
-        from datetime import datetime, timezone
         recall_resp = await app_client.post(
             "/v1/recall",
             json={"agent_id": "bot-1", "query": "test", "k": 1},
@@ -156,6 +154,33 @@ class TestProvision:
         k1 = await _make()
         k2 = await _make()
         assert k1 != k2
+
+
+class TestBarrierTenantIsolation:
+
+    @pytest.mark.asyncio
+    async def test_same_agent_id_can_be_assigned_in_two_namespaces(self, app_client):
+        for namespace, group in (("tenant-a", "desk-a"), ("tenant-b", "desk-b")):
+            response = await app_client.post(
+                "/v1/admin/barriers",
+                params={"namespace": namespace},
+                json={"agent_id": "default", "group_name": group},
+                headers={"X-Admin-Secret": ADMIN_SECRET},
+            )
+            assert response.status_code == 201, response.text
+
+        tenant_a = await app_client.get(
+            "/v1/admin/barriers",
+            params={"namespace": "tenant-a"},
+            headers={"X-Admin-Secret": ADMIN_SECRET},
+        )
+        tenant_b = await app_client.get(
+            "/v1/admin/barriers",
+            params={"namespace": "tenant-b"},
+            headers={"X-Admin-Secret": ADMIN_SECRET},
+        )
+        assert tenant_a.json()[0]["group_name"] == "desk-a"
+        assert tenant_b.json()[0]["group_name"] == "desk-b"
 
 
 # ---------------------------------------------------------------------------

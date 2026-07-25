@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..db import get_db
+from ..db import get_db, set_current_barrier_group, set_current_namespace
 from ..models import ApiKey, AgentBarrierGroup, NamespacePolicy
 from ..schemas import (
     ApiKeyCreate, ApiKeyCreated, ApiKeyOut,
@@ -46,8 +46,14 @@ def _generate_key() -> str:
 async def _require_admin(
     secret: Annotated[Optional[str], Security(_admin_header)],
 ) -> None:
-    if not secret or secret != get_settings().admin_secret:
+    expected = get_settings().admin_secret
+    if not secret or not secrets.compare_digest(secret, expected):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Admin-Secret")
+    # Admin routes do not use get_auth(), so establish the RLS bypass sentinel
+    # before their DB dependency opens a transaction. get_db() clears it at
+    # request teardown.
+    set_current_namespace("__admin__")
+    set_current_barrier_group(None)
 
 
 @router.post(
@@ -222,8 +228,8 @@ async def assign_barrier_group(
     Example barrier groups:  equity_desk, fixed_income, investment_banking
     """
     # Upsert: if the agent already has a group, replace it
-    existing = await db.get(AgentBarrierGroup, body.agent_id)
-    if existing and existing.namespace == namespace:
+    existing = await db.get(AgentBarrierGroup, (namespace, body.agent_id))
+    if existing:
         existing.group_name = body.group_name
         row = existing
     else:
@@ -270,8 +276,8 @@ async def remove_barrier_group(
     _: None = Depends(_require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    row = await db.get(AgentBarrierGroup, agent_id)
-    if row is None or row.namespace != namespace:
+    row = await db.get(AgentBarrierGroup, (namespace, agent_id))
+    if row is None:
         raise HTTPException(status_code=404, detail="Barrier group assignment not found")
     await db.delete(row)
     await chain_log(

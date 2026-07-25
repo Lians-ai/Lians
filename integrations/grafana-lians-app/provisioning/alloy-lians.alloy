@@ -1,0 +1,32 @@
+otelcol.receiver.otlp "default" {
+  grpc {}
+  http {}
+
+  output {
+    traces = [
+      otelcol.exporter.otlphttp.lians.input,
+      otelcol.exporter.otlp.grafana_cloud.input,
+    ]
+  }
+}
+
+otelcol.exporter.otlphttp "lians" {
+  client {
+    endpoint = sys.env("LIANS_OTLP_ENDPOINT")
+    headers = {
+      "X-API-Key" = sys.env("LIANS_API_KEY"),
+    }
+  }
+}
+
+otelcol.auth.basic "grafana_cloud" {
+  username = sys.env("GRAFANA_CLOUD_INSTANCE_ID")
+  password = sys.env("GRAFANA_CLOUD_API_KEY")
+}
+
+otelcol.exporter.otlp "grafana_cloud" {
+  client {
+    endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
+    auth = otelcol.auth.basic.grafana_cloud.handler
+  }
+}

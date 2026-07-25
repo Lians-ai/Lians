@@ -1,0 +1,31 @@
+{
+  "title": "Lians Operations",
+  "uid": "lians-operations",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["lians", "opentelemetry", "compliance"],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Lians API request rate",
+      "id": 1,
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "sum(rate(lians_http_requests_total[5m]))", "refId": "A"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Lians API latency p95",
+      "id": 2,
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(lians_http_request_duration_seconds_bucket[5m])))",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

@@ -6,12 +6,12 @@ from pydantic import BaseModel, Field
 
 
 class MemoryAdd(BaseModel):
-    agent_id: str
-    content: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1, max_length=100_000)
     event_time: datetime
-    source: Optional[str] = None
-    subject_id: Optional[str] = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    source: Optional[str] = Field(None, max_length=512)
+    subject_id: Optional[str] = Field(None, max_length=512)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
@@ -49,11 +49,11 @@ class MemoryOut(BaseModel):
 
 
 class RecallRequest(BaseModel):
-    agent_id: str
-    query: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    query: str = Field(min_length=1, max_length=20_000)
     k: int = Field(default=5, ge=1, le=100)
     as_of: Optional[datetime] = None
-    filters: dict[str, Any] = Field(default_factory=dict)
+    filters: dict[str, Any] = Field(default_factory=dict, max_length=100)
     # Attach each hit's temporally-adjacent neighbors (context_before/_after).
     # Measured on LongMemEval: answer-session retrieval coverage was ~100%
     # while judged QA sat at 89% — the failures were an answerer misreading
@@ -241,7 +241,7 @@ class BarrierGroupOut(BaseModel):
 
 
 class MemoryBatchAdd(BaseModel):
-    memories: list[MemoryAdd]
+    memories: list[MemoryAdd] = Field(max_length=100)
 
 
 class MemoryBatchResult(BaseModel):
@@ -529,23 +529,23 @@ class AuditExportResult(BaseModel):
 
 class RelateRequest(BaseModel):
     """Assert a relationship edge: src_entity --rel_type--> dst_entity."""
-    agent_id: str
-    src_entity: str
-    rel_type: str
-    dst_entity: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    src_entity: str = Field(min_length=1, max_length=1000)
+    rel_type: str = Field(min_length=1, max_length=200)
+    dst_entity: str = Field(min_length=1, max_length=1000)
     event_time: datetime
     exclusive: bool = False              # invalidate other live src--rel_type--> edges
-    subject_id: Optional[str] = None
-    source: Optional[str] = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    subject_id: Optional[str] = Field(None, max_length=512)
+    source: Optional[str] = Field(None, max_length=512)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
     normalize: bool = False              # collapse company/ISIN/CUSIP to canonical ticker
 
 
 class UnrelateRequest(BaseModel):
-    agent_id: str
-    src_entity: str
-    rel_type: str
-    dst_entity: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    src_entity: str = Field(min_length=1, max_length=1000)
+    rel_type: str = Field(min_length=1, max_length=200)
+    dst_entity: str = Field(min_length=1, max_length=1000)
     event_time: Optional[datetime] = None
     normalize: bool = False
 
@@ -597,12 +597,15 @@ class PathResult(BaseModel):
 
 class ContextRequest(BaseModel):
     """Build a token-budgeted, ready-to-inject context block from recall."""
-    agent_id: str
-    query: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    query: str = Field(min_length=1, max_length=20_000)
     k: int = Field(default=10, ge=1, le=100)
     as_of: Optional[datetime] = None
     max_tokens: int = Field(default=1500, ge=64, le=32000)
-    header: str = "Relevant facts from memory (most recent, non-stale):"
+    header: str = Field(
+        default="Relevant facts from memory (most recent, non-stale):",
+        max_length=1000,
+    )
     mmr: bool = False                     # diversity reranking before assembly
     # Active resurfacing: open conflicts push to the top of every context block
     # until adjudicated — an unresolved conflict must not silently age out.
@@ -629,8 +632,8 @@ class ContextResult(BaseModel):
 
 class ExtractRequest(BaseModel):
     """Extract relationship edges from unstructured text and write them."""
-    agent_id: str
-    text: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    text: str = Field(min_length=1, max_length=100_000)
     event_time: datetime
     normalize: bool = False
     exclusive: bool = False

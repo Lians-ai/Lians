@@ -14,6 +14,8 @@ services:
     startCommand: export DATABASE_URL=$(echo "$DATABASE_URL" | sed 's#postgresql://#postgresql+asyncpg://#') && uvicorn lians.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: agentmem-pg
@@ -32,7 +34,7 @@ services:
       - key: ADMIN_SECRET
         sync: false          # set this = the website's LIANS_ADMIN_SECRET
       - key: API_SECRET_SEED
-        generateValue: true  # MUST NOT be the dev default (keys become forgeable)
+        generateValue: true  # retained for deployment compatibility
       - key: CORS_ORIGINS
         value: "https://lians.ai,https://www.lians.ai"
       - key: ANTHROPIC_API_KEY

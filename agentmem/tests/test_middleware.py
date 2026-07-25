@@ -9,9 +9,7 @@ import json
 import logging
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-from io import StringIO
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient, ASGITransport
 
@@ -303,6 +301,27 @@ class TestRateLimitMiddleware:
         # Auth middleware should 401, not rate limiter 429
         assert resp.status_code == 401
 
+    async def test_admin_secret_guesses_are_rate_limited_by_client_ip(self, client):
+        """Changing an admin-secret guess must not create a fresh rate bucket."""
+        from src.lians.config import get_settings
+
+        limit = get_settings().rate_limit_per_minute
+        with patch("src.lians.cache._get_redis") as mock_redis:
+            r = AsyncMock()
+            r.incr = AsyncMock(return_value=limit + 1)
+            r.expire = AsyncMock()
+            mock_redis.return_value = r
+
+            resp = await client.get(
+                "/v1/admin/api-keys",
+                headers={"X-Admin-Secret": "a-different-wrong-guess"},
+            )
+
+        assert resp.status_code == 429
+        redis_key = r.incr.await_args.args[0]
+        assert redis_key.startswith("agentmem:rl:admin:")
+        assert "a-different-wrong-guess" not in redis_key
+
     def test_configured_limit_is_wired_into_the_middleware(self):
         """RATE_LIMIT_PER_MINUTE must actually reach the middleware.
 
@@ -322,3 +341,21 @@ class TestRateLimitMiddleware:
             "RateLimitMiddleware is not wired to the configured limit — "
             "RATE_LIMIT_PER_MINUTE is being ignored"
         )
+
+
+@pytest.mark.asyncio
+async def test_oversized_request_body_returns_413(client):
+    """Reject oversized uploads before JSON parsing or route execution."""
+    from src.lians.config import get_settings
+
+    payload = b'{"agent_id":"a","content":"' + (
+        b"x" * get_settings().max_request_body_bytes
+    ) + b'"}'
+    resp = await client.post(
+        "/v1/memories",
+        content=payload,
+        headers={"X-API-Key": TEST_KEY, "Content-Type": "application/json"},
+    )
+
+    assert resp.status_code == 413
+    assert resp.json()["detail"] == "Request body too large"

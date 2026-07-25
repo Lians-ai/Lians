@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Text, DateTime, Float, Boolean,
     ForeignKey, Index, LargeBinary, JSON, Integer,
-    types as sa_types,
+    UniqueConstraint, types as sa_types,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import Dialect
 from pgvector.sqlalchemy import Vector
 from .db import Base
@@ -154,6 +154,7 @@ class DecisionRecord(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     namespace = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False, index=True)
+    barrier_group = Column(String, nullable=True, index=True)
     decision_type = Column(String, nullable=False, index=True)
     outcome = Column(String, nullable=False)
     reason_codes = Column(JSON, nullable=False, server_default="[]")
@@ -190,6 +191,7 @@ class LedgerEvent(Base):
     namespace = Column(String, nullable=False, index=True)
     event_type = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False, index=True)
+    barrier_group = Column(String, nullable=True, index=True)
     occurred_at = Column(DateTime(timezone=True), nullable=False, index=True)
     recorded_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     subject_id = Column(String, nullable=True, index=True)
@@ -202,6 +204,52 @@ class LedgerEvent(Base):
     event_hash = Column(String(64), nullable=False, index=True)
 
     __table_args__ = (Index("ix_ledger_event_ns_time", "namespace", "occurred_at"),)
+
+
+class OTelSpan(Base):
+    """Append-only copy of a span accepted through the OTLP/HTTP receiver."""
+    __tablename__ = "otel_spans"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    trace_id = Column(String(32), nullable=False)
+    span_id = Column(String(16), nullable=False)
+    parent_span_id = Column(String(16), nullable=True)
+    name = Column(String, nullable=False)
+    kind = Column(Integer, nullable=False, default=0)
+    start_time_unix_nano = Column(String, nullable=False)
+    end_time_unix_nano = Column(String, nullable=False)
+    status_code = Column(Integer, nullable=False, default=0)
+    status_message = Column(String, nullable=True)
+    service_name = Column(String, nullable=True, index=True)
+    scope_name = Column(String, nullable=True)
+    scope_version = Column(String, nullable=True)
+    resource_attributes = Column(JSON, nullable=False, server_default="{}")
+    attributes = Column(JSON, nullable=False, server_default="{}")
+    events = Column(JSON, nullable=False, server_default="[]")
+    links = Column(JSON, nullable=False, server_default="[]")
+    is_genai = Column(Boolean, nullable=False, default=False, index=True)
+    model_id = Column(String, nullable=True, index=True)
+    model_version = Column(String, nullable=True)
+    payload_hash = Column(String(64), nullable=False)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=_now, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "namespace", "trace_id", "span_id", name="uq_otel_span_ns_trace_span"
+        ),
+        Index("ix_otel_span_ns_received", "namespace", "received_at"),
+    )
+
+
+class ValidMindModelLink(Base):
+    """Mutable synchronization metadata; source telemetry remains append-only."""
+    __tablename__ = "validmind_model_links"
+
+    namespace = Column(String, primary_key=True)
+    external_id = Column(String, primary_key=True)
+    vm_cuid = Column(String, nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
 
 class AgentBarrierGroup(Base):
@@ -217,8 +265,8 @@ class AgentBarrierGroup(Base):
     """
     __tablename__ = "agent_barrier_groups"
 
+    namespace = Column(String, primary_key=True, index=True)
     agent_id = Column(String, primary_key=True)
-    namespace = Column(String, nullable=False, index=True)
     group_name = Column(String, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
@@ -226,8 +274,8 @@ class AgentBarrierGroup(Base):
 class Agent(Base):
     __tablename__ = "agents"
 
+    namespace = Column(String, primary_key=True, index=True)
     agent_id = Column(String, primary_key=True)
-    namespace = Column(String, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     config = Column(JSON, nullable=False, server_default="{}")
 
@@ -371,6 +419,7 @@ class WebhookEndpoint(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     namespace = Column(String, nullable=False, index=True)
+    barrier_group = Column(String, nullable=True, index=True)
     url = Column(Text, nullable=False)
     secret = Column(String, nullable=False)
     events = Column(JSON, nullable=False)  # list[str]; JSONB on PostgreSQL via migration
@@ -425,13 +474,14 @@ class PendingAdmission(Base):
 
     High-risk candidates (PII / PHI / MNPI) are parked here instead of being
     written live; an admin approves (→ the memory is created) or rejects them.
-    Content is stored as submitted so a reviewer can see exactly what was held.
+    Content is encrypted at rest and decrypted only for authorized reviewers.
     """
     __tablename__ = "pending_admissions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     namespace = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False)
+    barrier_group = Column(String, nullable=True, index=True)
     content = Column(Text, nullable=False)
     event_time = Column(DateTime(timezone=True), nullable=False)
     source = Column(String, nullable=True)

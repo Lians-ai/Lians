@@ -9,7 +9,7 @@ Different from /v1/recall (vector search → top-k relevant):
   /v1/snapshot is exhaustive — every fact valid at T, no relevance filter.
   SEC examiners don't want "the most relevant 5 memories" — they want everything.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -61,7 +61,10 @@ async def knowledge_snapshot(
     temporal graph queries but no tamper-evident hash chain or compliance export API.
     """
     auth.require("read")
-    items = await get_knowledge_snapshot(db, auth.namespace, agent_id, as_of, limit)
+    items = await get_knowledge_snapshot(
+        db, auth.namespace, agent_id, as_of, limit,
+        barrier_override=auth.barrier_group,
+    )
     return KnowledgeSnapshot(
         agent_id=agent_id,
         namespace=auth.namespace,
@@ -100,7 +103,10 @@ async def snapshot_markdown(
     was not altered after generation.
     """
     auth.require("read")
-    result = await export_memory_markdown(db, auth.namespace, agent_id, as_of, limit)
+    result = await export_memory_markdown(
+        db, auth.namespace, agent_id, as_of, limit,
+        barrier_override=auth.barrier_group,
+    )
     if raw:
         return PlainTextResponse(result.markdown, media_type="text/markdown; charset=utf-8")
     return MarkdownExportResult.model_validate(result)

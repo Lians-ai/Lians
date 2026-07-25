@@ -25,23 +25,27 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
-import time
+import socket
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import WebhookEndpoint, WebhookDelivery
+from .secret_storage import WEBHOOK_SIGNING_PURPOSE, seal_text, unseal_text
 
 logger = logging.getLogger("agentmem.webhooks")
 
 _MAX_ATTEMPTS = 3
 _BACKOFF_BASE = 2.0   # seconds; attempt n waits BASE^(n-1) before retry
 _TIMEOUT_S = 10.0
+_BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".home", ".lan")
 
 # ── Supported event types ─────────────────────────────────────────────────────
 
@@ -65,17 +69,83 @@ def _sign(secret: str, body: bytes) -> str:
     return f"sha256={mac.hexdigest()}"
 
 
+def _validate_webhook_url(url: str) -> tuple[str, int]:
+    """Validate URL syntax and reject direct private-network destinations."""
+    if len(url) > 2048:
+        raise ValueError("Webhook URL is too long")
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() != "https":
+        raise ValueError("Webhook URL must use HTTPS")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Webhook URL must not contain userinfo")
+    if parsed.fragment:
+        raise ValueError("Webhook URL must not contain a fragment")
+    if not parsed.hostname:
+        raise ValueError("Webhook URL must include a hostname")
+    try:
+        port = parsed.port or 443
+    except ValueError as exc:
+        raise ValueError("Webhook URL contains an invalid port") from exc
+
+    host = parsed.hostname.lower().rstrip(".")
+    if host == "localhost" or host.endswith(_BLOCKED_HOST_SUFFIXES):
+        raise ValueError("Webhook URL resolves to a blocked host")
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        if not address.is_global:
+            raise ValueError("Webhook URL must use a public IP address")
+    return host, port
+
+
+async def _validate_webhook_destination(url: str) -> None:
+    """Resolve a webhook immediately before delivery and require public IPs."""
+    host, port = _validate_webhook_url(url)
+    try:
+        ipaddress.ip_address(host)
+        return  # Public literal IP was checked above.
+    except ValueError:
+        pass
+
+    try:
+        addresses = await asyncio.to_thread(
+            socket.getaddrinfo,
+            host,
+            port,
+            type=socket.SOCK_STREAM,
+        )
+    except OSError as exc:
+        raise ValueError("Webhook hostname could not be resolved") from exc
+    if not addresses:
+        raise ValueError("Webhook hostname could not be resolved")
+    for info in addresses:
+        address = ipaddress.ip_address(info[4][0])
+        if not address.is_global:
+            raise ValueError("Webhook hostname resolves to a non-public address")
+
+
 # ── HTTP delivery (isolated so tests can mock it) ─────────────────────────────
 
 async def _http_post(url: str, body: bytes, signature: str) -> tuple[int, str]:
     """POST body to url with signature header.  Returns (status_code, error_or_empty)."""
+    try:
+        await _validate_webhook_destination(url)
+    except ValueError as exc:
+        return 0, f"Blocked webhook destination: {exc}"
+
     try:
         import httpx
     except ImportError:
         return 0, "httpx not installed — pip install httpx to enable webhook delivery"
 
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+        async with httpx.AsyncClient(
+            timeout=_TIMEOUT_S,
+            follow_redirects=False,
+            trust_env=False,
+        ) as client:
             resp = await client.post(
                 url,
                 content=body,
@@ -96,6 +166,7 @@ async def dispatch_event(
     namespace: str,
     event_type: str,
     data: dict[str, Any],
+    barrier_group: str | None = None,
 ) -> None:
     """
     Fan out *event_type* to all enabled endpoints subscribed to it in *namespace*.
@@ -103,12 +174,16 @@ async def dispatch_event(
     This coroutine itself is fast (one DB read + task spawning).  Each delivery
     runs in a separate asyncio task so the write path is never blocked.
     """
-    result = await db.execute(
-        select(WebhookEndpoint).where(
+    conditions = [
             WebhookEndpoint.namespace == namespace,
             WebhookEndpoint.enabled.is_(True),
+    ]
+    if barrier_group is not None:
+        conditions.append(
+            (WebhookEndpoint.barrier_group.is_(None))
+            | (WebhookEndpoint.barrier_group == barrier_group)
         )
-    )
+    result = await db.execute(select(WebhookEndpoint).where(*conditions))
     endpoints = [ep for ep in result.scalars().all() if event_type in (ep.events or [])]
 
     if not endpoints:
@@ -137,7 +212,11 @@ async def dispatch_event(
             _deliver_with_retry(
                 endpoint_id=endpoint.id,
                 url=endpoint.url,
-                secret=endpoint.secret,
+                secret=unseal_text(
+                    endpoint.secret,
+                    purpose=WEBHOOK_SIGNING_PURPOSE,
+                    context=endpoint.namespace,
+                ),
                 delivery_id=delivery.id,
                 body=body,
                 event_type=event_type,
@@ -208,12 +287,19 @@ async def register_webhook(
     secret: str,
     events: list[str],
     description: str | None = None,
+    barrier_group: str | None = None,
 ) -> WebhookEndpoint:
     events = _validate_events(events)
+    _validate_webhook_url(url)
     endpoint = WebhookEndpoint(
         namespace=namespace,
+        barrier_group=barrier_group,
         url=url,
-        secret=secret,
+        secret=seal_text(
+            secret,
+            purpose=WEBHOOK_SIGNING_PURPOSE,
+            context=namespace,
+        ),
         events=events,
         description=description,
     )
@@ -223,18 +309,40 @@ async def register_webhook(
     return endpoint
 
 
-async def list_webhooks(db: AsyncSession, namespace: str) -> list[WebhookEndpoint]:
+async def list_webhooks(
+    db: AsyncSession,
+    namespace: str,
+    barrier_override: str | None = None,
+) -> list[WebhookEndpoint]:
+    conditions = [WebhookEndpoint.namespace == namespace]
+    if barrier_override is not None:
+        conditions.append(
+            (WebhookEndpoint.barrier_group.is_(None))
+            | (WebhookEndpoint.barrier_group == barrier_override)
+        )
     result = await db.execute(
         select(WebhookEndpoint)
-        .where(WebhookEndpoint.namespace == namespace)
+        .where(*conditions)
         .order_by(WebhookEndpoint.created_at)
     )
     return list(result.scalars().all())
 
 
-async def delete_webhook(db: AsyncSession, namespace: str, endpoint_id: uuid.UUID) -> bool:
+async def delete_webhook(
+    db: AsyncSession,
+    namespace: str,
+    endpoint_id: uuid.UUID,
+    barrier_override: str | None = None,
+) -> bool:
     ep = await db.get(WebhookEndpoint, endpoint_id)
-    if ep is None or ep.namespace != namespace:
+    if (
+        ep is None
+        or ep.namespace != namespace
+        or (
+            barrier_override is not None
+            and ep.barrier_group not in (None, barrier_override)
+        )
+    ):
         return False
     await db.delete(ep)
     await db.commit()
@@ -249,9 +357,17 @@ async def update_webhook(
     enabled: bool | None = None,
     events: list[str] | None = None,
     description: str | None = None,
+    barrier_override: str | None = None,
 ) -> WebhookEndpoint | None:
     ep = await db.get(WebhookEndpoint, endpoint_id)
-    if ep is None or ep.namespace != namespace:
+    if (
+        ep is None
+        or ep.namespace != namespace
+        or (
+            barrier_override is not None
+            and ep.barrier_group not in (None, barrier_override)
+        )
+    ):
         return None
     if enabled is not None:
         ep.enabled = enabled

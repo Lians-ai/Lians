@@ -63,7 +63,10 @@ async def backtest_contamination_check(
     that auditable in a single call.
     """
     auth.require("read")
-    report = await check_contamination(db, auth.namespace, req.agent_id, req.simulation_as_of)
+    report = await check_contamination(
+        db, auth.namespace, req.agent_id, req.simulation_as_of,
+        barrier_override=auth.barrier_group,
+    )
 
     flags_out = [
         ContaminationFlagOut(

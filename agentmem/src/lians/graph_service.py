@@ -20,7 +20,6 @@ import hashlib
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Optional
-from uuid import UUID
 
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,6 +85,7 @@ async def relate(
     source: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
     normalize: bool = False,
+    barrier_override: Optional[str] = None,
 ) -> Relationship:
     """
     Assert a relationship edge.
@@ -100,22 +100,27 @@ async def relate(
     src = canon_entity(src_entity, normalize=normalize)
     dst = canon_entity(dst_entity, normalize=normalize)
     rel = rel_type.strip()
+    barrier_group = await _get_barrier_group(
+        db, namespace, agent_id, override=barrier_override
+    )
 
     # Idempotent: identical live edge already exists.
-    existing = (await db.execute(
-        select(Relationship).where(and_(
+    existing_conditions = [
             Relationship.namespace == namespace,
             Relationship.agent_id == agent_id,
             Relationship.src_entity == src,
             Relationship.rel_type == rel,
             Relationship.dst_entity == dst,
             Relationship.valid_to.is_(None),
-        ))
+    ]
+    if barrier_group is not None:
+        existing_conditions.append(Relationship.barrier_group == barrier_group)
+    existing = (await db.execute(
+        select(Relationship).where(and_(*existing_conditions))
     )).scalars().first()
     if existing is not None:
         return existing
 
-    barrier_group = await _get_barrier_group(db, namespace, agent_id)
     now = datetime.now(timezone.utc)
 
     edge = Relationship(
@@ -138,15 +143,18 @@ async def relate(
     await db.flush()
 
     if exclusive:
-        superseded = (await db.execute(
-            select(Relationship).where(and_(
+        exclusive_conditions = [
                 Relationship.namespace == namespace,
                 Relationship.agent_id == agent_id,
                 Relationship.src_entity == src,
                 Relationship.rel_type == rel,
                 Relationship.dst_entity != dst,
                 Relationship.valid_to.is_(None),
-            ))
+        ]
+        if barrier_group is not None:
+            exclusive_conditions.append(Relationship.barrier_group == barrier_group)
+        superseded = (await db.execute(
+            select(Relationship).where(and_(*exclusive_conditions))
         )).scalars().all()
         for old in superseded:
             old.valid_to = event_time
@@ -174,6 +182,7 @@ async def unrelate(
     dst_entity: str,
     event_time: Optional[datetime] = None,
     normalize: bool = False,
+    barrier_override: Optional[str] = None,
 ) -> int:
     """
     Invalidate a live edge (set ``valid_to``) — Graphiti's ``invalid_at``.
@@ -186,15 +195,18 @@ async def unrelate(
     rel = rel_type.strip()
     when = event_time or datetime.now(timezone.utc)
 
-    edge = (await db.execute(
-        select(Relationship).where(and_(
+    conditions = [
             Relationship.namespace == namespace,
             Relationship.agent_id == agent_id,
             Relationship.src_entity == src,
             Relationship.rel_type == rel,
             Relationship.dst_entity == dst,
             Relationship.valid_to.is_(None),
-        ))
+    ]
+    if barrier_override is not None:
+        conditions.append(Relationship.barrier_group == barrier_override)
+    edge = (await db.execute(
+        select(Relationship).where(and_(*conditions))
     )).scalars().first()
     if edge is None:
         return 0
@@ -220,7 +232,7 @@ async def _log_invalidation(db: AsyncSession, namespace: str, edge: Relationship
         "rel_type": edge.rel_type,
         "dst": edge.dst_entity,
         "reason": reason,
-    })
+    }, barrier_group=edge.barrier_group)
 
 
 # ── Read / traversal ────────────────────────────────────────────────────────────
@@ -232,12 +244,18 @@ async def _live_edges(
     agent_id: str,
     as_of: Optional[datetime],
     rel_types: Optional[list[str]] = None,
+    barrier_override: Optional[str] = None,
 ) -> list[Relationship]:
     conds = [Relationship.namespace == namespace, Relationship.agent_id == agent_id]
     if as_of is None:
         conds.append(Relationship.valid_to.is_(None))
     if rel_types:
         conds.append(Relationship.rel_type.in_(rel_types))
+    if barrier_override is not None:
+        conds.append(or_(
+            Relationship.barrier_group.is_(None),
+            Relationship.barrier_group == barrier_override,
+        ))
     rows = (await db.execute(select(Relationship).where(and_(*conds)))).scalars().all()
     if as_of is None:
         return list(rows)
@@ -272,6 +290,7 @@ async def neighbors(
     rel_types: Optional[list[str]] = None,
     direction: str = "any",
     normalize: bool = False,
+    barrier_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Return entities reachable from ``entity`` within ``depth`` hops.
@@ -282,7 +301,9 @@ async def neighbors(
     at the first hop are included for context.
     """
     start = canon_entity(entity, normalize=normalize)
-    edges = await _live_edges(db, namespace, agent_id, as_of, rel_types)
+    edges = await _live_edges(
+        db, namespace, agent_id, as_of, rel_types, barrier_override
+    )
     adj = _adjacency(edges, direction)
 
     dist: dict[str, int] = {start: 0}
@@ -323,6 +344,7 @@ async def path(
     as_of: Optional[datetime] = None,
     rel_types: Optional[list[str]] = None,
     normalize: bool = False,
+    barrier_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Shortest connection between two entities — the conflict-of-interest /
@@ -331,7 +353,9 @@ async def path(
     """
     src = canon_entity(src_entity, normalize=normalize)
     dst = canon_entity(dst_entity, normalize=normalize)
-    edges = await _live_edges(db, namespace, agent_id, as_of, rel_types)
+    edges = await _live_edges(
+        db, namespace, agent_id, as_of, rel_types, barrier_override
+    )
     adj = _adjacency(edges, "any")
 
     # BFS tracking the edge used to reach each node, to reconstruct the trail.
@@ -382,6 +406,7 @@ async def extract_and_relate(
     normalize: bool = False,
     exclusive: bool = False,
     use_llm: bool = False,
+    barrier_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Extract ``(src, rel_type, dst)`` triplets from ``text`` and assert each as an
@@ -399,6 +424,7 @@ async def extract_and_relate(
             agent_id=agent_id, src_entity=src, rel_type=rel, dst_entity=dst,
             event_time=event_time, exclusive=exclusive, normalize=normalize,
             source="extracted",
+            barrier_override=barrier_override,
         )
         edges.append(_edge_dict(edge))
     return {
@@ -417,6 +443,7 @@ async def entity_distances(
     max_depth: int = 3,
     as_of: Optional[datetime] = None,
     normalize: bool = False,
+    barrier_override: Optional[str] = None,
 ) -> dict[str, int]:
     """
     Graph hop-distance from ``anchor`` to each candidate entity (BFS, undirected).
@@ -426,7 +453,9 @@ async def entity_distances(
     """
     start = canon_entity(anchor, normalize=normalize)
     wanted = {canon_entity(c, normalize=normalize) for c in candidates}
-    edges = await _live_edges(db, namespace, agent_id, as_of)
+    edges = await _live_edges(
+        db, namespace, agent_id, as_of, barrier_override=barrier_override
+    )
     adj = _adjacency(edges, "any")
 
     dist: dict[str, int] = {start: 0}

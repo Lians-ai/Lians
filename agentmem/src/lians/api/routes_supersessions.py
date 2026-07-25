@@ -57,6 +57,7 @@ async def review_supersessions(
         namespace=auth.namespace,
         confidence_threshold=threshold,
         limit=limit,
+        barrier_override=auth.barrier_group,
     )
 
 
@@ -85,4 +86,7 @@ async def action_supersession(
     the newer memory until a human explicitly supersedes or erases one of them.
     """
     auth.require("write")
-    return await apply_supersession_action(db, auth.namespace, memory_id, body)
+    return await apply_supersession_action(
+        db, auth.namespace, memory_id, body,
+        barrier_override=auth.barrier_group,
+    )

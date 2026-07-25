@@ -12,10 +12,10 @@ from __future__ import annotations
 import secrets
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,10 +33,10 @@ router = APIRouter(prefix="/v1", tags=["webhooks"])
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
 
 class WebhookRegisterRequest(BaseModel):
-    url: str = Field(..., description="HTTPS endpoint that will receive events")
-    events: list[str] = Field(..., description=f"Event types to subscribe to. Valid: {sorted(ALL_EVENTS)}")
-    secret: Optional[str] = Field(None, description="HMAC secret. If omitted, a 32-byte random secret is generated.")
-    description: Optional[str] = None
+    url: str = Field(..., max_length=2048, description="HTTPS endpoint that will receive events")
+    events: list[str] = Field(..., min_length=1, max_length=len(ALL_EVENTS), description=f"Event types to subscribe to. Valid: {sorted(ALL_EVENTS)}")
+    secret: Optional[str] = Field(None, min_length=16, max_length=1024, description="HMAC secret. If omitted, a 32-byte random secret is generated.")
+    description: Optional[str] = Field(None, max_length=500)
 
 
 class WebhookOut(BaseModel):
@@ -58,7 +58,7 @@ class WebhookUpdateRequest(BaseModel):
 
 class WebhookRegisterResult(BaseModel):
     endpoint: WebhookOut
-    secret: str   # returned ONCE at registration; not stored in plaintext
+    secret: str   # returned once at registration; encrypted at rest
 
 
 class DeliveryOut(BaseModel):
@@ -107,6 +107,7 @@ async def create_webhook(
             secret=secret,
             events=req.events,
             description=req.description,
+            barrier_group=auth.barrier_group,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -119,7 +120,9 @@ async def get_webhooks(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("read")
-    endpoints = await list_webhooks(db, auth.namespace)
+    endpoints = await list_webhooks(
+        db, auth.namespace, barrier_override=auth.barrier_group
+    )
     return [_ep_to_out(ep) for ep in endpoints]
 
 
@@ -137,6 +140,7 @@ async def patch_webhook(
             enabled=req.enabled,
             events=req.events,
             description=req.description,
+            barrier_override=auth.barrier_group,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -152,7 +156,10 @@ async def remove_webhook(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("write")
-    deleted = await delete_webhook(db, auth.namespace, endpoint_id)
+    deleted = await delete_webhook(
+        db, auth.namespace, endpoint_id,
+        barrier_override=auth.barrier_group,
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Webhook not found")
 
@@ -166,7 +173,14 @@ async def webhook_deliveries(
 ):
     auth.require("read")
     ep = await db.get(WebhookEndpoint, endpoint_id)
-    if ep is None or ep.namespace != auth.namespace:
+    if (
+        ep is None
+        or ep.namespace != auth.namespace
+        or (
+            auth.barrier_group is not None
+            and ep.barrier_group not in (None, auth.barrier_group)
+        )
+    ):
         raise HTTPException(status_code=404, detail="Webhook not found")
 
     result = await db.execute(

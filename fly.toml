@@ -26,6 +26,7 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
     soft_limit = 150
 
 [env]
+  DEPLOYMENT_ENVIRONMENT        = "production"
   # bge-large-en-v1.5 is baked into the image; "local" (hash projection) makes
   # semantic scores pure noise. Needs the 2GB VM below — the model is ~1.3GB.
   EMBEDDING_PROVIDER            = "sentence-transformers"
@@ -37,7 +38,7 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
   LOG_JSON                      = "true"
   LOG_LEVEL                     = "INFO"
   RATE_LIMIT_PER_MINUTE         = "300"
-  CORS_ORIGINS                  = "*"
+  CORS_ORIGINS                  = "https://lians.ai,https://www.lians.ai"
   AIRGAP_MODE                   = "false"
   RETENTION_PRUNE_INTERVAL_HOURS = "24"
 

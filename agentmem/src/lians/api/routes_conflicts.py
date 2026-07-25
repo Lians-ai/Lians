@@ -59,7 +59,10 @@ async def get_conflicts(
     auth.require("read")
     # Empty string query param → no status filter (all conflicts)
     effective_status = status if status else None
-    return await list_conflicts(db, auth.namespace, status=effective_status, limit=limit)
+    return await list_conflicts(
+        db, auth.namespace, status=effective_status, limit=limit,
+        barrier_override=auth.barrier_group,
+    )
 
 
 @router.post("/conflicts/{conflict_id}/resolve", response_model=ConflictResolveResult)
@@ -83,4 +86,7 @@ async def resolve_conflict_endpoint(
     optional reviewer note for regulatory examination.
     """
     auth.require("write")
-    return await resolve_conflict(db, auth.namespace, conflict_id, req)
+    return await resolve_conflict(
+        db, auth.namespace, conflict_id, req,
+        barrier_override=auth.barrier_group,
+    )

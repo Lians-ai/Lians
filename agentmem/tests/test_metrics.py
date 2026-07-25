@@ -117,7 +117,10 @@ def reset_metrics():
 # â”€â”€ Test client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest_asyncio.fixture
-async def client(db):
+async def client(db, monkeypatch):
+    monkeypatch.setenv("METRICS_ENABLED", "true")
+    from src.lians.config import get_settings
+    get_settings.cache_clear()
     hashed = hashlib.sha256(TEST_KEY.encode()).hexdigest()
     db.add(ApiKey(hashed_key=hashed, namespace=TEST_NS, scopes=["read", "write", "admin"]))
     await db.commit()
@@ -131,6 +134,7 @@ async def client(db):
             yield ac
     finally:
         app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 def _h() -> dict:

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "app",
+  "name": "Lians Compliance Evidence",
+  "id": "lians-lians-app",
+  "info": {
+    "description": "Connects Grafana OpenTelemetry pipelines to Lians for non-sampled evidence retention and operational visibility.",
+    "author": {
+      "name": "Lians"
+    },
+    "keywords": ["opentelemetry", "genai", "audit", "compliance"],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {"name": "Documentation", "url": "https://github.com/Lians-ai/lians"}
+    ],
+    "version": "0.1.0",
+    "updated": "2026-07-24"
+  },
+  "includes": [
+    {
+      "type": "page",
+      "name": "Configuration",
+      "path": "/plugins/lians-lians-app",
+      "role": "Admin",
+      "addToNav": true,
+      "defaultNav": true
+    },
+    {
+      "type": "dashboard",
+      "name": "Lians Operations",
+      "path": "dashboards/lians-operations.json",
+      "addToNav": true
+    }
+  ],
+  "dependencies": {
+    "grafanaDependency": ">=11.1.0",
+    "plugins": []
+  }
+}

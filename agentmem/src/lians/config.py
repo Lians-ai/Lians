@@ -5,6 +5,9 @@ from functools import lru_cache
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # Enables fail-closed validation for secrets and other production controls.
+    deployment_environment: str = "development"
+
     # DB
     database_url: str = "postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem"
 
@@ -75,6 +78,7 @@ class Settings(BaseSettings):
 
     # Rate limiting (per API key, sliding window)
     rate_limit_per_minute: int = 300
+    max_request_body_bytes: int = 2_000_000
 
     # Background retention scheduler
     # Interval between automated prune cycles (hours). Set to 0 to disable.
@@ -184,7 +188,9 @@ class Settings(BaseSettings):
     # Expose GET /metrics in Prometheus text format.
     # Requires prometheus-client>=0.19 (pip install agentmem[metrics]).
     # Disable to suppress the endpoint entirely (returns 404).
-    metrics_enabled: bool = True
+    # Disabled by default because metric labels include tenant namespaces.
+    # Enable only behind an authenticated/private monitoring network.
+    metrics_enabled: bool = False
 
     # ── Domain adapter ─────────────────────────────────────────────────────────
 

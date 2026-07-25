@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, update, text, cast, Float
+from sqlalchemy import select, and_, or_, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import time as _time
@@ -30,15 +30,16 @@ from .telemetry import tracer
 from .metrics import record_write, observe_add, record_recall, observe_recall, record_erase
 from .schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
-    MemoryBatchAdd, MemoryBatchResult,
+    MemoryBatchResult,
     SupersessionReviewItem, SupersessionReviewResult,
     SupersessionAction, SupersessionActionResult,
     RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
     LineageNode, LineageEdge, MemoryLineageResult,
     ConflictFlagOut, ConflictListResult, ConflictResolveRequest, ConflictResolveResult,
+    ContextRequest, ContextResult,
 )
 from .embeddings import get_embedding_provider
-from .crypto import encrypt_content, decrypt_content, unwrap_subject_key
+from .crypto import encrypt_content, unwrap_subject_key
 from .pii import get_or_create_subject_key, destroy_subject_key
 from .supersession import run_supersession, _utc
 from .ranking import hybrid_recall
@@ -51,6 +52,21 @@ from .session_cache import get_working_set, set_working_set, invalidate_working_
 logger = logging.getLogger("agentmem.memory_service")
 
 _IMPORTANCE_RECENCY_HALF_LIFE_DAYS = 90.0
+
+
+def _barrier_visible(row: Any, barrier_group: Optional[str]) -> bool:
+    """Application-layer equivalent of the PostgreSQL barrier RLS policy."""
+    return (
+        barrier_group is None
+        or getattr(row, "barrier_group", None) is None
+        or getattr(row, "barrier_group", None) == barrier_group
+    )
+
+
+def _barrier_filter(column: Any, barrier_group: Optional[str]) -> Optional[Any]:
+    if barrier_group is None:
+        return None
+    return or_(column.is_(None), column == barrier_group)
 
 
 def _write_lock_keys(namespace: str, agent_id: str) -> tuple[int, int]:
@@ -112,12 +128,13 @@ async def _get_barrier_group(
     # agent sets '' and sees every row in its namespace (compliance-officer view);
     # a group-scoped agent sees only NULL-barrier (shared) and same-group rows.
     # No-op on SQLite (no set_config) — those tests rely on app-layer filtering.
-    try:
+    # PostgreSQL errors propagate so a broken RLS context fails closed.
+    if db.get_bind().dialect.name == "postgresql":
         await db.execute(
             text("SELECT set_config('agentmem.barrier_group', :bg, true)"),
             {"bg": group or ""},
         )
-    except Exception:
+    else:
         pass
 
     return group
@@ -554,14 +571,14 @@ async def add_memory(
                     "superseded_ids": [str(i) for i in supersession.superseded_ids],
                     "relation": supersession.relation,
                     "confidence": supersession.confidence,
-                })
+                }, barrier_group=barrier_group)
             if supersession.conflict_ids:
                 await dispatch_event(db, namespace, MEMORY_CONFLICT, {
                     "agent_id": req.agent_id,
                     "new_memory_id": str(mem.id),
                     "conflict_ids": [str(i) for i in supersession.conflict_ids],
                     "confidence": supersession.confidence,
-                })
+                }, barrier_group=barrier_group)
 
             await db.commit()
 
@@ -994,7 +1011,8 @@ async def recall_memories(
         # anchor entity in the relationship graph (Graphiti-style node-distance).
         if near_entity and results:
             results = await _rerank_by_proximity(
-                db, namespace, req.agent_id, near_entity, near_key, results, req.as_of
+                db, namespace, req.agent_id, near_entity, near_key, results, req.as_of,
+                barrier_override=barrier_override,
             )
             span.set_attribute("graph_rerank", True)
 
@@ -1075,6 +1093,7 @@ async def _rerank_by_proximity(
     near_key: str,
     results: list,
     as_of: Optional[datetime],
+    barrier_override: Optional[str] = None,
 ) -> list:
     """
     Reorder recall results by graph proximity to ``anchor``.
@@ -1095,7 +1114,8 @@ async def _rerank_by_proximity(
         return results
 
     distances = await entity_distances(
-        db, namespace, agent_id, anchor, candidates, as_of=as_of
+        db, namespace, agent_id, anchor, candidates, as_of=as_of,
+        barrier_override=barrier_override,
     )
 
     def _key(item):
@@ -1134,11 +1154,12 @@ async def batch_add_memories(
     db: AsyncSession,
     namespace: str,
     reqs: list[MemoryAdd],
+    barrier_override: Optional[str] = None,
 ) -> MemoryBatchResult:
     """Add multiple memories sequentially — later items can supersede earlier ones."""
     out: list[MemoryOut] = []
     for req in reqs:
-        out.append(await add_memory(db, namespace, req))
+        out.append(await add_memory(db, namespace, req, barrier_override=barrier_override))
     return MemoryBatchResult(added=len(out), memories=out)
 
 
@@ -1147,6 +1168,7 @@ async def get_pending_supersessions(
     namespace: str,
     confidence_threshold: Optional[float] = None,
     limit: int = 50,
+    barrier_override: Optional[str] = None,
 ) -> SupersessionReviewResult:
     settings = get_settings()
     threshold = confidence_threshold if confidence_threshold is not None else settings.supersession_review_threshold
@@ -1167,6 +1189,10 @@ async def get_pending_supersessions(
 
     items: list[SupersessionReviewItem] = []
     for row in rows:
+        if barrier_override is not None:
+            memory = await db.get(Memory, row.memory_id)
+            if memory is None or not _barrier_visible(memory, barrier_override):
+                continue
         payload = dict(row.payload or {})
         confidence = float(payload.get("confidence", 1.0))
         if confidence >= threshold:
@@ -1197,9 +1223,14 @@ async def apply_supersession_action(
     namespace: str,
     memory_id: UUID,
     action: SupersessionAction,
+    barrier_override: Optional[str] = None,
 ) -> SupersessionActionResult:
     mem = await db.get(Memory, memory_id)
-    if mem is None or mem.namespace != namespace:
+    if (
+        mem is None
+        or mem.namespace != namespace
+        or not _barrier_visible(mem, barrier_override)
+    ):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Memory not found")
     if action.action not in ("confirm", "reject"):
@@ -1394,6 +1425,7 @@ async def get_knowledge_snapshot(
     agent_id: str,
     as_of: datetime,
     limit: int = 1000,
+    barrier_override: Optional[str] = None,
 ) -> list[MemoryOut]:
     """
     Exhaustive point-in-time knowledge state — every memory valid at *as_of*.
@@ -1426,6 +1458,9 @@ async def get_knowledge_snapshot(
         .order_by(Memory.event_time.asc())
         .limit(limit)
     )
+    barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
+    if barrier_condition is not None:
+        stmt = stmt.where(barrier_condition)
     result = await db.execute(stmt)
     mems = result.scalars().all()
 
@@ -1459,6 +1494,7 @@ async def get_memory_lineage(
     db: AsyncSession,
     namespace: str,
     memory_id: UUID,
+    barrier_override: Optional[str] = None,
 ) -> MemoryLineageResult:
     """
     Reconstruct the full belief-provenance chain a memory belongs to.
@@ -1475,7 +1511,11 @@ async def get_memory_lineage(
     from fastapi import HTTPException
 
     queried = await db.get(Memory, memory_id)
-    if queried is None or queried.namespace != namespace:
+    if (
+        queried is None
+        or queried.namespace != namespace
+        or not _barrier_visible(queried, barrier_override)
+    ):
         raise HTTPException(status_code=404, detail="Memory not found")
 
     # Walk forward: follow superseded_by until the live tip (superseded_by IS NULL).
@@ -1488,6 +1528,8 @@ async def get_memory_lineage(
         if cursor.superseded_by is None:
             break
         cursor = await db.get(Memory, cursor.superseded_by)
+        if cursor is not None and not _barrier_visible(cursor, barrier_override):
+            cursor = None
 
     # Walk backward: find the memory whose superseded_by points AT the current root.
     backward: list[Memory] = []
@@ -1499,6 +1541,9 @@ async def get_memory_lineage(
                 Memory.superseded_by == current_root.id,
             )
         )
+        barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
+        if barrier_condition is not None:
+            stmt = stmt.where(barrier_condition)
         older = (await db.execute(stmt)).scalars().first()
         if older is None or older.id in seen:
             break
@@ -1563,6 +1608,7 @@ async def get_structured_fact_history(
     key_values: dict[str, str],
     adapter,
     limit: int = 100,
+    barrier_override: Optional[str] = None,
 ) -> list[MemoryOut]:
     """
     Return every recorded version of a structured fact, ordered by event_time asc.
@@ -1585,6 +1631,9 @@ async def get_structured_fact_history(
         )
         .order_by(Memory.event_time.asc())
     )
+    barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
+    if barrier_condition is not None:
+        stmt = stmt.where(barrier_condition)
     rows = (await db.execute(stmt)).scalars().all()
 
     # For each requested (canonical) key, accept any of its metadata aliases.
@@ -1623,6 +1672,7 @@ async def list_conflicts(
     namespace: str,
     status: Optional[str] = "open",
     limit: int = 50,
+    barrier_override: Optional[str] = None,
 ) -> ConflictListResult:
     """
     List conflict flags for a namespace, newest first.
@@ -1650,6 +1700,13 @@ async def list_conflicts(
     for flag in flags:
         mem_a = await db.get(Memory, flag.memory_a_id)
         mem_b = await db.get(Memory, flag.memory_b_id)
+        if barrier_override is not None and (
+            mem_a is None
+            or mem_b is None
+            or not _barrier_visible(mem_a, barrier_override)
+            or not _barrier_visible(mem_b, barrier_override)
+        ):
+            continue
         conflicts.append(ConflictFlagOut(
             id=flag.id,
             namespace=flag.namespace,
@@ -1681,6 +1738,7 @@ async def resolve_conflict(
     namespace: str,
     conflict_id: UUID,
     req: ConflictResolveRequest,
+    barrier_override: Optional[str] = None,
 ) -> ConflictResolveResult:
     """
     Resolve a conflict flag and append a tamper-evident ``conflict_resolved`` event.
@@ -1698,6 +1756,16 @@ async def resolve_conflict(
     flag = await db.get(ConflictFlag, conflict_id)
     if flag is None or flag.namespace != namespace:
         raise HTTPException(status_code=404, detail="Conflict not found")
+    if barrier_override is not None:
+        mem_a = await db.get(Memory, flag.memory_a_id)
+        mem_b = await db.get(Memory, flag.memory_b_id)
+        if (
+            mem_a is None
+            or mem_b is None
+            or not _barrier_visible(mem_a, barrier_override)
+            or not _barrier_visible(mem_b, barrier_override)
+        ):
+            raise HTTPException(status_code=404, detail="Conflict not found")
     if flag.status != "open":
         raise HTTPException(status_code=409, detail="Conflict already resolved")
 

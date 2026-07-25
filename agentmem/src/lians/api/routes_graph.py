@@ -48,6 +48,7 @@ async def relate(
         source=req.source,
         metadata=req.metadata,
         normalize=req.normalize,
+        barrier_override=auth.barrier_group,
     )
     return RelateResult(
         id=edge.id,
@@ -76,6 +77,7 @@ async def extract(
         db, auth.namespace,
         agent_id=req.agent_id, text=req.text, event_time=req.event_time,
         normalize=req.normalize, exclusive=req.exclusive, use_llm=req.use_llm,
+        barrier_override=auth.barrier_group,
     )
     return ExtractResult(**result)
 
@@ -95,6 +97,7 @@ async def unrelate(
         dst_entity=req.dst_entity,
         event_time=req.event_time,
         normalize=req.normalize,
+        barrier_override=auth.barrier_group,
     )
     return {"invalidated": count}
 
@@ -116,6 +119,7 @@ async def neighbors(
         db, auth.namespace, agent_id, entity,
         depth=depth, as_of=as_of, rel_types=rel_type,
         direction=direction, normalize=normalize,
+        barrier_override=auth.barrier_group,
     )
     return NeighborsResult(**result)
 
@@ -140,5 +144,6 @@ async def path(
     result = await graph_service.path(
         db, auth.namespace, agent_id, src, dst,
         max_depth=max_depth, as_of=as_of, rel_types=rel_type, normalize=normalize,
+        barrier_override=auth.barrier_group,
     )
     return PathResult(**result)

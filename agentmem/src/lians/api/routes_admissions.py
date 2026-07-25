@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..schemas import AdmissionListResult, AdmissionResolveRequest, PendingAdmissionOut
-from ..admission_service import list_pending, resolve_pending
+from ..admission_service import decrypt_pending_content, list_pending, resolve_pending
 from .deps import get_auth, AuthContext
 
 router = APIRouter(prefix="/v1/admissions", tags=["admission"])
@@ -33,9 +33,17 @@ async def get_admissions(
 ):
     auth.require("admin")
     effective = status if status else None
-    rows = await list_pending(db, auth.namespace, status=effective, limit=limit)
+    rows = await list_pending(
+        db, auth.namespace, status=effective, limit=limit,
+        barrier_override=auth.barrier_group,
+    )
     return AdmissionListResult(
-        pending=[PendingAdmissionOut.model_validate(r) for r in rows],
+        pending=[
+            PendingAdmissionOut.model_validate(r).model_copy(
+                update={"content": decrypt_pending_content(r)}
+            )
+            for r in rows
+        ],
         total=len(rows),
         status_filter=effective,
     )
@@ -50,4 +58,7 @@ async def resolve_admission(
 ):
     """Approve a held write (creates the memory) or reject it. Audited either way."""
     auth.require("admin")
-    return await resolve_pending(db, auth.namespace, pending_id, req.action, req.note)
+    return await resolve_pending(
+        db, auth.namespace, pending_id, req.action, req.note,
+        barrier_override=auth.barrier_group,
+    )

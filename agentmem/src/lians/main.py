@@ -25,11 +25,14 @@ from .api.routes_snapshot import router as snapshot_router
 from .api.routes_graph import router as graph_router
 from .api.routes_admissions import router as admissions_router
 from .api.routes_decisions import router as decisions_router, records_router
+from .api.routes_otlp import router as otlp_router
+from .api.routes_validmind import router as validmind_router
 from .telemetry import instrument_fastapi, instrument_sqlalchemy
 from .middleware import (
     setup_logging,
     RequestIDMiddleware,
     AccessLogMiddleware,
+    RequestBodyLimitMiddleware,
     RateLimitMiddleware,
 )
 
@@ -52,15 +55,9 @@ def _warn_insecure_secrets(settings) -> None:
 
     These defaults are intentionally weak so tests work without configuration.
     A production deployment using them is exploitable — any party that reads
-    this source code can forge API keys or bypass admin auth.
+    this source code can bypass admin authentication.
     """
     warnings = []
-    if settings.api_secret_seed in _DEV_SECRETS:
-        warnings.append(
-            "API_SECRET_SEED is using the development default. "
-            "All API keys are forgeable. "
-            "Set a strong random value before ingesting any real data."
-        )
     if settings.admin_secret in _DEV_SECRETS:
         warnings.append(
             "ADMIN_SECRET is using the development default. "
@@ -69,6 +66,20 @@ def _warn_insecure_secrets(settings) -> None:
         )
     for msg in warnings:
         logger.warning("SECURITY: %s", msg)
+
+
+def _validate_production_secrets(settings) -> None:
+    """Fail closed instead of starting production with published secrets."""
+    if settings.deployment_environment.strip().lower() not in {"prod", "production"}:
+        return
+    errors = []
+    if settings.admin_secret in _DEV_SECRETS or len(settings.admin_secret) < 32:
+        errors.append("ADMIN_SECRET must be a random value of at least 32 characters")
+    origins = {o.strip() for o in settings.cors_origins.split(",") if o.strip()}
+    if "*" in origins:
+        errors.append("CORS_ORIGINS must list trusted origins instead of '*'")
+    if errors:
+        raise RuntimeError("Unsafe production secret configuration: " + "; ".join(errors))
 
 
 def _validate_airgap(settings) -> None:
@@ -97,7 +108,12 @@ def _validate_airgap(settings) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from .db import engine, AsyncSessionLocal
+    from .db import (
+        engine,
+        AsyncSessionLocal,
+        set_current_barrier_group,
+        set_current_namespace,
+    )
     from .config import get_settings
     from .kms import load_master_key
     from .scheduler import run_retention_scheduler
@@ -107,11 +123,30 @@ async def lifespan(app: FastAPI):
     setup_logging(level=settings.log_level, json_logs=settings.log_json)
 
     _warn_insecure_secrets(settings)
+    _validate_production_secrets(settings)
 
     if settings.airgap_mode:
         _validate_airgap(settings)
 
     await load_master_key()
+
+    # Encrypt legacy review-queue content and webhook signing secrets before the
+    # service accepts traffic. The admin sentinel is transaction-local and is
+    # cleared immediately after this one-time, idempotent upgrade pass.
+    from .secret_storage import protect_legacy_sensitive_rows
+    set_current_namespace("__admin__")
+    set_current_barrier_group(None)
+    try:
+        async with AsyncSessionLocal() as migration_db:
+            protected_rows = await protect_legacy_sensitive_rows(migration_db)
+    finally:
+        set_current_namespace(None)
+        set_current_barrier_group(None)
+    if protected_rows:
+        logger.info(
+            "Protected legacy sensitive rows",
+            extra={"rows_updated": protected_rows},
+        )
 
     # Change 5: pre-warm the embedder at startup so the first recall doesn't pay
     # the model-load penalty.  For sentence-transformers this blocks briefly in a
@@ -220,9 +255,23 @@ _cors_origins = [o.strip() for o in (get_settings().cors_origins or "*").split("
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # API keys are explicit headers, not browser cookies. Credentialed wildcard
+    # CORS is both invalid in browsers and unnecessarily broad.
+    allow_credentials="*" not in _cors_origins,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Content-Type",
+        "X-API-Key",
+        "X-Admin-Secret",
+        "Idempotency-Key",
+        "X-Request-ID",
+    ],
+    expose_headers=[
+        "X-Request-ID",
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "Retry-After",
+    ],
 )
 
 # Middleware is applied in reverse registration order (last added = outermost).
@@ -233,6 +282,10 @@ app.add_middleware(
 app.add_middleware(RateLimitMiddleware, requests_per_minute=get_settings().rate_limit_per_minute)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(
+    RequestBodyLimitMiddleware,
+    max_bytes=get_settings().max_request_body_bytes,
+)
 
 app.include_router(memory_router)
 app.include_router(audit_router)
@@ -249,6 +302,8 @@ app.include_router(admissions_router)
 app.include_router(decisions_router)
 app.include_router(records_router)
 app.include_router(metrics_router)
+app.include_router(otlp_router)
+app.include_router(validmind_router)
 
 
 @app.get("/health", include_in_schema=False)

@@ -5,6 +5,7 @@ Memory admission control — detectors, decision modes, and the write-path behav
 from __future__ import annotations
 
 import hashlib
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -15,7 +16,7 @@ from httpx import AsyncClient, ASGITransport
 
 from src.lians.main import app
 from src.lians.db import get_db
-from src.lians.models import ApiKey
+from src.lians.models import ApiKey, PendingAdmission
 from src.lians.admission import detect_risk_tags, evaluate
 
 NS = "adm-ns"
@@ -123,7 +124,9 @@ async def test_enforce_rejects_injection(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_enforce_holds_pii_then_approve_makes_it_recallable(client, monkeypatch):
+async def test_enforce_holds_pii_then_approve_makes_it_recallable(
+    client, db, monkeypatch
+):
     _enforce(monkeypatch)
     r = await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT, "content": "patient John, MRN-5567120, diagnosed with condition",
@@ -135,6 +138,13 @@ async def test_enforce_holds_pii_then_approve_makes_it_recallable(client, monkey
     pid = body["pending_id"]
     assert "phi:mrn" in body["risk_tags"]
 
+    # The review queue can contain highly sensitive content. It must be sealed
+    # in storage while the authorized API continues to return cleartext.
+    stored = await db.get(PendingAdmission, uuid.UUID(pid))
+    assert stored is not None
+    assert "MRN-5567120" not in stored.content
+    assert stored.content.startswith("lians-sealed:v1:")
+
     # It is NOT yet recallable.
     rec = await client.post("/v1/recall", headers=_h(),
                             json={"agent_id": AGENT, "query": "patient MRN", "k": 5})
@@ -144,7 +154,8 @@ async def test_enforce_holds_pii_then_approve_makes_it_recallable(client, monkey
     # Listed in the review queue.
     lst = await client.get("/v1/admissions", headers=_h())
     assert lst.status_code == 200
-    assert any(p["id"] == pid for p in lst.json()["pending"])
+    pending = next(p for p in lst.json()["pending"] if p["id"] == pid)
+    assert "MRN-5567120" in pending["content"]
 
     # Approve → the memory is created and now recallable.
     res = await client.post(f"/v1/admissions/{pid}/resolve", headers=_h(),

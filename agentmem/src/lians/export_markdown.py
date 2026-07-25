@@ -80,13 +80,17 @@ async def export_memory_markdown(
     agent_id: str,
     as_of: Optional[datetime] = None,
     limit: int = 1000,
+    barrier_override: Optional[str] = None,
 ) -> MarkdownExportResult:
     """Render, hash, chain-anchor, and return the memory statement."""
     from .memory_service import get_knowledge_snapshot
 
     generated_at = datetime.now(timezone.utc)
     effective_as_of = as_of or generated_at
-    items = await get_knowledge_snapshot(db, namespace, agent_id, effective_as_of, limit)
+    items = await get_knowledge_snapshot(
+        db, namespace, agent_id, effective_as_of, limit,
+        barrier_override=barrier_override,
+    )
 
     lines: list[str] = [
         "---",

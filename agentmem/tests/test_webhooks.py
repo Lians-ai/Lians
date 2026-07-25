@@ -9,7 +9,7 @@ import hmac
 import json
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -21,7 +21,8 @@ from src.lians.models import ApiKey, WebhookEndpoint, WebhookDelivery
 from src.lians.webhook_service import (
     register_webhook, list_webhooks, delete_webhook, update_webhook,
     dispatch_event, _sign, _http_post,
-    MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED, ALL_EVENTS,
+    _validate_webhook_url,
+    MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED,
 )
 
 TEST_NS = "webhook-test-ns"
@@ -94,6 +95,32 @@ async def test_register_webhook(db):
     assert ep.namespace == TEST_NS
     assert ep.enabled is True
     assert MEMORY_SUPERSEDED in ep.events
+    assert ep.secret != "my-secret"
+    assert ep.secret.startswith("lians-sealed:v1:")
+
+
+@pytest.mark.parametrize("url", [
+    "http://example.com/hook",
+    "https://127.0.0.1/hook",
+    "https://[::1]/hook",
+    "https://169.254.169.254/latest/meta-data",
+    "https://localhost/hook",
+    "https://user:password@example.com/hook",
+])
+def test_webhook_url_rejects_ssrf_destinations(url):
+    with pytest.raises(ValueError):
+        _validate_webhook_url(url)
+
+
+@pytest.mark.asyncio
+async def test_http_post_blocks_private_destination_before_network():
+    status, error = await _http_post(
+        "https://169.254.169.254/latest/meta-data",
+        b"{}",
+        "sha256=test",
+    )
+    assert status == 0
+    assert "Blocked webhook destination" in error
 
 
 @pytest.mark.asyncio
@@ -353,7 +380,8 @@ async def test_supersession_dispatches_webhook(client, db):
     """Adding a newer memory triggers MEMORY_SUPERSEDED to registered endpoint."""
     r = await client.post("/v1/webhooks",
                           json={"url": "https://sup.example.com/hook",
-                                "events": [MEMORY_SUPERSEDED], "secret": "test-secret"},
+                                "events": [MEMORY_SUPERSEDED],
+                                "secret": "test-secret-strong-enough"},
                           headers=_api_h())
     assert r.status_code == 201
 

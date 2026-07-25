@@ -15,7 +15,7 @@ from ..schemas import (
     FactHistoryResult, ContextRequest, ContextResult,
 )
 from ..memory_service import (
-    add_memory, add_memory_idempotent, recall_memories, batch_add_memories,
+    add_memory_idempotent, recall_memories, batch_add_memories,
     get_memory_lineage, get_structured_fact_history, assemble_context,
 )
 from ..adapters import get_adapter
@@ -56,7 +56,10 @@ async def create_memory(
         })
 
     if decision.action == "review":
-        pending = await enqueue_pending(db, auth.namespace, req, decision)
+        pending = await enqueue_pending(
+            db, auth.namespace, req, decision,
+            barrier_override=auth.barrier_group,
+        )
         return JSONResponse(status_code=202, content={
             "status": "held_for_review", "pending_id": str(pending.id),
             "risk_tags": decision.risk_tags, "reasons": decision.reasons,
@@ -85,7 +88,48 @@ async def batch_create_memories(
     Each item runs the full supersession funnel and audit-log write.
     """
     auth.require("write")
-    return await batch_add_memories(db, auth.namespace, req.memories)
+    settings = get_settings()
+    blocked = {
+        s.strip().lower()
+        for s in settings.admission_blocked_sources.split(",")
+        if s.strip()
+    }
+    for item in req.memories:
+        decision = evaluate_admission(
+            item.content,
+            item.source,
+            mode=settings.admission_mode,
+            blocked_sources=blocked,
+        )
+        if decision.action == "reject":
+            await record_rejection(db, auth.namespace, item.agent_id, decision)
+            raise HTTPException(status_code=422, detail={
+                "status": "rejected",
+                "risk_tags": decision.risk_tags,
+                "reasons": decision.reasons,
+            })
+        if decision.action == "review":
+            pending = await enqueue_pending(
+                db, auth.namespace, item, decision,
+                barrier_override=auth.barrier_group,
+            )
+            raise HTTPException(status_code=422, detail={
+                "status": "held_for_review",
+                "pending_id": str(pending.id),
+                "risk_tags": decision.risk_tags,
+                "reasons": decision.reasons,
+            })
+        if decision.risk_tags:
+            item.metadata = {
+                **(item.metadata or {}),
+                "_admission": {
+                    "action": "admit",
+                    "risk_tags": decision.risk_tags,
+                },
+            }
+    return await batch_add_memories(
+        db, auth.namespace, req.memories, barrier_override=auth.barrier_group
+    )
 
 
 @router.get("/memories/{memory_id}/lineage", response_model=MemoryLineageResult)
@@ -109,7 +153,9 @@ async def memory_lineage(
     ``nodes`` are always returned oldest-first.
     """
     auth.require("read")
-    return await get_memory_lineage(db, auth.namespace, memory_id)
+    return await get_memory_lineage(
+        db, auth.namespace, memory_id, barrier_override=auth.barrier_group
+    )
 
 
 @router.get("/facts/history", response_model=FactHistoryResult)
@@ -141,7 +187,8 @@ async def fact_history(
         "metric": adapter.normalize("metric", metric),
     }
     items = await get_structured_fact_history(
-        db, auth.namespace, agent_id, key_values, adapter, limit
+        db, auth.namespace, agent_id, key_values, adapter, limit,
+        barrier_override=auth.barrier_group,
     )
     return FactHistoryResult(
         ticker=key_values["ticker"],

@@ -21,4 +21,7 @@ async def audit_reconstruct(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("read")
-    return await reconstruct(db, auth.namespace, agent_id, as_of, query, k)
+    return await reconstruct(
+        db, auth.namespace, agent_id, as_of, query, k,
+        barrier_override=auth.barrier_group,
+    )

@@ -129,7 +129,7 @@
     </div>
     <div class="config-field wide">
       <label>Read-only API Key (from seed_demo.py)</label>
-      <input id="api-key" type="text" placeholder="agentmem_..." />
+      <input id="api-key" type="password" placeholder="agentmem_..." autocomplete="off" spellcheck="false" />
     </div>
   </div>
 
@@ -276,10 +276,10 @@
       <div class="card-desc">
         Verifies the SHA-256 hash chain across every event-log row. Any
         tampered or deleted row breaks the chain and is reported.
-        Requires X-Admin-Secret (default: <code>demo-admin-secret</code>).
+        Requires the deployment's X-Admin-Secret.
       </div>
       <div class="card-extra">
-        <input id="admin-secret" type="text" class="date-input" value="demo-admin-secret" placeholder="Admin secret" style="flex:2" />
+        <input id="admin-secret" type="password" class="date-input" placeholder="Admin secret" autocomplete="off" spellcheck="false" style="flex:2" />
         <button onclick="verifyChain()">Verify chain</button>
       </div>
       <div id="result-audit" class="result"></div>
@@ -361,11 +361,18 @@
       k: 10,
       as_of: "2099-01-01T00:00:00Z",   // future date = see everything
     }, "result-raw");
-    // Annotate stale items visually
+    // Annotate stale items visually without reparsing API-controlled text as HTML.
     const el = $("result-raw");
-    el.innerHTML = el.textContent
-      .replace(/\[SUPERSEDED[^\]]*\]/g, m => `<span style="color:#f87171">${m}</span>`)
-      .replace(/\[CURRENT\]/g, m => `<span style="color:#4ade80">${m}</span>`);
+    const parts = el.textContent.split(/(\[SUPERSEDED[^\]]*\]|\[CURRENT\])/g);
+    el.replaceChildren(...parts.filter(Boolean).map(part => {
+      if (!part.startsWith("[SUPERSEDED") && part !== "[CURRENT]") {
+        return document.createTextNode(part);
+      }
+      const span = document.createElement("span");
+      span.style.color = part === "[CURRENT]" ? "#4ade80" : "#f87171";
+      span.textContent = part;
+      return span;
+    }));
   }
 
   async function queryPresent() {

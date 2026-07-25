@@ -9,8 +9,9 @@ is intended to be scraped by an in-cluster Prometheus server, protected at the
 network layer by the existing Kubernetes NetworkPolicy (which only admits traffic
 from the monitoring namespace).
 
-To disable the endpoint entirely set ``METRICS_ENABLED=false`` in the
-environment.  Any scrape will receive 404 while the flag is off.
+The endpoint is disabled by default because labels contain tenant namespaces.
+Set ``METRICS_ENABLED=true`` only when network policy or an authenticated proxy
+restricts it to the monitoring system. Any scrape receives 404 while disabled.
 
 Metrics emitted (see src/lians/metrics.py for full list):
 
@@ -39,7 +40,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from ..config import get_settings
-from ..metrics import generate_metrics, _PROM_AVAILABLE
+from ..metrics import generate_metrics
 
 router = APIRouter(tags=["observability"])
 

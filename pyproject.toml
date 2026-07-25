@@ -43,6 +43,10 @@ otel = [
     "opentelemetry-instrumentation-sqlalchemy>=0.45b0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.24.0",
 ]
+otel-receiver = [
+    "opentelemetry-proto>=1.24.0",
+    "protobuf>=4.25.0",
+]
 metrics = [
     "prometheus-client>=0.20.0",
 ]

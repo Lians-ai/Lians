@@ -35,7 +35,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory
-from .memory_service import _memory_to_out, _resolve_subject_key
+from .memory_service import _resolve_subject_key
 from .ranking import _decrypt as _decrypt_memory_content
 
 
@@ -71,6 +71,7 @@ async def check_contamination(
     namespace: str,
     agent_id: str,
     simulation_as_of: datetime,
+    barrier_override: Optional[str] = None,
 ) -> ContaminationReport:
     """
     Scan every memory an agent possessed and flag those that constitute
@@ -96,6 +97,10 @@ async def check_contamination(
         )
         .order_by(Memory.event_time.asc())
     )
+    if barrier_override is not None:
+        stmt = stmt.where(
+            or_(Memory.barrier_group.is_(None), Memory.barrier_group == barrier_override)
+        )
     result = await db.execute(stmt)
     candidates = result.scalars().all()
 
@@ -108,6 +113,10 @@ async def check_contamination(
             Memory.erased_at.is_(None),
         )
     )
+    if barrier_override is not None:
+        count_stmt = count_stmt.where(
+            or_(Memory.barrier_group.is_(None), Memory.barrier_group == barrier_override)
+        )
     total_count = (await db.execute(count_stmt)).scalar_one()
 
     # Decrypt content for preview

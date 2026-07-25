@@ -23,7 +23,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
@@ -111,6 +111,7 @@ async def worm_posture(
     """
     from ..config import get_settings
     auth.require("read")
+    auth.require_unbarriered()
     chain = await verify_chain(db, auth.namespace)
     worm_mode = get_settings().worm_mode
     return {
@@ -144,6 +145,7 @@ async def compliance_report(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("read")
+    auth.require_unbarriered()
     ns = auth.namespace
 
     # Parse window
@@ -225,7 +227,7 @@ async def compliance_report(
 
     # ── Conflicts ─────────────────────────────────────────────────────────────
 
-    def _conflict_count(status_val: str) -> "coroutine":
+    def _conflict_count(status_val: str):
         filt = [ConflictFlag.namespace == ns, ConflictFlag.status == status_val]
         if win_from:
             filt.append(ConflictFlag.detected_at >= win_from)
