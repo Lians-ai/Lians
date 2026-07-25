@@ -1,15 +1,20 @@
 # RIAD-1: Reconstruction of Immutable Agent Decisions
 
+[![RIAD-1 CI](https://github.com/Lians-ai/Lians/actions/workflows/riad-1.yml/badge.svg)](https://github.com/Lians-ai/Lians/actions/workflows/riad-1.yml)
+
 RIAD-1 is Lians' first decision-evidence benchmark. It asks one concrete
 question: after an AI system makes a consequential decision, can Lians produce
 the evidence needed to reconstruct what happened and detect later tampering?
 
 ## Scenario
 
-The fixture models a credit-underwriting agent. It records two facts available
-before approval, one fact learned afterward, one OpenTelemetry GenAI span, and
-one decision linked to the evidence, model, policy, session, and input/output
-hashes.
+The fixture models a credit-underwriting agent and the technical record needed
+for an ECOA/adverse-action review: what evidence was available to the system
+when it made a specific credit decision, and what reason codes supported the
+outcome. It records two facts available before approval, one fact learned
+afterward, one OpenTelemetry GenAI span, and one decision linked to the
+evidence, model, policy, session, and input/output hashes. This is an
+engineering benchmark, not a legal-compliance determination.
 
 The benchmark exports the decision evidence pack and checks:
 
@@ -34,6 +39,22 @@ python agentmem/benchmarks/decision_reconstruction_eval.py
 The command emits a machine-readable JSON report and exits nonzero if any check
 fails. It runs offline against an ephemeral SQLite database and does not alter
 development or production data.
+
+## Comparison
+
+RIAD-1 distinguishes executed results from capability assessments. Lians is
+executed end-to-end. Mem0 OSS, Graphiti OSS, and Letta are scored as N/A where
+their public product surface does not expose the RIAD operation; Graphiti
+receives partial credit for historical bitemporal graph state.
+
+```bash
+python agentmem/benchmarks/riad_comparison.py --write
+```
+
+See the [commit-linked comparison](riad-1-comparison.md) and
+[machine-readable receipt](riad-1-results.json). CI reruns the benchmark on
+relevant changes and every Monday; each run uploads receipts named for the
+exact Git commit.
 
 ## Claims this benchmark supports
 

@@ -1,0 +1,178 @@
+{
+  "schema": "https://lians.ai/schemas/riad-comparison/v1",
+  "benchmark": "RIAD-1",
+  "generated_at": "2026-07-25T04:38:07.067526+00:00",
+  "source_commit": "e5c899ae3ade0e98410eddc4e016a284344f8479",
+  "systems": {
+    "Lians": {
+      "exact_point_in_time_reconstruction": {
+        "status": "pass",
+        "evidence": "Executed by RIAD-1 against the public Lians API on ephemeral SQLite.",
+        "mode": "executed",
+        "source": "https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/decision_reconstruction_eval.py"
+      },
+      "provenance_coverage_100_percent": {
+        "status": "pass",
+        "evidence": "Executed by RIAD-1 against the public Lians API on ephemeral SQLite.",
+        "mode": "executed",
+        "source": "https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/decision_reconstruction_eval.py"
+      },
+      "evidence_pack_hash_valid": {
+        "status": "pass",
+        "evidence": "Executed by RIAD-1 against the public Lians API on ephemeral SQLite.",
+        "mode": "executed",
+        "source": "https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/decision_reconstruction_eval.py"
+      },
+      "otlp_genai_span_accepted": {
+        "status": "pass",
+        "evidence": "Executed by RIAD-1 against the public Lians API on ephemeral SQLite.",
+        "mode": "executed",
+        "source": "https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/decision_reconstruction_eval.py"
+      },
+      "audit_tamper_detected": {
+        "status": "pass",
+        "evidence": "Executed by RIAD-1 against the public Lians API on ephemeral SQLite.",
+        "mode": "executed",
+        "source": "https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/decision_reconstruction_eval.py"
+      },
+      "local_p95_under_3000_ms": {
+        "status": "pass",
+        "evidence": "Executed by RIAD-1 against the public Lians API on ephemeral SQLite.",
+        "mode": "executed",
+        "source": "https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/decision_reconstruction_eval.py"
+      }
+    },
+    "Mem0 OSS": {
+      "exact_point_in_time_reconstruction": {
+        "status": "not_available",
+        "evidence": "No OSS as-of recall or exhaustive historical decision snapshot API.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/mem0ai/mem0"
+      },
+      "provenance_coverage_100_percent": {
+        "status": "not_available",
+        "evidence": "No consequential-decision record with model, policy, cutoff, and cited evidence.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/mem0ai/mem0"
+      },
+      "evidence_pack_hash_valid": {
+        "status": "not_available",
+        "evidence": "No decision evidence-pack export API.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/mem0ai/mem0"
+      },
+      "otlp_genai_span_accepted": {
+        "status": "not_available",
+        "evidence": "No authenticated OTLP trace receiver.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/mem0ai/mem0"
+      },
+      "audit_tamper_detected": {
+        "status": "not_available",
+        "evidence": "No append-only payload hash-chain verifier.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/mem0ai/mem0"
+      },
+      "local_p95_under_3000_ms": {
+        "status": "not_run",
+        "evidence": "Not comparable because the evidence-pack operation is unavailable.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/mem0ai/mem0"
+      }
+    },
+    "Graphiti OSS": {
+      "exact_point_in_time_reconstruction": {
+        "status": "partial",
+        "evidence": "Bitemporal graph edges support historical graph state, but not a complete decision-time evidence boundary or cited decision snapshot.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/getzep/graphiti"
+      },
+      "provenance_coverage_100_percent": {
+        "status": "not_available",
+        "evidence": "No first-class consequential-decision record with the RIAD provenance contract.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/getzep/graphiti"
+      },
+      "evidence_pack_hash_valid": {
+        "status": "not_available",
+        "evidence": "No decision evidence-pack export API.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/getzep/graphiti"
+      },
+      "otlp_genai_span_accepted": {
+        "status": "not_available",
+        "evidence": "No authenticated OTLP trace receiver.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/getzep/graphiti"
+      },
+      "audit_tamper_detected": {
+        "status": "not_available",
+        "evidence": "No append-only payload hash-chain verifier.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/getzep/graphiti"
+      },
+      "local_p95_under_3000_ms": {
+        "status": "not_run",
+        "evidence": "Not comparable because the evidence-pack operation is unavailable.",
+        "mode": "capability_assessed",
+        "source": "https://github.com/getzep/graphiti"
+      }
+    },
+    "Letta": {
+      "exact_point_in_time_reconstruction": {
+        "status": "not_available",
+        "evidence": "Passage search has no as-of validity filter or exhaustive historical snapshot.",
+        "mode": "capability_assessed",
+        "source": "https://docs.letta.com/api/typescript/resources/agents/subresources/passages"
+      },
+      "provenance_coverage_100_percent": {
+        "status": "not_available",
+        "evidence": "No RIAD-compatible consequential-decision record and cited-evidence contract.",
+        "mode": "capability_assessed",
+        "source": "https://docs.letta.com/api/typescript/resources/agents/subresources/passages"
+      },
+      "evidence_pack_hash_valid": {
+        "status": "not_available",
+        "evidence": "No decision evidence-pack export API.",
+        "mode": "capability_assessed",
+        "source": "https://docs.letta.com/api/typescript/resources/agents/subresources/passages"
+      },
+      "otlp_genai_span_accepted": {
+        "status": "not_available",
+        "evidence": "No authenticated OTLP trace receiver.",
+        "mode": "capability_assessed",
+        "source": "https://docs.letta.com/api/typescript/resources/agents/subresources/passages"
+      },
+      "audit_tamper_detected": {
+        "status": "not_available",
+        "evidence": "No append-only payload hash-chain verifier.",
+        "mode": "capability_assessed",
+        "source": "https://docs.letta.com/api/typescript/resources/agents/subresources/passages"
+      },
+      "local_p95_under_3000_ms": {
+        "status": "not_run",
+        "evidence": "Not comparable because the evidence-pack operation is unavailable.",
+        "mode": "capability_assessed",
+        "source": "https://docs.letta.com/api/typescript/resources/agents/subresources/passages"
+      }
+    }
+  },
+  "lians_metrics": {
+    "reconstruction_accuracy": 1.0,
+    "provenance_coverage": 1.0,
+    "tamper_detection_rate": 1.0,
+    "evidence_pack_p95_ms": 1018.4,
+    "latency_repetitions": 1
+  },
+  "methodology": {
+    "executed": [
+      "Lians"
+    ],
+    "capability_assessed": [
+      "Mem0 OSS",
+      "Graphiti OSS",
+      "Letta"
+    ],
+    "rule": "N/A means the public product surface lacks the operation; it is not a failed live call."
+  }
+}

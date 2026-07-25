@@ -1,0 +1,55 @@
+name: RIAD-1
+
+on:
+  push:
+    branches: ["master", "main"]
+    paths:
+      - "agentmem/benchmarks/decision_reconstruction_eval.py"
+      - "agentmem/benchmarks/riad_comparison.py"
+      - "agentmem/src/lians/**"
+      - "agentmem/tests/test_decision_reconstruction_eval.py"
+      - "agentmem/tests/test_riad_comparison.py"
+      - ".github/workflows/riad-1.yml"
+  pull_request:
+    branches: ["master", "main"]
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: decision reconstruction
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Lians
+        run: pip install -e ".[dev,otel-receiver]"
+
+      - name: Run RIAD-1 tests
+        run: >-
+          python -m pytest
+          agentmem/tests/test_decision_reconstruction_eval.py
+          agentmem/tests/test_riad_comparison.py
+          agentmem/tests/test_audit_chain.py
+          -q
+
+      - name: Generate commit-linked receipts
+        run: python agentmem/benchmarks/riad_comparison.py --write --repetitions 10
+
+      - name: Upload receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: riad-1-${{ github.sha }}
+          path: |
+            docs/benchmarks/riad-1-results.json
+            docs/benchmarks/riad-1-comparison.md
+          if-no-files-found: error

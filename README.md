@@ -39,6 +39,9 @@
 
 <p align="center">
   <a href="docs/benchmark.md"><strong>Benchmark: 0 stale facts in top-5 vs mem0-style recall's 4/4, plus 100% supersession accuracy</strong></a>
+  <br />
+  <a href="docs/benchmarks/riad-1.md"><strong>RIAD-1: decision reconstruction benchmark</strong></a>
+  · <a href="https://github.com/Lians-ai/Lians/actions/workflows/riad-1.yml"><strong>CI receipts</strong></a>
 </p>
 
 ---
