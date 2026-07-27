@@ -1,0 +1,27 @@
+services:
+  alloy:
+    image: grafana/alloy:latest
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    env_file: ${LIANS_ENV_FILE:-.env.example}
+    volumes:
+      - ../provisioning/alloy-lians.alloy:/etc/alloy/config.alloy:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "12345:12345"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: lians-lians-app
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ../dist:/var/lib/grafana/plugins/lians-lians-app:ro
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

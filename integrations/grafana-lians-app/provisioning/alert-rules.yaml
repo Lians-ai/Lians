@@ -1,0 +1,69 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Lians evidence capture
+    folder: Lians
+    interval: 1m
+    rules:
+      - uid: lians-otel-ingest-stopped
+        title: Lians OTLP ingestion stopped
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Error
+        annotations:
+          summary: No OTLP spans have reached Lians for five minutes.
+          description: Check Alloy exporter health, the Lians endpoint, and the write-scoped API key.
+        labels:
+          severity: critical
+          service: lians
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: sum(rate(lians_otel_spans_accepted_total[5m]))
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0.001], type: lt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-conflict-queue
+        title: Lians unresolved memory conflicts
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: The Lians memory-conflict review queue is growing.
+        labels:
+          severity: warning
+          service: lians
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: sum(agentmem_conflict_queue_depth)
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query

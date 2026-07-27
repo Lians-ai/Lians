@@ -6,7 +6,10 @@ Lians now implements authenticated OTLP/HTTP trace ingestion at `POST /v1/traces
 It accepts OTLP JSON in the base install and OTLP protobuf when the
 `otel-receiver` extra is installed. Spans containing OpenTelemetry GenAI
 semantic attributes are identified and indexed by model; all spans are retained
-without application-side sampling.
+without application-side sampling. GenAI spans are grouped by trace and
+correlated automatically into idempotent decision records containing capture
+status, model, historical cutoff, evidence references, and an inference ledger
+event.
 
 The Grafana app source and Alloy fan-out configuration live in
 `integrations/grafana-lians-app`. The app has **not** been reviewed, signed, or

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import OTelSpan
+from ..metrics import record_otel_ingest
+from ..otel_correlation import correlate_genai_trace
 from ..otlp import OtlpDecodeError, decode_trace_request
 from .deps import AuthContext, get_auth
 
@@ -64,6 +66,13 @@ async def ingest_traces(
             stmt = insert(OTelSpan).values(chunk)
         result = await db.execute(stmt.returning(OTelSpan.id))
         accepted += len(result.scalars().all())
+    decision_ids, decisions_created = await correlate_genai_trace(
+        db,
+        namespace=auth.namespace,
+        barrier_group=auth.barrier_group,
+        spans=spans,
+    )
+    record_otel_ingest(auth.namespace, accepted, decisions_created)
     await db.commit()
 
     # OTLP specifies an empty success response. JSON is used for JSON requests;
@@ -79,4 +88,8 @@ async def ingest_traces(
             ExportTraceServiceResponse().SerializeToString(),
             media_type="application/x-protobuf",
         )
-    return {"partialSuccess": {}, "acceptedSpans": accepted}
+    return {
+        "partialSuccess": {},
+        "acceptedSpans": accepted,
+        "decisionIds": [str(value) for value in decision_ids],
+    }
