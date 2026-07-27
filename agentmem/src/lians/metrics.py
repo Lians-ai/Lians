@@ -134,6 +134,18 @@ if _PROM_AVAILABLE:
         ["component", "reason"],
         registry=REGISTRY,
     )
+    _otel_spans = Counter(
+        "lians_otel_spans_accepted_total",
+        "OTLP spans accepted by the Lians evidence receiver",
+        ["namespace", "signal"],
+        registry=REGISTRY,
+    )
+    _otel_decisions = Counter(
+        "lians_otel_decisions_correlated_total",
+        "Decision records correlated automatically from OTLP GenAI traces",
+        ["namespace"],
+        registry=REGISTRY,
+    )
 else:
     REGISTRY = None  # type: ignore[assignment]
     _writes = _NOOP  # type: ignore[assignment]
@@ -147,6 +159,8 @@ else:
     _conflicts_resolved = _NOOP  # type: ignore[assignment]
     _conflict_queue = _NOOP  # type: ignore[assignment]
     _degradations = _NOOP  # type: ignore[assignment]
+    _otel_spans = _NOOP  # type: ignore[assignment]
+    _otel_decisions = _NOOP  # type: ignore[assignment]
 
 
 # ── Public helpers (called by memory_service.py) ──────────────────────────────
@@ -208,6 +222,14 @@ def record_conflict_detected(namespace: str, count: int = 1) -> None:
     """Increment conflict detection counter and open-queue gauge."""
     _conflicts_detected.labels(namespace=namespace).inc(count)
     _conflict_queue.labels(namespace=namespace).inc(count)
+
+
+def record_otel_ingest(namespace: str, spans: int, decisions: int) -> None:
+    """Record accepted OTLP volume and correlated decision records."""
+    if spans:
+        _otel_spans.labels(namespace=namespace, signal="traces").inc(spans)
+    if decisions:
+        _otel_decisions.labels(namespace=namespace).inc(decisions)
 
 
 def record_conflict_resolved(namespace: str, resolution: str) -> None:

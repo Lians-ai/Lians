@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lians-otel
+type: Opaque
+stringData:
+  LIANS_API_KEY: replace-with-write-scoped-key
+  GRAFANA_CLOUD_INSTANCE_ID: replace-with-stack-id
+  GRAFANA_CLOUD_API_KEY: replace-with-metrics-publish-token
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lians-alloy
+data:
+  config.alloy: |
+    otelcol.receiver.otlp "lians" {
+      grpc { endpoint = "0.0.0.0:4317" }
+      http { endpoint = "0.0.0.0:4318" }
+      output { traces = [otelcol.processor.memory_limiter.lians.input] }
+    }
+    otelcol.processor.memory_limiter "lians" {
+      check_interval = "1s"
+      limit = "512MiB"
+      spike_limit = "128MiB"
+      output { traces = [otelcol.processor.batch.lians.input] }
+    }
+    otelcol.processor.batch "lians" {
+      timeout = "2s"
+      send_batch_size = 512
+      output {
+        traces = [
+          otelcol.exporter.otlphttp.lians.input,
+          otelcol.exporter.otlp.grafana_cloud.input,
+        ]
+      }
+    }
+    otelcol.exporter.otlphttp "lians" {
+      client {
+        endpoint = sys.env("LIANS_OTLP_ENDPOINT")
+        headers = { "X-API-Key" = sys.env("LIANS_API_KEY") }
+      }
+      retry_on_failure { enabled = true }
+      sending_queue { enabled = true, queue_size = 5000 }
+    }
+    otelcol.auth.basic "grafana_cloud" {
+      username = sys.env("GRAFANA_CLOUD_INSTANCE_ID")
+      password = sys.env("GRAFANA_CLOUD_API_KEY")
+    }
+    otelcol.exporter.otlp "grafana_cloud" {
+      client {
+        endpoint = sys.env("GRAFANA_CLOUD_OTLP_ENDPOINT")
+        auth = otelcol.auth.basic.grafana_cloud.handler
+      }
+      retry_on_failure { enabled = true }
+      sending_queue { enabled = true, queue_size = 5000 }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lians-alloy
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: lians-alloy}
+  template:
+    metadata:
+      labels: {app: lians-alloy}
+    spec:
+      containers:
+        - name: alloy
+          image: grafana/alloy:latest
+          args: ["run", "--storage.path=/var/lib/alloy", "/etc/alloy/config.alloy"]
+          envFrom:
+            - secretRef: {name: lians-otel}
+          env:
+            - name: LIANS_OTLP_ENDPOINT
+              value: https://api.lians.ai
+            - name: GRAFANA_CLOUD_OTLP_ENDPOINT
+              value: replace-with-grafana-cloud-otlp-endpoint
+          ports:
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 768Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/alloy}
+      volumes:
+        - name: config
+          configMap: {name: lians-alloy}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lians-alloy
+spec:
+  selector: {app: lians-alloy}
+  ports:
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}

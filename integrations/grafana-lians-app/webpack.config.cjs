@@ -42,6 +42,7 @@ module.exports = {
         { from: 'src/plugin.json', to: 'plugin.json' },
         { from: 'src/img', to: 'img' },
         { from: 'src/dashboards', to: 'dashboards' },
+        { from: 'provisioning', to: 'provisioning' },
         { from: 'README.md', to: 'README.md' },
       ],
     }),

@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 
 from src.lians.db import get_db
 from src.lians.main import app
-from src.lians.models import ApiKey, OTelSpan
+from src.lians.models import ApiKey, DecisionRecord, LedgerEvent, OTelSpan
 from src.lians.otlp import decode_trace_request
 
 
@@ -124,13 +124,21 @@ async def test_otlp_json_ingestion_is_authenticated_and_idempotent(partner_clien
     second = await client.post("/v1/traces", headers=_headers(), json=_otlp_payload())
     assert first.status_code == 200
     assert first.json()["acceptedSpans"] == 1
+    assert len(first.json()["decisionIds"]) == 1
     assert second.json()["acceptedSpans"] == 0
+    assert second.json()["decisionIds"] == first.json()["decisionIds"]
 
     assert (await db.scalar(select(func.count()).select_from(OTelSpan))) == 1
+    assert (await db.scalar(select(func.count()).select_from(DecisionRecord))) == 1
+    assert (await db.scalar(select(func.count()).select_from(LedgerEvent))) == 1
     row = (await db.execute(select(OTelSpan))).scalar_one()
     assert row.is_genai is True
     assert row.model_id == "gpt-5"
     assert row.attributes["gen_ai.usage.input_tokens"] == "42"
+    decision = (await db.execute(select(DecisionRecord))).scalar_one()
+    assert decision.metadata_["trace_id"] == row.trace_id
+    assert decision.metadata_["capture_status"] == "partial"
+    assert decision.model_id == "gpt-5"
 
 
 @pytest.mark.asyncio
