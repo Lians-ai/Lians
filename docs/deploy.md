@@ -35,8 +35,11 @@ alembic upgrade head
 
 # Verify schema version
 alembic current
-# Expected: 0011_rls_barriers (head)
+# Expected: 0028_decision_envelopes (head)
 ```
+
+Before deploying migration 0028, complete the disposable staging-data
+rehearsal in `docs/migration-0028-staging-rehearsal.md`.
 
 ### Required extensions
 
