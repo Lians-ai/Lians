@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     # Background retention scheduler
     # Interval between automated prune cycles (hours). Set to 0 to disable.
     retention_prune_interval_hours: float = 24.0
+    # Outcome-learning maintenance is opt-in. It never deletes memories:
+    # repeated ignored/duplicate signals demote importance and flag
+    # consolidation candidates for review.
+    learning_maintenance_interval_hours: float = 0.0
+    learning_maintenance_min_signals: int = 3
 
     # Stripe usage metering — optional; metering is silently disabled when api_key is empty.
     # Requires pip install agentmem[billing] (stripe>=7.0.0).

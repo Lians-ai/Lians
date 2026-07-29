@@ -15,6 +15,7 @@ from ..schemas import (
     FactHistoryResult, ContextRequest, ContextResult,
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
+    MemoryMaintenanceResult,
 )
 from ..memory_service import (
     add_memory, add_memory_idempotent, recall_memories, batch_add_memories,
@@ -24,6 +25,7 @@ from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
 from ..feedback_service import (
     record_memory_feedback, memory_learning_summary, resolve_memory_review,
+    run_memory_maintenance,
 )
 
 router = APIRouter(prefix="/v1", tags=["memory"])
@@ -69,6 +71,19 @@ async def resolve_learning_review(
         raise HTTPException(status_code=404, detail="Memory not found") from None
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@router.post("/memory-learning/maintenance", response_model=MemoryMaintenanceResult)
+async def trigger_learning_maintenance(
+    dry_run: bool = Query(default=True),
+    min_signals: int = Query(default=3, ge=1, le=100),
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    auth.require("admin")
+    return await run_memory_maintenance(
+        db, auth.namespace, min_signals=min_signals, dry_run=dry_run,
+    )
 
 
 @router.post("/memories", response_model=MemoryOut)

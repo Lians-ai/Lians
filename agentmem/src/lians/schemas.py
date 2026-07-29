@@ -146,6 +146,15 @@ class MemoryReviewResult(BaseModel):
     replacement_memory_id: Optional[UUID] = None
 
 
+class MemoryMaintenanceResult(BaseModel):
+    namespace: str
+    memories_scanned: int
+    memories_demoted: int
+    consolidation_candidates: int
+    dry_run: bool
+    candidate_memory_ids: list[UUID] = Field(default_factory=list)
+
+
 class AuditReconstructRequest(BaseModel):
     agent_id: str
     as_of: datetime

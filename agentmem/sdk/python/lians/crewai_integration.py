@@ -170,7 +170,9 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
         args_schema: type[BaseModel] = _RecallInput
 
         def _run(self, query: str, k: int = 5) -> str:
-            result = client.recall(agent_id=agent_id, query=query, k=k)
+            result = client.recall(
+                agent_id=agent_id, query=query, k=k, strategy="adaptive",
+            )
             return _fmt(result.get("memories", []))
 
     class _RecallAtInput(BaseModel):

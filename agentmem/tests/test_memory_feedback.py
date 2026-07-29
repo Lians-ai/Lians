@@ -124,3 +124,34 @@ def test_review_can_replace_memory_and_preserve_correction_lineage():
             item for item in recalled["memories"] if "Tuesday" in item["content"]
         )
         assert replacement["metadata"]["_corrects"] == memory["id"]
+
+
+def test_maintenance_applies_bounded_decay_once_and_never_auto_retires():
+    with LocalLiansClient() as client:
+        memory = client.add(
+            agent_id="feedback-agent",
+            content="A low-value repeated observation.",
+            event_time=datetime(2026, 7, 28, 12, tzinfo=timezone.utc),
+        )
+        for _ in range(3):
+            client.feedback(
+                memory["id"], agent_id="feedback-agent", signal="ignored",
+            )
+
+        preview = client.run_learning_maintenance(dry_run=True)
+        assert preview["consolidation_candidates"] == 1
+        assert preview["memories_demoted"] == 0
+
+        applied = client.run_learning_maintenance(dry_run=False)
+        assert applied["memories_demoted"] == 1
+        repeated = client.run_learning_maintenance(dry_run=False)
+        assert repeated["memories_demoted"] == 0
+
+        recalled = client.recall(
+            agent_id="feedback-agent", query="repeated observation"
+        )
+        assert recalled["memories"]  # maintenance never auto-retires evidence
+        assert (
+            recalled["memories"][0]["metadata"]["_learning_maintenance"]["status"]
+            == "consolidation_review"
+        )

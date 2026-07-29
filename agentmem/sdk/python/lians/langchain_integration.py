@@ -221,7 +221,9 @@ def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
         return f"Stored: {preview}"
 
     def _recall(query: str, k: int = 5) -> str:
-        result = client.recall(agent_id=agent_id, query=query, k=k)
+        result = client.recall(
+            agent_id=agent_id, query=query, k=k, strategy="adaptive",
+        )
         return _format_memories(result.get("memories", []))
 
     def _recall_at(query: str, as_of_iso: str, k: int = 5) -> str:

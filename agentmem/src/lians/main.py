@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
     from .db import engine, AsyncSessionLocal
     from .config import get_settings
     from .kms import load_master_key
-    from .scheduler import run_retention_scheduler
+    from .scheduler import run_learning_maintenance_scheduler, run_retention_scheduler
     from .metering import run_metering_worker
     settings = get_settings()
 
@@ -157,6 +157,17 @@ async def lifespan(app: FastAPI):
             name="retention-scheduler",
         )
 
+    learning_task: asyncio.Task | None = None
+    if settings.learning_maintenance_interval_hours > 0:
+        learning_task = asyncio.create_task(
+            run_learning_maintenance_scheduler(
+                AsyncSessionLocal,
+                settings.learning_maintenance_interval_hours,
+                settings.learning_maintenance_min_signals,
+            ),
+            name="learning-maintenance-scheduler",
+        )
+
     metering_task: asyncio.Task | None = None
     if settings.stripe_api_key:
         metering_task = asyncio.create_task(
@@ -179,7 +190,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    for task in (scheduler_task, metering_task, llm_worker_task):
+    for task in (scheduler_task, learning_task, metering_task, llm_worker_task):
         if task is not None:
             task.cancel()
             try:
