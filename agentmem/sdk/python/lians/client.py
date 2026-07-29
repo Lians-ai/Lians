@@ -333,10 +333,11 @@ class AsyncLiansClient:
     async def resolve_memory_review(
         self, memory_id: str, *, agent_id: str, action: str,
         reviewer: str, note: Optional[str] = None,
+        correction: Optional[str] = None,
     ) -> dict:
         return await self._req("POST", f"/v1/memories/{memory_id}/review", json={
             "agent_id": agent_id, "action": action,
-            "reviewer": reviewer, "note": note,
+            "reviewer": reviewer, "note": note, "correction": correction,
         })
 
     async def reconstruct(

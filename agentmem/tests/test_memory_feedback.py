@@ -90,3 +90,37 @@ def test_review_can_keep_flagged_memory():
         )
         assert after["memories"]
         assert after["memories"][0]["metadata"]["_learning_review"]["status"] == "kept"
+
+
+def test_review_can_replace_memory_and_preserve_correction_lineage():
+    with LocalLiansClient() as client:
+        memory = client.add(
+            agent_id="feedback-agent",
+            content="The launch date is Monday.",
+            event_time=datetime(2026, 7, 28, 12, tzinfo=timezone.utc),
+            metadata={"project": "Apollo", "field": "launch_date"},
+        )
+        client.feedback(
+            memory["id"], agent_id="feedback-agent", signal="incorrect",
+        )
+
+        resolution = client.resolve_memory_review(
+            memory["id"],
+            agent_id="feedback-agent",
+            action="replace",
+            reviewer="owner@example.com",
+            correction="The Apollo launch date is Tuesday.",
+        )
+
+        assert resolution["status"] == "replaced"
+        assert resolution["replacement_memory_id"]
+        recalled = client.recall(
+            agent_id="feedback-agent", query="When is the Apollo launch?"
+        )
+        contents = [item["content"] for item in recalled["memories"]]
+        assert any("Tuesday" in content for content in contents)
+        assert not any(content == "The launch date is Monday." for content in contents)
+        replacement = next(
+            item for item in recalled["memories"] if "Tuesday" in item["content"]
+        )
+        assert replacement["metadata"]["_corrects"] == memory["id"]
