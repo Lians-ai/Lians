@@ -267,6 +267,8 @@ class LocalLiansClient:
         as_of: Optional[datetime] = None,
         filters: Optional[dict[str, Any]] = None,
         include_context: bool = False,
+        strategy: str = "standard",
+        max_query_variants: int = 4,
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict.
 
@@ -277,6 +279,7 @@ class LocalLiansClient:
         return self._run(self._async_recall(
             agent_id=agent_id, query=query, k=k, as_of=as_of,
             filters=filters or {}, include_context=include_context,
+            strategy=strategy, max_query_variants=max_query_variants,
         ))
 
     async def _async_recall(self, **kwargs) -> dict:

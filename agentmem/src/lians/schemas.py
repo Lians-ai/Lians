@@ -44,6 +44,16 @@ class MemoryOut(BaseModel):
     # holds the half a consumer LLM needs to read the hit correctly.
     context_before: Optional[str] = None
     context_after: Optional[str] = None
+    context_before_id: Optional[UUID] = None
+    context_after_id: Optional[UUID] = None
+    context_before_metadata: Optional[dict[str, Any]] = None
+    context_after_metadata: Optional[dict[str, Any]] = None
+    context_before_2: Optional[str] = None
+    context_after_2: Optional[str] = None
+    context_before_2_id: Optional[UUID] = None
+    context_after_2_id: Optional[UUID] = None
+    context_before_2_metadata: Optional[dict[str, Any]] = None
+    context_after_2_metadata: Optional[dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
 
@@ -51,7 +61,7 @@ class MemoryOut(BaseModel):
 class RecallRequest(BaseModel):
     agent_id: str
     query: str
-    k: int = Field(default=5, ge=1, le=100)
+    k: int = Field(default=5, ge=1, le=200)
     as_of: Optional[datetime] = None
     filters: dict[str, Any] = Field(default_factory=dict)
     # Attach each hit's temporally-adjacent neighbors (context_before/_after).
@@ -59,6 +69,11 @@ class RecallRequest(BaseModel):
     # while judged QA sat at 89% — the failures were an answerer misreading
     # isolated fragments whose meaning lived in the adjacent turn.
     include_context: bool = False
+    # ``adaptive`` keeps simple questions on the standard fast path and plans
+    # a few deterministic retrieval facets for temporal, relational, and
+    # aggregation questions. No LLM or benchmark labels are involved.
+    strategy: str = Field(default="standard", pattern="^(standard|adaptive)$")
+    max_query_variants: int = Field(default=4, ge=1, le=4)
 
 
 class RecallResult(BaseModel):
@@ -73,6 +88,10 @@ class RecallResult(BaseModel):
     # Rough size of the returned memory contents (~4 chars/token) so callers
     # can budget the prompt cost of injecting this recall into an LLM call.
     token_estimate: int = 0
+    strategy: str = "standard"
+    query_variants: list[str] = Field(default_factory=list)
+    retrieval_confidence: float = 0.0
+    latency_ms: float = 0.0
 
 
 class AuditReconstructRequest(BaseModel):
@@ -599,7 +618,7 @@ class ContextRequest(BaseModel):
     """Build a token-budgeted, ready-to-inject context block from recall."""
     agent_id: str
     query: str
-    k: int = Field(default=10, ge=1, le=100)
+    k: int = Field(default=10, ge=1, le=200)
     as_of: Optional[datetime] = None
     max_tokens: int = Field(default=1500, ge=64, le=32000)
     header: str = "Relevant facts from memory (most recent, non-stale):"
@@ -609,6 +628,8 @@ class ContextRequest(BaseModel):
     # Opt out per-call for surfaces where contested facts are handled elsewhere.
     surface_conflicts: bool = True
     max_conflicts: int = Field(default=5, ge=0, le=50)
+    strategy: str = Field(default="adaptive", pattern="^(standard|adaptive)$")
+    max_query_variants: int = Field(default=4, ge=1, le=4)
 
 
 class ContextResult(BaseModel):
@@ -617,6 +638,10 @@ class ContextResult(BaseModel):
     token_estimate: int
     truncated: bool                       # True if the budget cut off some facts
     retrieval_degraded: bool = False      # recall ran lexical-only (see RecallResult)
+    strategy: str = "adaptive"
+    query_variants: list[str] = Field(default_factory=list)
+    retrieval_confidence: float = 0.0
+    recall_latency_ms: float = 0.0
     # Open conflicts surfaced into the block (oldest first) + the total count
     # still open for this agent, so callers can alert when the backlog grows
     # beyond what the block shows.
