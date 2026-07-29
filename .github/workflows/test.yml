@@ -28,17 +28,17 @@ jobs:
         run: test "$(alembic heads | wc -l)" -eq 1
         working-directory: agentmem
       - name: Run memory intelligence gates
-        run: >-
-          python -m pytest
-          agentmem/tests/test_adaptive_recall.py
-          agentmem/tests/test_context.py
-          agentmem/tests/test_degraded_retrieval.py
-          agentmem/tests/test_memory_feedback.py
-          agentmem/tests/test_memory_intelligence_integrations.py
-          agentmem/tests/test_recall_limits.py
-          agentmem/tests/test_scheduler.py
-          agentmem/tests/test_sso_barrier.py
-          -q
+        run: |
+          PYTHONPATH=agentmem/src python -m pytest \
+            agentmem/tests/test_adaptive_recall.py \
+            agentmem/tests/test_context.py \
+            agentmem/tests/test_degraded_retrieval.py \
+            agentmem/tests/test_recall_limits.py \
+            agentmem/tests/test_scheduler.py \
+            agentmem/tests/test_sso_barrier.py -q
+          PYTHONPATH=agentmem/sdk/python:agentmem python -m pytest \
+            agentmem/tests/test_memory_feedback.py \
+            agentmem/tests/test_memory_intelligence_integrations.py -q
 
   # ── Python test suite ───────────────────────────────────────────────────────
   pytest:
@@ -105,7 +105,33 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
 
       - name: Run pytest
-        run: python -m pytest agentmem/tests/ -v --tb=short
+        run: |
+          PYTHONPATH=agentmem/src python -m pytest agentmem/tests/ -v --tb=short \
+            --ignore=agentmem/tests/test_compaction_flush.py \
+            --ignore=agentmem/tests/test_distill_ingest.py \
+            --ignore=agentmem/tests/test_eval_harness.py \
+            --ignore=agentmem/tests/test_graph.py \
+            --ignore=agentmem/tests/test_harness.py \
+            --ignore=agentmem/tests/test_langchain.py \
+            --ignore=agentmem/tests/test_memory_feedback.py \
+            --ignore=agentmem/tests/test_memory_intelligence_integrations.py \
+            --ignore=agentmem/tests/test_regulated_eval.py \
+            --ignore=agentmem/tests/test_sdk.py \
+            --ignore=agentmem/tests/test_sdk_extended.py \
+            --ignore=agentmem/tests/test_sdk_retry.py
+          PYTHONPATH=agentmem/sdk/python:agentmem python -m pytest \
+            agentmem/tests/test_compaction_flush.py \
+            agentmem/tests/test_distill_ingest.py \
+            agentmem/tests/test_eval_harness.py \
+            agentmem/tests/test_graph.py \
+            agentmem/tests/test_harness.py \
+            agentmem/tests/test_langchain.py \
+            agentmem/tests/test_memory_feedback.py \
+            agentmem/tests/test_memory_intelligence_integrations.py \
+            agentmem/tests/test_regulated_eval.py \
+            agentmem/tests/test_sdk.py \
+            agentmem/tests/test_sdk_extended.py \
+            agentmem/tests/test_sdk_retry.py -v --tb=short
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
 
