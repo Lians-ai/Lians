@@ -8,6 +8,11 @@ def test_simple_fact_question_stays_on_fast_path():
     assert plan.complex is False
 
 
+def test_relative_time_in_simple_episode_does_not_force_broadening():
+    plan = plan_query("How did Melanie feel after the accident?")
+    assert plan.variants == ("How did Melanie feel after the accident?",)
+
+
 def test_temporal_aggregate_question_gets_bounded_facets():
     plan = plan_query("What activities did Jordan do before moving?", max_variants=3)
     assert plan.variants[0] == "What activities did Jordan do before moving?"
