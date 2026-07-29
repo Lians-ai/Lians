@@ -16,16 +16,17 @@ _STOP = frozenset(
     "them they this to was we were what when where which who whom why will with "
     "you your".split()
 )
-_TEMPORAL = re.compile(
-    r"\b(when|before|after|first|last|recent|previous|formerly|used to|how long|"
+_TEMPORAL_STRONG = re.compile(
+    r"\b(when|first|last|recent|previous|formerly|used to|how long|"
     r"date|time|year|month|week|day)\b", re.I
 )
+_TEMPORAL_RELATIVE = re.compile(r"\b(before|after|prior|later)\b", re.I)
 _AGGREGATE = re.compile(
     r"\b(all|both|activities|events|ways|examples|kinds|types|places|books|"
     r"jobs|hobbies|interests|changes|experiences|things)\b", re.I
 )
 _RELATIONAL = re.compile(
-    r"\b(why|would|might|likely|relationship|together|influence|role|feel|"
+    r"\b(why|would|might|likely|relationship|together|influence|role|"
     r"attitude|personality|nickname|advice|support|cope|reason)\b", re.I
 )
 
@@ -56,7 +57,15 @@ def plan_query(query: str, max_variants: int = 4) -> QueryPlan:
     variants = [original]
     scopes = ["episodic"]
 
-    if _TEMPORAL.search(original):
+    # "after" often appears in a simple episodic question ("How did she feel
+    # after the accident?"). Broaden relative-time language only when the
+    # request also asks for a set/history; explicit time questions broaden
+    # unconditionally.
+    temporal = bool(
+        _TEMPORAL_STRONG.search(original)
+        or (_TEMPORAL_RELATIVE.search(original) and _AGGREGATE.search(original))
+    )
+    if temporal:
         variants.append(f"{core} chronology date sequence prior later")
         scopes.append("temporal")
     if _AGGREGATE.search(original):
