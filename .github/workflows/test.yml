@@ -39,6 +39,12 @@ jobs:
           PYTHONPATH=agentmem/sdk/python:agentmem python -m pytest \
             agentmem/tests/test_memory_feedback.py \
             agentmem/tests/test_memory_intelligence_integrations.py -q
+      - name: Run deterministic tenant-isolation soak
+        run: |
+          python agentmem/benchmarks/memory_intelligence_soak.py \
+            --tenants 3 --memories 10 --workers 3 \
+            --db "$RUNNER_TEMP/memory-intelligence-soak.db" \
+            --out "$RUNNER_TEMP/memory-intelligence-soak.json"
 
   # ── Python test suite ───────────────────────────────────────────────────────
   pytest:
@@ -108,6 +114,7 @@ jobs:
         run: |
           PYTHONPATH=agentmem/src python -m pytest agentmem/tests/ -v --tb=short \
             --ignore=agentmem/tests/test_compaction_flush.py \
+            --ignore=agentmem/tests/test_compare_regulated.py \
             --ignore=agentmem/tests/test_distill_ingest.py \
             --ignore=agentmem/tests/test_eval_harness.py \
             --ignore=agentmem/tests/test_graph.py \
@@ -115,12 +122,14 @@ jobs:
             --ignore=agentmem/tests/test_langchain.py \
             --ignore=agentmem/tests/test_memory_feedback.py \
             --ignore=agentmem/tests/test_memory_intelligence_integrations.py \
+            --ignore=agentmem/tests/test_mcp_local.py \
             --ignore=agentmem/tests/test_regulated_eval.py \
             --ignore=agentmem/tests/test_sdk.py \
             --ignore=agentmem/tests/test_sdk_extended.py \
             --ignore=agentmem/tests/test_sdk_retry.py
           PYTHONPATH=agentmem/sdk/python:agentmem python -m pytest \
             agentmem/tests/test_compaction_flush.py \
+            agentmem/tests/test_compare_regulated.py \
             agentmem/tests/test_distill_ingest.py \
             agentmem/tests/test_eval_harness.py \
             agentmem/tests/test_graph.py \
@@ -128,6 +137,7 @@ jobs:
             agentmem/tests/test_langchain.py \
             agentmem/tests/test_memory_feedback.py \
             agentmem/tests/test_memory_intelligence_integrations.py \
+            agentmem/tests/test_mcp_local.py \
             agentmem/tests/test_regulated_eval.py \
             agentmem/tests/test_sdk.py \
             agentmem/tests/test_sdk_extended.py \
