@@ -125,6 +125,9 @@ def _local_api(method: str, path: str, body: dict | None = None) -> dict:
             agent_id=body["agent_id"],
             simulation_as_of=_iso(body["simulation_as_of"]),
         )
+    if method == "POST" and parsed.path.startswith("/v1/memories/") and parsed.path.endswith("/feedback"):
+        memory_id = parsed.path.split("/")[3]
+        return client.feedback(memory_id, **body)
     raise ValueError(f"Unsupported local MCP route: {method} {parsed.path}")
 
 
@@ -151,7 +154,8 @@ def _fmt_memories(memories: list[dict]) -> str:
     if not memories:
         return "No relevant memories found."
     return "\n".join(
-        f"[{(m.get('event_time') or '')[:10]}] {m.get('content') or '[erased]'}"
+        f"[{(m.get('event_time') or '')[:10]} id={str(m.get('id') or '')}] "
+        f"{m.get('content') or '[erased]'}"
         for m in memories
     )
 
@@ -340,6 +344,27 @@ def _build_server() -> Any:
                     },
                 },
             ),
+            Tool(
+                name="memory_feedback",
+                description=(
+                    "Record whether a recalled memory was helpful, incorrect, outdated, "
+                    "duplicate, or ignored. Negative feedback flags evidence for review "
+                    "and never silently deletes it."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "required": ["memory_id", "signal"],
+                    "properties": {
+                        "memory_id": {"type": "string"},
+                        "signal": {
+                            "type": "string",
+                            "enum": ["helpful", "incorrect", "outdated", "duplicate", "ignored"],
+                        },
+                        "outcome": {"type": "string"},
+                        "note": {"type": "string"},
+                    },
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -363,9 +388,29 @@ def _build_server() -> Any:
                     "query": arguments["query"],
                     "k": arguments.get("k", 5),
                     "filters": arguments.get("filters", {}),
+                    "strategy": "adaptive",
                 }
                 result = await _api("POST", "/v1/recall", body)
                 return [TextContent(type="text", text=_fmt_memories(result.get("memories", [])))]
+
+            elif name == "memory_feedback":
+                memory_id = arguments["memory_id"]
+                result = await _api(
+                    "POST", f"/v1/memories/{memory_id}/feedback", {
+                        "agent_id": LIANS_AGENT_ID,
+                        "signal": arguments["signal"],
+                        "outcome": arguments.get("outcome"),
+                        "note": arguments.get("note"),
+                        "source": "mcp",
+                    },
+                )
+                return [TextContent(
+                    type="text",
+                    text=(
+                        f"Feedback recorded: {result.get('signal')} "
+                        f"({result.get('policy_action')})"
+                    ),
+                )]
 
             elif name == "recall_at":
                 body = {
