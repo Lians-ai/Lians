@@ -1,12 +1,45 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: ["master", "main"]
   pull_request:
     branches: ["master", "main"]
 
 jobs:
+  memory-intelligence:
+    name: Memory intelligence safety gates
+    runs-on: ubuntu-latest
+    env:
+      EMBEDDING_PROVIDER: local
+      MASTER_ENCRYPTION_KEY: ""
+      AGENTMEM_ALLOW_UNENCRYPTED: "true"
+      RECALL_CACHE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install test dependencies
+        run: pip install -e ".[dev]"
+      - name: Verify migration graph
+        run: test "$(alembic heads | wc -l)" -eq 1
+        working-directory: agentmem
+      - name: Run memory intelligence gates
+        run: >-
+          python -m pytest
+          agentmem/tests/test_adaptive_recall.py
+          agentmem/tests/test_context.py
+          agentmem/tests/test_degraded_retrieval.py
+          agentmem/tests/test_memory_feedback.py
+          agentmem/tests/test_memory_intelligence_integrations.py
+          agentmem/tests/test_recall_limits.py
+          agentmem/tests/test_scheduler.py
+          agentmem/tests/test_sso_barrier.py
+          -q
+
   # ── Python test suite ───────────────────────────────────────────────────────
   pytest:
     name: pytest (Python ${{ matrix.python-version }})
