@@ -60,6 +60,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
+from threading import Lock
 from typing import Any, Callable, Optional, Protocol, Sequence, runtime_checkable
 
 
@@ -155,6 +156,20 @@ class SmartTurnResult:
     total_latency_ms: float
 
 
+@dataclass(frozen=True)
+class MemoryIntelligenceMetrics:
+    """Aggregated evidence that the memory layer is useful and efficient."""
+
+    prepare_calls: int
+    memory_hit_rate: float
+    mean_retrieval_confidence: float
+    degraded_rate: float
+    mean_context_tokens: float
+    mean_recall_latency_ms: float
+    recall_latency_p95_ms: float
+    durable_learnings: int
+
+
 # ── Harness ───────────────────────────────────────────────────────────────────
 
 
@@ -218,6 +233,41 @@ class LiansMemoryHarness:
         self.domain = domain
         self.recall_k = recall_k
         self.default_importance = default_importance
+        self._metrics_lock = Lock()
+        self._prepare_samples: list[tuple[bool, float, bool, int, float]] = []
+        self._durable_learnings = 0
+
+    def _record_prepared(self, prepared: PreparedMemoryContext) -> None:
+        sample = (
+            bool(prepared.memories),
+            prepared.retrieval_confidence,
+            prepared.retrieval_degraded,
+            prepared.token_estimate,
+            prepared.latency_ms,
+        )
+        with self._metrics_lock:
+            self._prepare_samples.append(sample)
+
+    def metrics(self) -> MemoryIntelligenceMetrics:
+        """Return process-local memory effectiveness and efficiency telemetry."""
+        with self._metrics_lock:
+            samples = list(self._prepare_samples)
+            learned = self._durable_learnings
+        if not samples:
+            return MemoryIntelligenceMetrics(0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, learned)
+        count = len(samples)
+        latencies = sorted(sample[4] for sample in samples)
+        p95_index = min(count - 1, int(count * 0.95))
+        return MemoryIntelligenceMetrics(
+            prepare_calls=count,
+            memory_hit_rate=round(sum(sample[0] for sample in samples) / count, 4),
+            mean_retrieval_confidence=round(sum(sample[1] for sample in samples) / count, 4),
+            degraded_rate=round(sum(sample[2] for sample in samples) / count, 4),
+            mean_context_tokens=round(sum(sample[3] for sample in samples) / count, 2),
+            mean_recall_latency_ms=round(sum(latencies) / count, 3),
+            recall_latency_p95_ms=round(latencies[p95_index], 3),
+            durable_learnings=learned,
+        )
 
     def prepare(
         self,
@@ -253,7 +303,7 @@ class LiansMemoryHarness:
                 RecalledMemory.from_dict(item)
                 for item in (raw.get("memories") or [])
             ]
-            return PreparedMemoryContext(
+            prepared = PreparedMemoryContext(
                 query=query,
                 context=str(raw.get("context") or ""),
                 memories=memories,
@@ -268,10 +318,12 @@ class LiansMemoryHarness:
                 ),
                 truncated=bool(raw.get("truncated")),
             )
+            self._record_prepared(prepared)
+            return prepared
 
         recalled = self.recall(query, k=k, as_of=as_of)
         context = self._render(recalled)
-        return PreparedMemoryContext(
+        prepared = PreparedMemoryContext(
             query=query,
             context=context,
             memories=recalled,
@@ -282,6 +334,8 @@ class LiansMemoryHarness:
             query_variants=[query],
             latency_ms=round((perf_counter() - started) * 1000, 3),
         )
+        self._record_prepared(prepared)
+        return prepared
 
     def learn(
         self,
@@ -312,6 +366,8 @@ class LiansMemoryHarness:
                 importance=importance,
                 event_time=event_time,
             ))
+        with self._metrics_lock:
+            self._durable_learnings += len(learned)
         return learned
 
     def smart_turn(

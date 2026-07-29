@@ -53,6 +53,7 @@ from .harness import (
     TurnResult,
     PreparedMemoryContext,
     SmartTurnResult,
+    MemoryIntelligenceMetrics,
     MemoryClient,
 )
 
@@ -81,6 +82,7 @@ __all__ = [
     "TurnResult",
     "PreparedMemoryContext",
     "SmartTurnResult",
+    "MemoryIntelligenceMetrics",
     "MemoryClient",
     # aliases
     "AgentMemClient",
