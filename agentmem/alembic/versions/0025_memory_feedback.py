@@ -1,14 +1,14 @@
 """Add persistent memory feedback and learning signals.
 
-Revision ID: 0021_memory_feedback
-Revises: 0020_decision_records
+Revision ID: 0025_memory_feedback
+Revises: 0024_audit_payload_hash
 """
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "0021_memory_feedback"
-down_revision = "0020_decision_records"
+revision = "0025_memory_feedback"
+down_revision = "0024_audit_payload_hash"
 branch_labels = None
 depends_on = None
 
