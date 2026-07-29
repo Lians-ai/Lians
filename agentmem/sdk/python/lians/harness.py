@@ -370,6 +370,35 @@ class LiansMemoryHarness:
             self._durable_learnings += len(learned)
         return learned
 
+    def feedback(
+        self,
+        prepared: PreparedMemoryContext,
+        signal: str,
+        *,
+        outcome: Optional[str] = None,
+        weight: float = 1.0,
+        note: Optional[str] = None,
+    ) -> list[dict]:
+        """Attach an explicit outcome signal to every memory used in a turn."""
+        feedback_fn = getattr(self.client, "feedback", None)
+        if not callable(feedback_fn):
+            raise NotImplementedError("client does not support persistent memory feedback")
+        records = []
+        for memory in prepared.memories:
+            if not memory.id:
+                continue
+            records.append(feedback_fn(
+                memory.id,
+                agent_id=self.agent_id,
+                signal=signal,
+                weight=weight,
+                outcome=outcome,
+                query=prepared.query,
+                source=self.source,
+                note=note,
+            ))
+        return records
+
     def smart_turn(
         self,
         query: str,
@@ -377,6 +406,7 @@ class LiansMemoryHarness:
         *,
         learned_memories: Optional[Callable[[Any], Sequence[str]]] = None,
         outcome: Optional[str] = None,
+        memory_signal: Optional[str] = None,
         k: Optional[int] = None,
         max_tokens: int = 1500,
         strategy: str = "adaptive",
@@ -391,6 +421,8 @@ class LiansMemoryHarness:
         generation_latency = (perf_counter() - generation_started) * 1000
         durable = learned_memories(response) if learned_memories else ()
         learned = self.learn(durable, outcome=outcome)
+        if memory_signal:
+            self.feedback(prepared, memory_signal, outcome=outcome)
         return SmartTurnResult(
             prepared=prepared,
             response=response,

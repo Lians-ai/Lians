@@ -315,6 +315,21 @@ class AsyncLiansClient:
         """
         return await self.recall(agent_id=agent_id, query=query, k=k, as_of=as_of, filters=filters)
 
+    async def feedback(self, memory_id: str, *, agent_id: str, signal: str,
+                       weight: float = 1.0, outcome: Optional[str] = None,
+                       query: Optional[str] = None, source: Optional[str] = None,
+                       note: Optional[str] = None) -> dict:
+        """Record whether a recalled memory helped, was wrong, or is stale."""
+        return await self._req("POST", f"/v1/memories/{memory_id}/feedback", json={
+            "agent_id": agent_id, "signal": signal, "weight": weight,
+            "outcome": outcome, "query": query, "source": source, "note": note,
+        })
+
+    async def learning_summary(self, agent_id: Optional[str] = None) -> dict:
+        return await self._req(
+            "GET", "/v1/memory-learning/summary", params={"agent_id": agent_id},
+        )
+
     async def reconstruct(
         self,
         agent_id: str,

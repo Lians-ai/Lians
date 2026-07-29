@@ -322,6 +322,29 @@ class LocalLiansClient:
             result = await assemble_context(db, self._namespace, req)
         return result.model_dump(mode="json")
 
+    def feedback(self, memory_id: str, **kwargs) -> dict:
+        return self._run(self._async_feedback(memory_id, **kwargs))
+
+    async def _async_feedback(self, memory_id: str, **kwargs) -> dict:
+        from uuid import UUID
+        from src.lians.feedback_service import record_memory_feedback
+        from src.lians.schemas import MemoryFeedbackCreate
+        req = MemoryFeedbackCreate(**kwargs)
+        async with self._session_factory() as db:
+            result = await record_memory_feedback(
+                db, self._namespace, UUID(str(memory_id)), req,
+            )
+        return result.model_dump(mode="json")
+
+    def learning_summary(self, agent_id: Optional[str] = None) -> dict:
+        return self._run(self._async_learning_summary(agent_id))
+
+    async def _async_learning_summary(self, agent_id: Optional[str]) -> dict:
+        from src.lians.feedback_service import memory_learning_summary
+        async with self._session_factory() as db:
+            result = await memory_learning_summary(db, self._namespace, agent_id)
+        return result.model_dump(mode="json")
+
     def reconstruct(
         self,
         agent_id: str,

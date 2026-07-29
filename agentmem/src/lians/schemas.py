@@ -94,6 +94,40 @@ class RecallResult(BaseModel):
     latency_ms: float = 0.0
 
 
+class MemoryFeedbackCreate(BaseModel):
+    agent_id: str
+    signal: str = Field(pattern="^(helpful|incorrect|outdated|duplicate|ignored)$")
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    outcome: Optional[str] = None
+    query: Optional[str] = None
+    source: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class MemoryFeedbackOut(BaseModel):
+    id: UUID
+    memory_id: UUID
+    agent_id: str
+    signal: str
+    weight: float
+    outcome: Optional[str] = None
+    policy_action: str
+    memory_importance: float
+    created_at: datetime
+
+
+class MemoryLearningSummary(BaseModel):
+    agent_id: Optional[str] = None
+    total_feedback: int
+    helpful: int
+    incorrect: int
+    outdated: int
+    duplicate: int
+    ignored: int
+    helpful_rate: float
+    memories_pending_review: int
+
+
 class AuditReconstructRequest(BaseModel):
     agent_id: str
     as_of: datetime

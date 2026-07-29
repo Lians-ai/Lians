@@ -107,6 +107,29 @@ class Memory(Base):
         return list(v)
 
 
+class MemoryFeedback(Base):
+    """Append-only outcome signal for a recalled memory."""
+    __tablename__ = "memory_feedback"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    memory_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False, index=True)
+    signal = Column(String, nullable=False, index=True)
+    weight = Column(Float, nullable=False, default=1.0)
+    outcome = Column(String, nullable=True, index=True)
+    query_hash = Column(String(64), nullable=True)
+    source = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    policy_action = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        Index("ix_memory_feedback_ns_memory", "namespace", "memory_id"),
+        Index("ix_memory_feedback_ns_created", "namespace", "created_at"),
+    )
+
+
 class SubjectKey(Base):
     """Per-subject encryption keys — destroy to crypto-shred all their data.
 

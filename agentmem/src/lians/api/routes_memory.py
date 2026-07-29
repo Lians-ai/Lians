@@ -13,6 +13,7 @@ from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
     FactHistoryResult, ContextRequest, ContextResult,
+    MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
 )
 from ..memory_service import (
     add_memory_idempotent, recall_memories, batch_add_memories,
@@ -20,8 +21,34 @@ from ..memory_service import (
 )
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
+from ..feedback_service import record_memory_feedback, memory_learning_summary
 
 router = APIRouter(prefix="/v1", tags=["memory"])
+
+
+@router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)
+async def create_memory_feedback(
+    memory_id: UUID,
+    req: MemoryFeedbackCreate,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record an outcome signal and apply the configured safe learning policy."""
+    auth.require("write")
+    try:
+        return await record_memory_feedback(db, auth.namespace, memory_id, req)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
+
+
+@router.get("/memory-learning/summary", response_model=MemoryLearningSummary)
+async def get_memory_learning_summary(
+    agent_id: Optional[str] = None,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    auth.require("read")
+    return await memory_learning_summary(db, auth.namespace, agent_id)
 
 
 @router.post("/memories", response_model=MemoryOut)

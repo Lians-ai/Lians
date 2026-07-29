@@ -233,6 +233,16 @@ class LiansClient:
             self._async.reconstruct(agent_id=agent_id, as_of=as_of, query=query)
         )
 
+    def feedback(self, memory_id: str, **kwargs: Any) -> dict:
+        return self._loop.run_until_complete(
+            self._async.feedback(memory_id=memory_id, **kwargs)
+        )
+
+    def learning_summary(self, agent_id: Optional[str] = None) -> dict:
+        return self._loop.run_until_complete(
+            self._async.learning_summary(agent_id=agent_id)
+        )
+
     # ── Compliance ────────────────────────────────────────────────────────────
 
     def erase(self, subject_id: str, request_ref: str) -> dict:
