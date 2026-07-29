@@ -130,9 +130,10 @@ class MemoryLearningSummary(BaseModel):
 
 class MemoryReviewResolve(BaseModel):
     agent_id: str
-    action: str = Field(pattern="^(keep|retire)$")
+    action: str = Field(pattern="^(keep|retire|replace)$")
     reviewer: str = Field(min_length=1, max_length=200)
     note: Optional[str] = Field(default=None, max_length=2000)
+    correction: Optional[str] = Field(default=None, min_length=1, max_length=100000)
 
 
 class MemoryReviewResult(BaseModel):
@@ -142,6 +143,7 @@ class MemoryReviewResult(BaseModel):
     status: str
     reviewer: str
     resolved_at: datetime
+    replacement_memory_id: Optional[UUID] = None
 
 
 class AuditReconstructRequest(BaseModel):

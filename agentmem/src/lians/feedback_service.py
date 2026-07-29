@@ -157,9 +157,40 @@ async def resolve_memory_review(
     review = dict(metadata.get("_learning_review") or {})
     if review.get("status") != "pending":
         raise ValueError("memory has no pending learning review")
+    if req.action == "replace" and not req.correction:
+        raise ValueError("correction is required when action='replace'")
 
     resolved_at = _utcnow()
-    status = "kept" if req.action == "keep" else "retired"
+    status = {"keep": "kept", "retire": "retired", "replace": "replaced"}[req.action]
+    replacement_id = None
+    if req.action == "replace":
+        from .memory_service import add_memory
+        from .schemas import MemoryAdd
+        correction_metadata = {
+            **dict(memory.metadata_ or {}),
+            "_corrects": str(memory.id),
+            "_correction_reviewer": req.reviewer,
+        }
+        correction_metadata.pop("_learning_review", None)
+        replacement = await add_memory(
+            db,
+            namespace,
+            MemoryAdd(
+                agent_id=req.agent_id,
+                content=str(req.correction),
+                event_time=resolved_at,
+                source="human_correction",
+                subject_id=memory.subject_id,
+                metadata=correction_metadata,
+                importance=max(0.8, float(memory.importance)),
+            ),
+        )
+        replacement_id = replacement.id
+        # add_memory commits; reload the reviewed row before closing its live
+        # interval to keep the correction lineage deterministic.
+        memory = await db.get(Memory, memory_id)
+        if memory is None:
+            raise LookupError("memory not found")
     review.update({
         "status": status,
         "reviewer": req.reviewer,
@@ -169,8 +200,10 @@ async def resolve_memory_review(
     metadata["_learning_review"] = review
     memory.metadata_ = metadata
     values = {"metadata_": metadata}
-    if req.action == "retire":
+    if req.action in {"retire", "replace"}:
         memory.valid_to = resolved_at
+        if replacement_id:
+            memory.superseded_by = replacement_id
         values["valid_to"] = resolved_at
         from .current_facts import remove_live_facts
         await remove_live_facts(db, [memory_id])
@@ -191,6 +224,7 @@ async def resolve_memory_review(
             "status": status,
             "reviewer": req.reviewer,
             "note": req.note,
+            "replacement_memory_id": str(replacement_id) if replacement_id else None,
         },
     )
     await db.commit()
@@ -205,4 +239,5 @@ async def resolve_memory_review(
         status=status,
         reviewer=req.reviewer,
         resolved_at=resolved_at,
+        replacement_memory_id=replacement_id,
     )
