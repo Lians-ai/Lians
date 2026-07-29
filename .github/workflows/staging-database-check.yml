@@ -2,6 +2,12 @@ name: Staging database check
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - agent/memory-intelligence-v1-clean
+    paths:
+      - .github/workflows/staging-database-check.yml
+      - scripts/check_staging_database.py
 
 permissions:
   contents: read
