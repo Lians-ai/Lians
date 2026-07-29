@@ -11,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .audit_chain import chain_log
 from .models import LiveFact, Memory, MemoryFeedback
-from .schemas import MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary
+from .schemas import (
+    MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
+    MemoryReviewResolve, MemoryReviewResult,
+)
 
 
 def _utcnow() -> datetime:
@@ -138,4 +141,68 @@ async def memory_learning_summary(
         ignored=counts.get("ignored", 0),
         helpful_rate=round(helpful / total, 4) if total else 0.0,
         memories_pending_review=pending,
+    )
+
+
+async def resolve_memory_review(
+    db: AsyncSession,
+    namespace: str,
+    memory_id: UUID,
+    req: MemoryReviewResolve,
+) -> MemoryReviewResult:
+    memory = await db.get(Memory, memory_id)
+    if memory is None or memory.namespace != namespace or memory.agent_id != req.agent_id:
+        raise LookupError("memory not found")
+    metadata = dict(memory.metadata_ or {})
+    review = dict(metadata.get("_learning_review") or {})
+    if review.get("status") != "pending":
+        raise ValueError("memory has no pending learning review")
+
+    resolved_at = _utcnow()
+    status = "kept" if req.action == "keep" else "retired"
+    review.update({
+        "status": status,
+        "reviewer": req.reviewer,
+        "note": req.note,
+        "resolved_at": resolved_at.isoformat(),
+    })
+    metadata["_learning_review"] = review
+    memory.metadata_ = metadata
+    values = {"metadata_": metadata}
+    if req.action == "retire":
+        memory.valid_to = resolved_at
+        values["valid_to"] = resolved_at
+        from .current_facts import remove_live_facts
+        await remove_live_facts(db, [memory_id])
+    else:
+        await db.execute(
+            update(LiveFact).where(LiveFact.memory_id == memory_id).values(**values)
+        )
+
+    await chain_log(
+        db,
+        namespace=namespace,
+        agent_id=req.agent_id,
+        op="memory_review_resolved",
+        memory_id=memory_id,
+        content_hash=memory.content_hash,
+        payload={
+            "action": req.action,
+            "status": status,
+            "reviewer": req.reviewer,
+            "note": req.note,
+        },
+    )
+    await db.commit()
+    from .cache import invalidate_agent
+    from .session_cache import invalidate_working_set
+    await invalidate_agent(namespace, req.agent_id)
+    invalidate_working_set(namespace, req.agent_id)
+    return MemoryReviewResult(
+        memory_id=memory_id,
+        agent_id=req.agent_id,
+        action=req.action,
+        status=status,
+        reviewer=req.reviewer,
+        resolved_at=resolved_at,
     )

@@ -14,6 +14,7 @@ from ..schemas import (
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
     FactHistoryResult, ContextRequest, ContextResult,
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
+    MemoryReviewResolve, MemoryReviewResult,
 )
 from ..memory_service import (
     add_memory_idempotent, recall_memories, batch_add_memories,
@@ -21,7 +22,9 @@ from ..memory_service import (
 )
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
-from ..feedback_service import record_memory_feedback, memory_learning_summary
+from ..feedback_service import (
+    record_memory_feedback, memory_learning_summary, resolve_memory_review,
+)
 
 router = APIRouter(prefix="/v1", tags=["memory"])
 
@@ -49,6 +52,23 @@ async def get_memory_learning_summary(
 ):
     auth.require("read")
     return await memory_learning_summary(db, auth.namespace, agent_id)
+
+
+@router.post("/memories/{memory_id}/review", response_model=MemoryReviewResult)
+async def resolve_learning_review(
+    memory_id: UUID,
+    req: MemoryReviewResolve,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Keep or retire a feedback-flagged memory without rewriting history."""
+    auth.require("write")
+    try:
+        return await resolve_memory_review(db, auth.namespace, memory_id, req)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 @router.post("/memories", response_model=MemoryOut)

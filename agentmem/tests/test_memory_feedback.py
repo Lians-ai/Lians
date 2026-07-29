@@ -49,3 +49,44 @@ def test_incorrect_feedback_flags_review_without_deleting_memory():
         summary = client.learning_summary(agent_id="feedback-agent")
         assert summary["incorrect"] == 1
         assert summary["memories_pending_review"] == 1
+
+        resolution = client.resolve_memory_review(
+            memory["id"],
+            agent_id="feedback-agent",
+            action="retire",
+            reviewer="ops@example.com",
+            note="Confirmed against the project plan.",
+        )
+        assert resolution["status"] == "retired"
+        after = client.recall(
+            agent_id="feedback-agent", query="When is the launch date?"
+        )
+        assert not after["memories"]
+        summary = client.learning_summary(agent_id="feedback-agent")
+        assert summary["memories_pending_review"] == 0
+
+
+def test_review_can_keep_flagged_memory():
+    with LocalLiansClient() as client:
+        memory = client.add(
+            agent_id="feedback-agent",
+            content="The support tier is enterprise.",
+            event_time=datetime(2026, 7, 28, 12, tzinfo=timezone.utc),
+        )
+        client.feedback(
+            memory["id"], agent_id="feedback-agent", signal="outdated",
+        )
+
+        resolution = client.resolve_memory_review(
+            memory["id"],
+            agent_id="feedback-agent",
+            action="keep",
+            reviewer="owner@example.com",
+        )
+
+        assert resolution["status"] == "kept"
+        after = client.recall(
+            agent_id="feedback-agent", query="What is the support tier?"
+        )
+        assert after["memories"]
+        assert after["memories"][0]["metadata"]["_learning_review"]["status"] == "kept"

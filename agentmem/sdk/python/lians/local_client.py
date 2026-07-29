@@ -345,6 +345,20 @@ class LocalLiansClient:
             result = await memory_learning_summary(db, self._namespace, agent_id)
         return result.model_dump(mode="json")
 
+    def resolve_memory_review(self, memory_id: str, **kwargs) -> dict:
+        return self._run(self._async_resolve_memory_review(memory_id, **kwargs))
+
+    async def _async_resolve_memory_review(self, memory_id: str, **kwargs) -> dict:
+        from uuid import UUID
+        from src.lians.feedback_service import resolve_memory_review
+        from src.lians.schemas import MemoryReviewResolve
+        req = MemoryReviewResolve(**kwargs)
+        async with self._session_factory() as db:
+            result = await resolve_memory_review(
+                db, self._namespace, UUID(str(memory_id)), req,
+            )
+        return result.model_dump(mode="json")
+
     def reconstruct(
         self,
         agent_id: str,

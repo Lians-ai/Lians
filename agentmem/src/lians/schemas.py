@@ -128,6 +128,22 @@ class MemoryLearningSummary(BaseModel):
     memories_pending_review: int
 
 
+class MemoryReviewResolve(BaseModel):
+    agent_id: str
+    action: str = Field(pattern="^(keep|retire)$")
+    reviewer: str = Field(min_length=1, max_length=200)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class MemoryReviewResult(BaseModel):
+    memory_id: UUID
+    agent_id: str
+    action: str
+    status: str
+    reviewer: str
+    resolved_at: datetime
+
+
 class AuditReconstructRequest(BaseModel):
     agent_id: str
     as_of: datetime

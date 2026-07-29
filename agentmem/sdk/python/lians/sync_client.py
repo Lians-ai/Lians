@@ -243,6 +243,11 @@ class LiansClient:
             self._async.learning_summary(agent_id=agent_id)
         )
 
+    def resolve_memory_review(self, memory_id: str, **kwargs: Any) -> dict:
+        return self._loop.run_until_complete(
+            self._async.resolve_memory_review(memory_id=memory_id, **kwargs)
+        )
+
     # ── Compliance ────────────────────────────────────────────────────────────
 
     def erase(self, subject_id: str, request_ref: str) -> dict:
