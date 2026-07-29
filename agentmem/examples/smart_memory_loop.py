@@ -56,6 +56,9 @@ def main() -> None:
         print(f"  context tokens: {result.prepared.token_estimate}")
         print(f"  recall latency: {result.prepared.latency_ms:.1f} ms")
         print(f"  durable learnings stored: {len(result.learned)}")
+        metrics = memory.metrics()
+        print(f"  memory hit rate: {metrics.memory_hit_rate:.0%}")
+        print(f"  degraded retrieval rate: {metrics.degraded_rate:.0%}")
 
 
 if __name__ == "__main__":

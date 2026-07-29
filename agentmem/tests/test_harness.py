@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
 
 from lians import (
     LocalLiansClient, LiansMemoryHarness, PreparedMemoryContext,
-    RecalledMemory, SmartTurnResult, TurnResult,
+    MemoryIntelligenceMetrics, RecalledMemory, SmartTurnResult, TurnResult,
 )
 from lians.harness import MemoryClient
 
@@ -136,6 +136,25 @@ class TestTurn:
             assert len(result.learned) == 1
             recalled = h.recall("When is the renewal follow-up?")
             assert any("Tuesday" in (memory.content or "") for memory in recalled)
+
+            metrics = h.metrics()
+            assert isinstance(metrics, MemoryIntelligenceMetrics)
+            assert metrics.prepare_calls == 1
+            assert metrics.memory_hit_rate == 0.0
+            assert metrics.durable_learnings == 1
+            assert metrics.recall_latency_p95_ms >= 0
+
+    def test_metrics_capture_memory_hits_and_context_cost(self):
+        with LocalLiansClient() as mem:
+            h = LiansMemoryHarness(mem, agent_id="desk")
+            h.remember("The implementation review is Friday.")
+            h.prepare("When is the implementation review?")
+
+            metrics = h.metrics()
+            assert metrics.prepare_calls == 1
+            assert metrics.memory_hit_rate == 1.0
+            assert metrics.mean_context_tokens > 0
+            assert 0.0 <= metrics.mean_retrieval_confidence <= 1.0
 
     def test_run_turn_recalls_and_remembers(self):
         with LocalLiansClient() as mem:
