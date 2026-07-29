@@ -2,7 +2,7 @@
 
 Migration `0028_decision_envelopes` must pass against a sanitized copy of
 staging before deployment. The rehearsal never mutates staging itself. It
-restores the supplied dump into a disposable local PostgreSQL 16 plus pgvector
+restores the supplied dump into a disposable local PostgreSQL 17 plus pgvector
 container.
 
 ## Required input
@@ -14,6 +14,14 @@ must be sanitized, approved for local use, and at Alembic revision
 If the only available input is a staging database URL, have an authorized
 operator create and sanitize the dump first. Do not point Alembic at the live
 staging database for the downgrade test.
+
+When staging is intentionally clean, use
+`scripts/seed_staging_fixture_0020.sql` at revision
+`0020_decision_records` before upgrading staging to revision 0027 and taking
+the dump. The fixture is synthetic and contains no customer records,
+credentials, subject keys, or usable webhook secrets. It exercises the legacy
+record-barrier backfill, multi-tenant agent key migration, Decision Envelope
+backfill, valid evidence links, and invalid evidence identifiers.
 
 ## Run the rehearsal
 
@@ -27,7 +35,7 @@ From the repository root:
 
 The script:
 
-1. Starts a uniquely named disposable `pgvector/pgvector:pg16` container.
+1. Starts a uniquely named disposable `pgvector/pgvector:pg17` container.
 2. Restores the dump without restoring ownership or privileges.
 3. Assigns the restored schema to a non-superuser migration role so forced RLS
    remains active during the test.
@@ -53,3 +61,17 @@ the `lians-migration-rehearsal-*` namespace.
 
 Record only aggregate row counts and the final revision in the release ticket.
 Do not attach the dump or row contents.
+
+## Verify staging from GitHub Actions
+
+The `staging` GitHub environment contains two environment-scoped secrets:
+
+- `DATABASE_URL`, whose hostname remains the private `.flycast` address.
+- `FLY_API_TOKEN`, an app-scoped token for
+  `agentmem-lotus-staging-db`.
+
+Run the **Staging database check** workflow manually after a staging migration.
+The job opens a short-lived `flyctl proxy`, connects through its loopback port,
+and verifies PostgreSQL 17, the expected Alembic revision, and Decision Envelope
+referential integrity. The workflow never prints either secret and closes the
+proxy when the job exits.

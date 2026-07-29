@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $true)]
     [switch]$ConfirmSanitized,
 
-    [string]$PostgresImage = "pgvector/pgvector:pg16",
+    [string]$PostgresImage = "pgvector/pgvector:pg17",
 
     [switch]$KeepContainer
 )
@@ -160,11 +160,31 @@ try {
     $containerCreated = $true
 
     $databaseReady = $false
+    $consecutiveReadyChecks = 0
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
-        & docker exec $containerName pg_isready --username postgres --dbname $databaseName *> $null
-        if ($LASTEXITCODE -eq 0) {
-            $databaseReady = $true
-            break
+        $priorErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "SilentlyContinue"
+            & docker exec $containerName psql `
+                --username postgres `
+                --dbname $databaseName `
+                --tuples-only `
+                --no-align `
+                --command "SELECT 1" *> $null
+            $readyExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $priorErrorActionPreference
+        }
+        if ($readyExitCode -eq 0) {
+            $consecutiveReadyChecks++
+            if ($consecutiveReadyChecks -ge 3) {
+                $databaseReady = $true
+                break
+            }
+        }
+        else {
+            $consecutiveReadyChecks = 0
         }
         Start-Sleep -Seconds 1
     }
