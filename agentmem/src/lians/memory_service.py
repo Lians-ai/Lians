@@ -48,10 +48,79 @@ from .config import get_settings
 from .current_facts import compute_predicate_key, upsert_live_fact, remove_live_facts, keyed_lookup
 from .dek_cache import get_cached_dek, cache_dek, evict_dek
 from .session_cache import get_working_set, set_working_set, invalidate_working_set
+from .query_planner import QueryPlan, plan_query
 
 logger = logging.getLogger("agentmem.memory_service")
 
 _IMPORTANCE_RECENCY_HALF_LIFE_DAYS = 90.0
+_RRF_K = 60.0
+
+
+def _fuse_recall_rankings(
+    rankings: list[list[tuple[Any, float, Optional[str]]]],
+    plan: QueryPlan,
+    *,
+    limit: int,
+) -> list[tuple[Any, float, Optional[str]]]:
+    """Fuse query-facet rankings without allowing duplicate memories.
+
+    Weighted reciprocal-rank fusion is deliberately score-scale independent:
+    lexical, embedding, and future graph retrievers can participate without
+    requiring their raw scores to be calibrated to one another.
+    """
+    if len(rankings) == 1:
+        return rankings[0][:limit]
+
+    weights = [1.25] + [1.0] * max(0, len(rankings) - 1)
+    fused: dict[str, dict[str, Any]] = {}
+    for facet_index, ranking in enumerate(rankings):
+        weight = weights[facet_index]
+        scope = plan.scopes[facet_index]
+        for rank, (memory, raw_score, content) in enumerate(ranking, start=1):
+            key = str(memory.id)
+            entry = fused.setdefault(
+                key,
+                {
+                    "memory": memory,
+                    "content": content,
+                    "score": 0.0,
+                    "raw_score": float(raw_score),
+                    "scopes": set(),
+                },
+            )
+            entry["score"] += weight / (_RRF_K + rank)
+            entry["raw_score"] = max(entry["raw_score"], float(raw_score))
+            entry["scopes"].add(scope)
+
+    # Normalize against the best possible RRF score, then retain a small
+    # calibrated contribution from the strongest underlying hybrid score.
+    ceiling = sum(weights[: len(rankings)]) / (_RRF_K + 1.0)
+    ordered: list[tuple[Any, float, Optional[str]]] = []
+    for entry in fused.values():
+        support = len(entry["scopes"]) / max(1, len(rankings))
+        rrf = entry["score"] / ceiling if ceiling else 0.0
+        raw = max(0.0, min(1.0, entry["raw_score"]))
+        score = 0.72 * rrf + 0.18 * raw + 0.10 * support
+        # Internal provenance is useful for confidence and debugging but does
+        # not alter the stored memory record.
+        setattr(entry["memory"], "_retrieval_scopes", sorted(entry["scopes"]))
+        ordered.append((entry["memory"], score, entry["content"]))
+    ordered.sort(key=lambda item: (-item[1], str(item[0].id)))
+    return ordered[:limit]
+
+
+def _retrieval_confidence(
+    results: list[tuple[Any, float, Optional[str]]],
+    variant_count: int,
+) -> float:
+    if not results:
+        return 0.0
+    top = max(0.0, min(1.0, float(results[0][1])))
+    second = max(0.0, min(1.0, float(results[1][1]))) if len(results) > 1 else 0.0
+    margin = max(0.0, min(1.0, top - second))
+    scopes = getattr(results[0][0], "_retrieval_scopes", None)
+    support = len(scopes) / max(1, variant_count) if scopes else 1.0
+    return round(max(0.0, min(1.0, 0.65 * top + 0.20 * support + 0.15 * margin)), 4)
 
 
 def _barrier_visible(row: Any, barrier_group: Optional[str]) -> bool:
@@ -679,36 +748,60 @@ async def _attach_context(
     """
     from .ranking import _decrypt
 
-    gap = timedelta(seconds=CONTEXT_GAP_S)
+    conditions = [
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+        Memory.erased_at.is_(None),
+    ]
+    if as_of is not None:
+        conditions.append(Memory.event_time <= as_of)
+    rows = list((await db.execute(
+        select(Memory)
+        .where(and_(*conditions))
+        .order_by(Memory.event_time.asc(), Memory.id.asc())
+    )).scalars().all())
+    positions = {row.id: index for index, row in enumerate(rows)}
+
     for out in memories_out:
-        base = [
-            Memory.namespace == namespace,
-            Memory.agent_id == agent_id,
-            Memory.erased_at.is_(None),
-            Memory.id != out.id,
-        ]
-        if as_of is not None:
-            base.append(Memory.event_time <= as_of)
-        before_stmt = (
-            select(Memory)
-            .where(and_(*base, Memory.event_time < out.event_time,
-                        Memory.event_time >= out.event_time - gap))
-            .order_by(Memory.event_time.desc())
-            .limit(1)
-        )
-        after_stmt = (
-            select(Memory)
-            .where(and_(*base, Memory.event_time > out.event_time,
-                        Memory.event_time <= out.event_time + gap))
-            .order_by(Memory.event_time.asc())
-            .limit(1)
-        )
-        before = (await db.execute(before_stmt)).scalars().first()
-        after = (await db.execute(after_stmt)).scalars().first()
+        position = positions.get(out.id)
+        if position is None:
+            continue
+        before = rows[position - 1] if position > 0 else None
+        after = rows[position + 1] if position + 1 < len(rows) else None
+        before_2 = rows[position - 2] if position > 1 else None
+        after_2 = rows[position + 2] if position + 2 < len(rows) else None
+        if before is not None and (
+            out.event_time - before.event_time
+        ).total_seconds() > CONTEXT_GAP_S:
+            before = None
+        if after is not None and (
+            after.event_time - out.event_time
+        ).total_seconds() > CONTEXT_GAP_S:
+            after = None
+        if before_2 is not None and (
+            out.event_time - before_2.event_time
+        ).total_seconds() > CONTEXT_GAP_S:
+            before_2 = None
+        if after_2 is not None and (
+            after_2.event_time - out.event_time
+        ).total_seconds() > CONTEXT_GAP_S:
+            after_2 = None
         if before is not None:
             out.context_before = _decrypt(before, subject_keys)
+            out.context_before_id = before.id
+            out.context_before_metadata = dict(before.metadata_ or {})
         if after is not None:
             out.context_after = _decrypt(after, subject_keys)
+            out.context_after_id = after.id
+            out.context_after_metadata = dict(after.metadata_ or {})
+        if before_2 is not None:
+            out.context_before_2 = _decrypt(before_2, subject_keys)
+            out.context_before_2_id = before_2.id
+            out.context_before_2_metadata = dict(before_2.metadata_ or {})
+        if after_2 is not None:
+            out.context_after_2 = _decrypt(after_2, subject_keys)
+            out.context_after_2_id = after_2.id
+            out.context_after_2_metadata = dict(after_2.metadata_ or {})
 
 
 async def _agent_open_conflicts(
@@ -754,12 +847,12 @@ async def _agent_open_conflicts(
             memory_b_content=_decrypt(mem_b, subject_keys) if mem_b else None,
             memory_a_source=mem_a.source if mem_a else None,
             memory_b_source=mem_b.source if mem_b else None,
-            memory_a_event_time=mem_a.event_time if mem_a else flag.detected_at,
-            memory_b_event_time=mem_b.event_time if mem_b else flag.detected_at,
+            memory_a_event_time=_utc(mem_a.event_time if mem_a else flag.detected_at),
+            memory_b_event_time=_utc(mem_b.event_time if mem_b else flag.detected_at),
             confidence=flag.confidence,
-            detected_at=flag.detected_at,
+            detected_at=_utc(flag.detected_at),
             status=flag.status,
-            resolved_at=flag.resolved_at,
+            resolved_at=_utc(flag.resolved_at) if flag.resolved_at else None,
             resolver_note=flag.resolver_note,
         ))
     return out, int(total)
@@ -792,6 +885,8 @@ async def assemble_context(
         filters["_rerank"] = "mmr"
     recall_req = RecallRequest(
         agent_id=req.agent_id, query=req.query, k=req.k, as_of=req.as_of, filters=filters,
+        include_context=True, strategy=req.strategy,
+        max_query_variants=req.max_query_variants,
     )
     result = await recall_memories(db, namespace, recall_req, barrier_override=barrier_override)
 
@@ -845,6 +940,10 @@ async def assemble_context(
         token_estimate=used,
         truncated=truncated,
         retrieval_degraded=result.retrieval_degraded,
+        strategy=result.strategy,
+        query_variants=result.query_variants,
+        retrieval_confidence=result.retrieval_confidence,
+        recall_latency_ms=result.latency_ms,
         open_conflicts=open_conflicts,
         open_conflicts_total=open_conflicts_total,
     )
@@ -865,6 +964,14 @@ async def recall_memories(
         span.set_attribute("has_as_of", bool(req.as_of))
 
         settings = get_settings()
+        request_filters = dict(req.filters or {})
+        plan = (
+            plan_query(req.query, req.max_query_variants)
+            if req.strategy == "adaptive"
+            else QueryPlan((req.query,), ("episodic",), False)
+        )
+        span.set_attribute("strategy", req.strategy)
+        span.set_attribute("query_variant_count", len(plan.variants))
 
         # Graph-proximity reranking (opt-in via filters). Pull the anchor params
         # out of `filters` BEFORE they reach the metadata matcher, and bypass the
@@ -873,19 +980,20 @@ async def recall_memories(
         near_key = "ticker"
         rerank: Optional[str] = None
         mmr_lambda = 0.5
-        if req.filters:
-            near_entity = req.filters.pop("_near_entity", None)
-            near_key = req.filters.pop("_near_key", "ticker")
-            rerank = req.filters.pop("_rerank", None)
+        if request_filters:
+            near_entity = request_filters.pop("_near_entity", None)
+            near_key = request_filters.pop("_near_key", "ticker")
+            rerank = request_filters.pop("_rerank", None)
             try:
-                mmr_lambda = float(req.filters.pop("_mmr_lambda", 0.5))
+                mmr_lambda = float(request_filters.pop("_mmr_lambda", 0.5))
             except (TypeError, ValueError):
                 mmr_lambda = 0.5
 
         # Hot cache (Redis)
-        if settings.recall_cache_enabled and not req.as_of and not near_entity and not rerank and barrier_override is None:
+        cache_eligible = len(plan.variants) == 1
+        if settings.recall_cache_enabled and cache_eligible and not req.as_of and not near_entity and not rerank and barrier_override is None:
             cached = await get_cached_recall(
-                namespace, req.agent_id, req.query, req.as_of, req.k, req.filters
+                namespace, req.agent_id, req.query, req.as_of, req.k, request_filters
             )
             if cached is not None:
                 span.set_attribute("cache_hit", True)
@@ -895,8 +1003,8 @@ async def recall_memories(
         span.set_attribute("cache_hit", False)
 
         # Change 2: keyed router — exact lookup if filters resolve to a known predicate
-        if not req.as_of and req.filters:
-            predicate_key = compute_predicate_key(req.filters)
+        if not req.as_of and request_filters:
+            predicate_key = compute_predicate_key(request_filters)
             if predicate_key:
                 with tracer.start_as_current_span("recall.keyed_lookup") as ks:
                     barrier_group = await _get_barrier_group(db, namespace, req.agent_id, override=barrier_override)
@@ -918,6 +1026,10 @@ async def recall_memories(
                                 memories=[mem_out],
                                 as_of=None,
                                 total_candidates=1,
+                                strategy=req.strategy,
+                                query_variants=list(plan.variants),
+                                retrieval_confidence=1.0,
+                                latency_ms=round((_time.perf_counter() - _recall_t0) * 1000, 3),
                             )
                             _fire_recall_audit(db, namespace, req, [mem_out])
                             record_recall(namespace, router="keyed", cache_hit=False)
@@ -942,10 +1054,13 @@ async def recall_memories(
                 # Custom providers written against the pre-asymmetric
                 # interface may only implement embed_one; treat that as the
                 # query embedding rather than a degradation event.
-                embed_fn = getattr(provider, "embed_query", None) or provider.embed_one
-                query_embedding = await embed_fn(req.query)
+                if len(plan.variants) > 1 and hasattr(provider, "embed_queries"):
+                    query_embeddings = await provider.embed_queries(list(plan.variants))
+                else:
+                    embed_fn = getattr(provider, "embed_query", None) or provider.embed_one
+                    query_embeddings = [await embed_fn(req.query)]
             except Exception as exc:
-                query_embedding = []
+                query_embeddings = [[] for _ in plan.variants]
                 retrieval_degraded = True
                 embed_span.set_attribute("retrieval_degraded", True)
                 logger.warning(
@@ -983,19 +1098,23 @@ async def recall_memories(
                     span.set_attribute("working_set_cold", False)
 
         with tracer.start_as_current_span("recall.search"):
-            results = await hybrid_recall(
-                db=db,
-                namespace=namespace,
-                agent_id=req.agent_id,
-                query=req.query,
-                query_embedding=query_embedding,
-                k=req.k,
-                as_of=req.as_of,
-                filters=req.filters,
-                subject_keys=subject_keys,
-                barrier_group=barrier_group,
-                live_facts_override=live_facts_cache,
-            )
+            facet_k = req.k if len(plan.variants) == 1 else min(200, max(50, req.k * 3))
+            rankings = []
+            for query_variant, query_embedding in zip(plan.variants, query_embeddings):
+                rankings.append(await hybrid_recall(
+                    db=db,
+                    namespace=namespace,
+                    agent_id=req.agent_id,
+                    query=query_variant,
+                    query_embedding=query_embedding,
+                    k=facet_k,
+                    as_of=req.as_of,
+                    filters=request_filters,
+                    subject_keys=subject_keys,
+                    barrier_group=barrier_group,
+                    live_facts_override=live_facts_cache,
+                ))
+            results = _fuse_recall_rankings(rankings, plan, limit=req.k)
 
         span.set_attribute("result_count", len(results))
 
@@ -1022,6 +1141,9 @@ async def recall_memories(
             for mem, _score, content in results:
                 mem_out = _memory_to_out(mem, content)
                 mem_out.score = _score
+                scopes = getattr(mem, "_retrieval_scopes", None)
+                if scopes:
+                    mem_out.metadata["_retrieval_scopes"] = scopes
                 memories_out.append(mem_out)
 
         if req.include_context and memories_out:
@@ -1035,7 +1157,9 @@ async def recall_memories(
             "query_hash": _content_hash(req.query),
             "k": req.k,
             "as_of": req.as_of.isoformat() if req.as_of else None,
-            "filters": req.filters,
+            "filters": request_filters,
+            "strategy": req.strategy,
+            "query_variants": list(plan.variants),
             "result_ids": [str(m.id) for m in memories_out],
         }
         if retrieval_degraded:
@@ -1052,6 +1176,10 @@ async def recall_memories(
             as_of=req.as_of,
             total_candidates=len(results),
             retrieval_degraded=retrieval_degraded,
+            strategy=req.strategy,
+            query_variants=list(plan.variants),
+            retrieval_confidence=_retrieval_confidence(results, len(plan.variants)),
+            latency_ms=round((_time.perf_counter() - _recall_t0) * 1000, 3),
             token_estimate=sum(
                 _estimate_tokens(m.content) for m in memories_out if m.content),
         )
@@ -1067,11 +1195,11 @@ async def recall_memories(
         # Never cache a degraded result — it would keep serving lexical-only
         # recall after the embedding provider recovers.
         if (
-            settings.recall_cache_enabled and not req.as_of and not near_entity
+            settings.recall_cache_enabled and cache_eligible and not req.as_of and not near_entity
             and barrier_override is None and not retrieval_degraded
         ):
             await set_cached_recall(
-                namespace, req.agent_id, req.query, req.as_of, req.k, req.filters,
+                namespace, req.agent_id, req.query, req.as_of, req.k, request_filters,
                 result.model_dump_json(),
                 settings.recall_cache_ttl_seconds,
             )
@@ -1717,12 +1845,12 @@ async def list_conflicts(
             memory_b_content=_decrypt(mem_b, subject_keys) if mem_b else None,
             memory_a_source=mem_a.source if mem_a else None,
             memory_b_source=mem_b.source if mem_b else None,
-            memory_a_event_time=mem_a.event_time if mem_a else flag.detected_at,
-            memory_b_event_time=mem_b.event_time if mem_b else flag.detected_at,
+            memory_a_event_time=_utc(mem_a.event_time if mem_a else flag.detected_at),
+            memory_b_event_time=_utc(mem_b.event_time if mem_b else flag.detected_at),
             confidence=flag.confidence,
-            detected_at=flag.detected_at,
+            detected_at=_utc(flag.detected_at),
             status=flag.status,
-            resolved_at=flag.resolved_at,
+            resolved_at=_utc(flag.resolved_at) if flag.resolved_at else None,
             resolver_note=flag.resolver_note,
         ))
 

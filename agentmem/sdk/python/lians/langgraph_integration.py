@@ -113,7 +113,10 @@ def create_recall_node(
         if _recall_is_async:
             result = await client.recall(**kwargs)
         else:
-            result = client.recall(**kwargs)
+            # LangGraph nodes run inside an event loop. Keep synchronous
+            # clients (including LocalLiansClient, which owns its own loop)
+            # off that loop to avoid nested run_until_complete failures.
+            result = await asyncio.to_thread(client.recall, **kwargs)
 
         return {memories_key: result.get("memories", [])}
 
@@ -195,7 +198,7 @@ def create_remember_node(
         if _add_is_async:
             result = await client.add(**kwargs)
         else:
-            result = client.add(**kwargs)
+            result = await asyncio.to_thread(client.add, **kwargs)
 
         return {result_key: result}
 
@@ -237,7 +240,7 @@ def create_batch_remember_node(
         if _batch_is_async:
             result = await client.batch_add(enriched)
         else:
-            result = client.batch_add(enriched)
+            result = await asyncio.to_thread(client.batch_add, enriched)
 
         return {result_key: result}
 

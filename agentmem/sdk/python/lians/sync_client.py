@@ -153,17 +153,24 @@ class LiansClient:
         k: int = 5,
         as_of: Optional[datetime] = None,
         filters: Optional[dict[str, Any]] = None,
+        include_context: bool = False,
+        strategy: str = "standard",
+        max_query_variants: int = 4,
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict."""
-        return self._loop.run_until_complete(
-            self._async.recall(
-                agent_id=agent_id,
-                query=query,
-                k=k,
-                as_of=as_of,
-                filters=filters,
-            )
-        )
+        kwargs = {
+            "agent_id": agent_id, "query": query, "k": k,
+            "as_of": as_of, "filters": filters,
+        }
+        # Preserve the historical call shape for wrappers/mocks unless the
+        # caller opts into the new recall controls.
+        if include_context:
+            kwargs["include_context"] = True
+        if strategy != "standard":
+            kwargs["strategy"] = strategy
+        if max_query_variants != 4:
+            kwargs["max_query_variants"] = max_query_variants
+        return self._loop.run_until_complete(self._async.recall(**kwargs))
 
     def context(
         self,
@@ -176,6 +183,8 @@ class LiansClient:
         mmr: bool = False,
         surface_conflicts: bool = True,
         max_conflicts: int = 5,
+        strategy: str = "adaptive",
+        max_query_variants: int = 4,
     ) -> dict:
         """Build a token-budgeted, ready-to-inject context block. Returns a dict
         ``{context, memories, token_estimate, truncated}``. Open conflicts ride
@@ -185,6 +194,7 @@ class LiansClient:
                 agent_id=agent_id, query=query, k=k, as_of=as_of,
                 max_tokens=max_tokens, header=header, mmr=mmr,
                 surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
+                strategy=strategy, max_query_variants=max_query_variants,
             )
         )
 

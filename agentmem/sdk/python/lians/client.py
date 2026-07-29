@@ -241,6 +241,9 @@ class AsyncLiansClient:
         k: int = 5,
         as_of: Optional[datetime] = None,
         filters: Optional[dict[str, Any]] = None,
+        include_context: bool = False,
+        strategy: str = "standard",
+        max_query_variants: int = 4,
     ) -> dict:
         """
         Retrieve the most relevant *current* memories for a query.
@@ -254,6 +257,9 @@ class AsyncLiansClient:
             "k": k,
             "as_of": as_of.isoformat() if as_of else None,
             "filters": filters or {},
+            "include_context": include_context,
+            "strategy": strategy,
+            "max_query_variants": max_query_variants,
         })
 
     async def context(
@@ -267,6 +273,8 @@ class AsyncLiansClient:
         mmr: bool = False,
         surface_conflicts: bool = True,
         max_conflicts: int = 5,
+        strategy: str = "adaptive",
+        max_query_variants: int = 4,
     ) -> dict:
         """
         Build a token-budgeted, ready-to-inject context block from recall.
@@ -282,6 +290,7 @@ class AsyncLiansClient:
             "agent_id": agent_id, "query": query, "k": k,
             "max_tokens": max_tokens, "mmr": mmr,
             "surface_conflicts": surface_conflicts, "max_conflicts": max_conflicts,
+            "strategy": strategy, "max_query_variants": max_query_variants,
         }
         if as_of:
             body["as_of"] = as_of.isoformat()
