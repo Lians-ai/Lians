@@ -209,25 +209,33 @@ async def chain_log(
                 if window.is_full():
                     await flush_window(db, namespace)
         except Exception:
-            pass  # Merkle batching is optional — never block the hot path
+            from .degradation import record_degradation
+            record_degradation("merkle_audit", "batch_failed")
 
     # Fire-and-forget SIEM streaming — never blocks or fails the write path.
     try:
-        from .siem import siem_enabled, stream_event
+        from .durable_jobs import enqueue_job
+        from .siem import siem_enabled
         if siem_enabled():
-            import asyncio
-            asyncio.create_task(stream_event({
-                "id": str(row_id),
-                "namespace": namespace,
-                "agent_id": agent_id,
-                "op": op,
-                "memory_id": str(memory_id) if memory_id is not None else None,
-                "content_hash": content_hash,
-                "row_hash": row.row_hash,
-                "created_at": created_at_utc,
-            }))
+            await enqueue_job(
+                db,
+                namespace=namespace,
+                kind="siem.event",
+                payload={"event": {
+                    "id": str(row_id),
+                    "namespace": namespace,
+                    "agent_id": agent_id,
+                    "op": op,
+                    "memory_id": str(memory_id) if memory_id is not None else None,
+                    "content_hash": content_hash,
+                    "row_hash": row.row_hash,
+                    "created_at": created_at_utc,
+                }},
+                dedupe_key=str(row_id),
+            )
     except Exception:
-        pass
+        from .degradation import record_degradation
+        record_degradation("siem", "dispatch_failed")
 
     return row
 

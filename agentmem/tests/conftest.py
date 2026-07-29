@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from src.lians.db import Base
 from src.lians.config import get_settings, Settings
+from src.lians.degradation import reset_degradations
 import src.lians.kms as _kms
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,7 @@ def pytest_configure(config):
 # Override settings for tests
 @pytest.fixture(autouse=True)
 def test_settings(monkeypatch):
+    reset_degradations()
     monkeypatch.setenv("EMBEDDING_PROVIDER", "local")
     monkeypatch.setenv("MASTER_ENCRYPTION_KEY", "")
     monkeypatch.setenv("KMS_PROVIDER", "env")
@@ -123,6 +125,7 @@ def test_settings(monkeypatch):
     get_settings.cache_clear()
     _kms._reset_cache()
     yield
+    reset_degradations()
     get_settings.cache_clear()
     _kms._reset_cache()
 

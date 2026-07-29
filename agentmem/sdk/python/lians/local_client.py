@@ -269,6 +269,7 @@ class LocalLiansClient:
         include_context: bool = False,
         strategy: str = "standard",
         max_query_variants: int = 4,
+        mode: str = "fast",
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict.
 
@@ -280,6 +281,7 @@ class LocalLiansClient:
             agent_id=agent_id, query=query, k=k, as_of=as_of,
             filters=filters or {}, include_context=include_context,
             strategy=strategy, max_query_variants=max_query_variants,
+            mode=mode,
         ))
 
     async def _async_recall(self, **kwargs) -> dict:
@@ -303,6 +305,7 @@ class LocalLiansClient:
         max_conflicts: int = 5,
         strategy: str = "adaptive",
         max_query_variants: int = 4,
+        mode: str = "deep",
     ) -> dict:
         """Build model-ready, token-budgeted adaptive memory context locally."""
         return self._run(self._async_context(
@@ -310,6 +313,7 @@ class LocalLiansClient:
             max_tokens=max_tokens, header=header, mmr=mmr,
             surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
             strategy=strategy, max_query_variants=max_query_variants,
+            mode=mode,
         ))
 
     async def _async_context(self, **kwargs) -> dict:

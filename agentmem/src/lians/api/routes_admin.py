@@ -20,7 +20,7 @@ from ..config import get_settings
 from ..db import get_db, set_current_barrier_group, set_current_namespace
 from ..models import ApiKey, AgentBarrierGroup, NamespacePolicy
 from ..schemas import (
-    ApiKeyCreate, ApiKeyCreated, ApiKeyOut,
+    ApiKeyCreate, ApiKeyCreated, ApiKeyOut, ApiKeyScopesUpdate,
     BarrierGroupAssign, BarrierGroupOut,
     RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
     AuditChainVerifyResult, AuditExportResult,
@@ -150,6 +150,40 @@ async def revoke_key(
     )
     await db.commit()
     return Response(status_code=204)
+
+
+@router.patch(
+    "/api-keys/{key_id}",
+    response_model=ApiKeyOut,
+    summary="Update the scopes of an active API key",
+)
+async def update_key_scopes(
+    key_id: UUID,
+    body: ApiKeyScopesUpdate,
+    _: None = Depends(_require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ApiKeyOut:
+    row = await db.get(ApiKey, key_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if row.revoked_at is not None:
+        raise HTTPException(status_code=409, detail="API key is revoked")
+    previous = list(row.scopes)
+    row.scopes = list(dict.fromkeys(body.scopes))
+    await chain_log(
+        db,
+        namespace=row.namespace,
+        agent_id=_ADMIN_AGENT,
+        op="admin.key_scopes_update",
+        payload={
+            "key_id": str(key_id),
+            "previous_scopes": previous,
+            "scopes": list(row.scopes),
+        },
+    )
+    await db.commit()
+    await db.refresh(row)
+    return ApiKeyOut.model_validate(row)
 
 
 @router.post(

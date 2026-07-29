@@ -435,15 +435,14 @@ class TestAdminBillingEndpoints:
 class TestHotPathMetering:
 
     @pytest.mark.asyncio
-    async def test_add_memory_queues_write_event(self, app_client, monkeypatch):
-        """POST /v1/memories queues one write event when customer_id is set."""
+    async def test_add_memory_persists_write_event(self, app_client, monkeypatch):
+        """POST /v1/memories persists one write event when customer_id is set."""
         queued: list[dict] = []
 
-        def _spy(event_name, customer_id, quantity, identifier):
-            queued.append({"event_name": event_name, "customer_id": customer_id,
-                           "quantity": quantity, "identifier": identifier})
+        async def _spy(db, **event):
+            queued.append(event)
 
-        monkeypatch.setattr(metering_mod, "queue_usage_event", _spy)
+        monkeypatch.setattr(metering_mod, "enqueue_usage_event", _spy)
 
         # Provision API key
         key_resp = await app_client.post(
@@ -482,15 +481,14 @@ class TestHotPathMetering:
     ADMIN = "metering-admin-secret"
 
     @pytest.mark.asyncio
-    async def test_recall_queues_recall_event(self, app_client, monkeypatch):
-        """POST /v1/recall queues one recall event when customer_id is set."""
+    async def test_recall_persists_recall_event(self, app_client, monkeypatch):
+        """POST /v1/recall persists one recall event when customer_id is set."""
         queued: list[dict] = []
 
-        def _spy(event_name, customer_id, quantity, identifier):
-            queued.append({"event_name": event_name, "customer_id": customer_id,
-                           "quantity": quantity, "identifier": identifier})
+        async def _spy(db, **event):
+            queued.append(event)
 
-        monkeypatch.setattr(metering_mod, "queue_usage_event", _spy)
+        monkeypatch.setattr(metering_mod, "enqueue_usage_event", _spy)
 
         key_resp = await app_client.post(
             "/v1/admin/api-keys",
@@ -523,10 +521,10 @@ class TestHotPathMetering:
         """When stripe_customer_id is null, no metering event is queued."""
         queued: list[dict] = []
 
-        def _spy(event_name, customer_id, quantity, identifier):
-            queued.append({"event_name": event_name})
+        async def _spy(db, **event):
+            queued.append(event)
 
-        monkeypatch.setattr(metering_mod, "queue_usage_event", _spy)
+        monkeypatch.setattr(metering_mod, "enqueue_usage_event", _spy)
 
         key_resp = await app_client.post(
             "/v1/admin/api-keys",

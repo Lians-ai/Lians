@@ -8,6 +8,30 @@ on:
     branches: ["master", "main"]
 
 jobs:
+  quality:
+    name: Release, API, and dependency contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install release tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pip-audit
+      - name: Verify synchronized release identity
+        run: python scripts/check_release_contract.py
+      - name: Verify public OpenAPI contract
+        run: PYTHONPATH=agentmem/src python scripts/check_openapi_contract.py
+      - name: Reject syntax and undefined-name defects
+        run: python -m ruff check agentmem/src/lians agentmem/benchmarks scripts --select E9,F63,F7,F82
+      - name: Compile runtime and release scripts
+        run: python -m compileall -q agentmem/src/lians agentmem/benchmarks scripts
+      - name: Audit production Python dependencies
+        run: python -m pip_audit --local --skip-editable
+
   memory-intelligence:
     name: Memory intelligence safety gates
     runs-on: ubuntu-latest
@@ -45,6 +69,20 @@ jobs:
             --tenants 3 --memories 10 --workers 3 \
             --db "$RUNNER_TEMP/memory-intelligence-soak.db" \
             --out "$RUNNER_TEMP/memory-intelligence-soak.json"
+      - name: Run reproducible foundation evidence gates
+        working-directory: agentmem
+        run: |
+          PYTHONPATH=src python -m benchmarks.evidence_suite
+          PYTHONPATH=src python -m benchmarks.release_claims \
+            --out results/claim-evidence-latest.json \
+            --require foundation_verified
+      - name: Preserve foundation evidence receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: memory-foundation-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            agentmem/results/evidence-suite-latest.json
+            agentmem/results/claim-evidence-latest.json
 
   # ── Python test suite ───────────────────────────────────────────────────────
   pytest:

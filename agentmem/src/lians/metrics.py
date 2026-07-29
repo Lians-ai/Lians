@@ -121,6 +121,19 @@ if _PROM_AVAILABLE:
         ["namespace"],
         registry=REGISTRY,
     )
+    _recall_mode_hist = Histogram(
+        "lians_recall_mode_duration_seconds",
+        "Recall wall time by explicit serving mode and deadline result",
+        ["namespace", "mode", "deadline_exceeded"],
+        buckets=_RECALL_BUCKETS + (2.5, 5.0),
+        registry=REGISTRY,
+    )
+    _degradations = Counter(
+        "lians_subsystem_degradations_total",
+        "Fail-open or optional subsystem failures by component and sanitized reason",
+        ["component", "reason"],
+        registry=REGISTRY,
+    )
 else:
     REGISTRY = None  # type: ignore[assignment]
     _writes = _NOOP  # type: ignore[assignment]
@@ -129,9 +142,11 @@ else:
     _erase_requests = _NOOP  # type: ignore[assignment]
     _add_hist = _NOOP  # type: ignore[assignment]
     _recall_hist = _NOOP  # type: ignore[assignment]
+    _recall_mode_hist = _NOOP  # type: ignore[assignment]
     _conflicts_detected = _NOOP  # type: ignore[assignment]
     _conflicts_resolved = _NOOP  # type: ignore[assignment]
     _conflict_queue = _NOOP  # type: ignore[assignment]
+    _degradations = _NOOP  # type: ignore[assignment]
 
 
 # ── Public helpers (called by memory_service.py) ──────────────────────────────
@@ -167,6 +182,21 @@ def observe_recall(namespace: str, seconds: float) -> None:
     _recall_hist.labels(namespace=namespace).observe(seconds)
 
 
+def observe_recall_mode(
+    namespace: str,
+    mode: str,
+    seconds: float,
+    *,
+    deadline_exceeded: bool,
+) -> None:
+    """Record the latency frontier for fast, deep, and reconstruct modes."""
+    _recall_mode_hist.labels(
+        namespace=namespace,
+        mode=mode,
+        deadline_exceeded="true" if deadline_exceeded else "false",
+    ).observe(seconds)
+
+
 def record_erase(namespace: str, count: int) -> None:
     """Record an erasure request and the number of memory records destroyed."""
     _erase_requests.labels(namespace=namespace).inc()
@@ -184,6 +214,11 @@ def record_conflict_resolved(namespace: str, resolution: str) -> None:
     """Increment resolution counter and decrement the open-queue gauge."""
     _conflicts_resolved.labels(namespace=namespace, resolution=resolution).inc()
     _conflict_queue.labels(namespace=namespace).dec()
+
+
+def record_degradation_metric(component: str, reason: str) -> None:
+    """Increment the bounded-label subsystem degradation counter."""
+    _degradations.labels(component=component, reason=reason).inc()
 
 
 # ── Scrape output ─────────────────────────────────────────────────────────────

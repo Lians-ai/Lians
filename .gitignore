@@ -18,6 +18,7 @@ agentmem/sdk/java/target/
 .pytest_cache/
 .coverage
 htmlcov/
+.run/
 
 # IDE
 .idea/

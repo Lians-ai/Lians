@@ -186,21 +186,175 @@ class LiansClient:
         k: int = 5,
         as_of: Optional[str | datetime] = None,
         filters: dict[str, Any] | None = None,
+        include_context: bool = False,
+        strategy: str = "standard",
+        max_query_variants: int = 4,
+        mode: str = "fast",
+        decision_envelope_id: Optional[str] = None,
     ) -> RecallResult:
         """
         Retrieve the most relevant current memories for a query.
 
-        Pass ``as_of`` for point-in-time recall — the compliance differentiator
-        vs. mem0 / Zep.  Neither competitor can answer "what did the agent know
-        on this date?"
+        Pass ``as_of`` for point-in-time recall. Pass
+        ``decision_envelope_id`` to bind the receipt and returned memory versions
+        to a consequential decision before the context is used.
         """
-        body: dict[str, Any] = {"agent_id": agent_id, "query": query, "k": k}
+        body: dict[str, Any] = {
+            "agent_id": agent_id,
+            "query": query,
+            "k": k,
+            "include_context": include_context,
+            "strategy": strategy,
+            "max_query_variants": max_query_variants,
+            "mode": mode,
+        }
+        if decision_envelope_id:
+            body["decision_envelope_id"] = decision_envelope_id
         if as_of:
             body["as_of"] = as_of.isoformat() if isinstance(as_of, datetime) else as_of
         if filters:
             body["filters"] = filters
         data = await self._req("POST", "/v1/recall", json_body=body)
         return RecallResult.model_validate(data)
+
+    async def open_decision_envelope(
+        self,
+        *,
+        agent_id: str,
+        decision_type: str,
+        knowledge_as_of: Optional[str | datetime] = None,
+        completeness_profile: str = "standard",
+        **fields: Any,
+    ) -> dict[str, Any]:
+        body = {
+            "agent_id": agent_id,
+            "decision_type": decision_type,
+            "knowledge_as_of": (
+                knowledge_as_of.isoformat()
+                if isinstance(knowledge_as_of, datetime)
+                else knowledge_as_of
+            ),
+            "completeness_profile": completeness_profile,
+            **fields,
+        }
+        return await self._req(
+            "POST", "/v1/decision-envelopes", json_body=body
+        )
+
+    async def add_decision_evidence(
+        self,
+        envelope_id: str,
+        evidence: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        normalized = [
+            {
+                key: value.isoformat() if isinstance(value, datetime) else value
+                for key, value in item.items()
+            }
+            for item in evidence
+        ]
+        return await self._req(
+            "POST",
+            f"/v1/decision-envelopes/{envelope_id}/evidence",
+            json_body={"evidence": normalized},
+        )
+
+    async def seal_decision_envelope(
+        self,
+        envelope_id: str,
+        *,
+        outcome: str,
+        decided_at: str | datetime,
+        reason_codes: Optional[list[str]] = None,
+        **fields: Any,
+    ) -> dict[str, Any]:
+        body = {
+            "outcome": outcome,
+            "decided_at": (
+                decided_at.isoformat()
+                if isinstance(decided_at, datetime)
+                else decided_at
+            ),
+            "reason_codes": reason_codes or [],
+            **{
+                key: value.isoformat() if isinstance(value, datetime) else value
+                for key, value in fields.items()
+            },
+        }
+        return await self._req(
+            "POST",
+            f"/v1/decision-envelopes/{envelope_id}/seal",
+            json_body=body,
+        )
+
+    async def decision_completeness(self, decision_id: str) -> dict[str, Any]:
+        return await self._req(
+            "GET", f"/v1/decisions/{decision_id}/completeness"
+        )
+
+    async def reconstruct_decision(self, decision_id: str) -> dict[str, Any]:
+        return await self._req(
+            "GET", f"/v1/decisions/{decision_id}/reconstruction"
+        )
+
+    async def evidence_pack(
+        self,
+        decision_id: str,
+        *,
+        verify: bool = True,
+        version: str = "v2",
+    ) -> dict[str, Any]:
+        return await self._req(
+            "GET",
+            f"/v1/decisions/{decision_id}/evidence-pack",
+            params={"verify": verify, "version": version},
+        )
+
+    async def blast_radius(
+        self,
+        *,
+        evidence_type: str,
+        source_id: str,
+        source_version: Optional[str] = None,
+        artifact_hash: Optional[str] = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        return await self._req(
+            "GET",
+            "/v1/evidence/blast-radius",
+            params={
+                "evidence_type": evidence_type,
+                "source_id": source_id,
+                "source_version": source_version,
+                "artifact_hash": artifact_hash,
+                "limit": limit,
+            },
+        )
+
+    async def record_evidence_change(
+        self,
+        *,
+        evidence_type: str,
+        source_id: str,
+        change_kind: str,
+        changed_at: str | datetime,
+        **fields: Any,
+    ) -> dict[str, Any]:
+        return await self._req(
+            "POST",
+            "/v1/evidence/changes",
+            json_body={
+                "evidence_type": evidence_type,
+                "source_id": source_id,
+                "change_kind": change_kind,
+                "changed_at": (
+                    changed_at.isoformat()
+                    if isinstance(changed_at, datetime)
+                    else changed_at
+                ),
+                **fields,
+            },
+        )
 
     async def get_lineage(self, memory_id: str) -> MemoryLineageResult:
         """Return the full belief provenance chain for a memory."""

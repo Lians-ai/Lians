@@ -18,17 +18,17 @@ Maven:
 <dependency>
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.4.1</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation "ai.lians:lians-sdk:0.4.1"
+implementation "ai.lians:lians-sdk:0.5.0"
 ```
 
-Version 0.4.1 is available from [Maven Central](https://central.sonatype.com/artifact/ai.lians/lians-sdk/0.4.1). Release JARs are also attached to [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
+Published releases are available from [Maven Central](https://central.sonatype.com/artifact/ai.lians/lians-sdk). Release JARs are also attached to [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
 
 ## Quickstart
 

@@ -12,6 +12,7 @@ from ..admission_service import record_rejection, enqueue_pending
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
+    MessageIngestRequest,
     FactHistoryResult, ContextRequest, ContextResult,
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
@@ -194,6 +195,49 @@ async def batch_create_memories(
     )
 
 
+@router.post("/memories/messages", response_model=MemoryBatchResult)
+async def ingest_messages(
+    req: MessageIngestRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ingest standard chat messages through the engine's canonical write path."""
+    from datetime import datetime, timezone
+
+    allowed = {"user", "assistant", "system", "tool"}
+    roles = set(req.roles)
+    if not roles <= allowed:
+        raise HTTPException(status_code=422, detail="roles contains an unsupported role")
+    default_time = req.event_time or datetime.now(timezone.utc)
+    memories = []
+    for index, message in enumerate(req.messages):
+        if message.role not in roles:
+            continue
+        memories.append(
+            MemoryAdd(
+                agent_id=req.agent_id,
+                content=message.content,
+                event_time=message.event_time or default_time,
+                source=req.source,
+                subject_id=req.subject_id,
+                metadata={
+                    **req.metadata,
+                    **message.metadata,
+                    "role": message.role,
+                    "message_index": index,
+                },
+                importance=req.importance,
+            )
+        )
+    if not memories:
+        return MemoryBatchResult(added=0, memories=[])
+    return await batch_create_memories(
+        MemoryBatchAdd(memories=memories),
+        auth,
+        db,
+    )
+
+
 @router.get("/memories/{memory_id}/lineage", response_model=MemoryLineageResult)
 async def memory_lineage(
     memory_id: UUID,
@@ -269,7 +313,33 @@ async def recall(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("read")
-    return await recall_memories(db, auth.namespace, req, barrier_override=auth.barrier_group)
+    envelope = None
+    if req.decision_envelope_id is not None:
+        auth.require("write")
+        from ..decision_evidence import get_envelope
+
+        envelope = await get_envelope(
+            db,
+            auth.namespace,
+            req.decision_envelope_id,
+            auth.barrier_group,
+        )
+        if envelope is None:
+            raise HTTPException(status_code=422, detail="Decision envelope not found")
+    result = await recall_memories(
+        db, auth.namespace, req, barrier_override=auth.barrier_group
+    )
+    if envelope is not None:
+        from ..decision_evidence import attach_recall_receipt
+
+        await attach_recall_receipt(
+            db,
+            envelope,
+            result.receipt_sha256,
+            result.receipt,
+        )
+        await db.commit()
+    return result
 
 
 @router.post("/context", response_model=ContextResult)
@@ -285,4 +355,30 @@ async def context(
     ``mmr: true`` for diversity reranking, and ``max_tokens`` to cap the budget.
     """
     auth.require("read")
-    return await assemble_context(db, auth.namespace, req, barrier_override=auth.barrier_group)
+    envelope = None
+    if req.decision_envelope_id is not None:
+        auth.require("write")
+        from ..decision_evidence import get_envelope
+
+        envelope = await get_envelope(
+            db,
+            auth.namespace,
+            req.decision_envelope_id,
+            auth.barrier_group,
+        )
+        if envelope is None:
+            raise HTTPException(status_code=422, detail="Decision envelope not found")
+    result = await assemble_context(
+        db, auth.namespace, req, barrier_override=auth.barrier_group
+    )
+    if envelope is not None:
+        from ..decision_evidence import attach_recall_receipt
+
+        await attach_recall_receipt(
+            db,
+            envelope,
+            result.receipt_sha256,
+            result.receipt,
+        )
+        await db.commit()
+    return result

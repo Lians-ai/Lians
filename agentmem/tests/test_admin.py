@@ -75,6 +75,36 @@ async def app_client(monkeypatch):
 # Provisioning
 # ---------------------------------------------------------------------------
 
+
+@pytest.mark.asyncio
+async def test_update_key_scopes_without_rotating_secret(app_client):
+    created = await app_client.post(
+        "/v1/admin/api-keys",
+        json={"namespace": "scope-update", "scopes": ["read"], "label": "agent"},
+        headers={"X-Admin-Secret": ADMIN_SECRET},
+    )
+    key_id = created.json()["id"]
+
+    updated = await app_client.patch(
+        f"/v1/admin/api-keys/{key_id}",
+        json={"scopes": ["read", "write", "audit", "audit"]},
+        headers={"X-Admin-Secret": ADMIN_SECRET},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["scopes"] == ["read", "write", "audit"]
+    assert "key" not in updated.json()
+
+    audit = await app_client.get(
+        "/v1/admin/audit/export",
+        params={"namespace": "scope-update"},
+        headers={"X-Admin-Secret": ADMIN_SECRET},
+    )
+    event = next(
+        e for e in audit.json()["events"]
+        if e["op"] == "admin.key_scopes_update"
+    )
+    assert event["payload"]["previous_scopes"] == ["read"]
+
 class TestProvision:
 
     @pytest.mark.asyncio

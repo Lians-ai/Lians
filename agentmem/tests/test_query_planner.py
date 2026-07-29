@@ -34,3 +34,27 @@ def test_variant_count_is_hard_bounded():
         max_variants=2,
     )
     assert len(plan.variants) == 2
+
+
+def test_deep_mode_broadens_a_simple_query_with_typed_memory_facet():
+    plan = plan_query(
+        "What is Jordan's favorite color?",
+        retrieval_mode="deep",
+    )
+    assert plan.scopes == ("episodic", "typed")
+    assert "preferences procedures policies" in plan.variants[1]
+
+
+def test_reconstruct_mode_adds_chronology_and_provenance_facets():
+    plan = plan_query(
+        "What was the policy?",
+        retrieval_mode="reconstruct",
+    )
+    assert plan.scopes == (
+        "episodic",
+        "typed",
+        "reconstruction",
+        "provenance",
+    )
+    assert "valid at requested time" in plan.variants[2]
+    assert "source provenance evidence lineage" in plan.variants[3]

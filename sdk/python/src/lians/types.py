@@ -54,12 +54,29 @@ class RecallRequest(BaseModel):
     k: int = Field(default=5, ge=1, le=100)
     as_of: Optional[datetime] = None
     filters: dict[str, Any] = Field(default_factory=dict)
+    include_context: bool = False
+    strategy: str = "standard"
+    max_query_variants: int = 4
+    mode: str = "fast"
+    decision_envelope_id: Optional[UUID] = None
 
 
 class RecallResult(BaseModel):
     memories: list[MemoryOut]
     as_of: Optional[datetime]
     total_candidates: int
+    retrieval_degraded: bool = False
+    token_estimate: int = 0
+    strategy: str = "standard"
+    query_variants: list[str] = Field(default_factory=list)
+    retrieval_confidence: float = 0.0
+    latency_ms: float = 0.0
+    mode: str = "fast"
+    latency_budget_ms: float = 100.0
+    deadline_exceeded: bool = False
+    receipt_sha256: str = ""
+    receipt: dict[str, Any] = Field(default_factory=dict)
+    provenance_coverage: float = 0.0
 
 
 # ── Batch ─────────────────────────────────────────────────────────────────────

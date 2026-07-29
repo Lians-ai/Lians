@@ -1,7 +1,7 @@
 {
   "name": "@lians-ai/lians",
-  "version": "0.4.1",
-  "description": "Bitemporal long-term memory for AI agents with point-in-time recall, tamper-evident audit trails, and GDPR crypto-erasure",
+  "version": "0.5.0",
+  "description": "Cross-platform decision evidence and reconstruction for regulated AI agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",
@@ -52,7 +52,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js"
   },
   "dependencies": {},
   "devDependencies": {

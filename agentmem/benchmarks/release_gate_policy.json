@@ -1,0 +1,43 @@
+{
+  "schema": "lians.release-gates.v1",
+  "claim_levels": {
+    "foundation_verified": {
+      "required_local_gates": [
+        "supersession",
+        "point_in_time",
+        "regulated_invariants",
+        "riad_1",
+        "memory_engine"
+      ]
+    },
+    "production_validated": {
+      "requires": [
+        "foundation_verified",
+        "postgres_load_test",
+        "multi_tenant_isolation_load_test",
+        "backup_restore_drill",
+        "failure_injection_test"
+      ]
+    },
+    "competitive_leader": {
+      "requires": [
+        "production_validated",
+        "agent_memory_benchmark_submission",
+        "longmemeval_v2_lafs_submission",
+        "independent_reproduction"
+      ],
+      "rule": "Top reproducible accuracy-latency-cost frontier with statistical confidence."
+    }
+  },
+  "serving_slos": {
+    "fast": {"p95_ms": 100, "p99_ms": 200},
+    "deep": {"p95_ms": 800},
+    "reconstruct": {"p95_ms": 2000}
+  },
+  "governance_gates": {
+    "provenance_coverage": 1.0,
+    "cross_tenant_retrievals": 0,
+    "tamper_detection": 1.0,
+    "point_in_time_accuracy": 1.0
+  }
+}

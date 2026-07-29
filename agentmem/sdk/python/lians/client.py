@@ -206,31 +206,16 @@ class AsyncLiansClient:
             )
             # result["added"] == 2  (two assistant turns stored)
         """
-        from datetime import timezone as _tz
-        _roles = set(roles) if roles is not None else {"assistant"}
-        _event_time = event_time or datetime.now(_tz.utc)
-        _meta_base = dict(metadata or {})
-
-        batch = []
-        for i, msg in enumerate(messages):
-            role = (msg.get("role") or "").lower()
-            content = (msg.get("content") or "").strip()
-            if role not in _roles or not content:
-                continue
-            item_meta = {**_meta_base, "role": role, "message_index": i}
-            batch.append({
-                "agent_id":   agent_id,
-                "content":    content,
-                "event_time": _event_time.isoformat(),
-                "source":     source,
-                "subject_id": subject_id,
-                "metadata":   item_meta,
-                "importance": importance,
-            })
-
-        if not batch:
-            return {"added": 0, "memories": []}
-        return await self.batch_add(batch)
+        return await self._req("POST", "/v1/memories/messages", json={
+            "agent_id": agent_id,
+            "messages": messages,
+            "event_time": event_time.isoformat() if event_time else None,
+            "source": source,
+            "subject_id": subject_id,
+            "metadata": metadata or {},
+            "importance": importance,
+            "roles": roles or ["assistant"],
+        })
 
     # ── Read ──────────────────────────────────────────────────────────────────
 
@@ -244,6 +229,8 @@ class AsyncLiansClient:
         include_context: bool = False,
         strategy: str = "standard",
         max_query_variants: int = 4,
+        mode: str = "fast",
+        decision_envelope_id: Optional[str] = None,
     ) -> dict:
         """
         Retrieve the most relevant *current* memories for a query.
@@ -260,6 +247,8 @@ class AsyncLiansClient:
             "include_context": include_context,
             "strategy": strategy,
             "max_query_variants": max_query_variants,
+            "mode": mode,
+            "decision_envelope_id": decision_envelope_id,
         })
 
     async def context(
@@ -275,6 +264,8 @@ class AsyncLiansClient:
         max_conflicts: int = 5,
         strategy: str = "adaptive",
         max_query_variants: int = 4,
+        mode: str = "deep",
+        decision_envelope_id: Optional[str] = None,
     ) -> dict:
         """
         Build a token-budgeted, ready-to-inject context block from recall.
@@ -291,6 +282,8 @@ class AsyncLiansClient:
             "max_tokens": max_tokens, "mmr": mmr,
             "surface_conflicts": surface_conflicts, "max_conflicts": max_conflicts,
             "strategy": strategy, "max_query_variants": max_query_variants,
+            "mode": mode,
+            "decision_envelope_id": decision_envelope_id,
         }
         if as_of:
             body["as_of"] = as_of.isoformat()
@@ -328,6 +321,90 @@ class AsyncLiansClient:
     async def learning_summary(self, agent_id: Optional[str] = None) -> dict:
         return await self._req(
             "GET", "/v1/memory-learning/summary", params={"agent_id": agent_id},
+        )
+
+    async def create_experience(
+        self,
+        *,
+        agent_id: str,
+        task: str,
+        decision: dict[str, Any],
+        context_memory_ids: list[str],
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        """Record a decision episode before its outcome is known."""
+        return await self._req("POST", "/v1/experiences", json={
+            "agent_id": agent_id,
+            "task": task,
+            "decision": decision,
+            "context_memory_ids": context_memory_ids,
+            "metadata": metadata or {},
+        })
+
+    async def record_experience_outcome(
+        self,
+        experience_id: str,
+        *,
+        outcome: dict[str, Any],
+        reward: float,
+        reviewer_feedback: Optional[str] = None,
+    ) -> dict:
+        """Attach a reviewed outcome that may influence future context ranking."""
+        return await self._req(
+            "PATCH",
+            f"/v1/experiences/{experience_id}/outcome",
+            json={
+                "outcome": outcome,
+                "reward": reward,
+                "reviewer_feedback": reviewer_feedback,
+            },
+        )
+
+    async def list_experiences(
+        self,
+        *,
+        agent_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> dict:
+        return await self._req("GET", "/v1/experiences", params={
+            "agent_id": agent_id,
+            "status": status,
+            "limit": limit,
+        })
+
+    async def generate_reflections(
+        self,
+        *,
+        agent_id: str,
+        minimum_support: int = 2,
+        minimum_reward: float = 0.6,
+    ) -> dict:
+        return await self._req("POST", "/v1/reflections/generate", json={
+            "agent_id": agent_id,
+            "minimum_support": minimum_support,
+            "minimum_reward": minimum_reward,
+        })
+
+    async def list_reflections(self, status: str = "pending") -> dict:
+        return await self._req(
+            "GET",
+            "/v1/reflections",
+            params={"status": status},
+        )
+
+    async def review_reflection(
+        self,
+        proposal_id: str,
+        *,
+        action: str,
+        reviewer: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        return await self._req(
+            "PATCH",
+            f"/v1/reflections/{proposal_id}",
+            json={"action": action, "reviewer": reviewer, "note": note},
         )
 
     async def resolve_memory_review(
@@ -744,6 +821,120 @@ class AsyncLiansClient:
             **fields,
         })
 
+    async def open_decision_envelope(
+        self,
+        *,
+        agent_id: str,
+        decision_type: str,
+        knowledge_as_of: Optional[datetime] = None,
+        completeness_profile: str = "standard",
+        **fields: Any,
+    ) -> dict:
+        """Open the evidence correlation boundary before an agent acts."""
+        return await self._req("POST", "/v1/decision-envelopes", json={
+            "agent_id": agent_id,
+            "decision_type": decision_type,
+            "knowledge_as_of": knowledge_as_of.isoformat() if knowledge_as_of else None,
+            "completeness_profile": completeness_profile,
+            **fields,
+        })
+
+    async def decision_envelope(self, envelope_id: str) -> dict:
+        return await self._req("GET", f"/v1/decision-envelopes/{envelope_id}")
+
+    async def add_decision_evidence(
+        self,
+        envelope_id: str,
+        evidence: list[dict[str, Any]],
+    ) -> list[dict]:
+        """Append evidence edges before or after the decision is sealed."""
+        normalized = []
+        for item in evidence:
+            normalized.append({
+                key: value.isoformat() if isinstance(value, datetime) else value
+                for key, value in item.items()
+            })
+        return await self._req(
+            "POST",
+            f"/v1/decision-envelopes/{envelope_id}/evidence",
+            json={"evidence": normalized},
+        )
+
+    async def seal_decision_envelope(
+        self,
+        envelope_id: str,
+        *,
+        outcome: str,
+        decided_at: datetime,
+        reason_codes: Optional[list[str]] = None,
+        **fields: Any,
+    ) -> dict:
+        """Seal an envelope and return its Recorded-to-Replayable grade."""
+        normalized_fields = {
+            key: value.isoformat() if isinstance(value, datetime) else value
+            for key, value in fields.items()
+        }
+        return await self._req(
+            "POST",
+            f"/v1/decision-envelopes/{envelope_id}/seal",
+            json={
+                "outcome": outcome,
+                "decided_at": decided_at.isoformat(),
+                "reason_codes": reason_codes or [],
+                **normalized_fields,
+            },
+        )
+
+    async def decision_completeness(self, decision_id: str) -> dict:
+        return await self._req(
+            "GET", f"/v1/decisions/{decision_id}/completeness"
+        )
+
+    async def reconstruct_decision(self, decision_id: str) -> dict:
+        return await self._req(
+            "GET", f"/v1/decisions/{decision_id}/reconstruction"
+        )
+
+    async def blast_radius(
+        self,
+        *,
+        evidence_type: str,
+        source_id: str,
+        source_version: Optional[str] = None,
+        artifact_hash: Optional[str] = None,
+        limit: int = 100,
+    ) -> dict:
+        """Find decisions exposed to a changed source, version, or artifact."""
+        return await self._req("GET", "/v1/evidence/blast-radius", params={
+            "evidence_type": evidence_type,
+            "source_id": source_id,
+            "source_version": source_version,
+            "artifact_hash": artifact_hash,
+            "limit": limit,
+        })
+
+    async def record_evidence_change(
+        self,
+        *,
+        evidence_type: str,
+        source_id: str,
+        change_kind: str,
+        changed_at: datetime,
+        **fields: Any,
+    ) -> dict:
+        """Record a source change and return the immediate blast radius."""
+        normalized_fields = {
+            key: value.isoformat() if isinstance(value, datetime) else value
+            for key, value in fields.items()
+        }
+        return await self._req("POST", "/v1/evidence/changes", json={
+            "evidence_type": evidence_type,
+            "source_id": source_id,
+            "change_kind": change_kind,
+            "changed_at": changed_at.isoformat(),
+            **normalized_fields,
+        })
+
     async def decisions(self, **filters: Any) -> list[dict]:
         """List decision records, optionally filtered by agent, subject, or regime."""
         return await self._req("GET", "/v1/decisions", params=filters)
@@ -755,10 +946,15 @@ class AsyncLiansClient:
             "status": status, "reviewer": reviewer, "note": note,
         })
 
-    async def evidence_pack(self, decision_id: str, verify: bool = True) -> dict:
-        """Export a hash-anchored Evidence Pack v1 for a decision."""
+    async def evidence_pack(
+        self,
+        decision_id: str,
+        verify: bool = True,
+        version: str = "v1",
+    ) -> dict:
+        """Export an Evidence Pack; v2 adds completeness and optional Ed25519 signing."""
         return await self._req("GET", f"/v1/decisions/{decision_id}/evidence-pack",
-                               params={"verify": verify})
+                               params={"verify": verify, "version": version})
 
     async def record_event(self, event_type: str, agent_id: str, occurred_at: datetime,
                            **fields: Any) -> dict:

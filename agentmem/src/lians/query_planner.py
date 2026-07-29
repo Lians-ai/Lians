@@ -43,7 +43,12 @@ def _keywords(query: str) -> str:
     return " ".join(word for word in words if word not in _STOP)
 
 
-def plan_query(query: str, max_variants: int = 4) -> QueryPlan:
+def plan_query(
+    query: str,
+    max_variants: int = 4,
+    *,
+    retrieval_mode: str = "fast",
+) -> QueryPlan:
     """Return a bounded, stable set of semantic search facets.
 
     The original question is always first and carries the strongest fusion
@@ -74,6 +79,24 @@ def plan_query(query: str, max_variants: int = 4) -> QueryPlan:
     if _RELATIONAL.search(original):
         variants.append(f"{core} relationships background reasons preferences")
         scopes.append("relational")
+
+    # Explicit serving modes must be materially different even when a short
+    # query has no aggregate or temporal trigger. Deep recall adds one typed
+    # memory facet. Reconstruction adds stable chronology and provenance
+    # facets so a point-in-time request does not depend on one embedding.
+    if retrieval_mode in {"deep", "reconstruct"}:
+        variants.append(
+            f"{core} facts preferences procedures policies relationships outcomes"
+        )
+        scopes.append("typed")
+    if retrieval_mode == "reconstruct":
+        variants.extend(
+            [
+                f"{core} chronology versions superseded valid at requested time",
+                f"{core} source provenance evidence lineage decision context",
+            ]
+        )
+        scopes.extend(["reconstruction", "provenance"])
 
     seen: set[str] = set()
     unique: list[tuple[str, str]] = []

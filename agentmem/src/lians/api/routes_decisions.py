@@ -13,9 +13,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..audit_chain import chain_log, verify_chain
 from ..db import get_db
+from ..decision_evidence import (
+    add_evidence,
+    assess_completeness,
+    create_envelope,
+    decision_out,
+    envelope_out,
+    evidence_out,
+    get_envelope,
+    ledger_event_out,
+    list_evidence,
+    seal_envelope,
+)
+from ..evidence_signing import sign_evidence_manifest
 from ..memory_service import get_knowledge_snapshot
-from ..models import DecisionRecord, LedgerEvent, Memory, NamespacePolicy
-from ..schemas import DecisionCreate, DecisionOut, DecisionReview, LedgerEventCreate, LedgerEventOut
+from ..models import DecisionRecord, LedgerEvent, NamespacePolicy
+from ..schemas import (
+    DecisionCreate,
+    DecisionEnvelopeOpen,
+    DecisionEnvelopeSeal,
+    DecisionEvidenceCreate,
+    DecisionOut,
+    DecisionReview,
+    LedgerEventCreate,
+    LedgerEventOut,
+)
 from .deps import AuthContext, get_auth
 
 router = APIRouter(prefix="/v1/decisions", tags=["decisions"])
@@ -40,51 +62,11 @@ def _canonical(data: dict) -> str:
 
 
 def _out(row: DecisionRecord) -> DecisionOut:
-    return DecisionOut(
-        id=row.id,
-        namespace=row.namespace,
-        agent_id=row.agent_id,
-        decision_type=row.decision_type,
-        outcome=row.outcome,
-        reason_codes=list(row.reason_codes or []),
-        regime=row.regime,
-        subject_id=row.subject_id,
-        session_id=row.session_id,
-        model_id=row.model_id,
-        model_version=row.model_version,
-        policy_version=row.policy_version,
-        decided_at=row.decided_at,
-        recorded_at=row.recorded_at,
-        knowledge_as_of=row.knowledge_as_of,
-        evidence_memory_ids=[UUID(str(x)) for x in (row.evidence_memory_ids or [])],
-        input_hash=row.input_hash,
-        output_hash=row.output_hash,
-        human_review_status=row.human_review_status,
-        human_reviewer=row.human_reviewer,
-        human_reviewed_at=row.human_reviewed_at,
-        supersedes_id=row.supersedes_id,
-        metadata=dict(row.metadata_ or {}),
-        record_hash=row.record_hash,
-    )
+    return decision_out(row)
 
 
 def _event_out(row: LedgerEvent) -> LedgerEventOut:
-    return LedgerEventOut(
-        id=row.id,
-        namespace=row.namespace,
-        event_type=row.event_type,
-        agent_id=row.agent_id,
-        occurred_at=row.occurred_at,
-        recorded_at=row.recorded_at,
-        subject_id=row.subject_id,
-        session_id=row.session_id,
-        decision_id=row.decision_id,
-        model_id=row.model_id,
-        model_version=row.model_version,
-        payload=dict(row.payload or {}),
-        artifact_hash=row.artifact_hash,
-        event_hash=row.event_hash,
-    )
+    return ledger_event_out(row)
 
 
 @records_router.post("/events", response_model=LedgerEventOut)
@@ -95,6 +77,8 @@ async def record_event(
 ):
     """Append an inference, oversight, change, subject, incident, or memory event."""
     auth.require("write")
+    envelope = None
+    decision = None
     if req.decision_id:
         decision = await db.get(DecisionRecord, req.decision_id)
         if (
@@ -103,9 +87,30 @@ async def record_event(
             or not _barrier_visible(decision, auth)
         ):
             raise HTTPException(422, "decision_id does not belong to this namespace")
+    envelope_id = req.decision_envelope_id or (
+        decision.envelope_id if decision is not None else None
+    )
+    if envelope_id:
+        envelope = await get_envelope(
+            db, auth.namespace, envelope_id, auth.barrier_group
+        )
+        if envelope is None:
+            raise HTTPException(422, "decision_envelope_id does not belong to this namespace")
+        if decision is not None and decision.envelope_id not in (None, envelope.id):
+            raise HTTPException(422, "decision_id and decision_envelope_id do not match")
+        if decision is None:
+            decision = (
+                await db.execute(
+                    select(DecisionRecord).where(
+                        DecisionRecord.envelope_id == envelope.id
+                    )
+                )
+            ).scalar_one_or_none()
     recorded_at = datetime.now(timezone.utc)
     body = req.model_dump(mode="json") | {
         "namespace": auth.namespace,
+        "decision_id": str(decision.id) if decision is not None else None,
+        "decision_envelope_id": str(envelope.id) if envelope is not None else None,
         "recorded_at": recorded_at.isoformat(),
     }
     event_hash = hashlib.sha256(_canonical(body).encode()).hexdigest()
@@ -118,7 +123,7 @@ async def record_event(
         recorded_at=recorded_at,
         subject_id=req.subject_id,
         session_id=req.session_id,
-        decision_id=req.decision_id,
+        decision_id=decision.id if decision is not None else None,
         model_id=req.model_id,
         model_version=req.model_version,
         payload=req.payload,
@@ -127,6 +132,46 @@ async def record_event(
     )
     db.add(row)
     await db.flush()
+    if envelope is not None:
+        evidence_type = {
+            "policy_decision": "policy_decision",
+            "tool_call": "tool_call",
+            "tool_result": "tool_result",
+            "human_oversight": "human_review",
+            "memory": "memory",
+            "inference": "model",
+        }.get(req.event_type, "external")
+        role = {
+            "policy_decision": "governed",
+            "tool_call": "executed",
+            "tool_result": "used",
+            "human_oversight": "reviewed",
+            "memory": "used",
+            "inference": "executed",
+        }.get(req.event_type, "used")
+        await add_evidence(
+            db,
+            envelope,
+            [
+                DecisionEvidenceCreate(
+                    evidence_type=evidence_type,
+                    role=role,
+                    source_id=str(row.id),
+                    source_version=req.model_version,
+                    artifact_hash=req.artifact_hash or event_hash,
+                    occurred_at=req.occurred_at,
+                    metadata={
+                        "ledger_event_type": req.event_type,
+                        "ledger_event_id": str(row.id),
+                        "model_id": req.model_id,
+                        "model_version": req.model_version,
+                        "payload": req.payload,
+                    },
+                )
+            ],
+            actor_id=req.agent_id,
+            audit=False,
+        )
     await chain_log(
         db,
         auth.namespace,
@@ -177,72 +222,56 @@ async def list_events(
 async def create_decision(
     req: DecisionCreate, auth: AuthContext = Depends(get_auth), db: AsyncSession = Depends(get_db)
 ):
-    """Append an authoritative record of a consequential agent decision."""
+    """Compatibility path that opens and seals a Decision Envelope atomically."""
     auth.require("write")
-    as_of = req.knowledge_as_of or req.decided_at
-    ids = [str(x) for x in req.evidence_memory_ids]
-    if ids:
-        evidence_filters = [
-            Memory.namespace == auth.namespace,
-            Memory.id.in_(req.evidence_memory_ids),
-        ]
-        _apply_barrier_filter(evidence_filters, Memory.barrier_group, auth)
-        found = (await db.execute(select(Memory.id).where(*evidence_filters))).scalars().all()
-        if len(set(found)) != len(set(req.evidence_memory_ids)):
-            raise HTTPException(
-                422, "One or more evidence_memory_ids do not belong to this namespace"
-            )
-    if req.supersedes_id:
-        prior = await db.get(DecisionRecord, req.supersedes_id)
-        if prior is None or prior.namespace != auth.namespace or not _barrier_visible(prior, auth):
-            raise HTTPException(422, "supersedes_id does not belong to this namespace")
-
-    recorded_at = datetime.now(timezone.utc)
-    body = req.model_dump(mode="json") | {
-        "namespace": auth.namespace,
-        "knowledge_as_of": as_of.isoformat(),
-        "recorded_at": recorded_at.isoformat(),
-    }
-    record_hash = hashlib.sha256(_canonical(body).encode()).hexdigest()
-    row = DecisionRecord(
-        namespace=auth.namespace,
-        agent_id=req.agent_id,
-        barrier_group=auth.barrier_group,
-        decision_type=req.decision_type,
-        outcome=req.outcome,
-        reason_codes=req.reason_codes,
-        regime=req.regime,
-        subject_id=req.subject_id,
-        session_id=req.session_id,
-        model_id=req.model_id,
-        model_version=req.model_version,
-        policy_version=req.policy_version,
-        decided_at=req.decided_at,
-        recorded_at=recorded_at,
-        knowledge_as_of=as_of,
-        evidence_memory_ids=ids,
-        input_hash=req.input_hash,
-        output_hash=req.output_hash,
-        supersedes_id=req.supersedes_id,
-        metadata_=req.metadata,
-        record_hash=record_hash,
-    )
-    db.add(row)
-    await db.flush()
-    await chain_log(
-        db,
-        auth.namespace,
-        req.agent_id,
-        "decision_recorded",
-        content_hash=record_hash,
-        payload={
-            "decision_id": str(row.id),
-            "decision_type": req.decision_type,
-            "regime": req.regime,
-        },
-    )
-    await db.commit()
-    await db.refresh(row)
+    try:
+        envelope = await create_envelope(
+            db,
+            auth.namespace,
+            auth.barrier_group,
+            DecisionEnvelopeOpen(
+                agent_id=req.agent_id,
+                decision_type=req.decision_type,
+                regime=req.regime,
+                subject_id=req.subject_id,
+                session_id=req.session_id,
+                trace_id=req.trace_id,
+                run_id=req.run_id,
+                knowledge_as_of=req.knowledge_as_of,
+                completeness_profile=req.completeness_profile,
+                required_checks=req.required_checks,
+                metadata=req.metadata,
+            ),
+        )
+        row, _, _ = await seal_envelope(
+            db,
+            envelope,
+            DecisionEnvelopeSeal(
+                outcome=req.outcome,
+                reason_codes=req.reason_codes,
+                decided_at=req.decided_at,
+                knowledge_as_of=req.knowledge_as_of,
+                model_id=req.model_id,
+                model_version=req.model_version,
+                model_artifact_hash=req.model_artifact_hash,
+                policy_id=req.policy_id,
+                policy_version=req.policy_version,
+                policy_artifact_hash=req.policy_artifact_hash,
+                prompt_id=req.prompt_id,
+                prompt_version=req.prompt_version,
+                prompt_artifact_hash=req.prompt_artifact_hash,
+                runtime_version=req.runtime_version,
+                evidence_memory_ids=req.evidence_memory_ids,
+                input_hash=req.input_hash,
+                output_hash=req.output_hash,
+                replay_manifest_hash=req.replay_manifest_hash,
+                supersedes_id=req.supersedes_id,
+                metadata=req.metadata,
+            ),
+        )
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _out(row)
 
 
@@ -307,6 +336,37 @@ async def review_decision(
         req.reviewer,
         now,
     )
+    if row.envelope_id is not None:
+        envelope = await get_envelope(
+            db, auth.namespace, row.envelope_id, auth.barrier_group
+        )
+        if envelope is not None:
+            review_payload = {
+                "decision_id": str(row.id),
+                "status": req.status,
+                "reviewer": req.reviewer,
+                "note": req.note,
+                "reviewed_at": now.isoformat(),
+            }
+            await add_evidence(
+                db,
+                envelope,
+                [
+                    DecisionEvidenceCreate(
+                        evidence_type="human_review",
+                        role="reviewed",
+                        source_id=req.reviewer,
+                        source_version=req.status,
+                        artifact_hash=hashlib.sha256(
+                            _canonical(review_payload).encode()
+                        ).hexdigest(),
+                        occurred_at=now,
+                        metadata=review_payload,
+                    )
+                ],
+                actor_id=req.reviewer,
+                audit=False,
+            )
     await chain_log(
         db,
         auth.namespace,
@@ -329,6 +389,7 @@ async def review_decision(
 async def evidence_pack(
     decision_id: UUID,
     verify: bool = True,
+    version: str = Query("v1", pattern=r"^v[12]$"),
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -362,20 +423,74 @@ async def evidence_pack(
         }
     else:
         chain = {"status": "unchecked", "rows_checked": 0, "violations": []}
+    generated_at = datetime.now(timezone.utc).isoformat()
+    retention = None
+    if policy is not None:
+        retention = {
+            "content_ttl_days": policy.content_ttl_days,
+            "audit_retention_days": policy.audit_retention_days,
+            "legal_hold": policy.legal_hold,
+        }
+    if version == "v2":
+        if row.envelope_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="This legacy decision predates Decision Envelopes",
+            )
+        envelope = await get_envelope(
+            db, auth.namespace, row.envelope_id, auth.barrier_group
+        )
+        if envelope is None:
+            raise HTTPException(status_code=409, detail="Decision envelope is unavailable")
+        evidence = await list_evidence(
+            db, auth.namespace, envelope.id, auth.barrier_group
+        )
+        completeness = assess_completeness(envelope, row, evidence)
+        envelope_payload = await envelope_out(
+            db, envelope, decision=row, evidence=evidence
+        )
+        manifest = {
+            "schema": "https://lians.ai/schemas/evidence-pack/v2",
+            "generated_at": generated_at,
+            "decision": _out(row).model_dump(mode="json"),
+            "envelope": envelope_payload.model_dump(mode="json"),
+            "completeness": completeness.model_dump(mode="json"),
+            "knowledge_snapshot": [m.model_dump(mode="json") for m in snapshot],
+            "cited_evidence": cited,
+            "evidence_graph": [evidence_out(item).model_dump(mode="json") for item in evidence],
+            "audit_chain": chain,
+            "retention": retention,
+            "verification_policy": {
+                "incomplete_records_are_never_labeled_verified": True,
+                "grade": completeness.grade,
+                "gaps": [gap.model_dump(mode="json") for gap in completeness.gaps],
+            },
+        }
+        pack = sign_evidence_manifest(manifest)
+        await chain_log(
+            db,
+            auth.namespace,
+            row.agent_id,
+            "evidence_pack_exported",
+            content_hash=pack["pack_hash"],
+            payload={
+                "decision_id": str(row.id),
+                "schema": pack["schema"],
+                "signature_status": pack["signature"]["status"],
+                "completeness_grade": completeness.grade,
+            },
+        )
+        await db.commit()
+        return pack
+
     pack = {
         "schema": "https://lians.ai/schemas/evidence-pack/v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": generated_at,
         "decision": _out(row).model_dump(mode="json"),
         "knowledge_snapshot": [m.model_dump(mode="json") for m in snapshot],
         "cited_evidence": cited,
         "audit_chain": chain,
-        "retention": None
-        if policy is None
-        else {
-            "content_ttl_days": policy.content_ttl_days,
-            "audit_retention_days": policy.audit_retention_days,
-            "legal_hold": policy.legal_hold,
-        },
+        "retention": retention,
     }
     pack["pack_hash"] = hashlib.sha256(_canonical(pack).encode()).hexdigest()
     await chain_log(

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lians-sdk"
-version = "0.4.2"
-description = "Bitemporal long-term memory for AI agents with point-in-time recall, tamper-evident audit trails, and GDPR crypto-erasure"
+version = "0.5.0"
+description = "Correct, temporal, and auditable memory infrastructure for AI agents"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 readme = "README.md"
@@ -34,8 +34,8 @@ local         = [
     "sqlalchemy>=2.0",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
-    "pydantic-settings>=2.1",
-    "cryptography>=42",
+    "pydantic-settings>=2.14.2",
+    "cryptography>=48.0.1",
     "pgvector>=0.2.5",
     "numpy>=1.26",
     "fastapi>=0.110",
@@ -53,8 +53,8 @@ mcp           = [
     "sqlalchemy>=2.0",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
-    "pydantic-settings>=2.1",
-    "cryptography>=42",
+    "pydantic-settings>=2.14.2",
+    "cryptography>=48.0.1",
     "pgvector>=0.2.5",
     "numpy>=1.26",
     "fastapi>=0.110",
