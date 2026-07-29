@@ -340,6 +340,13 @@ class AsyncLiansClient:
             "reviewer": reviewer, "note": note, "correction": correction,
         })
 
+    async def run_learning_maintenance(
+        self, *, dry_run: bool = True, min_signals: int = 3,
+    ) -> dict:
+        return await self._req("POST", "/v1/memory-learning/maintenance", params={
+            "dry_run": dry_run, "min_signals": min_signals,
+        })
+
     async def reconstruct(
         self,
         agent_id: str,

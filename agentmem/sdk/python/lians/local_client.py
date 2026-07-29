@@ -359,6 +359,23 @@ class LocalLiansClient:
             )
         return result.model_dump(mode="json")
 
+    def run_learning_maintenance(
+        self, *, dry_run: bool = True, min_signals: int = 3,
+    ) -> dict:
+        return self._run(self._async_run_learning_maintenance(
+            dry_run=dry_run, min_signals=min_signals,
+        ))
+
+    async def _async_run_learning_maintenance(
+        self, *, dry_run: bool, min_signals: int,
+    ) -> dict:
+        from src.lians.feedback_service import run_memory_maintenance
+        async with self._session_factory() as db:
+            result = await run_memory_maintenance(
+                db, self._namespace, dry_run=dry_run, min_signals=min_signals,
+            )
+        return result.model_dump(mode="json")
+
     def reconstruct(
         self,
         agent_id: str,

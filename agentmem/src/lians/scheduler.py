@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from .models import NamespacePolicy
+from .models import MemoryFeedback, NamespacePolicy
 
 logger = logging.getLogger("agentmem.scheduler")
 
@@ -86,3 +86,42 @@ async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) ->
             "elapsed_ms": elapsed_ms,
         },
     )
+
+
+async def run_learning_maintenance_scheduler(
+    session_factory: async_sessionmaker[AsyncSession],
+    interval_hours: float,
+    min_signals: int = 3,
+) -> None:
+    """Periodically apply bounded outcome-driven decay across namespaces."""
+    logger.info("Learning maintenance scheduler started")
+    try:
+        while True:
+            await asyncio.sleep(interval_hours * 3600)
+            async with session_factory() as db:
+                namespaces = list((await db.execute(
+                    select(MemoryFeedback.namespace).distinct()
+                )).scalars().all())
+            from .feedback_service import run_memory_maintenance
+            for namespace in namespaces:
+                try:
+                    async with session_factory() as db:
+                        result = await run_memory_maintenance(
+                            db, namespace, min_signals=min_signals,
+                        )
+                    logger.info(
+                        "Learning maintenance completed",
+                        extra={
+                            "namespace": namespace,
+                            "demoted": result.memories_demoted,
+                            "candidates": result.consolidation_candidates,
+                        },
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "Learning maintenance error",
+                        extra={"namespace": namespace, "error": str(exc)},
+                    )
+    except asyncio.CancelledError:
+        logger.info("Learning maintenance scheduler stopped")
+        raise

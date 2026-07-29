@@ -248,6 +248,15 @@ class LiansClient:
             self._async.resolve_memory_review(memory_id=memory_id, **kwargs)
         )
 
+    def run_learning_maintenance(
+        self, *, dry_run: bool = True, min_signals: int = 3,
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.run_learning_maintenance(
+                dry_run=dry_run, min_signals=min_signals,
+            )
+        )
+
     # ── Compliance ────────────────────────────────────────────────────────────
 
     def erase(self, subject_id: str, request_ref: str) -> dict:

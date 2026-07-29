@@ -160,9 +160,13 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
         :param k: Number of memories to return (1–20). Default 5.
         """
         if _is_async:
-            result = await client.recall(agent_id=agent_id, query=query, k=k)
+            result = await client.recall(
+                agent_id=agent_id, query=query, k=k, strategy="adaptive",
+            )
         else:
-            result = client.recall(agent_id=agent_id, query=query, k=k)
+            result = client.recall(
+                agent_id=agent_id, query=query, k=k, strategy="adaptive",
+            )
         return _fmt(result.get("memories", []))
 
     async def agentmem_recall_at(query: str, as_of_iso: str, k: int = 5) -> str:
@@ -266,7 +270,9 @@ def build_autogen_functions(
         return f"Stored: {content[:120]}"
 
     def _recall(query: str, k: int = 5) -> str:
-        result = client.recall(agent_id=agent_id, query=query, k=k)
+        result = client.recall(
+            agent_id=agent_id, query=query, k=k, strategy="adaptive",
+        )
         return _fmt(result.get("memories", []))
 
     def _recall_at(query: str, as_of_iso: str, k: int = 5) -> str:

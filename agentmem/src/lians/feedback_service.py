@@ -14,6 +14,7 @@ from .models import LiveFact, Memory, MemoryFeedback
 from .schemas import (
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
+    MemoryMaintenanceResult,
 )
 
 
@@ -240,4 +241,84 @@ async def resolve_memory_review(
         reviewer=req.reviewer,
         resolved_at=resolved_at,
         replacement_memory_id=replacement_id,
+    )
+
+
+async def run_memory_maintenance(
+    db: AsyncSession,
+    namespace: str,
+    *,
+    min_signals: int = 3,
+    dry_run: bool = False,
+) -> MemoryMaintenanceResult:
+    """Apply bounded decay to repeatedly unused/duplicate memories.
+
+    Helpful evidence is never decayed. Candidates are flagged for consolidation
+    review; maintenance itself never retires or merges a memory.
+    """
+    rows = (await db.execute(
+        select(MemoryFeedback.memory_id, MemoryFeedback.signal, func.count())
+        .where(MemoryFeedback.namespace == namespace)
+        .group_by(MemoryFeedback.memory_id, MemoryFeedback.signal)
+    )).all()
+    by_memory: dict[UUID, dict[str, int]] = {}
+    for memory_id, signal, count in rows:
+        by_memory.setdefault(memory_id, {})[str(signal)] = int(count)
+
+    candidates: list[UUID] = []
+    demoted = 0
+    for memory_id, counts in by_memory.items():
+        negative = counts.get("ignored", 0) + counts.get("duplicate", 0)
+        if negative < min_signals or counts.get("helpful", 0):
+            continue
+        candidates.append(memory_id)
+        if dry_run:
+            continue
+        memory = await db.get(Memory, memory_id)
+        if memory is None or memory.namespace != namespace or memory.valid_to is not None:
+            continue
+        metadata = dict(memory.metadata_ or {})
+        prior_count = int((metadata.get("_learning_maintenance") or {}).get("signals", 0))
+        if negative <= prior_count:
+            continue
+        memory.importance = max(0.0, float(memory.importance) - 0.10)
+        metadata["_learning_maintenance"] = {
+            "status": "consolidation_review",
+            "signals": negative,
+            "at": _utcnow().isoformat(),
+        }
+        memory.metadata_ = metadata
+        await db.execute(
+            update(LiveFact).where(LiveFact.memory_id == memory_id).values(
+                importance=memory.importance, metadata_=metadata,
+            )
+        )
+        await chain_log(
+            db, namespace=namespace, agent_id=memory.agent_id,
+            op="memory_maintenance", memory_id=memory.id,
+            content_hash=memory.content_hash,
+            payload={"action": "bounded_decay", "signals": negative},
+        )
+        demoted += 1
+    if not dry_run:
+        await db.commit()
+        from .cache import invalidate_agent
+        from .session_cache import invalidate_working_set
+        agent_ids = {
+            str(row[0]) for row in (await db.execute(
+                select(Memory.agent_id).where(
+                    Memory.namespace == namespace, Memory.id.in_(candidates)
+                )
+            )).all()
+        }
+        for agent_id in agent_ids:
+            await invalidate_agent(namespace, agent_id)
+            invalidate_working_set(namespace, agent_id)
+    return MemoryMaintenanceResult(
+        namespace=namespace,
+        memories_scanned=len(by_memory),
+        memories_demoted=demoted,
+        consolidation_candidates=len(candidates),
+        dry_run=dry_run,
+        candidate_memory_ids=candidates,
     )

@@ -146,7 +146,9 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         k:
             Maximum number of memories to return (1–20). Default 5.
         """
-        result = client.recall(agent_id=agent_id, query=query, k=k)
+        result = client.recall(
+            agent_id=agent_id, query=query, k=k, strategy="adaptive",
+        )
         return _fmt(result.get("memories", []))
 
     @function_tool
