@@ -107,12 +107,14 @@ completeness assessment.
 
 Lians never labels an incomplete record verified.
 
-| Grade | What Lians can claim |
-|---|---|
-| Recorded | The decision and its integrity commitment exist. |
-| Reconstructable | The point-in-time context and material influence evidence are linked. |
-| Verifiable | The input, output, and material evidence carry integrity commitments. |
-| Replayable | Exact model, prompt, trace, and replay manifest requirements are also satisfied. |
+The definitions are cumulative and normative:
+
+| Grade | Minimum base requirements | What Lians can claim |
+|---|---|---|
+| Recorded | Sealed decision with `record_hash` | The append-only decision and its integrity commitment exist. |
+| Reconstructable | Recorded + `knowledge_as_of` + material influence evidence | The captured point-in-time context and material influences can be assembled. |
+| Verifiable | Reconstructable + input hash + output hash + hashes on every material evidence edge | A recipient can independently check the integrity of the committed decision evidence. |
+| Replayable | Verifiable + exact model + exact prompt + content-addressed trace + replay-manifest hash | The declared identity and dependency commitments required to attempt deterministic replay are present. |
 
 Each response includes every failed check, the grade it blocks, and a concrete
 remediation. Profiles can add requirements without weakening the base grades:
@@ -123,6 +125,10 @@ remediation. Profiles can add requirements without weakening the base grades:
 
 Customers can add recognized checks through `required_checks`. Unknown checks
 are rejected, so a typo cannot silently lower the standard.
+
+The complete normative definitions, profile additions, exclusions, and stable
+gap codes are published in
+[Completeness Grades](completeness-grades.md).
 
 ## Reconstruction is not replay
 
@@ -184,6 +190,13 @@ identity proof:
 lians-verify-evidence pack.json \
   --trusted-public-key lians-evidence-public-key.txt
 ```
+
+Private-key custody, access separation, normal rotation, compromise handling,
+and verification after retirement are defined in
+[Evidence Pack Signing Key Custody](evidence-signing-key-custody.md). The
+bundled raw-key signer requires secret-manager injection in production.
+Organizations that require a non-exportable key must connect a dedicated HSM or
+KMS-backed signing service.
 
 ## ValidMind validation view
 

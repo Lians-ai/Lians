@@ -141,6 +141,21 @@ def upgrade() -> None:
 
 def _backfill_existing_decisions() -> None:
     bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        # Existing record tables use FORCE ROW LEVEL SECURITY. Migration roles
+        # are not necessarily superusers, so enter the same explicit admin
+        # context used by the application before scanning every namespace.
+        # The settings are transaction-local and disappear after migration.
+        bind.execute(
+            sa.text(
+                "SELECT set_config('app.current_namespace', '__admin__', true)"
+            )
+        )
+        bind.execute(
+            sa.text(
+                "SELECT set_config('agentmem.barrier_group', '', true)"
+            )
+        )
     decisions = list(
         bind.execute(
             sa.text(

@@ -61,6 +61,8 @@ typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
 mode and returns a content-addressed receipt that can bind automatically to a
 Decision Envelope. See
 [decision evidence and reconstruction](docs/decision-evidence.md), the
+[normative completeness grades](docs/completeness-grades.md),
+[Evidence Pack signing key custody](docs/evidence-signing-key-custody.md), the
 [governed memory engine](docs/memory-engine.md) and
 [reproducible evidence gates](docs/benchmarks/README.md).
 
