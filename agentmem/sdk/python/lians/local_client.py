@@ -290,6 +290,38 @@ class LocalLiansClient:
             result = await recall_memories(db, self._namespace, req)
         return result.model_dump(mode="json")
 
+    def context(
+        self,
+        agent_id: str,
+        query: str,
+        k: int = 10,
+        as_of: Optional[datetime] = None,
+        max_tokens: int = 1500,
+        header: Optional[str] = None,
+        mmr: bool = False,
+        surface_conflicts: bool = True,
+        max_conflicts: int = 5,
+        strategy: str = "adaptive",
+        max_query_variants: int = 4,
+    ) -> dict:
+        """Build model-ready, token-budgeted adaptive memory context locally."""
+        return self._run(self._async_context(
+            agent_id=agent_id, query=query, k=k, as_of=as_of,
+            max_tokens=max_tokens, header=header, mmr=mmr,
+            surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
+            strategy=strategy, max_query_variants=max_query_variants,
+        ))
+
+    async def _async_context(self, **kwargs) -> dict:
+        from src.lians.schemas import ContextRequest
+        from src.lians.memory_service import assemble_context
+        if kwargs.get("header") is None:
+            kwargs.pop("header", None)
+        req = ContextRequest(**kwargs)
+        async with self._session_factory() as db:
+            result = await assemble_context(db, self._namespace, req)
+        return result.model_dump(mode="json")
+
     def reconstruct(
         self,
         agent_id: str,

@@ -51,6 +51,8 @@ from .harness import (
     CompactionGuard,
     RecalledMemory,
     TurnResult,
+    PreparedMemoryContext,
+    SmartTurnResult,
     MemoryClient,
 )
 
@@ -77,6 +79,8 @@ __all__ = [
     "CompactionGuard",
     "RecalledMemory",
     "TurnResult",
+    "PreparedMemoryContext",
+    "SmartTurnResult",
     "MemoryClient",
     # aliases
     "AgentMemClient",

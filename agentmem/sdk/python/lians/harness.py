@@ -59,6 +59,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any, Callable, Optional, Protocol, Sequence, runtime_checkable
 
 
@@ -127,6 +128,33 @@ class TurnResult:
     remembered: Optional[dict] = None
 
 
+@dataclass(frozen=True)
+class PreparedMemoryContext:
+    """Model-ready context plus the evidence and cost of producing it."""
+
+    query: str
+    context: str
+    memories: list[RecalledMemory]
+    token_estimate: int
+    retrieval_confidence: float
+    retrieval_degraded: bool
+    strategy: str
+    query_variants: list[str]
+    latency_ms: float
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class SmartTurnResult:
+    """End-to-end prepare → generate → learn result for production telemetry."""
+
+    prepared: PreparedMemoryContext
+    response: Any
+    learned: list[dict]
+    generation_latency_ms: float
+    total_latency_ms: float
+
+
 # ── Harness ───────────────────────────────────────────────────────────────────
 
 
@@ -190,6 +218,130 @@ class LiansMemoryHarness:
         self.domain = domain
         self.recall_k = recall_k
         self.default_importance = default_importance
+
+    def prepare(
+        self,
+        query: str,
+        *,
+        k: Optional[int] = None,
+        as_of: Optional[datetime] = None,
+        max_tokens: int = 1500,
+        strategy: str = "adaptive",
+        max_query_variants: int = 4,
+        mmr: bool = False,
+    ) -> PreparedMemoryContext:
+        """Prepare decision-ready context through one stable integration call.
+
+        Newer clients use the server's token-budgeted context endpoint. Older
+        duck-typed clients fall back to recall + local rendering, preserving
+        compatibility while still exposing the same result container.
+        """
+        started = perf_counter()
+        context_fn = getattr(self.client, "context", None)
+        if callable(context_fn):
+            raw = context_fn(
+                agent_id=self.agent_id,
+                query=query,
+                k=k if k is not None else max(10, self.recall_k),
+                as_of=as_of,
+                max_tokens=max_tokens,
+                mmr=mmr,
+                strategy=strategy,
+                max_query_variants=max_query_variants,
+            )
+            memories = [
+                RecalledMemory.from_dict(item)
+                for item in (raw.get("memories") or [])
+            ]
+            return PreparedMemoryContext(
+                query=query,
+                context=str(raw.get("context") or ""),
+                memories=memories,
+                token_estimate=int(raw.get("token_estimate") or 0),
+                retrieval_confidence=float(raw.get("retrieval_confidence") or 0.0),
+                retrieval_degraded=bool(raw.get("retrieval_degraded")),
+                strategy=str(raw.get("strategy") or strategy),
+                query_variants=list(raw.get("query_variants") or [query]),
+                latency_ms=float(
+                    raw.get("recall_latency_ms")
+                    or ((perf_counter() - started) * 1000)
+                ),
+                truncated=bool(raw.get("truncated")),
+            )
+
+        recalled = self.recall(query, k=k, as_of=as_of)
+        context = self._render(recalled)
+        return PreparedMemoryContext(
+            query=query,
+            context=context,
+            memories=recalled,
+            token_estimate=max(1, len(context) // 4),
+            retrieval_confidence=0.0,
+            retrieval_degraded=False,
+            strategy="standard",
+            query_variants=[query],
+            latency_ms=round((perf_counter() - started) * 1000, 3),
+        )
+
+    def learn(
+        self,
+        memories: Sequence[str],
+        *,
+        outcome: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        importance: Optional[float] = None,
+        event_time: Optional[datetime] = None,
+    ) -> list[dict]:
+        """Persist explicit durable learnings after an agent action.
+
+        Callers choose the durable facts; Lians does not indiscriminately turn
+        every model completion into trusted memory. Outcome labels are attached
+        for later quality analysis and policy-controlled experience learning.
+        """
+        learned: list[dict] = []
+        for content in memories:
+            if not str(content).strip():
+                continue
+            item_metadata = dict(metadata or {})
+            item_metadata["_lians_learning"] = "agent_outcome"
+            if outcome:
+                item_metadata["_outcome"] = outcome
+            learned.append(self.remember(
+                str(content),
+                metadata=item_metadata,
+                importance=importance,
+                event_time=event_time,
+            ))
+        return learned
+
+    def smart_turn(
+        self,
+        query: str,
+        generate: Callable[[str, str], Any],
+        *,
+        learned_memories: Optional[Callable[[Any], Sequence[str]]] = None,
+        outcome: Optional[str] = None,
+        k: Optional[int] = None,
+        max_tokens: int = 1500,
+        strategy: str = "adaptive",
+    ) -> SmartTurnResult:
+        """Run the full memory-intelligence loop with measurable boundaries."""
+        total_started = perf_counter()
+        prepared = self.prepare(
+            query, k=k, max_tokens=max_tokens, strategy=strategy,
+        )
+        generation_started = perf_counter()
+        response = generate(prepared.context, query)
+        generation_latency = (perf_counter() - generation_started) * 1000
+        durable = learned_memories(response) if learned_memories else ()
+        learned = self.learn(durable, outcome=outcome)
+        return SmartTurnResult(
+            prepared=prepared,
+            response=response,
+            learned=learned,
+            generation_latency_ms=round(generation_latency, 3),
+            total_latency_ms=round((perf_counter() - total_started) * 1000, 3),
+        )
 
     # ── Recall ────────────────────────────────────────────────────────────────
 
