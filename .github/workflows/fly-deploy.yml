@@ -1,18 +1,219 @@
-# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+name: Production deploy
 
-name: Fly Deploy
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DEPLOY to release master to production
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
-  deploy:
-    name: Deploy app
+  authorize:
+    name: Confirm production release
     runs-on: ubuntu-latest
-    concurrency: deploy-group    # optional: ensure only one action runs at a time
     steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
+      - name: Require explicit confirmation
         env:
+          CONFIRM: ${{ inputs.confirm }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = "DEPLOY"
+          test "$REF_NAME" = "master"
+
+  staging-gate:
+    name: Recheck staging database
+    needs: authorize
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
+      - name: Install read-only check dependency
+        run: python -m pip install "asyncpg>=0.29,<1"
+
+      - name: Verify staging through its private Fly tunnel
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          flyctl proxy 15432:5432 \
+            --app agentmem-lotus-staging-db \
+            --bind-addr 127.0.0.1 \
+            --quiet \
+            >"$RUNNER_TEMP/fly-staging-proxy.log" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.monotonic() + 60
+          while time.monotonic() < deadline:
+              try:
+                  with socket.create_connection(("127.0.0.1", 15432), timeout=1):
+                      break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Fly staging proxy did not become ready within 60 seconds")
+          PY
+
+          python scripts/check_staging_database.py \
+            --host 127.0.0.1 \
+            --port 15432 \
+            --expected-revision 0028_decision_envelopes
+
+  deploy:
+    name: Snapshot and deploy production
+    needs: staging-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://agentmem-lotus.fly.dev
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
+      - name: Record rollback image
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
+        run: |
+          set -euo pipefail
+          previous_image="$(
+            flyctl releases --app agentmem-lotus --json |
+              jq -er '[.[] | select(.Status == "complete")][0].ImageRef'
+          )"
+          case "$previous_image" in
+            registry.fly.io/agentmem-lotus:deployment-*) ;;
+            *) echo "Unexpected rollback image reference" >&2; exit 1 ;;
+          esac
+          echo "PREVIOUS_IMAGE=$previous_image" >> "$GITHUB_ENV"
+          echo "Rollback image recorded in the protected job environment."
+
+      - name: Create an immediate encrypted database snapshot
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_DB_TOKEN }}
+        run: |
+          set -euo pipefail
+          volumes="$(flyctl volumes list --app agentmem-lotus-db --json)"
+          volume_count="$(jq 'length' <<<"$volumes")"
+          test "$volume_count" -eq 1
+          test "$(jq -r '.[0].encrypted' <<<"$volumes")" = "true"
+          test "$(jq -r '.[0].state' <<<"$volumes")" = "created"
+          volume_id="$(jq -er '.[0].id' <<<"$volumes")"
+
+          before_ids="$RUNNER_TEMP/production-snapshot-ids-before.txt"
+          flyctl volumes snapshots list "$volume_id" \
+            --app agentmem-lotus-db \
+            --json |
+            jq -r '.[].id' |
+            sort >"$before_ids"
+
+          # Fly currently prints a scheduling message even when --json is
+          # requested. Confirm the backup through the snapshot list instead
+          # of trying to parse the create command's stdout.
+          flyctl volumes snapshots create "$volume_id" \
+            --app agentmem-lotus-db \
+            >"$RUNNER_TEMP/production-snapshot-create.log"
+
+          snapshot_id=""
+          snapshot_status=""
+          for _ in $(seq 1 30); do
+            snapshots="$(
+              flyctl volumes snapshots list "$volume_id" \
+                --app agentmem-lotus-db \
+                --json
+            )"
+            snapshot_id="$(
+              jq -r '.[].id' <<<"$snapshots" |
+                sort |
+                grep -vxFf "$before_ids" |
+                head -n 1 || true
+            )"
+            if [ -n "$snapshot_id" ]; then
+              snapshot_status="$(
+                jq -er --arg id "$snapshot_id" \
+                  '.[] | select(.id == $id) | .status' <<<"$snapshots"
+              )"
+              if [ "$snapshot_status" = "created" ]; then
+                break
+              fi
+            fi
+            sleep 2
+          done
+
+          test -n "$snapshot_id"
+          test "$snapshot_status" = "created"
+          echo "Production database snapshot created: $snapshot_id"
+          echo "### Database safety" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Snapshot: \`$snapshot_id\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Volume: encrypted" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy with release migration and canary health checks
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
+        run: |
+          set -euo pipefail
+          flyctl deploy \
+            --app agentmem-lotus \
+            --config fly.toml \
+            --remote-only \
+            --strategy canary \
+            --release-command-timeout 10m \
+            --wait-timeout 10m
+
+      - name: Verify schema revision inside the production app
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
+        run: |
+          set -euo pipefail
+          revision="$(
+            flyctl ssh console \
+              --app agentmem-lotus \
+              --command "alembic -c alembic.ini current" \
+              --quiet 2>/dev/null |
+              awk 'NF { print $1; exit }'
+          )"
+          test "$revision" = "0028_decision_envelopes"
+          echo "Production schema revision: $revision"
+
+      - name: Run public production smoke checks
+        run: |
+          python scripts/check_production_deployment.py \
+            --base-url https://agentmem-lotus.fly.dev
+
+      - name: Publish rollback command
+        if: always()
+        run: |
+          {
+            echo "### Rollback"
+            echo "If application rollback is needed, run the **Production rollback** workflow."
+            echo "Use image: \`$PREVIOUS_IMAGE\`"
+            echo "Do not downgrade the production database during incident response."
+          } >> "$GITHUB_STEP_SUMMARY"

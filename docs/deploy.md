@@ -17,7 +17,7 @@ Copy `.env.example` to `.env` and fill every value:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/Lians
-ENCRYPTION_MASTER_KEY=<32-byte hex, generate with: python -c "import secrets; print(secrets.token_hex(32))">
+MASTER_ENCRYPTION_KEY=<base64-encoded 32-byte key>
 ADMIN_SECRET=<long random string — never expose in client traffic>
 ANTHROPIC_API_KEY=<required when SUPERSESSION_LLM_STAGE=true>
 VOYAGE_API_KEY=<required when EMBEDDING_PROVIDER=voyage>
@@ -40,6 +40,9 @@ alembic current
 
 Before deploying migration 0028, complete the disposable staging-data
 rehearsal in `docs/migration-0028-staging-rehearsal.md`.
+
+For the exact Fly.io production gate, release sequence, abort criteria, and
+application rollback procedure, use `docs/production-release.md`.
 
 ### Required extensions
 
@@ -92,13 +95,16 @@ docker compose up -d
 docker compose logs -f Lians
 ```
 
-Health check: `curl http://localhost:8000/health`
+Liveness check: `curl http://localhost:8000/livez`
+
+Readiness check: `curl http://localhost:8000/readyz`
 
 ### Fly.io
 
 ```bash
-fly deploy --config fly.toml
-fly secrets set ENCRYPTION_MASTER_KEY=<value> ADMIN_SECRET=<value> ...
+# Production releases use the protected GitHub "Production deploy" workflow.
+# Do not deploy the production app directly from a workstation.
+fly secrets set MASTER_ENCRYPTION_KEY=<value> ADMIN_SECRET=<value> ...
 ```
 
 ### Kubernetes
@@ -148,7 +154,7 @@ scrape_configs:
 - [ ] TLS termination at the load balancer; plain HTTP never exposed externally
 
 ### Encryption
-- [ ] `ENCRYPTION_MASTER_KEY` stored in a secrets manager (AWS Secrets Manager, GCP Secret Manager, Vault), not in `.env`
+- [ ] `MASTER_ENCRYPTION_KEY` stored in a secrets manager (AWS Secrets Manager, GCP Secret Manager, Vault), not in `.env`
 - [ ] Master key rotation procedure documented and tested
 - [ ] DEK (data encryption key) cache TTL matches your compliance requirement (default: 300 s)
 
@@ -231,13 +237,11 @@ curl -H "X-Admin-Secret: $ADMIN_SECRET" \
 
 ## 9. Rollback
 
-```bash
-# Roll back one migration
-alembic downgrade -1
+For Fly.io production, run the protected **Production rollback** workflow with
+the prior `registry.fly.io/agentmem-lotus:deployment-*` image recorded by the
+deploy job.
 
-# Roll back to specific revision
-alembic downgrade 0007_billing
-
-# Deploy previous container image
-docker compose down && docker compose up -d --pull always
-```
+Do not downgrade the production database during incident response. Restore
+the prior application image with release migrations skipped, verify health,
+and investigate with the failed release logs and pre-deploy snapshot intact.
+See `docs/production-release.md`.
