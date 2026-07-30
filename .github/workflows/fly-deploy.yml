@@ -201,7 +201,7 @@ jobs:
 
       - name: Verify schema revision inside the production app
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_SSH_TOKEN }}
         run: |
           set -euo pipefail
           revision="$(
