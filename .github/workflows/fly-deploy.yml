@@ -128,16 +128,10 @@ jobs:
           test "$(jq -r '.[0].state' <<<"$volumes")" = "created"
           volume_id="$(jq -er '.[0].id' <<<"$volumes")"
 
-          before_ids="$RUNNER_TEMP/production-snapshot-ids-before.txt"
           before_snapshots="$(
             flyctl volumes snapshots list "$volume_id" \
               --app agentmem-lotus-db \
               --json
-          )"
-          jq -r '.[].id' <<<"$before_snapshots" |
-            sort >"$before_ids"
-          latest_before="$(
-            jq -ec 'sort_by(.created_at) | last' <<<"$before_snapshots"
           )"
 
           # Fly currently prints a scheduling message even when --json is
@@ -147,53 +141,49 @@ jobs:
             --app agentmem-lotus-db \
             >"$RUNNER_TEMP/production-snapshot-create.log"
 
-          snapshot_id=""
-          snapshot_status=""
-          snapshot_source="new"
+          selected_snapshot=""
           for _ in $(seq 1 30); do
             snapshots="$(
               flyctl volumes snapshots list "$volume_id" \
                 --app agentmem-lotus-db \
                 --json
             )"
-            snapshot_id="$(
-              jq -r '.[].id' <<<"$snapshots" |
-                sort |
-                grep -vxFf "$before_ids" |
-                head -n 1 || true
+            selected_snapshot="$(
+              jq -ec '
+                map(select(.status == "created"))
+                | sort_by(.created_at)
+                | last
+                | select(. != null)
+                | . + {
+                    age_seconds: (
+                      (now - (.created_at | fromdateiso8601))
+                      | floor
+                    )
+                  }
+                | select(.age_seconds >= 0 and .age_seconds <= 7200)
+              ' <<<"$snapshots" || true
             )"
-            if [ -n "$snapshot_id" ]; then
-              snapshot_status="$(
-                jq -er --arg id "$snapshot_id" \
-                  '.[] | select(.id == $id) | .status' <<<"$snapshots"
-              )"
-              if [ "$snapshot_status" = "created" ]; then
-                break
-              fi
+            if [ -n "$selected_snapshot" ]; then
+              break
             fi
             sleep 2
           done
 
-          if [ -z "$snapshot_id" ]; then
-            # Fly may rate-limit or coalesce snapshot requests when an
-            # automatic snapshot was created recently. A recent encrypted
-            # snapshot still satisfies the rollback gate.
-            snapshot_id="$(jq -er '.id' <<<"$latest_before")"
-            snapshot_status="$(jq -er '.status' <<<"$latest_before")"
-            snapshot_created_at="$(jq -er '.created_at' <<<"$latest_before")"
-            snapshot_created_epoch="$(date -u -d "$snapshot_created_at" +%s)"
-            snapshot_age_seconds="$(( $(date -u +%s) - snapshot_created_epoch ))"
-            test "$snapshot_age_seconds" -ge 0
-            test "$snapshot_age_seconds" -le 7200
+          test -n "$selected_snapshot"
+          snapshot_id="$(jq -er '.id' <<<"$selected_snapshot")"
+          snapshot_age_seconds="$(jq -er '.age_seconds' <<<"$selected_snapshot")"
+          if jq -e --arg id "$snapshot_id" \
+            'any(.[]; .id == $id)' <<<"$before_snapshots" >/dev/null; then
             snapshot_source="existing recent"
+          else
+            snapshot_source="new"
           fi
 
-          test -n "$snapshot_id"
-          test "$snapshot_status" = "created"
           echo "Production database snapshot selected: $snapshot_id ($snapshot_source)"
           echo "### Database safety" >> "$GITHUB_STEP_SUMMARY"
           echo "- Snapshot: \`$snapshot_id\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Source: $snapshot_source" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Age: $snapshot_age_seconds seconds" >> "$GITHUB_STEP_SUMMARY"
           echo "- Volume: encrypted" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy with release migration and canary health checks
