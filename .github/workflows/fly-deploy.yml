@@ -129,11 +129,16 @@ jobs:
           volume_id="$(jq -er '.[0].id' <<<"$volumes")"
 
           before_ids="$RUNNER_TEMP/production-snapshot-ids-before.txt"
-          flyctl volumes snapshots list "$volume_id" \
-            --app agentmem-lotus-db \
-            --json |
-            jq -r '.[].id' |
+          before_snapshots="$(
+            flyctl volumes snapshots list "$volume_id" \
+              --app agentmem-lotus-db \
+              --json
+          )"
+          jq -r '.[].id' <<<"$before_snapshots" |
             sort >"$before_ids"
+          latest_before="$(
+            jq -ec 'sort_by(.created_at) | last' <<<"$before_snapshots"
+          )"
 
           # Fly currently prints a scheduling message even when --json is
           # requested. Confirm the backup through the snapshot list instead
@@ -144,6 +149,7 @@ jobs:
 
           snapshot_id=""
           snapshot_status=""
+          snapshot_source="new"
           for _ in $(seq 1 30); do
             snapshots="$(
               flyctl volumes snapshots list "$volume_id" \
@@ -168,11 +174,26 @@ jobs:
             sleep 2
           done
 
+          if [ -z "$snapshot_id" ]; then
+            # Fly may rate-limit or coalesce snapshot requests when an
+            # automatic snapshot was created recently. A recent encrypted
+            # snapshot still satisfies the rollback gate.
+            snapshot_id="$(jq -er '.id' <<<"$latest_before")"
+            snapshot_status="$(jq -er '.status' <<<"$latest_before")"
+            snapshot_created_at="$(jq -er '.created_at' <<<"$latest_before")"
+            snapshot_created_epoch="$(date -u -d "$snapshot_created_at" +%s)"
+            snapshot_age_seconds="$(( $(date -u +%s) - snapshot_created_epoch ))"
+            test "$snapshot_age_seconds" -ge 0
+            test "$snapshot_age_seconds" -le 7200
+            snapshot_source="existing recent"
+          fi
+
           test -n "$snapshot_id"
           test "$snapshot_status" = "created"
-          echo "Production database snapshot created: $snapshot_id"
+          echo "Production database snapshot selected: $snapshot_id ($snapshot_source)"
           echo "### Database safety" >> "$GITHUB_STEP_SUMMARY"
           echo "- Snapshot: \`$snapshot_id\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: $snapshot_source" >> "$GITHUB_STEP_SUMMARY"
           echo "- Volume: encrypted" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy with release migration and canary health checks

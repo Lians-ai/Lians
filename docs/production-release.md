@@ -28,8 +28,9 @@ image is promoted.
 - Fly credentials are app-scoped and expire after 90 days.
 - The workflow rechecks the private staging database before touching
   production.
-- The workflow records the prior good image and creates a fresh encrypted
-  database-volume snapshot before deploying.
+- The workflow records the prior good image and requests a fresh encrypted
+  database-volume snapshot before deploying. If Fly coalesces that request,
+  it accepts only an existing `created` snapshot no older than two hours.
 - Fly gates promotion on `/readyz`.
 - The workflow verifies revision `0028_decision_envelopes` and the public API
   surface after deployment.
@@ -60,7 +61,8 @@ Do not proceed if any item is unknown.
 3. Choose the `master` branch, enter `DEPLOY`, and start the workflow.
 4. Confirm that **Recheck staging database** passes.
 5. Let the protected production job complete its five-minute wait.
-6. Confirm the workflow records a prior image and a new database snapshot.
+6. Confirm the workflow records a prior image and selects a `created`
+   database snapshot no older than two hours.
 7. Confirm the Fly release migration reaches `0028_decision_envelopes`.
 8. Confirm the deployment and public smoke checks pass.
 9. Inspect `/health`, `/readyz`, error rate, and request latency for at least
@@ -71,7 +73,7 @@ Do not proceed if any item is unknown.
 Abort or stop promotion if:
 
 - the staging database check fails;
-- no new production snapshot reaches `created`;
+- no production snapshot is both `created` and less than two hours old;
 - the release command fails or reports any revision other than
   `0028_decision_envelopes`;
 - `/readyz` does not become healthy within the workflow timeout;
