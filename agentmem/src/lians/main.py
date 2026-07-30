@@ -113,6 +113,50 @@ def _validate_airgap(settings) -> None:
         )
 
 
+async def _warm_embedding_provider(
+    provider,
+    *,
+    expected_dim: int,
+    provider_name: str,
+) -> None:
+    """Warm embedding inference without delaying API startup."""
+    try:
+        warmup_vec = await provider.embed_one("warmup")
+        if warmup_vec and len(warmup_vec) != expected_dim:
+            raise RuntimeError(
+                f"Embedding provider {provider_name!r} returned "
+                f"{len(warmup_vec)}-dim vectors but EMBEDDING_DIM={expected_dim}. "
+                "The DB schema is built for EMBEDDING_DIM dimensions. "
+                "Set EMBEDDING_DIM to match your model, or use a different model."
+            )
+        logger.info("Embedder warmed up", extra={"provider": provider_name})
+    except Exception as exc:  # noqa: BLE001 - providers expose heterogeneous failures
+        # The API can still serve writes, evidence exports, and health checks
+        # while a local model is warming or temporarily unavailable. Retrieval
+        # will retry provider initialization on its first real request.
+        from .degradation import record_degradation
+
+        record_degradation("embedding_warmup", type(exc).__name__)
+        logger.warning("Embedder warmup failed (non-fatal): %s", exc)
+
+
+def _start_embedding_warmup(
+    provider,
+    *,
+    expected_dim: int,
+    provider_name: str,
+) -> asyncio.Task:
+    """Schedule warmup and return immediately so readiness is not CPU-bound."""
+    return asyncio.create_task(
+        _warm_embedding_provider(
+            provider,
+            expected_dim=expected_dim,
+            provider_name=provider_name,
+        ),
+        name="embedding-warmup",
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from .db import (
@@ -154,25 +198,16 @@ async def lifespan(app: FastAPI):
             extra={"rows_updated": protected_rows},
         )
 
-    # Change 5: pre-warm the embedder at startup so the first recall doesn't pay
-    # the model-load penalty.  For sentence-transformers this blocks briefly in a
-    # thread-pool executor; for API providers it is a no-op.
+    # Warm the embedder in the background. Local model inference can take
+    # minutes on shared CPUs, so it must not hold liveness and readiness
+    # endpoints hostage during a rolling deployment.
     from .embeddings import get_embedding_provider
     _provider = get_embedding_provider()
-    try:
-        _warmup_vec = await _provider.embed_one("warmup")
-        if _warmup_vec and len(_warmup_vec) != settings.embedding_dim:
-            raise RuntimeError(
-                f"Embedding provider {settings.embedding_provider!r} returned "
-                f"{len(_warmup_vec)}-dim vectors but EMBEDDING_DIM={settings.embedding_dim}. "
-                "The DB schema is built for EMBEDDING_DIM dimensions. "
-                "Set EMBEDDING_DIM to match your model, or use a different model."
-            )
-        logger.info("Embedder warmed up", extra={"provider": settings.embedding_provider})
-    except RuntimeError:
-        raise
-    except Exception as exc:
-        logger.warning("Embedder warmup failed (non-fatal): %s", exc)
+    embedding_warmup_task = _start_embedding_warmup(
+        _provider,
+        expected_dim=settings.embedding_dim,
+        provider_name=settings.embedding_provider,
+    )
 
     if settings.cors_origins == "*":
         logger.warning(
@@ -229,6 +264,7 @@ async def lifespan(app: FastAPI):
     yield
 
     for task in (
+        embedding_warmup_task,
         scheduler_task,
         learning_task,
         durable_job_task,

@@ -102,9 +102,13 @@ class SentenceTransformerProvider(EmbeddingProvider):
         msl = getattr(model, "max_seq_length", None)
         if isinstance(msl, int) and msl > 512:
             model.max_seq_length = 512
-        # Validate dimension before the first real request, not on every call.
-        probe = model.encode(["probe"], normalize_embeddings=True)
-        actual_dim = probe.shape[1]
+        # SentenceTransformer exposes the output dimension from model metadata.
+        # Reading it avoids a full CPU inference pass during model load.
+        actual_dim = model.get_sentence_embedding_dimension()
+        if actual_dim is None:
+            raise ValueError(
+                f"Model '{self._model_name}' did not report an embedding dimension."
+            )
         if actual_dim != self.dim:
             raise ValueError(
                 f"Model '{self._model_name}' produces {actual_dim}-dim embeddings "

@@ -87,14 +87,56 @@ class TestSentenceTransformerProvider:
         # Simulate a 384-dim model
         fake_st_module = types.ModuleType("sentence_transformers")
         bad_model = MagicMock()
-        bad_model.encode = lambda texts, normalize_embeddings=True: np.zeros(
-            (len(texts), 384), dtype=np.float32
-        )
+        bad_model.get_sentence_embedding_dimension.return_value = 384
         fake_st_module.SentenceTransformer = lambda name: bad_model
 
+        with (
+            patch.dict("sys.modules", {"sentence_transformers": fake_st_module}),
+            pytest.raises(ValueError, match="384-dim"),
+        ):
+            provider._load()
+        bad_model.encode.assert_not_called()
+
+    def test_dimension_validation_does_not_run_inference(self):
+        """Loading validates model metadata without an expensive probe encode."""
+        from src.lians.embeddings import SentenceTransformerProvider
+
+        with patch("src.lians.config.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                sentence_transformer_model="BAAI/bge-large-en-v1.5",
+                embedding_dim=1024,
+            )
+            provider = SentenceTransformerProvider()
+
+        fake_st_module = types.ModuleType("sentence_transformers")
+        model = MagicMock()
+        model.get_sentence_embedding_dimension.return_value = 1024
+        fake_st_module.SentenceTransformer = lambda name: model
+
         with patch.dict("sys.modules", {"sentence_transformers": fake_st_module}):
-            with pytest.raises(ValueError, match="384-dim"):
-                provider._load()
+            assert provider._load() is model
+        model.encode.assert_not_called()
+
+    async def test_background_warmup_does_not_block_startup(self):
+        """Scheduling warmup returns while a slow provider is still working."""
+        from src.lians.main import _start_embedding_warmup
+
+        release = asyncio.Event()
+
+        class SlowProvider:
+            async def embed_one(self, text):
+                await release.wait()
+                return [0.0] * 1024
+
+        task = _start_embedding_warmup(
+            SlowProvider(),
+            expected_dim=1024,
+            provider_name="sentence-transformers",
+        )
+        await asyncio.sleep(0)
+        assert not task.done()
+        release.set()
+        await task
 
     def test_provider_registered_in_get_provider(self):
         """get_provider() must return SentenceTransformerProvider for the right key."""
