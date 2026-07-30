@@ -32,7 +32,7 @@ import socket
 import uuid
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,30 +102,50 @@ def _validate_webhook_url(url: str) -> tuple[str, int]:
     return host, port
 
 
-async def _validate_webhook_destination(url: str) -> None:
-    """Resolve a webhook immediately before delivery and require public IPs."""
+async def _resolve_webhook_destination(url: str) -> tuple[str, str, str]:
+    """Resolve once, require public IPs, and return an IP-pinned HTTPS target.
+
+    Validation followed by a normal hostname request creates a DNS-rebinding
+    window because the HTTP client resolves the name a second time. Connecting
+    to the validated address while retaining the original Host header and TLS
+    SNI closes that gap.
+    """
     host, port = _validate_webhook_url(url)
     try:
-        ipaddress.ip_address(host)
-        return  # Public literal IP was checked above.
+        literal = ipaddress.ip_address(host)
     except ValueError:
-        pass
-
-    try:
-        addresses = await asyncio.to_thread(
-            socket.getaddrinfo,
-            host,
-            port,
-            type=socket.SOCK_STREAM,
-        )
-    except OSError as exc:
-        raise ValueError("Webhook hostname could not be resolved") from exc
-    if not addresses:
-        raise ValueError("Webhook hostname could not be resolved")
-    for info in addresses:
-        address = ipaddress.ip_address(info[4][0])
-        if not address.is_global:
+        try:
+            addresses = await asyncio.to_thread(
+                socket.getaddrinfo,
+                host,
+                port,
+                type=socket.SOCK_STREAM,
+            )
+        except OSError as exc:
+            raise ValueError("Webhook hostname could not be resolved") from exc
+        if not addresses:
+            raise ValueError("Webhook hostname could not be resolved")
+        resolved = [ipaddress.ip_address(info[4][0]) for info in addresses]
+        if any(not address.is_global for address in resolved):
             raise ValueError("Webhook hostname resolves to a non-public address")
+        address = resolved[0]
+    else:
+        address = literal
+
+    parsed = urlsplit(url)
+    address_text = f"[{address}]" if address.version == 6 else str(address)
+    pinned_netloc = address_text if port == 443 else f"{address_text}:{port}"
+    pinned_url = urlunsplit(
+        ("https", pinned_netloc, parsed.path or "/", parsed.query, "")
+    )
+    host_text = f"[{host}]" if ":" in host else host
+    host_header = host_text if port == 443 else f"{host_text}:{port}"
+    return pinned_url, host_header, host
+
+
+async def _validate_webhook_destination(url: str) -> None:
+    """Compatibility validation helper used by callers and older integrations."""
+    await _resolve_webhook_destination(url)
 
 
 # ── HTTP delivery (isolated so tests can mock it) ─────────────────────────────
@@ -133,7 +153,7 @@ async def _validate_webhook_destination(url: str) -> None:
 async def _http_post(url: str, body: bytes, signature: str) -> tuple[int, str]:
     """POST body to url with signature header.  Returns (status_code, error_or_empty)."""
     try:
-        await _validate_webhook_destination(url)
+        pinned_url, host_header, sni_hostname = await _resolve_webhook_destination(url)
     except ValueError as exc:
         return 0, f"Blocked webhook destination: {exc}"
 
@@ -149,13 +169,15 @@ async def _http_post(url: str, body: bytes, signature: str) -> tuple[int, str]:
             trust_env=False,
         ) as client:
             resp = await client.post(
-                url,
+                pinned_url,
                 content=body,
                 headers={
                     "Content-Type": "application/json",
+                    "Host": host_header,
                     "X-Lians-Signature": signature,
                     "X-AgentMem-Signature": signature,
                 },
+                extensions={"sni_hostname": sni_hostname},
             )
             return resp.status_code, "" if resp.is_success else resp.text[:500]
     except Exception as exc:

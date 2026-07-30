@@ -41,6 +41,7 @@ from .middleware import (
     AccessLogMiddleware,
     RequestBodyLimitMiddleware,
     RateLimitMiddleware,
+    SecurityHeadersMiddleware,
 )
 
 logger = logging.getLogger("lians.startup")
@@ -157,6 +158,29 @@ def _start_embedding_warmup(
     )
 
 
+async def _validate_database_role(engine, *, production: bool) -> None:
+    """Refuse production startup when PostgreSQL can bypass tenant RLS."""
+    if not production or engine.dialect.name != "postgresql":
+        return
+    async with engine.connect() as connection:
+        role = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT r.rolsuper, r.rolbypassrls
+                    FROM pg_roles AS r
+                    WHERE r.rolname = current_user
+                    """
+                )
+            )
+        ).mappings().one()
+    if role["rolsuper"] or role["rolbypassrls"]:
+        raise RuntimeError(
+            "Unsafe production database role: the application connection must "
+            "be NOSUPERUSER and NOBYPASSRLS so tenant policies are enforceable"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from .db import (
@@ -174,6 +198,7 @@ async def lifespan(app: FastAPI):
 
     _warn_insecure_secrets(settings)
     _validate_production_secrets(settings)
+    await _validate_database_role(engine, production=_is_production)
 
     if settings.airgap_mode:
         _validate_airgap(settings)
@@ -279,6 +304,17 @@ async def lifespan(app: FastAPI):
     logger.info("Lians shutdown")
 
 
+_runtime_settings = get_settings()
+_is_production = _runtime_settings.deployment_environment.strip().lower() in {
+    "prod",
+    "production",
+}
+_docs_enabled = (
+    _runtime_settings.expose_api_docs
+    if _runtime_settings.expose_api_docs is not None
+    else not _is_production
+)
+
 app = FastAPI(
     title="Lians",
     description=(
@@ -287,6 +323,9 @@ app = FastAPI(
     ),
     version="0.5.0",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 
@@ -343,6 +382,7 @@ app.add_middleware(
     RequestBodyLimitMiddleware,
     max_bytes=get_settings().max_request_body_bytes,
 )
+app.add_middleware(SecurityHeadersMiddleware, production=_is_production)
 
 app.include_router(memory_router)
 app.include_router(audit_router)
@@ -404,12 +444,19 @@ async def health(db: AsyncSession = Depends(_get_db)):
     degradations = recent_degradations()
     all_ok = all(v in ("ok", "disabled") for v in checks.values())
     status = "ok" if all_ok and not degradations else "degraded"
-    return JSONResponse(
-        content={
-            "status": status,
+    details_enabled = (
+        get_settings().expose_health_details
+        if get_settings().expose_health_details is not None
+        else not _is_production
+    )
+    content = {"status": status}
+    if details_enabled:
+        content.update({
             "checks": checks,
             "recent_degradations": degradations,
-        },
+        })
+    return JSONResponse(
+        content=content,
         status_code=200 if all_ok else 503,
     )
 

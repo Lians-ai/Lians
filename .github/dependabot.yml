@@ -1,0 +1,82 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /agentmem/sdk/python
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      python-sdk:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /integrations/mcpb
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      mcpb:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /packages/agentmem-backtest-check
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      backtest-check:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /agentmem/sdk/typescript
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      typescript-sdk:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /integrations/grafana-lians-app
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      grafana-app:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /agentmem/sdk/go
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      go-sdk:
+        patterns: ["*"]
+
+  - package-ecosystem: maven
+    directory: /agentmem/sdk/java
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      java-sdk:
+        patterns: ["*"]

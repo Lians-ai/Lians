@@ -1,51 +1,60 @@
-﻿FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# System deps: gcc + libpq-dev for asyncpg C extension; libffi-dev for cryptography
+# Compilers and development headers exist only in the build stage.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies before copying the full source tree so that
-# Docker reuses this layer on code-only changes (pyproject.toml is the cache key).
-# [local] installs sentence-transformers for self-hosted, air-gapped deployments.
-# Pass --build-arg EXTRAS= to build a leaner image when using EMBEDDING_PROVIDER=voyage.
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Install a wheel-style package into an isolated virtual environment. Avoid an
+# editable install whose .pth file would point back into the builder filesystem.
 ARG EXTRAS=local
 COPY pyproject.toml ./
 COPY agentmem/src/ ./agentmem/src/
-RUN pip install --no-cache-dir -e ".[$EXTRAS]"
+RUN python -m pip install --no-cache-dir --upgrade pip==25.3 \
+    && python -m pip install --no-cache-dir ".[$EXTRAS]"
 
-# Pre-download the sentence-transformers model at build time so:
-#   (a) first startup requires zero network access
-#   (b) runtime works with readOnlyRootFilesystem: true (no downloads at startup)
-# The model lands in /app/.model_cache (set via SENTENCE_TRANSFORMERS_HOME below).
-# Pass --build-arg PREDOWNLOAD_MODEL= to skip the download (e.g. CI, non-local provider).
+# Pre-download the local embedding model for zero-network runtime startup.
 ARG PREDOWNLOAD_MODEL=BAAI/bge-large-en-v1.5
 ENV SENTENCE_TRANSFORMERS_HOME=/app/.model_cache
-RUN if [ -n "$PREDOWNLOAD_MODEL" ]; then \
+RUN mkdir -p "$SENTENCE_TRANSFORMERS_HOME" \
+    && if [ -n "$PREDOWNLOAD_MODEL" ]; then \
       python -c "from sentence_transformers import SentenceTransformer; \
                  SentenceTransformer('$PREDOWNLOAD_MODEL')"; \
     fi
 
-# After baking the model in, tell HuggingFace libraries not to check for updates
-# or attempt any network calls. This enforces true air-gap behaviour at runtime.
-ENV TRANSFORMERS_OFFLINE=1
-ENV HF_DATASETS_OFFLINE=1
 
-# Copy the remaining source (migrations, SDK, examples)
-COPY agentmem/ ./agentmem/
+FROM python:3.12-slim AS runtime
 
-# Run from agentmem/ so that:
-#   - alembic finds alembic.ini in the CWD
-#   - uvicorn resolves src.lian.main via the CWD on sys.path
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 lians \
+    && useradd --system --uid 10001 --gid lians \
+       --create-home --home-dir /home/lians lians
+
+ENV PATH="/opt/venv/bin:${PATH}" \
+    SENTENCE_TRANSFORMERS_HOME=/app/.model_cache \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_DATASETS_OFFLINE=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /app/.model_cache /app/.model_cache
+COPY agentmem/ /app/agentmem/
+
+RUN chown -R lians:lians /app /opt/venv /home/lians
+
 WORKDIR /app/agentmem
+USER 10001:10001
 
 EXPOSE 8000
 
-# The package is pip-installed (import name "lians") — do not reference the
-# src tree by path here; src.lian.main was a stale pre-rename path that made
-# the compose api service crash-loop while Render masked it via startCommand.
 CMD ["uvicorn", "lians.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

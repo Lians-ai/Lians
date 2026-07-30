@@ -22,7 +22,7 @@ from src.lians.models import ApiKey, DurableJob, WebhookEndpoint, WebhookDeliver
 from src.lians.webhook_service import (
     register_webhook, list_webhooks, delete_webhook, update_webhook,
     dispatch_event, handle_webhook_job, _sign, _http_post,
-    _validate_webhook_url,
+    _validate_webhook_url, _resolve_webhook_destination,
     MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED,
 )
 
@@ -122,6 +122,21 @@ async def test_http_post_blocks_private_destination_before_network():
     )
     assert status == 0
     assert "Blocked webhook destination" in error
+
+
+@pytest.mark.asyncio
+async def test_webhook_destination_is_pinned_to_validated_ip():
+    resolved = [
+        (2, 1, 6, "", ("93.184.216.34", 443)),
+    ]
+    with patch("src.lians.webhook_service.socket.getaddrinfo", return_value=resolved):
+        target, host_header, sni_hostname = await _resolve_webhook_destination(
+            "https://hooks.example.test/events?id=1"
+        )
+
+    assert target == "https://93.184.216.34/events?id=1"
+    assert host_header == "hooks.example.test"
+    assert sni_hostname == "hooks.example.test"
 
 
 @pytest.mark.asyncio

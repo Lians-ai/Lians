@@ -3,7 +3,7 @@ Production middleware: request IDs, structured JSON access logging, rate limitin
 
 RequestIDMiddleware   — assigns X-Request-ID to every request; propagates via ContextVar
 AccessLogMiddleware   — logs one JSON line per request with method/path/status/duration_ms
-RateLimitMiddleware   — sliding-window per-API-key limit backed by Redis; fails open
+RateLimitMiddleware   — Redis-backed limit with a bounded local fallback
 
 All three are registered in main.py before any route middleware so they wrap
 every request uniformly, including 4xx/5xx responses from FastAPI's own validation.
@@ -15,6 +15,7 @@ import json
 import logging
 import time
 import uuid
+from collections import OrderedDict
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
@@ -121,6 +122,31 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Apply browser and transport hardening to every API response."""
+
+    def __init__(self, app, *, production: bool = False):
+        super().__init__(app)
+        self._production = production
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=()"
+        )
+        if self._production:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+            )
+        return response
+
+
 class RequestBodyLimitMiddleware:
     """Streaming ASGI request-body cap; also handles chunked requests."""
 
@@ -183,9 +209,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Sliding-window rate limit keyed by API key hash (300 req/min default).
 
-    Uses Redis INCR + EXPIRE for atomic counting across multiple workers.
-    Fails open — if Redis is unavailable, requests pass through unthrottled
-    rather than taking the service down with it.
+    Uses Redis INCR + EXPIRE for atomic counting across multiple workers. If
+    Redis is unavailable, a bounded per-process fallback keeps throttling
+    active instead of silently disabling the control.
 
     The raw API key is never written to Redis; only the first 16 hex chars
     of its SHA-256 hash are used as the key discriminator.
@@ -195,6 +221,36 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._limit = requests_per_minute
         self._window = 60  # seconds
+        self._fallback: OrderedDict[str, tuple[int, int]] = OrderedDict()
+        self._fallback_max_buckets = 10_000
+
+    def _fallback_increment(self, discriminator: str) -> int:
+        """Return the local count using a bounded fixed-minute window."""
+        window_id = int(time.monotonic() // self._window)
+        previous_window, previous_count = self._fallback.get(
+            discriminator, (-1, 0)
+        )
+        count = previous_count + 1 if previous_window == window_id else 1
+        self._fallback[discriminator] = (window_id, count)
+        self._fallback.move_to_end(discriminator)
+        while len(self._fallback) > self._fallback_max_buckets:
+            self._fallback.popitem(last=False)
+        return count
+
+    def _limit_response(self) -> Response:
+        return Response(
+            content=json.dumps({
+                "detail": f"Rate limit exceeded ({self._limit} req/min). "
+                          f"Retry after {self._window} seconds."
+            }),
+            status_code=429,
+            headers={
+                "Content-Type": "application/json",
+                "Retry-After": str(self._window),
+                "X-RateLimit-Limit": str(self._limit),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Health checks are exempt — LB probes must never be rate-limited
@@ -229,23 +285,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             remaining = max(0, self._limit - count)
             if count > self._limit:
-                return Response(
-                    content=json.dumps({
-                        "detail": f"Rate limit exceeded ({self._limit} req/min). "
-                                  f"Retry after {self._window} seconds."
-                    }),
-                    status_code=429,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Retry-After": str(self._window),
-                        "X-RateLimit-Limit": str(self._limit),
-                        "X-RateLimit-Remaining": "0",
-                    },
-                )
+                return self._limit_response()
         except Exception:
             from .degradation import record_degradation
             record_degradation("rate_limit", "redis_unavailable")
-            remaining = None  # Redis down — can't compute, skip headers
+            count = self._fallback_increment(discriminator)
+            remaining = max(0, self._limit - count)
+            if count > self._limit:
+                return self._limit_response()
 
         response = await call_next(request)
 
