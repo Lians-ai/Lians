@@ -199,18 +199,39 @@ jobs:
             --release-command-timeout 10m \
             --wait-timeout 10m
 
-      - name: Verify schema revision inside the production app
+      - name: Resolve the production machine
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_SSH_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
         run: |
           set -euo pipefail
-          revision="$(
-            flyctl ssh console \
+          production_machine_id="$(
+            flyctl machines list \
               --app agentmem-lotus \
-              --command "alembic -c alembic.ini current" \
-              --quiet 2>/dev/null |
-              awk 'NF { print $1; exit }'
+              --json |
+              jq -er '
+                [.[] | select(.state == "started")] as $started |
+                if ($started | length) == 1 then $started[0].id
+                else error("expected exactly one started production machine")
+                end
+              '
           )"
+          echo "PRODUCTION_MACHINE_ID=$production_machine_id" >> "$GITHUB_ENV"
+
+      - name: Verify schema revision inside the production app
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_MACHINE_EXEC_TOKEN }}
+        run: |
+          set -euo pipefail
+          output="$(
+            flyctl machine exec \
+              "$PRODUCTION_MACHINE_ID" \
+              "/bin/sh -lc 'cd /app/agentmem; alembic -c alembic.ini current'" \
+              --app agentmem-lotus \
+              --timeout 60 \
+              2>&1
+          )"
+          printf '%s\n' "$output"
+          revision="$(grep -oE '^0028_decision_envelopes' <<<"$output" | head -n 1)"
           test "$revision" = "0028_decision_envelopes"
           echo "Production schema revision: $revision"
 
