@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,16 +11,24 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..decision_evidence import assess_completeness, decision_out
 from ..models import (
     Agent,
     ConflictFlag,
+    DecisionEnvelope,
+    DecisionEvidenceLink,
     DecisionRecord,
     OTelSpan,
     ValidMindModelLink,
 )
 from .deps import AuthContext, get_auth
 
-router = APIRouter(prefix="/api/v1", tags=["validmind"])
+router = APIRouter(prefix="/v1/integrations/validmind", tags=["validmind"])
+legacy_router = APIRouter(
+    prefix="/api/v1",
+    tags=["validmind-legacy"],
+    include_in_schema=False,
+)
 
 
 class ValidMindUpdate(BaseModel):
@@ -140,6 +149,7 @@ async def _model_records(db: AsyncSession, namespace: str) -> list[dict]:
     return sorted(records, key=lambda item: (item["resource_type"], item["name"]))
 
 
+@legacy_router.get("/health")
 @router.get("/health")
 async def validmind_health(
     auth: AuthContext = Depends(get_auth),
@@ -149,6 +159,7 @@ async def validmind_health(
     return {"status": "healthy"}
 
 
+@legacy_router.get("/models")
 @router.get("/models")
 async def list_validmind_models(
     resource_type: str | None = None,
@@ -165,6 +176,7 @@ async def list_validmind_models(
     return records[offset : offset + limit]
 
 
+@legacy_router.get("/models/{external_id}")
 @router.get("/models/{external_id}")
 async def get_validmind_model(
     external_id: str,
@@ -179,6 +191,7 @@ async def get_validmind_model(
     raise HTTPException(status_code=404, detail="Model not found")
 
 
+@legacy_router.put("/models/{external_id}")
 @router.put("/models/{external_id}")
 async def update_validmind_model(
     external_id: str,
@@ -227,6 +240,7 @@ def _ticket(row: ConflictFlag) -> dict:
     }
 
 
+@legacy_router.get("/tickets")
 @router.get("/tickets")
 async def list_validmind_tickets(
     offset: int = Query(0, ge=0),
@@ -248,6 +262,118 @@ async def list_validmind_tickets(
     return [_ticket(row) for row in rows]
 
 
+@legacy_router.get("/evidence-readiness")
+@router.get("/evidence-readiness")
+async def validmind_evidence_readiness(
+    limit: int = Query(100, ge=1, le=1000),
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Expose honest decision-evidence grades for model-risk validation."""
+    auth.require("read")
+    auth.require_unbarriered()
+    decisions = list(
+        (
+            await db.execute(
+                select(DecisionRecord)
+                .where(
+                    DecisionRecord.namespace == auth.namespace,
+                    DecisionRecord.envelope_id.is_not(None),
+                )
+                .order_by(DecisionRecord.decided_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    envelope_ids = [row.envelope_id for row in decisions if row.envelope_id]
+    envelopes = {
+        row.id: row
+        for row in (
+            (
+                await db.execute(
+                    select(DecisionEnvelope).where(
+                        DecisionEnvelope.namespace == auth.namespace,
+                        DecisionEnvelope.id.in_(envelope_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+            if envelope_ids
+            else []
+        )
+    }
+    links_by_envelope: dict = defaultdict(list)
+    if envelope_ids:
+        links = (
+            (
+                await db.execute(
+                    select(DecisionEvidenceLink).where(
+                        DecisionEvidenceLink.namespace == auth.namespace,
+                        DecisionEvidenceLink.envelope_id.in_(envelope_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for link in links:
+            links_by_envelope[link.envelope_id].append(link)
+
+    records = []
+    grade_counts: Counter[str] = Counter()
+    gap_counts: Counter[str] = Counter()
+    for decision in decisions:
+        envelope = envelopes.get(decision.envelope_id)
+        if envelope is None:
+            continue
+        assessment = assess_completeness(
+            envelope, decision, links_by_envelope[envelope.id]
+        )
+        grade = assessment.grade or "unrecorded"
+        grade_counts[grade] += 1
+        for gap in assessment.gaps:
+            gap_counts[gap.code] += 1
+        records.append(
+            {
+                "id": f"lians-decision-{decision.id}",
+                "resource_type": "decision_evidence",
+                "decision": decision_out(decision).model_dump(mode="json"),
+                "completeness": assessment.model_dump(mode="json"),
+            }
+        )
+    reconstructable_or_better = sum(
+        grade_counts[grade]
+        for grade in ("reconstructable", "verifiable", "replayable")
+    )
+    verifiable_or_better = sum(
+        grade_counts[grade] for grade in ("verifiable", "replayable")
+    )
+    total = len(records)
+    return {
+        "schema": "https://lians.ai/schemas/validmind/evidence-readiness/v1",
+        "generated_at": datetime.now(timezone.utc),
+        "summary": {
+            "decisions": total,
+            "grades": dict(grade_counts),
+            "reconstructable_rate": (
+                round(reconstructable_or_better / total, 6) if total else 0.0
+            ),
+            "verifiable_rate": (
+                round(verifiable_or_better / total, 6) if total else 0.0
+            ),
+            "top_gaps": [
+                {"code": code, "decisions": count}
+                for code, count in gap_counts.most_common(10)
+            ],
+        },
+        "records": records,
+    }
+
+
+@legacy_router.get("/tickets/{ticket_id}")
 @router.get("/tickets/{ticket_id}")
 async def get_validmind_ticket(
     ticket_id: str,
@@ -267,6 +393,7 @@ async def get_validmind_ticket(
     return _ticket(row)
 
 
+@legacy_router.get("/schema")
 @router.get("/schema")
 async def validmind_schema(auth: AuthContext = Depends(get_auth)):
     auth.require("read")
@@ -293,6 +420,7 @@ async def validmind_schema(auth: AuthContext = Depends(get_auth)):
     }
 
 
+@legacy_router.get("/resource-types")
 @router.get("/resource-types")
 async def validmind_resource_types(auth: AuthContext = Depends(get_auth)):
     auth.require("read")
@@ -301,4 +429,5 @@ async def validmind_resource_types(auth: AuthContext = Depends(get_auth)):
         {"id": "ml_model", "name": "Machine-learning model"},
         {"id": "llm", "name": "Large language model"},
         {"id": "agent", "name": "AI agent"},
+        {"id": "decision_evidence", "name": "Decision evidence record"},
     ]

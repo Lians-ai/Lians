@@ -153,17 +153,30 @@ class LiansClient:
         k: int = 5,
         as_of: Optional[datetime] = None,
         filters: Optional[dict[str, Any]] = None,
+        include_context: bool = False,
+        strategy: str = "standard",
+        max_query_variants: int = 4,
+        mode: str = "fast",
+        decision_envelope_id: Optional[str] = None,
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict."""
-        return self._loop.run_until_complete(
-            self._async.recall(
-                agent_id=agent_id,
-                query=query,
-                k=k,
-                as_of=as_of,
-                filters=filters,
-            )
-        )
+        kwargs = {
+            "agent_id": agent_id, "query": query, "k": k,
+            "as_of": as_of, "filters": filters,
+        }
+        # Preserve the historical call shape for wrappers/mocks unless the
+        # caller opts into the new recall controls.
+        if include_context:
+            kwargs["include_context"] = True
+        if strategy != "standard":
+            kwargs["strategy"] = strategy
+        if max_query_variants != 4:
+            kwargs["max_query_variants"] = max_query_variants
+        if mode != "fast":
+            kwargs["mode"] = mode
+        if decision_envelope_id is not None:
+            kwargs["decision_envelope_id"] = decision_envelope_id
+        return self._loop.run_until_complete(self._async.recall(**kwargs))
 
     def context(
         self,
@@ -176,6 +189,10 @@ class LiansClient:
         mmr: bool = False,
         surface_conflicts: bool = True,
         max_conflicts: int = 5,
+        strategy: str = "adaptive",
+        max_query_variants: int = 4,
+        mode: str = "deep",
+        decision_envelope_id: Optional[str] = None,
     ) -> dict:
         """Build a token-budgeted, ready-to-inject context block. Returns a dict
         ``{context, memories, token_estimate, truncated}``. Open conflicts ride
@@ -185,6 +202,9 @@ class LiansClient:
                 agent_id=agent_id, query=query, k=k, as_of=as_of,
                 max_tokens=max_tokens, header=header, mmr=mmr,
                 surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
+                strategy=strategy, max_query_variants=max_query_variants,
+                mode=mode,
+                decision_envelope_id=decision_envelope_id,
             )
         )
 
@@ -221,6 +241,30 @@ class LiansClient:
         """Audit reconstruction. Returns AuditReconstructResult as a dict."""
         return self._loop.run_until_complete(
             self._async.reconstruct(agent_id=agent_id, as_of=as_of, query=query)
+        )
+
+    def feedback(self, memory_id: str, **kwargs: Any) -> dict:
+        return self._loop.run_until_complete(
+            self._async.feedback(memory_id=memory_id, **kwargs)
+        )
+
+    def learning_summary(self, agent_id: Optional[str] = None) -> dict:
+        return self._loop.run_until_complete(
+            self._async.learning_summary(agent_id=agent_id)
+        )
+
+    def resolve_memory_review(self, memory_id: str, **kwargs: Any) -> dict:
+        return self._loop.run_until_complete(
+            self._async.resolve_memory_review(memory_id=memory_id, **kwargs)
+        )
+
+    def run_learning_maintenance(
+        self, *, dry_run: bool = True, min_signals: int = 3,
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.run_learning_maintenance(
+                dry_run=dry_run, min_signals=min_signals,
+            )
         )
 
     # ── Compliance ────────────────────────────────────────────────────────────
@@ -452,6 +496,92 @@ class LiansClient:
             decided_at=decided_at, reason_codes=reason_codes, **fields,
         ))
 
+    def open_decision_envelope(
+        self,
+        *,
+        agent_id: str,
+        decision_type: str,
+        knowledge_as_of: Optional[datetime] = None,
+        completeness_profile: str = "standard",
+        **fields: Any,
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.open_decision_envelope(
+                agent_id=agent_id,
+                decision_type=decision_type,
+                knowledge_as_of=knowledge_as_of,
+                completeness_profile=completeness_profile,
+                **fields,
+            )
+        )
+
+    def decision_envelope(self, envelope_id: str) -> dict:
+        return self._loop.run_until_complete(
+            self._async.decision_envelope(envelope_id)
+        )
+
+    def add_decision_evidence(
+        self,
+        envelope_id: str,
+        evidence: list[dict[str, Any]],
+    ) -> list[dict]:
+        return self._loop.run_until_complete(
+            self._async.add_decision_evidence(envelope_id, evidence)
+        )
+
+    def seal_decision_envelope(
+        self,
+        envelope_id: str,
+        *,
+        outcome: str,
+        decided_at: datetime,
+        reason_codes: Optional[list[str]] = None,
+        **fields: Any,
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.seal_decision_envelope(
+                envelope_id,
+                outcome=outcome,
+                decided_at=decided_at,
+                reason_codes=reason_codes,
+                **fields,
+            )
+        )
+
+    def decision_completeness(self, decision_id: str) -> dict:
+        return self._loop.run_until_complete(
+            self._async.decision_completeness(decision_id)
+        )
+
+    def reconstruct_decision(self, decision_id: str) -> dict:
+        return self._loop.run_until_complete(
+            self._async.reconstruct_decision(decision_id)
+        )
+
+    def blast_radius(self, **filters: Any) -> dict:
+        return self._loop.run_until_complete(
+            self._async.blast_radius(**filters)
+        )
+
+    def record_evidence_change(
+        self,
+        *,
+        evidence_type: str,
+        source_id: str,
+        change_kind: str,
+        changed_at: datetime,
+        **fields: Any,
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.record_evidence_change(
+                evidence_type=evidence_type,
+                source_id=source_id,
+                change_kind=change_kind,
+                changed_at=changed_at,
+                **fields,
+            )
+        )
+
     def decisions(self, **filters: Any) -> list[dict]:
         return self._loop.run_until_complete(self._async.decisions(**filters))
 
@@ -461,8 +591,15 @@ class LiansClient:
             self._async.review_decision(decision_id, status, reviewer, note)
         )
 
-    def evidence_pack(self, decision_id: str, verify: bool = True) -> dict:
-        return self._loop.run_until_complete(self._async.evidence_pack(decision_id, verify))
+    def evidence_pack(
+        self,
+        decision_id: str,
+        verify: bool = True,
+        version: str = "v1",
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.evidence_pack(decision_id, verify, version)
+        )
 
     def record_event(self, event_type: str, agent_id: str, occurred_at: datetime,
                      **fields: Any) -> dict:

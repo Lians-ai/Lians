@@ -1,5 +1,5 @@
 ﻿"""
-Lians Python SDK — financial-grade AI memory with compliance built in.
+Lians Python SDK: durable, temporal AI memory with governance built in.
 
 Three clients, same API surface:
 
@@ -44,15 +44,26 @@ Install with extras::
     pip install lians-sdk[local]           # LocalLiansClient (SQLite)
     pip install lians-sdk[all]             # Everything
 """
-from .sync_client import LiansClient
+from pkgutil import extend_path
+
+# The monorepo also contains the Lians server package under the same public
+# namespace. Extending the path lets editable installs and integration tests
+# expose SDK clients and server modules together. Standalone SDK installs still
+# resolve only this package.
+__path__ = extend_path(__path__, __name__)
+
 from .client import AsyncLiansClient
 from .harness import (
-    LiansMemoryHarness,
     CompactionGuard,
-    RecalledMemory,
-    TurnResult,
+    LiansMemoryHarness,
     MemoryClient,
+    MemoryIntelligenceMetrics,
+    PreparedMemoryContext,
+    RecalledMemory,
+    SmartTurnResult,
+    TurnResult,
 )
+from .sync_client import LiansClient
 
 # Backward-compatibility aliases
 AgentMemClient = LiansClient
@@ -77,6 +88,9 @@ __all__ = [
     "CompactionGuard",
     "RecalledMemory",
     "TurnResult",
+    "PreparedMemoryContext",
+    "SmartTurnResult",
+    "MemoryIntelligenceMetrics",
     "MemoryClient",
     # aliases
     "AgentMemClient",

@@ -69,23 +69,86 @@ _STRUCTURED_KEYS: frozenset[str] = frozenset({"ticker", "metric", "entity", "ins
 # ── Async LLM adjudication queue (Change 3) ──────────────────────────────────
 
 _llm_queue: asyncio.Queue | None = None
-
-AdjudicationTask = tuple[
-    str,    # namespace
-    str,    # agent_id
-    UUID,   # superseded_memory_id (old)
-    UUID,   # new_memory_id
-    str,    # old_content
-    str,    # new_content
-    dict,   # metadata
-]
+AdjudicationTask = tuple[str, str, UUID, UUID, str, str, dict]
 
 
 def get_llm_queue() -> asyncio.Queue:
+    """Compatibility queue for callers pinned to the pre-0.5 worker API."""
     global _llm_queue
     if _llm_queue is None:
         _llm_queue = asyncio.Queue(maxsize=1000)
     return _llm_queue
+
+
+async def _enqueue_adjudication(
+    db: AsyncSession,
+    namespace: str,
+    old_memory_id: UUID,
+    new_memory_id: UUID,
+) -> None:
+    """Persist an adjudication reference without copying memory content."""
+    from .durable_jobs import enqueue_job
+
+    await enqueue_job(
+        db,
+        namespace=namespace,
+        kind="supersession.adjudicate",
+        payload={
+            "old_memory_id": str(old_memory_id),
+            "new_memory_id": str(new_memory_id),
+        },
+        dedupe_key=f"{old_memory_id}:{new_memory_id}",
+        max_attempts=8,
+    )
+
+
+async def handle_llm_adjudication_job(db: AsyncSession, job) -> None:
+    """Recheck one supersession using content loaded from the governed store."""
+    from .audit_chain import chain_log
+    from .memory_service import _load_namespace_subject_keys
+
+    payload = dict(job.payload or {})
+    old_id = UUID(payload["old_memory_id"])
+    new_id = UUID(payload["new_memory_id"])
+    old_mem = await db.get(Memory, old_id)
+    new_mem = await db.get(Memory, new_id)
+    if old_mem is None or new_mem is None:
+        return
+
+    subject_keys = await _load_namespace_subject_keys(db, job.namespace)
+    old_key = subject_keys.get(old_mem.subject_id) if old_mem.subject_id else None
+    new_key = subject_keys.get(new_mem.subject_id) if new_mem.subject_id else None
+    old_content = _candidate_content(old_mem, old_key)
+    new_content = _candidate_content(new_mem, new_key)
+    if old_content is None or new_content is None:
+        return
+
+    relation, confidence, rationale = await llm_adjudicate(
+        old_content=old_content,
+        new_content=new_content,
+        meta=dict(new_mem.metadata_ or {}),
+    )
+    if relation != "CONFIRMS" or old_mem.valid_to is None:
+        return
+
+    old_mem.valid_to = None
+    old_mem.superseded_by = None
+    old_mem.supersession_confidence = None
+    await chain_log(
+        db,
+        namespace=job.namespace,
+        agent_id=new_mem.agent_id,
+        op="supersession_async_rejected",
+        memory_id=old_mem.id,
+        content_hash=old_mem.content_hash,
+        payload={
+            "new_memory_id": str(new_id),
+            "llm_relation": relation,
+            "confidence": confidence,
+            "rationale": rationale,
+        },
+    )
+    await db.commit()
 
 
 async def run_llm_adjudication_worker(session_factory) -> None:
@@ -658,12 +721,9 @@ async def run_supersession(
             if settings.llm_adjudication_async and new_memory_id is not None:
                 # Change 3: enqueue — don't block the write path
                 try:
-                    get_llm_queue().put_nowait((
-                        namespace, agent_id,
-                        candidate.id, new_memory_id,
-                        old_content, new_content,
-                        dict(candidate.metadata_ or {}),
-                    ))
+                    await _enqueue_adjudication(
+                        db, namespace, candidate.id, new_memory_id,
+                    )
                 except asyncio.QueueFull:
                     logger.warning("LLM adjudication queue full — skipping async Stage 3")
                 # Proceed with Stage-2 SUPERSEDES verdict; worker may later refine
@@ -705,12 +765,9 @@ async def run_supersession(
             if settings.supersession_llm_stage:
                 if settings.llm_adjudication_async and new_memory_id is not None:
                     try:
-                        get_llm_queue().put_nowait((
-                            namespace, agent_id,
-                            chosen.id, new_memory_id,
-                            chosen_old, new_content,
-                            dict(chosen.metadata_ or {}),
-                        ))
+                        await _enqueue_adjudication(
+                            db, namespace, chosen.id, new_memory_id,
+                        )
                     except asyncio.QueueFull:
                         logger.warning("LLM adjudication queue full — skipping async Stage 3")
                     superseded_ids.append(chosen.id)

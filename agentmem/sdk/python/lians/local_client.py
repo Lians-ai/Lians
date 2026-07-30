@@ -267,6 +267,9 @@ class LocalLiansClient:
         as_of: Optional[datetime] = None,
         filters: Optional[dict[str, Any]] = None,
         include_context: bool = False,
+        strategy: str = "standard",
+        max_query_variants: int = 4,
+        mode: str = "fast",
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict.
 
@@ -277,6 +280,8 @@ class LocalLiansClient:
         return self._run(self._async_recall(
             agent_id=agent_id, query=query, k=k, as_of=as_of,
             filters=filters or {}, include_context=include_context,
+            strategy=strategy, max_query_variants=max_query_variants,
+            mode=mode,
         ))
 
     async def _async_recall(self, **kwargs) -> dict:
@@ -285,6 +290,94 @@ class LocalLiansClient:
         req = RecallRequest(**kwargs)
         async with self._session_factory() as db:
             result = await recall_memories(db, self._namespace, req)
+        return result.model_dump(mode="json")
+
+    def context(
+        self,
+        agent_id: str,
+        query: str,
+        k: int = 10,
+        as_of: Optional[datetime] = None,
+        max_tokens: int = 1500,
+        header: Optional[str] = None,
+        mmr: bool = False,
+        surface_conflicts: bool = True,
+        max_conflicts: int = 5,
+        strategy: str = "adaptive",
+        max_query_variants: int = 4,
+        mode: str = "deep",
+    ) -> dict:
+        """Build model-ready, token-budgeted adaptive memory context locally."""
+        return self._run(self._async_context(
+            agent_id=agent_id, query=query, k=k, as_of=as_of,
+            max_tokens=max_tokens, header=header, mmr=mmr,
+            surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
+            strategy=strategy, max_query_variants=max_query_variants,
+            mode=mode,
+        ))
+
+    async def _async_context(self, **kwargs) -> dict:
+        from src.lians.schemas import ContextRequest
+        from src.lians.memory_service import assemble_context
+        if kwargs.get("header") is None:
+            kwargs.pop("header", None)
+        req = ContextRequest(**kwargs)
+        async with self._session_factory() as db:
+            result = await assemble_context(db, self._namespace, req)
+        return result.model_dump(mode="json")
+
+    def feedback(self, memory_id: str, **kwargs) -> dict:
+        return self._run(self._async_feedback(memory_id, **kwargs))
+
+    async def _async_feedback(self, memory_id: str, **kwargs) -> dict:
+        from uuid import UUID
+        from src.lians.feedback_service import record_memory_feedback
+        from src.lians.schemas import MemoryFeedbackCreate
+        req = MemoryFeedbackCreate(**kwargs)
+        async with self._session_factory() as db:
+            result = await record_memory_feedback(
+                db, self._namespace, UUID(str(memory_id)), req,
+            )
+        return result.model_dump(mode="json")
+
+    def learning_summary(self, agent_id: Optional[str] = None) -> dict:
+        return self._run(self._async_learning_summary(agent_id))
+
+    async def _async_learning_summary(self, agent_id: Optional[str]) -> dict:
+        from src.lians.feedback_service import memory_learning_summary
+        async with self._session_factory() as db:
+            result = await memory_learning_summary(db, self._namespace, agent_id)
+        return result.model_dump(mode="json")
+
+    def resolve_memory_review(self, memory_id: str, **kwargs) -> dict:
+        return self._run(self._async_resolve_memory_review(memory_id, **kwargs))
+
+    async def _async_resolve_memory_review(self, memory_id: str, **kwargs) -> dict:
+        from uuid import UUID
+        from src.lians.feedback_service import resolve_memory_review
+        from src.lians.schemas import MemoryReviewResolve
+        req = MemoryReviewResolve(**kwargs)
+        async with self._session_factory() as db:
+            result = await resolve_memory_review(
+                db, self._namespace, UUID(str(memory_id)), req,
+            )
+        return result.model_dump(mode="json")
+
+    def run_learning_maintenance(
+        self, *, dry_run: bool = True, min_signals: int = 3,
+    ) -> dict:
+        return self._run(self._async_run_learning_maintenance(
+            dry_run=dry_run, min_signals=min_signals,
+        ))
+
+    async def _async_run_learning_maintenance(
+        self, *, dry_run: bool, min_signals: int,
+    ) -> dict:
+        from src.lians.feedback_service import run_memory_maintenance
+        async with self._session_factory() as db:
+            result = await run_memory_maintenance(
+                db, self._namespace, dry_run=dry_run, min_signals=min_signals,
+            )
         return result.model_dump(mode="json")
 
     def reconstruct(

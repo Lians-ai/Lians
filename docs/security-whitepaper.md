@@ -19,6 +19,7 @@ inside your perimeter (air-gap mode) — no agent data needs to leave the networ
 | Memory content | May contain PII/PHI/MNPI | AES-256-GCM at rest under a per-subject key; TLS in transit |
 | Embeddings | Derived | Stored in pgvector; local embedding provider keeps text in-perimeter |
 | Audit events | Integrity-critical | SHA-256 hash chain; append-only; optional Merkle anchoring |
+| Evidence Pack signing key | Identity-critical secret | Dedicated secret-manager, KMS, Vault, or HSM custody; signer-only access; independently published public-key registry |
 | API keys | Secret | Stored only as SHA-256 hashes; individually revocable |
 | Subject keys (DEKs) | Secret | Wrapped by a master key (KMS: env/AWS/Azure/Vault); destroyed on erasure |
 
@@ -58,6 +59,13 @@ Postgres (RLS-enforced) + append audit row → optional SIEM stream / webhooks.
   renders all their content permanently unreadable, while the SHA-256 content
   hashes remain in the audit chain — the erasure is provable. A signed erasure
   certificate is available.
+- **Evidence Pack signing** uses a key isolated from content encryption and API
+  authentication. The current raw Ed25519 signer must receive its key from an
+  approved secret manager in production. Signer identity is established by an
+  independently published public-key registry, not by the embedded key ID.
+  Retired public keys are retained for the complete Evidence Pack retention
+  period. See
+  [Evidence Pack Signing Key Custody](evidence-signing-key-custody.md).
 
 ## 6. Auditability & monitoring
 

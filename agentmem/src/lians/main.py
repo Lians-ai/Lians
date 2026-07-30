@@ -25,8 +25,15 @@ from .api.routes_snapshot import router as snapshot_router
 from .api.routes_graph import router as graph_router
 from .api.routes_admissions import router as admissions_router
 from .api.routes_decisions import router as decisions_router, records_router
+from .api.routes_evidence import (
+    decision_router as decision_evidence_router,
+    evidence_router,
+    router as decision_envelopes_router,
+)
 from .api.routes_otlp import router as otlp_router
+from .api.routes_validmind import legacy_router as validmind_legacy_router
 from .api.routes_validmind import router as validmind_router
+from .api.routes_learning import router as learning_router
 from .telemetry import instrument_fastapi, instrument_sqlalchemy
 from .middleware import (
     setup_logging,
@@ -36,7 +43,7 @@ from .middleware import (
     RateLimitMiddleware,
 )
 
-logger = logging.getLogger("agentmem.startup")
+logger = logging.getLogger("lians.startup")
 
 _AIRGAP_SAFE_PROVIDERS = {"sentence-transformers", "local"}
 
@@ -116,8 +123,7 @@ async def lifespan(app: FastAPI):
     )
     from .config import get_settings
     from .kms import load_master_key
-    from .scheduler import run_retention_scheduler
-    from .metering import run_metering_worker
+    from .scheduler import run_learning_maintenance_scheduler, run_retention_scheduler
     settings = get_settings()
 
     setup_logging(level=settings.log_level, json_logs=settings.log_json)
@@ -174,7 +180,7 @@ async def lifespan(app: FastAPI):
             "Set CORS_ORIGINS to a comma-separated list of trusted origins in production."
         )
 
-    logger.info("AgentMem starting", extra={
+    logger.info("Lians starting", extra={
         "embedding_provider": settings.embedding_provider,
         "airgap_mode": settings.airgap_mode,
         "llm_stage": settings.supersession_llm_stage,
@@ -192,29 +198,41 @@ async def lifespan(app: FastAPI):
             name="retention-scheduler",
         )
 
-    metering_task: asyncio.Task | None = None
-    if settings.stripe_api_key:
-        metering_task = asyncio.create_task(
-            run_metering_worker(
-                settings.stripe_api_key,
-                settings.stripe_meter_write_event,
-                settings.stripe_meter_recall_event,
+    learning_task: asyncio.Task | None = None
+    if settings.learning_maintenance_interval_hours > 0:
+        learning_task = asyncio.create_task(
+            run_learning_maintenance_scheduler(
+                AsyncSessionLocal,
+                settings.learning_maintenance_interval_hours,
+                settings.learning_maintenance_min_signals,
             ),
-            name="metering-worker",
+            name="learning-maintenance-scheduler",
         )
 
-    # Change 3: start async LLM adjudication worker (off the write path)
-    llm_worker_task: asyncio.Task | None = None
-    if settings.supersession_llm_stage and settings.llm_adjudication_async:
-        from .supersession import run_llm_adjudication_worker
-        llm_worker_task = asyncio.create_task(
-            run_llm_adjudication_worker(AsyncSessionLocal),
-            name="llm-adjudication-worker",
+    durable_job_task: asyncio.Task | None = None
+    if settings.durable_job_worker_mode == "embedded":
+        from .durable_jobs import run_durable_job_worker
+        from .job_handlers import default_job_handlers
+        durable_job_task = asyncio.create_task(
+            run_durable_job_worker(
+                AsyncSessionLocal,
+                default_job_handlers(),
+                poll_seconds=settings.durable_job_poll_seconds,
+            ),
+            name="durable-job-worker",
+        )
+    elif settings.durable_job_worker_mode not in {"external", "disabled"}:
+        raise RuntimeError(
+            "DURABLE_JOB_WORKER_MODE must be embedded, external, or disabled"
         )
 
     yield
 
-    for task in (scheduler_task, metering_task, llm_worker_task):
+    for task in (
+        scheduler_task,
+        learning_task,
+        durable_job_task,
+    ):
         if task is not None:
             task.cancel()
             try:
@@ -222,13 +240,16 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 pass
 
-    logger.info("AgentMem shutdown")
+    logger.info("Lians shutdown")
 
 
 app = FastAPI(
-    title="AgentMem",
-    description="Financial-agent memory layer — bitemporal, auditable, erasable",
-    version="0.4.0",
+    title="Lians",
+    description=(
+        "Cross-platform decision evidence, reconstruction, and governed memory "
+        "for regulated AI"
+    ),
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -301,9 +322,14 @@ app.include_router(graph_router)
 app.include_router(admissions_router)
 app.include_router(decisions_router)
 app.include_router(records_router)
+app.include_router(decision_envelopes_router)
+app.include_router(decision_evidence_router)
+app.include_router(evidence_router)
 app.include_router(metrics_router)
 app.include_router(otlp_router)
 app.include_router(validmind_router)
+app.include_router(validmind_legacy_router)
+app.include_router(learning_router)
 
 
 @app.get("/health", include_in_schema=False)
@@ -338,9 +364,16 @@ async def health(db: AsyncSession = Depends(_get_db)):
     else:
         checks["redis"] = "disabled"
 
+    from .degradation import recent_degradations
+    degradations = recent_degradations()
     all_ok = all(v in ("ok", "disabled") for v in checks.values())
+    status = "ok" if all_ok and not degradations else "degraded"
     return JSONResponse(
-        content={"status": "ok" if all_ok else "degraded", "checks": checks},
+        content={
+            "status": status,
+            "checks": checks,
+            "recent_degradations": degradations,
+        },
         status_code=200 if all_ok else 503,
     )
 

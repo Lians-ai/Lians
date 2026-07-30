@@ -28,4 +28,16 @@ type RecallResult struct {
 	Memories        []MemoryOut `json:"memories"`
 	AsOf            *string     `json:"as_of"` // set when recall used a point-in-time checkpoint
 	TotalCandidates int         `json:"total_candidates"`
+	RetrievalDegraded bool      `json:"retrieval_degraded"`
+	TokenEstimate     int       `json:"token_estimate"`
+	Strategy          string    `json:"strategy"`
+	QueryVariants     []string  `json:"query_variants"`
+	RetrievalConfidence float64 `json:"retrieval_confidence"`
+	LatencyMS         float64   `json:"latency_ms"`
+	Mode              string    `json:"mode"`
+	LatencyBudgetMS   float64   `json:"latency_budget_ms"`
+	DeadlineExceeded bool      `json:"deadline_exceeded"`
+	ReceiptSHA256    string    `json:"receipt_sha256"`
+	Receipt          json.RawMessage `json:"receipt"`
+	ProvenanceCoverage float64 `json:"provenance_coverage"`
 }

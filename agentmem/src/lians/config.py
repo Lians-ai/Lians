@@ -34,6 +34,10 @@ class Settings(BaseSettings):
 
     # Crypto
     master_encryption_key: str = ""  # base64-encoded 32 bytes (used by kms_provider="env")
+    # Optional raw Ed25519 private key (base64-encoded 32-byte seed) used to
+    # sign Evidence Pack v2 manifests. Blank keeps packs explicitly unsigned.
+    evidence_signing_private_key: str = ""
+    evidence_signing_key_id: str = "lians-local"
 
     # KMS provider — controls how the master_encryption_key is fetched at startup
     # "env"   — read MASTER_ENCRYPTION_KEY env var (default; dev-friendly)
@@ -83,6 +87,15 @@ class Settings(BaseSettings):
     # Background retention scheduler
     # Interval between automated prune cycles (hours). Set to 0 to disable.
     retention_prune_interval_hours: float = 24.0
+    # Outcome-learning maintenance is opt-in. It never deletes memories:
+    # repeated ignored/duplicate signals demote importance and flag
+    # consolidation candidates for review.
+    learning_maintenance_interval_hours: float = 0.0
+    learning_maintenance_min_signals: int = 3
+    # Crash-safe side effects (webhooks, SIEM). "embedded" is convenient for
+    # one-process installs; production can run `lians-worker` separately.
+    durable_job_worker_mode: str = "embedded"  # embedded | external | disabled
+    durable_job_poll_seconds: float = 1.0
 
     # Stripe usage metering — optional; metering is silently disabled when api_key is empty.
     # Requires pip install agentmem[billing] (stripe>=7.0.0).
@@ -141,6 +154,18 @@ class Settings(BaseSettings):
     # positive on every conversation), agent_sim interjection probes 100%.
     # Set false to keep raw-turn-only ingestion.
     interjection_extraction_enabled: bool = True
+
+    # Deterministic memory compiler. The raw event remains authoritative; the
+    # compiler adds a versioned type/entity/temporal projection under
+    # metadata._lians_compiled for retrieval and audit. No network or LLM call.
+    memory_compiler_enabled: bool = True
+
+    # Explicit serving-mode latency budgets. These are observability budgets,
+    # not cancellation deadlines: a response that exceeds its mode budget is
+    # returned with deadline_exceeded=true and recorded for SLO enforcement.
+    recall_fast_budget_ms: float = 100.0
+    recall_deep_budget_ms: float = 800.0
+    recall_reconstruct_budget_ms: float = 2000.0
 
     # ── Memory admission control ──────────────────────────────────────────────
     # off     — no admission evaluation

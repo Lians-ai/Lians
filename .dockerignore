@@ -1,5 +1,7 @@
 .git/
 .venv/
+.run/
+integrations/
 **/__pycache__/
 **/*.pyc
 **/*.pyo

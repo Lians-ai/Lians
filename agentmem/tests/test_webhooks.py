@@ -14,13 +14,14 @@ from unittest.mock import patch
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
 
 from src.lians.main import app
 from src.lians.db import get_db
-from src.lians.models import ApiKey, WebhookEndpoint, WebhookDelivery
+from src.lians.models import ApiKey, DurableJob, WebhookEndpoint, WebhookDelivery
 from src.lians.webhook_service import (
     register_webhook, list_webhooks, delete_webhook, update_webhook,
-    dispatch_event, _sign, _http_post,
+    dispatch_event, handle_webhook_job, _sign, _http_post,
     _validate_webhook_url,
     MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED,
 )
@@ -197,9 +198,13 @@ async def test_dispatch_calls_http_for_matching_endpoint(db):
             "confidence": 1.0,
         })
         await db.commit()
-        # Allow background tasks to run
-        import asyncio
-        await asyncio.sleep(0.1)
+        job = (
+            await db.execute(
+                select(DurableJob).where(DurableJob.kind == "webhook.delivery")
+            )
+        ).scalar_one()
+        job.attempts = 1
+        await handle_webhook_job(db, job)
 
     assert len(captured) == 1
     url, body, sig = captured[0]
@@ -212,6 +217,7 @@ async def test_dispatch_calls_http_for_matching_endpoint(db):
     # Verify HMAC
     expected_sig = _sign("secret123", body)
     assert hmac.compare_digest(sig, expected_sig)
+    assert "secret123" not in json.dumps(job.payload)
 
 
 @pytest.mark.asyncio
@@ -408,8 +414,19 @@ async def test_supersession_dispatches_webhook(client, db):
             "metadata": {"ticker": "AAPL", "metric": "eps"},
         }, headers=_api_h())
 
-        import asyncio
-        await asyncio.sleep(0.2)
+        jobs = list(
+            (
+                await db.execute(
+                    select(DurableJob).where(
+                        DurableJob.kind == "webhook.delivery",
+                        DurableJob.status == "pending",
+                    )
+                )
+            ).scalars()
+        )
+        for job in jobs:
+            job.attempts = 1
+            await handle_webhook_job(db, job)
 
     assert any(p["event"] == MEMORY_SUPERSEDED for p in captured), \
         "Supersession must dispatch memory.superseded webhook"

@@ -243,6 +243,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
         except Exception:
+            from .degradation import record_degradation
+            record_degradation("rate_limit", "redis_unavailable")
             remaining = None  # Redis down — can't compute, skip headers
 
         response = await call_next(request)

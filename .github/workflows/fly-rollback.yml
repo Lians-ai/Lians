@@ -1,0 +1,71 @@
+name: Production rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Prior registry.fly.io/agentmem-lotus:deployment-* image
+        required: true
+        type: string
+      confirm:
+        description: Type ROLLBACK to restore the prior application image
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restore prior production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://agentmem-lotus.fly.dev
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
+      - name: Validate rollback request
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          IMAGE: ${{ inputs.image }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = "ROLLBACK"
+          test "$REF_NAME" = "master"
+          case "$IMAGE" in
+            registry.fly.io/agentmem-lotus:deployment-*) ;;
+            *) echo "Unexpected rollback image reference" >&2; exit 1 ;;
+          esac
+
+      - name: Restore prior image without changing the database
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          flyctl deploy \
+            --app agentmem-lotus \
+            --config fly.toml \
+            --image "$IMAGE" \
+            --skip-release-command \
+            --strategy immediate \
+            --wait-timeout 10m
+
+      - name: Verify rollback health
+        run: |
+          python scripts/check_production_deployment.py \
+            --base-url https://agentmem-lotus.fly.dev \
+            --health-only

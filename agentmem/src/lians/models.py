@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Text, DateTime, Float, Boolean,
     ForeignKey, Index, LargeBinary, JSON, Integer,
-    UniqueConstraint, types as sa_types,
+    UniqueConstraint, text, types as sa_types,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import Dialect
@@ -107,6 +107,86 @@ class Memory(Base):
         return list(v)
 
 
+class MemoryFeedback(Base):
+    """Append-only outcome signal for a recalled memory."""
+    __tablename__ = "memory_feedback"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    memory_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False, index=True)
+    signal = Column(String, nullable=False, index=True)
+    weight = Column(Float, nullable=False, default=1.0)
+    outcome = Column(String, nullable=True, index=True)
+    query_hash = Column(String(64), nullable=True)
+    source = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    policy_action = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        Index("ix_memory_feedback_ns_memory", "namespace", "memory_id"),
+        Index("ix_memory_feedback_ns_created", "namespace", "created_at"),
+    )
+
+
+class AgentExperience(Base):
+    """A decision episode whose eventual outcome can inform future ranking."""
+
+    __tablename__ = "agent_experiences"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    task = Column(Text, nullable=False)
+    task_key = Column(String(300), nullable=False, index=True)
+    decision = Column(JSON, nullable=False)
+    context_memory_ids = Column(JSON, nullable=False, server_default="[]")
+    metadata_ = Column("metadata", JSON, nullable=False, server_default="{}")
+    outcome = Column(JSON, nullable=True)
+    reward = Column(Float, nullable=True)
+    reviewer_feedback = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="open", index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_agent_experiences_ns_agent_created", "namespace", "agent_id", "created_at"),
+    )
+
+
+class ReflectionProposal(Base):
+    """Review-gated proposal distilled from repeated successful experiences."""
+
+    __tablename__ = "reflection_proposals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    task_key = Column(String(300), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    supporting_experience_ids = Column(JSON, nullable=False, server_default="[]")
+    confidence = Column(Float, nullable=False)
+    status = Column(String, nullable=False, default="pending", index=True)
+    reviewer_note = Column(Text, nullable=True)
+    promoted_memory_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_reflection_proposals_ns_status", "namespace", "status", "created_at"),
+        Index(
+            "uq_reflection_pending_task",
+            "namespace",
+            "agent_id",
+            "task_key",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+
+
 class SubjectKey(Base):
     """Per-subject encryption keys — destroy to crypto-shred all their data.
 
@@ -142,6 +222,43 @@ class EventLog(Base):
     hash_version = Column(Integer, nullable=False, default=1, server_default="1")
 
 
+class DecisionEnvelope(Base):
+    """Mutable capture window that becomes immutable when a decision is sealed.
+
+    The envelope is the correlation boundary for every artifact that can shape
+    an agent decision. Evidence links remain append-only after sealing so later
+    reviews and outcomes can strengthen the record without rewriting history.
+    """
+
+    __tablename__ = "decision_envelopes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    barrier_group = Column(String, nullable=True, index=True)
+    decision_type = Column(String, nullable=False, index=True)
+    regime = Column(String, nullable=True, index=True)
+    subject_id = Column(String, nullable=True, index=True)
+    session_id = Column(String, nullable=True, index=True)
+    trace_id = Column(String(32), nullable=True, index=True)
+    run_id = Column(String, nullable=True, index=True)
+    knowledge_as_of = Column(DateTime(timezone=True), nullable=True)
+    completeness_profile = Column(
+        String, nullable=False, default="standard", server_default="standard"
+    )
+    requirements = Column(JSON, nullable=False, server_default="{}")
+    metadata_ = Column("metadata", JSON, nullable=False, server_default="{}")
+    status = Column(String, nullable=False, default="open", server_default="open", index=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    sealed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_decision_envelope_ns_status", "namespace", "status", "created_at"),
+        Index("ix_decision_envelope_ns_trace", "namespace", "trace_id"),
+    )
+
+
 class DecisionRecord(Base):
     """A consequential agent decision that may later be disputed.
 
@@ -154,6 +271,13 @@ class DecisionRecord(Base):
     __tablename__ = "decision_records"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    envelope_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("decision_envelopes.id"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
     namespace = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False, index=True)
     barrier_group = Column(String, nullable=True, index=True)
@@ -163,15 +287,21 @@ class DecisionRecord(Base):
     regime = Column(String, nullable=True, index=True)
     subject_id = Column(String, nullable=True, index=True)
     session_id = Column(String, nullable=True, index=True)
+    trace_id = Column(String(32), nullable=True, index=True)
+    run_id = Column(String, nullable=True, index=True)
     model_id = Column(String, nullable=True)
     model_version = Column(String, nullable=True)
     policy_version = Column(String, nullable=True)
+    prompt_id = Column(String, nullable=True)
+    prompt_version = Column(String, nullable=True)
+    runtime_version = Column(String, nullable=True)
     decided_at = Column(DateTime(timezone=True), nullable=False, index=True)
     recorded_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     knowledge_as_of = Column(DateTime(timezone=True), nullable=False)
     evidence_memory_ids = Column(JSON, nullable=False, server_default="[]")
     input_hash = Column(String(64), nullable=True)
     output_hash = Column(String(64), nullable=True)
+    replay_manifest_hash = Column(String(64), nullable=True)
     human_review_status = Column(String, nullable=False, default="not_requested")
     human_reviewer = Column(String, nullable=True)
     human_reviewed_at = Column(DateTime(timezone=True), nullable=True)
@@ -182,6 +312,47 @@ class DecisionRecord(Base):
     __table_args__ = (
         Index("ix_decision_ns_decided", "namespace", "decided_at"),
         Index("ix_decision_ns_subject", "namespace", "subject_id"),
+        Index("ix_decision_ns_trace", "namespace", "trace_id"),
+    )
+
+
+class DecisionEvidenceLink(Base):
+    """Append-only edge from a decision envelope to a source artifact."""
+
+    __tablename__ = "decision_evidence_links"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    envelope_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("decision_envelopes.id"),
+        nullable=False,
+        index=True,
+    )
+    barrier_group = Column(String, nullable=True, index=True)
+    evidence_type = Column(String, nullable=False, index=True)
+    role = Column(String, nullable=False, index=True)
+    source_id = Column(String(512), nullable=False, index=True)
+    source_version = Column(String(255), nullable=True, index=True)
+    artifact_hash = Column(String(64), nullable=True, index=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    metadata_ = Column("metadata", JSON, nullable=False, server_default="{}")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        Index(
+            "ix_decision_evidence_source",
+            "namespace",
+            "evidence_type",
+            "source_id",
+            "source_version",
+        ),
+        Index(
+            "ix_decision_evidence_envelope_role",
+            "envelope_id",
+            "role",
+            "created_at",
+        ),
     )
 
 
@@ -448,6 +619,33 @@ class WebhookDelivery(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
     __table_args__ = (Index("ix_webhook_deliveries_endpoint_created", "endpoint_id", "created_at"),)
+
+
+class DurableJob(Base):
+    """Database-backed work item for crash-safe external side effects."""
+
+    __tablename__ = "durable_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False, index=True)
+    payload = Column(JSON, nullable=False, server_default="{}")
+    dedupe_key = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="pending", index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=8)
+    available_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    lease_until = Column(DateTime(timezone=True), nullable=True)
+    leased_by = Column(String, nullable=True)
+    last_error = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("namespace", "kind", "dedupe_key", name="uq_durable_job_dedupe"),
+        Index("ix_durable_jobs_claim", "status", "available_at", "lease_until"),
+    )
 
 
 class NamespacePolicy(Base):

@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from .config import get_settings
+from .models import DurableJob
 
 
 def siem_enabled() -> bool:
@@ -43,3 +44,12 @@ async def stream_event(event: dict[str, Any]) -> bool:
         return 200 <= resp.status_code < 300
     except Exception:
         return False
+
+
+async def handle_siem_job(_db, job: DurableJob) -> None:
+    """Forward a leased SIEM work item and retry non-success responses."""
+    event = job.payload.get("event")
+    if not isinstance(event, dict):
+        raise ValueError("Malformed SIEM event job")
+    if not await stream_event(event):
+        raise RuntimeError("SIEM collector did not accept the event")

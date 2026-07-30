@@ -65,6 +65,61 @@ async def get_customer_id(db: AsyncSession, namespace: str) -> Optional[str]:
     return cid
 
 
+async def enqueue_usage_event(
+    db: AsyncSession,
+    *,
+    namespace: str,
+    event_name: str,
+    customer_id: str,
+    quantity: int,
+    identifier: str,
+) -> None:
+    """Persist a Stripe meter event in the caller's current transaction."""
+    from .config import get_settings
+    from .durable_jobs import enqueue_job
+
+    if not get_settings().stripe_api_key:
+        return
+    safe_identifier = identifier[:100]
+    await enqueue_job(
+        db,
+        namespace=namespace,
+        kind="metering.stripe",
+        payload={
+            "event_name": event_name,
+            "customer_id": customer_id,
+            "quantity": quantity,
+            "identifier": safe_identifier,
+        },
+        dedupe_key=safe_identifier,
+        max_attempts=12,
+    )
+
+
+async def handle_metering_job(db: AsyncSession, job) -> None:
+    """Send one durable usage event; worker retry policy handles failures."""
+    from .config import get_settings
+
+    settings = get_settings()
+    if not settings.stripe_api_key:
+        raise RuntimeError("stripe_not_configured")
+    try:
+        import stripe as _stripe  # type: ignore[import]
+    except ImportError as exc:
+        raise RuntimeError("stripe_sdk_not_installed") from exc
+
+    _stripe.api_key = settings.stripe_api_key
+    payload = dict(job.payload or {})
+    await _stripe.billing.MeterEvent.create_async(
+        event_name=payload["event_name"],
+        payload={
+            "stripe_customer_id": payload["customer_id"],
+            "value": str(payload["quantity"]),
+        },
+        identifier=payload["identifier"],
+    )
+
+
 # ── Hot-path event queuing ───────────────────────────────────────────────────
 
 def queue_usage_event(

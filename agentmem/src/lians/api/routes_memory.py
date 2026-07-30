@@ -12,7 +12,11 @@ from ..admission_service import record_rejection, enqueue_pending
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
+    MessageIngestRequest,
     FactHistoryResult, ContextRequest, ContextResult,
+    MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
+    MemoryReviewResolve, MemoryReviewResult,
+    MemoryMaintenanceResult,
 )
 from ..memory_service import (
     add_memory_idempotent, recall_memories, batch_add_memories,
@@ -20,8 +24,67 @@ from ..memory_service import (
 )
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
+from ..feedback_service import (
+    record_memory_feedback, memory_learning_summary, resolve_memory_review,
+    run_memory_maintenance,
+)
 
 router = APIRouter(prefix="/v1", tags=["memory"])
+
+
+@router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)
+async def create_memory_feedback(
+    memory_id: UUID,
+    req: MemoryFeedbackCreate,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record an outcome signal and apply the configured safe learning policy."""
+    auth.require("write")
+    try:
+        return await record_memory_feedback(db, auth.namespace, memory_id, req)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
+
+
+@router.get("/memory-learning/summary", response_model=MemoryLearningSummary)
+async def get_memory_learning_summary(
+    agent_id: Optional[str] = None,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    auth.require("read")
+    return await memory_learning_summary(db, auth.namespace, agent_id)
+
+
+@router.post("/memories/{memory_id}/review", response_model=MemoryReviewResult)
+async def resolve_learning_review(
+    memory_id: UUID,
+    req: MemoryReviewResolve,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Keep or retire a feedback-flagged memory without rewriting history."""
+    auth.require("write")
+    try:
+        return await resolve_memory_review(db, auth.namespace, memory_id, req)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@router.post("/memory-learning/maintenance", response_model=MemoryMaintenanceResult)
+async def trigger_learning_maintenance(
+    dry_run: bool = Query(default=True),
+    min_signals: int = Query(default=3, ge=1, le=100),
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    auth.require("admin")
+    return await run_memory_maintenance(
+        db, auth.namespace, min_signals=min_signals, dry_run=dry_run,
+    )
 
 
 @router.post("/memories", response_model=MemoryOut)
@@ -132,6 +195,49 @@ async def batch_create_memories(
     )
 
 
+@router.post("/memories/messages", response_model=MemoryBatchResult)
+async def ingest_messages(
+    req: MessageIngestRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ingest standard chat messages through the engine's canonical write path."""
+    from datetime import datetime, timezone
+
+    allowed = {"user", "assistant", "system", "tool"}
+    roles = set(req.roles)
+    if not roles <= allowed:
+        raise HTTPException(status_code=422, detail="roles contains an unsupported role")
+    default_time = req.event_time or datetime.now(timezone.utc)
+    memories = []
+    for index, message in enumerate(req.messages):
+        if message.role not in roles:
+            continue
+        memories.append(
+            MemoryAdd(
+                agent_id=req.agent_id,
+                content=message.content,
+                event_time=message.event_time or default_time,
+                source=req.source,
+                subject_id=req.subject_id,
+                metadata={
+                    **req.metadata,
+                    **message.metadata,
+                    "role": message.role,
+                    "message_index": index,
+                },
+                importance=req.importance,
+            )
+        )
+    if not memories:
+        return MemoryBatchResult(added=0, memories=[])
+    return await batch_create_memories(
+        MemoryBatchAdd(memories=memories),
+        auth,
+        db,
+    )
+
+
 @router.get("/memories/{memory_id}/lineage", response_model=MemoryLineageResult)
 async def memory_lineage(
     memory_id: UUID,
@@ -207,7 +313,33 @@ async def recall(
     db: AsyncSession = Depends(get_db),
 ):
     auth.require("read")
-    return await recall_memories(db, auth.namespace, req, barrier_override=auth.barrier_group)
+    envelope = None
+    if req.decision_envelope_id is not None:
+        auth.require("write")
+        from ..decision_evidence import get_envelope
+
+        envelope = await get_envelope(
+            db,
+            auth.namespace,
+            req.decision_envelope_id,
+            auth.barrier_group,
+        )
+        if envelope is None:
+            raise HTTPException(status_code=422, detail="Decision envelope not found")
+    result = await recall_memories(
+        db, auth.namespace, req, barrier_override=auth.barrier_group
+    )
+    if envelope is not None:
+        from ..decision_evidence import attach_recall_receipt
+
+        await attach_recall_receipt(
+            db,
+            envelope,
+            result.receipt_sha256,
+            result.receipt,
+        )
+        await db.commit()
+    return result
 
 
 @router.post("/context", response_model=ContextResult)
@@ -223,4 +355,30 @@ async def context(
     ``mmr: true`` for diversity reranking, and ``max_tokens`` to cap the budget.
     """
     auth.require("read")
-    return await assemble_context(db, auth.namespace, req, barrier_override=auth.barrier_group)
+    envelope = None
+    if req.decision_envelope_id is not None:
+        auth.require("write")
+        from ..decision_evidence import get_envelope
+
+        envelope = await get_envelope(
+            db,
+            auth.namespace,
+            req.decision_envelope_id,
+            auth.barrier_group,
+        )
+        if envelope is None:
+            raise HTTPException(status_code=422, detail="Decision envelope not found")
+    result = await assemble_context(
+        db, auth.namespace, req, barrier_override=auth.barrier_group
+    )
+    if envelope is not None:
+        from ..decision_evidence import attach_recall_receipt
+
+        await attach_recall_receipt(
+            db,
+            envelope,
+            result.receipt_sha256,
+            result.receipt,
+        )
+        await db.commit()
+    return result

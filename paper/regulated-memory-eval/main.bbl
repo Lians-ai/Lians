@@ -1,0 +1,44 @@
+\begin{thebibliography}{1}
+
+\bibitem{lians2026}
+Ethan Beirne.
+\newblock Lians: Bitemporal long-term memory for ai agents.
+\newblock Software, version 0.4.0, 2026.
+
+\bibitem{worlddb2026}
+Harish~Santhanalakshmi Ganesan.
+\newblock Worlddb: A vector graph-of-worlds memory engine with ontology-aware
+  write-time reconciliation.
+\newblock {\em arXiv preprint arXiv:2604.18478}, 2026.
+
+\bibitem{locomo2024}
+Adyasha Maharana et~al.
+\newblock Evaluating very long-term conversational memory of llm agents.
+\newblock {\em arXiv preprint arXiv:2402.17753}, 2024.
+
+\bibitem{atma2026}
+Zitong Shi, Yixuan Tang, and Anthony Kum~Hoe Tung.
+\newblock A-tma: Decoupling state-aware memory failures in long-term agent
+  memory.
+\newblock {\em arXiv preprint arXiv:2607.01935}, 2026.
+
+\bibitem{toki2026}
+Ziming Wang.
+\newblock Toki: A bitemporal operator algebra for contradiction resolution in
+  llm-agent persistent memory.
+\newblock {\em arXiv preprint arXiv:2606.06240}, 2026.
+
+\bibitem{longmemeval2024}
+Di~Wu et~al.
+\newblock Longmemeval: Benchmarking chat assistants on long-term interactive
+  memory.
+\newblock {\em arXiv preprint arXiv:2410.10813}, 2024.
+
+\bibitem{longmemevalv2_2026}
+Di~Wu, Zixiang Ji, Asmi Kawatkar, Bryan Kwan, Jia-Chen Gu, Nanyun Peng, and
+  Kai-Wei Chang.
+\newblock Longmemeval-v2: Evaluating long-term agent memory toward experienced
+  colleagues.
+\newblock {\em arXiv preprint arXiv:2605.12493}, 2026.
+
+\end{thebibliography}

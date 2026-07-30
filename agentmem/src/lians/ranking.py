@@ -21,6 +21,7 @@ Point-in-time queries (as_of set) still go to the ``memories`` table because
 """
 from __future__ import annotations
 
+import asyncio
 import math
 import os
 import re
@@ -57,6 +58,7 @@ MMR_LAMBDA = float(os.getenv("RECALL_MMR_LAMBDA", "1.0"))
 # "BAAI/bge-reranker-v2-m3". Deterministic for a fixed model.
 RERANKER_MODEL = os.getenv("RECALL_RERANKER_MODEL", "")
 RERANKER_PREFETCH = int(os.getenv("RECALL_RERANKER_PREFETCH", "30"))
+RERANKER_TIMEOUT_MS = float(os.getenv("RECALL_RERANKER_TIMEOUT_MS", "300"))
 
 _reranker = None
 
@@ -91,6 +93,27 @@ def rerank_cross_encoder(
     except Exception:
         return scored[:k]
     return (reranked + rest)[:k]
+
+
+async def rerank_cross_encoder_async(
+    query: str,
+    scored: list[tuple[Any, float, Optional[str]]],
+    k: int,
+) -> list[tuple[Any, float, Optional[str]]]:
+    """Run CPU/GPU reranking without blocking the FastAPI event loop.
+
+    The timeout is a latency guard, not a correctness dependency. A timeout or
+    model failure returns the deterministic hybrid order.
+    """
+    if not RERANKER_MODEL or len(scored) <= 1:
+        return scored[:k]
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(rerank_cross_encoder, query, scored, k),
+            timeout=max(0.001, RERANKER_TIMEOUT_MS / 1000.0),
+        )
+    except Exception:
+        return scored[:k]
 
 # Temporal-context smoothing: a memory inherits a fraction of its strongest
 # temporally-adjacent neighbor's semantic match. Dialogue and event streams
@@ -802,6 +825,7 @@ async def hybrid_recall(
     subject_keys: Optional[dict[str, bytes]] = None,
     barrier_group: Optional[str] = None,
     live_facts_override: Optional[list] = None,
+    apply_reranker: bool = True,
 ) -> list[tuple[Any, float, Optional[str]]]:
     """Return list of (row, score, decrypted_content).
 
@@ -912,8 +936,8 @@ async def hybrid_recall(
 
     scored.sort(key=lambda x: x[1], reverse=True)
     scored = _collapse_derived(scored)
-    if RERANKER_MODEL:
-        return rerank_cross_encoder(query, scored, k)
+    if RERANKER_MODEL and apply_reranker:
+        return await rerank_cross_encoder_async(query, scored, k)
     return _mmr_select(scored, k)
 
 

@@ -1,5 +1,5 @@
 ﻿"""
-Lians -- financial-grade agent memory layer.
+Lians: cross-platform decision evidence, reconstruction, and governed memory.
 
 This is the server package. For the Python client SDK, install lians-sdk:
 
@@ -13,4 +13,4 @@ Then import from the SDK:
 Server entry point: src.lians.main:app (uvicorn)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.5.0"

@@ -172,6 +172,10 @@ type RecallRequest struct {
 	K       int        // defaults to 5
 	AsOf    *time.Time // point-in-time recall when non-nil
 	Filters map[string]any
+	IncludeContext bool
+	Strategy string // standard or adaptive
+	MaxQueryVariants int
+	Mode string // fast, deep, or reconstruct
 }
 
 // Recall returns the current (non-stale) memories relevant to the query.
@@ -181,6 +185,18 @@ func (c *Client) Recall(ctx context.Context, req RecallRequest) (*RecallResult, 
 		k = 5
 	}
 	body := map[string]any{"agent_id": req.AgentID, "query": req.Query, "k": k}
+	if req.IncludeContext {
+		body["include_context"] = true
+	}
+	if req.Strategy != "" {
+		body["strategy"] = req.Strategy
+	}
+	if req.MaxQueryVariants > 0 {
+		body["max_query_variants"] = req.MaxQueryVariants
+	}
+	if req.Mode != "" {
+		body["mode"] = req.Mode
+	}
 	if req.AsOf != nil {
 		body["as_of"] = iso(*req.AsOf)
 	}

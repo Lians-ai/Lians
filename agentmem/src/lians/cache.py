@@ -1,16 +1,21 @@
-"""
-Redis hot cache for recall results.
+"""Redis hot cache for recall results.
 
 Architecture:
-- Key:   agentmem:recall:{namespace}:{agent_id}:{query_hash}:{as_of}:{k}:{filters_hash}
-- Value: JSON-serialised RecallResult
-- TTL:   config.recall_cache_ttl_seconds (default 60 s)
 
-Invalidation: any write to (namespace, agent_id) deletes all recall keys for
-that pair via SCAN + DEL. The pattern is narrow enough that SCAN is safe
-even for large deployments (keys are bounded by unique query×filter×k combos).
+* Generation: ``agentmem:recall-generation:{namespace_agent_hash}``
+* Value key: ``agentmem:recall:{namespace_agent_hash}:{generation}:...``
+* TTL: ``config.recall_cache_ttl_seconds`` (default 60 seconds)
 
-All Redis errors are swallowed — the cache layer is never on the critical path.
+Invalidation is O(1): a write increments the pair's generation. Old-generation
+entries become unreachable immediately and expire under their normal TTL. This
+avoids a keyspace scan and stays correct when reads and writes race across
+processes.
+
+The key includes the complete retrieval policy, not only filters. A fast result
+can never be served for a deep or reconstruction request.
+
+All Redis errors are swallowed because cache availability is never required for
+memory correctness.
 """
 from __future__ import annotations
 
@@ -19,7 +24,7 @@ import json
 from datetime import datetime
 from typing import Any, Optional
 
-_redis_client: Any = None  # redis.asyncio.Redis, lazily initialised
+_redis_client: Any = None
 
 
 def _get_redis() -> Any:
@@ -27,6 +32,7 @@ def _get_redis() -> Any:
     if _redis_client is None:
         import redis.asyncio as aioredis
         from .config import get_settings
+
         _redis_client = aioredis.from_url(
             get_settings().redis_url,
             decode_responses=True,
@@ -36,25 +42,40 @@ def _get_redis() -> Any:
     return _redis_client
 
 
-def _h(s: str) -> str:
-    return hashlib.sha256(s.encode()).hexdigest()[:16]
+def _h(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()[:16]
+
+
+def _pair_hash(namespace: str, agent_id: str) -> str:
+    return hashlib.sha256(f"{namespace}\0{agent_id}".encode()).hexdigest()[:32]
+
+
+def _generation_key(namespace: str, agent_id: str) -> str:
+    return f"agentmem:recall-generation:{_pair_hash(namespace, agent_id)}"
 
 
 def _recall_key(
     namespace: str,
     agent_id: str,
+    generation: str,
     query: str,
     as_of: Optional[datetime],
     k: int,
     filters: Optional[dict],
+    policy: Optional[dict],
 ) -> str:
     as_of_str = as_of.isoformat() if as_of else "none"
     filters_str = json.dumps(filters or {}, sort_keys=True)
-    return f"agentmem:recall:{namespace}:{agent_id}:{_h(query)}:{as_of_str}:{k}:{_h(filters_str)}"
+    policy_str = json.dumps(policy or {}, sort_keys=True)
+    return (
+        f"agentmem:recall:{_pair_hash(namespace, agent_id)}:{generation}:"
+        f"{_h(query)}:{as_of_str}:{k}:{_h(filters_str)}:{_h(policy_str)}"
+    )
 
 
 def _enabled() -> bool:
     from .config import get_settings
+
     return get_settings().recall_cache_enabled
 
 
@@ -65,12 +86,17 @@ async def get_cached_recall(
     as_of: Optional[datetime],
     k: int,
     filters: Optional[dict],
+    policy: Optional[dict] = None,
 ) -> Optional[str]:
     if not _enabled():
         return None
     try:
-        key = _recall_key(namespace, agent_id, query, as_of, k, filters)
-        return await _get_redis().get(key)
+        redis = _get_redis()
+        generation = await redis.get(_generation_key(namespace, agent_id)) or "0"
+        key = _recall_key(
+            namespace, agent_id, generation, query, as_of, k, filters, policy
+        )
+        return await redis.get(key)
     except Exception:
         return None
 
@@ -84,25 +110,26 @@ async def set_cached_recall(
     filters: Optional[dict],
     payload: str,
     ttl: int,
+    policy: Optional[dict] = None,
 ) -> None:
     if not _enabled():
         return
     try:
-        key = _recall_key(namespace, agent_id, query, as_of, k, filters)
-        await _get_redis().setex(key, ttl, payload)
+        redis = _get_redis()
+        generation = await redis.get(_generation_key(namespace, agent_id)) or "0"
+        key = _recall_key(
+            namespace, agent_id, generation, query, as_of, k, filters, policy
+        )
+        await redis.setex(key, ttl, payload)
     except Exception:
         pass
 
 
 async def invalidate_agent(namespace: str, agent_id: str) -> None:
-    """Delete all recall cache entries for (namespace, agent_id) after a write."""
+    """Make every cached result for an agent unreachable in O(1)."""
     if not _enabled():
         return
     try:
-        pattern = f"agentmem:recall:{namespace}:{agent_id}:*"
-        r = _get_redis()
-        keys = [k async for k in r.scan_iter(pattern, count=100)]
-        if keys:
-            await r.delete(*keys)
+        await _get_redis().incr(_generation_key(namespace, agent_id))
     except Exception:
         pass

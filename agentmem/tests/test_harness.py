@@ -13,7 +13,10 @@ from pathlib import Path
 # Make the SDK importable from the test runner's working directory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
 
-from lians import LocalLiansClient, LiansMemoryHarness, RecalledMemory, TurnResult
+from lians import (
+    LocalLiansClient, LiansMemoryHarness, PreparedMemoryContext,
+    MemoryIntelligenceMetrics, RecalledMemory, SmartTurnResult, TurnResult,
+)
 from lians.harness import MemoryClient
 
 
@@ -102,6 +105,57 @@ class TestRemember:
 
 
 class TestTurn:
+    def test_prepare_returns_model_ready_context_and_metrics(self):
+        with LocalLiansClient() as mem:
+            h = LiansMemoryHarness(mem, agent_id="desk")
+            h.remember("The customer prefers concise weekly reports")
+
+            prepared = h.prepare("What reporting style does the customer prefer?")
+
+            assert isinstance(prepared, PreparedMemoryContext)
+            assert "concise weekly reports" in prepared.context
+            assert prepared.strategy == "adaptive"
+            assert prepared.token_estimate > 0
+            assert prepared.latency_ms >= 0
+            assert prepared.query_variants
+
+    def test_smart_turn_prepares_generates_and_learns_explicit_facts(self):
+        with LocalLiansClient() as mem:
+            h = LiansMemoryHarness(mem, agent_id="desk")
+            result = h.smart_turn(
+                "Prepare the renewal follow-up",
+                lambda context, query: "Follow up Tuesday.",
+                learned_memories=lambda response: [
+                    "The renewal follow-up is scheduled for Tuesday."
+                ],
+                outcome="accepted",
+            )
+
+            assert isinstance(result, SmartTurnResult)
+            assert result.response == "Follow up Tuesday."
+            assert len(result.learned) == 1
+            recalled = h.recall("When is the renewal follow-up?")
+            assert any("Tuesday" in (memory.content or "") for memory in recalled)
+
+            metrics = h.metrics()
+            assert isinstance(metrics, MemoryIntelligenceMetrics)
+            assert metrics.prepare_calls == 1
+            assert metrics.memory_hit_rate == 0.0
+            assert metrics.durable_learnings == 1
+            assert metrics.recall_latency_p95_ms >= 0
+
+    def test_metrics_capture_memory_hits_and_context_cost(self):
+        with LocalLiansClient() as mem:
+            h = LiansMemoryHarness(mem, agent_id="desk")
+            h.remember("The implementation review is Friday.")
+            h.prepare("When is the implementation review?")
+
+            metrics = h.metrics()
+            assert metrics.prepare_calls == 1
+            assert metrics.memory_hit_rate == 1.0
+            assert metrics.mean_context_tokens > 0
+            assert 0.0 <= metrics.mean_retrieval_confidence <= 1.0
+
     def test_run_turn_recalls_and_remembers(self):
         with LocalLiansClient() as mem:
             h = LiansMemoryHarness(mem, agent_id="desk")

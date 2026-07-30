@@ -25,6 +25,13 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
     hard_limit = 200
     soft_limit = 150
 
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval     = "15s"
+    method       = "GET"
+    path         = "/readyz"
+    timeout      = "10s"
+
 [env]
   DEPLOYMENT_ENVIRONMENT        = "production"
   # bge-large-en-v1.5 is baked into the image; "local" (hash projection) makes

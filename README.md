@@ -38,7 +38,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/benchmark.md"><strong>Benchmark: 0 stale facts in top-5 vs mem0-style recall's 4/4, plus 100% supersession accuracy</strong></a>
+  <a href="docs/benchmarks/README.md"><strong>Reproducible benchmark evidence and offline quality gates</strong></a>
   <br />
   <a href="docs/benchmarks/riad-1.md"><strong>RIAD-1: decision reconstruction benchmark</strong></a>
   · <a href="https://github.com/Lians-ai/Lians/actions/workflows/riad-1.yml"><strong>CI receipts</strong></a>
@@ -46,14 +46,39 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is **the system of record for AI in regulated industries**: one append-only, tamper-evident, bitemporal, erasure-compatible ledger for what AI systems knew, did, and why.
+[Lians](https://github.com/Lians-ai/Lians) is the **cross-platform
+decision evidence and reconstruction layer for regulated AI**. It gives
+compliance, model-risk, and operational-risk teams one record of what an agent
+knew, what it retrieved, which policy governed it, which tools ran, who
+reviewed it, and what changed later.
 
-The platform exposes two products on the same record layer:
+The durable moat is neutrality. A firm can run agents across Bedrock, Azure
+OpenAI, Anthropic direct, and open-source runtimes while keeping one portable
+evidence record outside every provider.
 
-- **Memory** — point-in-time-correct agent knowledge with supersession, provenance, information barriers, and crypto-shred erasure.
-- **Records** — first-class inference, human-oversight, system-change, data-subject, incident, memory, and consequential-decision events, plus portable Evidence Pack exports.
+Every write is preserved as a governed temporal record and compiled into a
+typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
+mode and returns a content-addressed receipt that can bind automatically to a
+Decision Envelope. See
+[decision evidence and reconstruction](docs/decision-evidence.md), the
+[normative completeness grades](docs/completeness-grades.md),
+[Evidence Pack signing key custody](docs/evidence-signing-key-custody.md), the
+[governed memory engine](docs/memory-engine.md) and
+[reproducible evidence gates](docs/benchmarks/README.md).
 
-Memory is what an agent knew. Records are what the AI system did. Either becomes evidence when a regulator, customer, validator, court, or auditor disputes an outcome.
+The platform exposes one evidence workflow:
+
+- **Capture**: open a Decision Envelope and bind memory, traces, policy
+  decisions, prompts, tools, and human review as the action happens.
+- **Reconstruct**: reproduce the point-in-time knowledge and execution path even
+  when exact deterministic replay is impossible.
+- **Verify**: grade every decision as Recorded, Reconstructable, Verifiable, or
+  Replayable, with every missing requirement named.
+- **Monitor**: when a source, policy, or model changes, identify every exposed
+  decision and emit a blast-radius alert.
+
+Memory remains a core evidence source and performance primitive. It is not the
+commercial category by itself.
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
@@ -67,19 +92,19 @@ Memory is what an agent knew. Records are what the AI system did. Either becomes
 
 ---
 
-## The regulated AI record problem
+## Agent memory should improve without losing the record
 
-Lians is the authoritative record layer for agents that operate on time-sensitive,
-audited, confidential data. The Memory product keeps context correct; the Records
-product captures behavior and oversight in an open, verifiable event format.
+Lians gives agents a durable memory loop across facts, context, decisions, outcomes,
+and reviewed lessons. The Memory product keeps context current and useful; the
+Records product captures behavior and oversight in an open, verifiable event format.
 
-Most memory layers help an agent remember. Lians is built for institutions that
-must also prove what the agent knew, when it knew it, where the fact came from,
-who was allowed to see it, whether stale facts were excluded, and whether erased
-content is cryptographically unrecoverable while the audit trail survives.
+Most memory layers stop at storage and retrieval. Lians is built for teams that
+also need to know what the agent knew, when it knew it, where the fact came from,
+which outcomes followed, who was allowed to see it, and whether stale or erased
+content was kept out of future context.
 
-That is the gap between useful memory and deployable memory in financial,
-medical, and legal environments.
+That is the gap between a memory demo and a memory system teams can trust in
+production, especially in financial, medical, and legal environments.
 
 ### What regulated memory must prove
 
@@ -102,9 +127,8 @@ Lians is designed for the failure modes that matter in institutions:
 
 The short competitive frame:
 
-> mem0 remembers. Zep connects. Lians proves what the agent knew, when it knew it,
-> who could see it, and whether that memory was allowed to influence a regulated
-> decision.
+> Runtime vendors explain their own cloud. Lians preserves portable decision
+> evidence across all of them.
 
 ### Built for regulated verticals
 
@@ -192,15 +216,58 @@ mem.add(
 # Superseded facts are excluded at the DB layer — never reach the LLM
 results = mem.recall(agent_id="analyst-1", query="NVDA revenue guidance")
 
+# Deeper multi-facet recall for planning and research
+results = mem.recall(
+    agent_id="analyst-1",
+    query="What changed in the guidance and why?",
+    mode="deep",
+)
+
 # Point-in-time: what did we know on March 1? (compliance-grade answer)
 results = mem.recall_at(
     agent_id="analyst-1",
     query="NVDA revenue guidance",
     as_of=datetime(2025, 3, 1, tzinfo=timezone.utc),
 )
+
+# Every result includes receipt_sha256, provenance_coverage, and the
+# resolved serving mode and latency budget.
 ```
 
 Switch to the hosted server with one line: `from lians import LiansClient as LocalLiansClient`
+
+### Decision evidence quickstart
+
+```python
+from datetime import datetime, timezone
+from lians import AsyncLiansClient
+
+async with AsyncLiansClient(base_url=LIANS_URL, api_key=LIANS_API_KEY) as lians:
+    envelope = await lians.open_decision_envelope(
+        agent_id="underwriter-1",
+        decision_type="credit_application",
+        regime="ECOA_REG_B",
+        completeness_profile="regulated_recordkeeping",
+        knowledge_as_of=datetime.now(timezone.utc),
+    )
+
+    context = await lians.recall(
+        agent_id="underwriter-1",
+        query="verified applicant income",
+        decision_envelope_id=envelope["id"],
+    )
+
+    sealed = await lians.seal_decision_envelope(
+        envelope["id"],
+        outcome="manual_review",
+        decided_at=datetime.now(timezone.utc),
+        input_hash=INPUT_SHA256,
+        output_hash=OUTPUT_SHA256,
+    )
+
+    # No overclaiming: every missing requirement names the grade it blocks.
+    print(sealed["completeness"])
+```
 
 ---
 
@@ -484,12 +551,13 @@ Interactive docs: `http://localhost:8000/docs`
 ## Running tests
 
 ```bash
-cd agentmem
 pip install -e ".[dev]"
-pytest -v
+python scripts/test_all.py
 
 # Benchmarks only (no API keys required)
-pytest tests/test_supersession_benchmark.py tests/test_recall_quality.py -v
+PYTHONPATH=agentmem/src python -m pytest \
+  agentmem/tests/test_supersession_benchmark.py \
+  agentmem/tests/test_recall_quality.py -v
 ```
 
 See [docs/testing.md](docs/testing.md) for the six named invariants (temporal soundness, audit immutability, erasure, etc.).

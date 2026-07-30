@@ -161,6 +161,83 @@ describe("recall()", () => {
     expect(result.memories).toHaveLength(1);
     expect(result.total_candidates).toBe(1);
   });
+
+  it("binds recall to a decision envelope", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: { memories: [], receipt_sha256: "a".repeat(64) },
+    });
+
+    await client.recall({
+      agent_id: "agent-1",
+      query: "applicant income",
+      decision_envelope_id: "envelope-1",
+      mode: "reconstruct",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.decision_envelope_id).toBe("envelope-1");
+    expect(body.mode).toBe("reconstruct");
+  });
+});
+
+// ── Decision evidence ───────────────────────────────────────────────────────
+
+describe("decision evidence", () => {
+  it("opens and seals one Decision Envelope", async () => {
+    const openFetch = mockFetch({
+      ok: true,
+      status: 200,
+      body: { id: "envelope-1", status: "open" },
+    });
+    await client.openDecisionEnvelope({
+      agent_id: "underwriter-1",
+      decision_type: "credit_application",
+      completeness_profile: "regulated_recordkeeping",
+      trace_id: "0123456789abcdef0123456789abcdef",
+    });
+    const [openUrl, openInit] = openFetch.mock.calls[0] as [string, RequestInit];
+    expect(openUrl).toBe("https://mem.example.com/v1/decision-envelopes");
+    expect(openInit.method).toBe("POST");
+
+    const sealFetch = mockFetch({
+      ok: true,
+      status: 200,
+      body: { decision: { id: "decision-1" }, completeness: { grade: "recorded" } },
+    });
+    await client.sealDecisionEnvelope("envelope-1", {
+      outcome: "manual_review",
+      decided_at: "2026-07-20T12:00:02Z",
+      input_hash: "1".repeat(64),
+      output_hash: "2".repeat(64),
+    });
+    const [sealUrl, sealInit] = sealFetch.mock.calls[0] as [string, RequestInit];
+    expect(sealUrl).toBe(
+      "https://mem.example.com/v1/decision-envelopes/envelope-1/seal",
+    );
+    const sealBody = JSON.parse(sealInit.body as string);
+    expect(sealBody.input_hash).toBe("1".repeat(64));
+  });
+
+  it("queries the exact source version blast radius", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: { impacted_decisions: 3, decisions: [] },
+    });
+    await client.blastRadius({
+      evidence_type: "external",
+      source_id: "vendor-risk-feed",
+      source_version: "2026-07-20",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/v1/evidence/blast-radius?");
+    expect(url).toContain("source_id=vendor-risk-feed");
+    expect(url).toContain("source_version=2026-07-20");
+    expect(init.method).toBe("GET");
+  });
 });
 
 // ── eraseSubject ──────────────────────────────────────────────────────────────

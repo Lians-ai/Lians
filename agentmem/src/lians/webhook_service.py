@@ -1,10 +1,9 @@
 """
-Webhook delivery service for AgentMem.
+Webhook delivery service for Lians.
 
-Every call to `dispatch_event()` fans out an HMAC-SHA256-signed JSON payload to
-all enabled endpoints registered for that namespace and event type.  Delivery is
-fire-and-forget from the write path's perspective: failures are logged and
-retried up to MAX_ATTEMPTS times with exponential back-off in a background task.
+Every call to `dispatch_event()` creates the delivery record and a durable job
+in the caller's transaction. Workers claim those jobs with database leases, so
+a process restart cannot silently lose an outbound event.
 
 Payload format (POST body):
     {
@@ -15,8 +14,9 @@ Payload format (POST body):
       "data":       { ... event-specific fields ... }
     }
 
-Signature header:
-    X-AgentMem-Signature: sha256=<hex_hmac>
+Signature headers:
+    X-Lians-Signature: sha256=<hex_hmac>
+    X-AgentMem-Signature: sha256=<hex_hmac>  (legacy compatibility)
 
 Receivers verify: hmac.compare_digest(sha256(secret, body), header_value)
 """
@@ -37,10 +37,11 @@ from urllib.parse import urlsplit
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import WebhookEndpoint, WebhookDelivery
+from .durable_jobs import enqueue_job
+from .models import DurableJob, WebhookEndpoint, WebhookDelivery
 from .secret_storage import WEBHOOK_SIGNING_PURPOSE, seal_text, unseal_text
 
-logger = logging.getLogger("agentmem.webhooks")
+logger = logging.getLogger("lians.webhooks")
 
 _MAX_ATTEMPTS = 3
 _BACKOFF_BASE = 2.0   # seconds; attempt n waits BASE^(n-1) before retry
@@ -54,10 +55,11 @@ MEMORY_CONFLICT     = "memory.conflict"
 MEMORY_ERASED       = "memory.erased"
 SUPERSESSION_REJECTED = "supersession.rejected"
 RELATIONSHIP_INVALIDATED = "relationship.invalidated"
+EVIDENCE_BLAST_RADIUS = "evidence.blast_radius"
 
 ALL_EVENTS = {
     MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED, SUPERSESSION_REJECTED,
-    RELATIONSHIP_INVALIDATED,
+    RELATIONSHIP_INVALIDATED, EVIDENCE_BLAST_RADIUS,
 }
 
 
@@ -151,6 +153,7 @@ async def _http_post(url: str, body: bytes, signature: str) -> tuple[int, str]:
                 content=body,
                 headers={
                     "Content-Type": "application/json",
+                    "X-Lians-Signature": signature,
                     "X-AgentMem-Signature": signature,
                 },
             )
@@ -171,8 +174,8 @@ async def dispatch_event(
     """
     Fan out *event_type* to all enabled endpoints subscribed to it in *namespace*.
 
-    This coroutine itself is fast (one DB read + task spawning).  Each delivery
-    runs in a separate asyncio task so the write path is never blocked.
+    This coroutine performs no network I/O. Each delivery and its work item are
+    committed atomically with the memory write that produced the event.
     """
     conditions = [
             WebhookEndpoint.namespace == namespace,
@@ -198,8 +201,6 @@ async def dispatch_event(
         "timestamp": now.isoformat(),
         "data": data,
     }
-    body = json.dumps(payload, default=str).encode()
-
     for endpoint in endpoints:
         delivery = WebhookDelivery(
             id=uuid.uuid4(),
@@ -208,22 +209,69 @@ async def dispatch_event(
             payload=payload,
         )
         db.add(delivery)
-        asyncio.create_task(
-            _deliver_with_retry(
-                endpoint_id=endpoint.id,
-                url=endpoint.url,
-                secret=unseal_text(
-                    endpoint.secret,
-                    purpose=WEBHOOK_SIGNING_PURPOSE,
-                    context=endpoint.namespace,
-                ),
-                delivery_id=delivery.id,
-                body=body,
-                event_type=event_type,
-            )
+        await db.flush()
+        await enqueue_job(
+            db,
+            namespace=namespace,
+            kind="webhook.delivery",
+            payload={
+                "endpoint_id": str(endpoint.id),
+                "delivery_id": str(delivery.id),
+            },
+            dedupe_key=str(delivery.id),
+            max_attempts=_MAX_ATTEMPTS,
         )
 
     await db.flush()
+
+
+class WebhookDeliveryError(RuntimeError):
+    """A retryable outbound delivery failure."""
+
+
+async def handle_webhook_job(db: AsyncSession, job: DurableJob) -> None:
+    """Deliver one leased webhook job without placing secrets in the job row."""
+    try:
+        endpoint_id = uuid.UUID(str(job.payload["endpoint_id"]))
+        delivery_id = uuid.UUID(str(job.payload["delivery_id"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Malformed webhook delivery job") from exc
+
+    endpoint = await db.get(WebhookEndpoint, endpoint_id)
+    delivery = await db.get(WebhookDelivery, delivery_id)
+    if delivery is None:
+        return
+    if endpoint is None or not endpoint.enabled:
+        delivery.attempt = job.attempts
+        delivery.error = "Webhook endpoint is missing or disabled"
+        await db.commit()
+        return
+
+    body = json.dumps(delivery.payload, default=str).encode()
+    secret = unseal_text(
+        endpoint.secret,
+        purpose=WEBHOOK_SIGNING_PURPOSE,
+        context=endpoint.namespace,
+    )
+    status_code, error = await _http_post(endpoint.url, body, _sign(secret, body))
+    delivered = bool(status_code and 200 <= status_code < 300)
+    delivery.attempt = job.attempts
+    delivery.status_code = status_code or None
+    delivery.error = error or None
+    delivery.delivered_at = datetime.now(tz=timezone.utc) if delivered else None
+    await db.commit()
+
+    if delivered:
+        logger.debug(
+            "Webhook %s delivered to %s (attempt %d)",
+            delivery.event_type,
+            endpoint.url,
+            job.attempts,
+        )
+        return
+    raise WebhookDeliveryError(
+        f"Webhook {delivery.event_type} returned {status_code or 'no response'}"
+    )
 
 
 async def _deliver_with_retry(

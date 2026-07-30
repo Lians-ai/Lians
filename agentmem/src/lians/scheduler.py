@@ -12,12 +12,34 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from .models import NamespacePolicy
+from .models import MemoryFeedback, NamespacePolicy
 
 logger = logging.getLogger("agentmem.scheduler")
+
+
+async def _try_scheduler_lock(db: AsyncSession, name: str) -> bool:
+    """Acquire a process-independent scheduler lock for the current connection."""
+    if db.get_bind().dialect.name != "postgresql":
+        return True
+    return bool(
+        (
+            await db.execute(
+                text("SELECT pg_try_advisory_lock(hashtext(:name))"),
+                {"name": name},
+            )
+        ).scalar_one()
+    )
+
+
+async def _release_scheduler_lock(db: AsyncSession, name: str) -> None:
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(
+            text("SELECT pg_advisory_unlock(hashtext(:name))"),
+            {"name": name},
+        )
 
 
 async def run_retention_scheduler(
@@ -47,34 +69,53 @@ async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) ->
     total_pruned = 0
     errors = 0
 
-    async with session_factory() as db:
-        stmt = select(NamespacePolicy).where(
-            NamespacePolicy.content_ttl_days.is_not(None),
-            NamespacePolicy.legal_hold.is_(False),
-        )
-        result = await db.execute(stmt)
-        namespaces = [p.namespace for p in result.scalars().all()]
+    async def prune_namespaces(namespaces: list[str]) -> None:
+        nonlocal total_pruned, errors
+        for namespace in namespaces:
+            try:
+                async with session_factory() as db:
+                    pruned = await prune_expired_content(db, namespace)
+                    total_pruned += pruned.memories_pruned
+                    if pruned.memories_pruned:
+                        logger.info(
+                            "Scheduler prune completed",
+                            extra={
+                                "namespace": namespace,
+                                "memories_pruned": pruned.memories_pruned,
+                                "cutoff_date": pruned.cutoff_date.isoformat(),
+                            },
+                        )
+            except Exception as exc:
+                errors += 1
+                logger.error(
+                    "Scheduler prune error",
+                    extra={"namespace": namespace, "error": str(exc)},
+                )
 
-    for namespace in namespaces:
-        try:
-            async with session_factory() as db:
-                pruned = await prune_expired_content(db, namespace)
-                total_pruned += pruned.memories_pruned
-                if pruned.memories_pruned:
-                    logger.info(
-                        "Scheduler prune completed",
-                        extra={
-                            "namespace": namespace,
-                            "memories_pruned": pruned.memories_pruned,
-                            "cutoff_date": pruned.cutoff_date.isoformat(),
-                        },
-                    )
-        except Exception as exc:
-            errors += 1
-            logger.error(
-                "Scheduler prune error",
-                extra={"namespace": namespace, "error": str(exc)},
-            )
+    stmt = select(NamespacePolicy).where(
+        NamespacePolicy.content_ttl_days.is_not(None),
+        NamespacePolicy.legal_hold.is_(False),
+    )
+    async with session_factory() as probe_db:
+        is_postgres = probe_db.get_bind().dialect.name == "postgresql"
+
+    if not is_postgres:
+        async with session_factory() as db:
+            result = await db.execute(stmt)
+            namespaces = [p.namespace for p in result.scalars().all()]
+        await prune_namespaces(namespaces)
+    else:
+        lock_name = "lians:retention"
+        async with session_factory() as lock_db:
+            if not await _try_scheduler_lock(lock_db, lock_name):
+                logger.info("Retention cycle skipped; another instance owns the lock")
+                return
+            try:
+                result = await lock_db.execute(stmt)
+                namespaces = [p.namespace for p in result.scalars().all()]
+                await prune_namespaces(namespaces)
+            finally:
+                await _release_scheduler_lock(lock_db, lock_name)
 
     elapsed_ms = round((datetime.now(timezone.utc) - started_at).total_seconds() * 1000, 1)
     logger.info(
@@ -86,3 +127,66 @@ async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) ->
             "elapsed_ms": elapsed_ms,
         },
     )
+
+
+async def run_learning_maintenance_scheduler(
+    session_factory: async_sessionmaker[AsyncSession],
+    interval_hours: float,
+    min_signals: int = 3,
+) -> None:
+    """Periodically apply bounded outcome-driven decay across namespaces."""
+    logger.info("Learning maintenance scheduler started")
+    try:
+        while True:
+            await asyncio.sleep(interval_hours * 3600)
+            async def maintain(namespaces: list[str]) -> None:
+                from .feedback_service import run_memory_maintenance
+
+                for namespace in namespaces:
+                    try:
+                        async with session_factory() as db:
+                            result = await run_memory_maintenance(
+                                db, namespace, min_signals=min_signals,
+                            )
+                        logger.info(
+                            "Learning maintenance completed",
+                            extra={
+                                "namespace": namespace,
+                                "demoted": result.memories_demoted,
+                                "candidates": result.consolidation_candidates,
+                            },
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "Learning maintenance error",
+                            extra={"namespace": namespace, "error": str(exc)},
+                        )
+
+            namespace_stmt = select(MemoryFeedback.namespace).distinct()
+            async with session_factory() as probe_db:
+                is_postgres = probe_db.get_bind().dialect.name == "postgresql"
+            if not is_postgres:
+                async with session_factory() as db:
+                    namespaces = list(
+                        (await db.execute(namespace_stmt)).scalars().all()
+                    )
+                await maintain(namespaces)
+                continue
+
+            lock_name = "lians:learning-maintenance"
+            async with session_factory() as lock_db:
+                if not await _try_scheduler_lock(lock_db, lock_name):
+                    logger.info(
+                        "Learning maintenance skipped; another instance owns the lock"
+                    )
+                    continue
+                try:
+                    namespaces = list(
+                        (await lock_db.execute(namespace_stmt)).scalars().all()
+                    )
+                    await maintain(namespaces)
+                finally:
+                    await _release_scheduler_lock(lock_db, lock_name)
+    except asyncio.CancelledError:
+        logger.info("Learning maintenance scheduler stopped")
+        raise

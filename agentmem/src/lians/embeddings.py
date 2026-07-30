@@ -28,6 +28,10 @@ class EmbeddingProvider(ABC):
         """
         return await self.embed_one(text)
 
+    async def embed_queries(self, texts: List[str]) -> List[List[float]]:
+        """Batch query embeddings when a provider has no specialized path."""
+        return await asyncio.gather(*(self.embed_query(text) for text in texts))
+
 
 class VoyageProvider(EmbeddingProvider):
     """Voyage finance/domain embedding model."""
@@ -153,6 +157,23 @@ class SentenceTransformerProvider(EmbeddingProvider):
             norm = sum(x * x for x in merged) ** 0.5 or 1.0
             return [x / norm for x in merged]
         return await self.embed_one(text)
+
+    async def embed_queries(self, texts: List[str]) -> List[List[float]]:
+        """Apply the model-family query instruction in one inference batch."""
+        name = self._model_name.lower()
+        for marker, prefix in self._QUERY_PREFIX_FAMILIES:
+            if marker in name:
+                return await self.embed([prefix + text for text in texts])
+        if "bge" in name:
+            instructed = [self._BGE_QUERY_INSTRUCTION + text for text in texts]
+            encoded = await self.embed(instructed + texts)
+            out: List[List[float]] = []
+            for first, second in zip(encoded[:len(texts)], encoded[len(texts):]):
+                merged = [(a + b) / 2.0 for a, b in zip(first, second)]
+                norm = sum(x * x for x in merged) ** 0.5 or 1.0
+                out.append([x / norm for x in merged])
+            return out
+        return await self.embed(texts)
 
 
 class LocalProvider(EmbeddingProvider):

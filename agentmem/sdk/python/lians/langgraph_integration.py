@@ -57,6 +57,8 @@ def create_recall_node(
     k: int = 5,
     as_of_key: Optional[str] = None,
     filters_key: Optional[str] = None,
+    strategy: str = "standard",
+    max_query_variants: int = 4,
 ):
     """
     Create a LangGraph node that recalls relevant memories into state.
@@ -110,14 +112,103 @@ def create_recall_node(
             filters = state.get(filters_key) or {}
 
         kwargs = dict(agent_id=agent_id, query=query, k=k, as_of=as_of, filters=filters)
+        if strategy != "standard":
+            kwargs["strategy"] = strategy
+            kwargs["max_query_variants"] = max_query_variants
         if _recall_is_async:
             result = await client.recall(**kwargs)
         else:
-            result = client.recall(**kwargs)
+            # LangGraph nodes run inside an event loop. Keep synchronous
+            # clients (including LocalLiansClient, which owns its own loop)
+            # off that loop to avoid nested run_until_complete failures.
+            result = await asyncio.to_thread(client.recall, **kwargs)
 
         return {memories_key: result.get("memories", [])}
 
     return _recall_node
+
+
+def create_memory_intelligence_node(
+    client: Any,
+    agent_id: str,
+    *,
+    query_key: str = "query",
+    context_key: str = "memory_context",
+    memories_key: str = "memories",
+    telemetry_key: str = "memory_telemetry",
+    k: int = 10,
+    max_tokens: int = 1500,
+    strategy: str = "adaptive",
+    max_query_variants: int = 4,
+):
+    """Create a LangGraph node that injects context, evidence, and telemetry."""
+    _context_is_async = asyncio.iscoroutinefunction(getattr(client, "context", None))
+
+    async def _context_node(state: dict) -> dict:
+        query = state.get(query_key) or ""
+        if not query:
+            return {context_key: "", memories_key: [], telemetry_key: {}}
+        kwargs = {
+            "agent_id": agent_id, "query": query, "k": k,
+            "max_tokens": max_tokens, "strategy": strategy,
+            "max_query_variants": max_query_variants,
+        }
+        if _context_is_async:
+            result = await client.context(**kwargs)
+        else:
+            result = await asyncio.to_thread(client.context, **kwargs)
+        telemetry = {
+            "strategy": result.get("strategy", strategy),
+            "query_variants": result.get("query_variants", [query]),
+            "retrieval_confidence": result.get("retrieval_confidence", 0.0),
+            "retrieval_degraded": result.get("retrieval_degraded", False),
+            "token_estimate": result.get("token_estimate", 0),
+            "recall_latency_ms": result.get("recall_latency_ms", 0.0),
+            "truncated": result.get("truncated", False),
+        }
+        return {
+            context_key: result.get("context", ""),
+            memories_key: result.get("memories", []),
+            telemetry_key: telemetry,
+        }
+
+    return _context_node
+
+
+def create_memory_feedback_node(
+    client: Any,
+    agent_id: str,
+    *,
+    memories_key: str = "memories",
+    query_key: str = "query",
+    signal_key: str = "memory_feedback_signal",
+    outcome_key: str = "outcome",
+    result_key: str = "memory_feedback",
+):
+    """Create a LangGraph node that persists explicit post-action feedback."""
+    _feedback_is_async = asyncio.iscoroutinefunction(getattr(client, "feedback", None))
+
+    async def _feedback_node(state: dict) -> dict:
+        signal = state.get(signal_key)
+        if not signal:
+            return {result_key: []}
+        records = []
+        for memory in state.get(memories_key) or []:
+            memory_id = memory.get("id") if isinstance(memory, dict) else None
+            if not memory_id:
+                continue
+            kwargs = {
+                "memory_id": str(memory_id), "agent_id": agent_id,
+                "signal": str(signal), "outcome": state.get(outcome_key),
+                "query": state.get(query_key), "source": "langgraph",
+            }
+            if _feedback_is_async:
+                records.append(await client.feedback(**kwargs))
+            else:
+                records.append(await asyncio.to_thread(client.feedback, **kwargs))
+        return {result_key: records}
+
+    return _feedback_node
 
 
 def create_remember_node(
@@ -195,7 +286,7 @@ def create_remember_node(
         if _add_is_async:
             result = await client.add(**kwargs)
         else:
-            result = client.add(**kwargs)
+            result = await asyncio.to_thread(client.add, **kwargs)
 
         return {result_key: result}
 
@@ -237,7 +328,7 @@ def create_batch_remember_node(
         if _batch_is_async:
             result = await client.batch_add(enriched)
         else:
-            result = client.batch_add(enriched)
+            result = await asyncio.to_thread(client.batch_add, enriched)
 
         return {result_key: result}
 

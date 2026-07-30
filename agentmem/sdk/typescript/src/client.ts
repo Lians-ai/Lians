@@ -1,11 +1,11 @@
 ﻿/**
  * AgentMem TypeScript SDK — async HTTP client for the REST API.
  *
- * AgentMem is a financial-grade AI memory layer that provides:
- *  - Compliance-grade recall: bitemporal model with SEC 17a-4 hash chain, GDPR
- *    crypto-shred (audit hash survives), and PostgreSQL RLS information barriers.
- *    mem0 has no temporal model. Graphiti/Zep has temporal graph queries but no
- *    compliance stack (no hash chain, no crypto-shred, no information barriers).
+ * Lians is a decision evidence and reconstruction layer that provides:
+ *  - Cross-platform Decision Envelopes that bind memory, traces, policy
+ *    decisions, tool results, and human review into one point-in-time record.
+ *  - Honest completeness grades from Recorded through Replayable, with every
+ *    missing requirement named instead of overclaiming verification.
  *  - Automatic supersession: the LLM engine detects when a new fact replaces an
  *    old one and invalidates the stale record, so recall always returns the
  *    current truth without your agent needing to deduplicate.
@@ -29,8 +29,23 @@ import type {
   MemoryAdd,
   MemoryOut,
   MemoryBatchResult,
+  MessageIngestRequest,
   RecallRequest,
   RecallResult,
+  ContextRequest,
+  ContextResult,
+  DecisionEnvelopeOpen,
+  DecisionEnvelopeOut,
+  DecisionEnvelopeSeal,
+  DecisionEvidenceCreate,
+  DecisionEvidenceOut,
+  DecisionCompleteness,
+  DecisionDetail,
+  BlastRadiusResult,
+  ExperienceCreate,
+  ExperienceOutcome,
+  ExperienceOut,
+  ReflectionProposal,
   EraseRequest,
   EraseResult,
   ErasureCertificate,
@@ -169,11 +184,184 @@ export class LiansClient {
   /**
    * Retrieve the most relevant current memories for a query.
    * Superseded facts are excluded at the database level. Pass `as_of` for
-   * point-in-time recall backed by a compliance audit stack (hash chain,
-   * crypto-shred, RLS information barriers) absent from mem0 and Graphiti/Zep.
+   * point-in-time recall. Set `decision_envelope_id` to bind the receipt and
+   * returned memory versions to the decision before the context is used.
    */
   recall(req: RecallRequest): Promise<RecallResult> {
     return this._req<RecallResult>("POST", "/v1/recall", { json: req });
+  }
+
+  /** Ingest standard chat messages through the server's canonical policy. */
+  addMessages(req: MessageIngestRequest): Promise<MemoryBatchResult> {
+    return this._req<MemoryBatchResult>("POST", "/v1/memories/messages", {
+      json: req,
+    });
+  }
+
+  /** Compile bounded, attributed context using the engine's canonical policy. */
+  context(req: ContextRequest): Promise<ContextResult> {
+    return this._req<ContextResult>("POST", "/v1/context", { json: req });
+  }
+
+  /** Open the evidence correlation boundary before an agent acts. */
+  openDecisionEnvelope(req: DecisionEnvelopeOpen): Promise<DecisionEnvelopeOut> {
+    return this._req<DecisionEnvelopeOut>("POST", "/v1/decision-envelopes", {
+      json: req,
+    });
+  }
+
+  decisionEnvelope(envelopeId: string): Promise<DecisionEnvelopeOut> {
+    return this._req<DecisionEnvelopeOut>(
+      "GET",
+      `/v1/decision-envelopes/${envelopeId}`,
+    );
+  }
+
+  addDecisionEvidence(
+    envelopeId: string,
+    evidence: DecisionEvidenceCreate[],
+  ): Promise<DecisionEvidenceOut[]> {
+    return this._req<DecisionEvidenceOut[]>(
+      "POST",
+      `/v1/decision-envelopes/${envelopeId}/evidence`,
+      { json: { evidence } },
+    );
+  }
+
+  /** Seal the decision and return its honest completeness grade. */
+  sealDecisionEnvelope(
+    envelopeId: string,
+    req: DecisionEnvelopeSeal,
+  ): Promise<DecisionDetail> {
+    return this._req<DecisionDetail>(
+      "POST",
+      `/v1/decision-envelopes/${envelopeId}/seal`,
+      { json: req },
+    );
+  }
+
+  decisionCompleteness(decisionId: string): Promise<DecisionCompleteness> {
+    return this._req<DecisionCompleteness>(
+      "GET",
+      `/v1/decisions/${decisionId}/completeness`,
+    );
+  }
+
+  reconstructDecision(decisionId: string): Promise<Record<string, unknown>> {
+    return this._req(
+      "GET",
+      `/v1/decisions/${decisionId}/reconstruction`,
+    );
+  }
+
+  evidencePack(
+    decisionId: string,
+    opts: { verify?: boolean; version?: "v1" | "v2" } = {},
+  ): Promise<Record<string, unknown>> {
+    return this._req(
+      "GET",
+      `/v1/decisions/${decisionId}/evidence-pack`,
+      {
+        params: {
+          verify: opts.verify ?? true,
+          version: opts.version ?? "v2",
+        },
+      },
+    );
+  }
+
+  blastRadius(req: {
+    evidence_type: string;
+    source_id: string;
+    source_version?: string;
+    artifact_hash?: string;
+    limit?: number;
+  }): Promise<BlastRadiusResult> {
+    return this._req<BlastRadiusResult>("GET", "/v1/evidence/blast-radius", {
+      params: req,
+    });
+  }
+
+  recordEvidenceChange(req: {
+    evidence_type: string;
+    source_id: string;
+    source_version?: string;
+    artifact_hash?: string;
+    new_source_version?: string;
+    new_artifact_hash?: string;
+    change_kind:
+      | "revised"
+      | "retracted"
+      | "compromised"
+      | "expired"
+      | "policy_changed"
+      | "model_changed";
+    severity?: "info" | "low" | "medium" | "high" | "critical";
+    changed_at: string;
+    actor_id?: string;
+    reason?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/evidence/changes", { json: req });
+  }
+
+  /** Record a decision episode before its outcome is known. */
+  createExperience(req: ExperienceCreate): Promise<ExperienceOut> {
+    return this._req<ExperienceOut>("POST", "/v1/experiences", { json: req });
+  }
+
+  /** Attach a reviewed outcome that may influence later context ranking. */
+  recordExperienceOutcome(
+    experienceId: string,
+    req: ExperienceOutcome,
+  ): Promise<ExperienceOut> {
+    return this._req<ExperienceOut>(
+      "PATCH",
+      `/v1/experiences/${experienceId}/outcome`,
+      { json: req },
+    );
+  }
+
+  listExperiences(
+    opts: { agentId?: string; status?: string; limit?: number } = {},
+  ): Promise<{ experiences: ExperienceOut[]; total: number }> {
+    return this._req("GET", "/v1/experiences", {
+      params: {
+        agent_id: opts.agentId,
+        status: opts.status,
+        limit: opts.limit,
+      },
+    });
+  }
+
+  generateReflections(
+    agentId: string,
+    opts: { minimumSupport?: number; minimumReward?: number } = {},
+  ): Promise<{ proposals: ReflectionProposal[]; total: number }> {
+    return this._req("POST", "/v1/reflections/generate", {
+      json: {
+        agent_id: agentId,
+        minimum_support: opts.minimumSupport,
+        minimum_reward: opts.minimumReward,
+      },
+    });
+  }
+
+  listReflections(
+    status: "pending" | "approved" | "rejected" = "pending",
+  ): Promise<{ proposals: ReflectionProposal[]; total: number }> {
+    return this._req("GET", "/v1/reflections", { params: { status } });
+  }
+
+  reviewReflection(
+    proposalId: string,
+    req: {
+      action: "approve" | "reject";
+      reviewer: string;
+      note?: string;
+    },
+  ): Promise<ReflectionProposal> {
+    return this._req("PATCH", `/v1/reflections/${proposalId}`, { json: req });
   }
 
   /**
