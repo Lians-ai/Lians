@@ -284,6 +284,26 @@ jobs:
         run: go test ./...
         working-directory: agentmem/sdk/go
 
+  runtime-container:
+    name: Production runtime container
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Build production image without the optional local model
+        run: >-
+          docker build
+          --build-arg EXTRAS=
+          --build-arg PREDOWNLOAD_MODEL=
+          --tag lians-runtime:test
+          .
+
+      - name: Verify non-root runtime and application import
+        run: |
+          test "$(docker image inspect lians-runtime:test --format '{{.Config.User}}')" = "10001:10001"
+          docker run --rm lians-runtime:test python -c "import lians.main"
+
   mcp-container:
     name: Glama MCP container
     runs-on: ubuntu-latest

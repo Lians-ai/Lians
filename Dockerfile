@@ -18,7 +18,8 @@ ARG EXTRAS=local
 COPY pyproject.toml ./
 COPY agentmem/src/ ./agentmem/src/
 RUN python -m pip install --no-cache-dir --upgrade pip==25.3 \
-    && python -m pip install --no-cache-dir ".[$EXTRAS]"
+    && if [ -n "$EXTRAS" ]; then package_spec=".[$EXTRAS]"; else package_spec="."; fi \
+    && python -m pip install --no-cache-dir "$package_spec"
 
 # Pre-download the local embedding model for zero-network runtime startup.
 ARG PREDOWNLOAD_MODEL=BAAI/bge-large-en-v1.5
