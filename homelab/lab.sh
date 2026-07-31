@@ -2,17 +2,74 @@
 set -eu
 
 command_name="${1:-up}"
-lab_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+[ "$#" -eq 0 ] || shift
+lab_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 compose_file="$lab_root/compose.yaml"
 real_model_file="$lab_root/compose.real-model.yaml"
 env_file="$lab_root/.env"
 example_env="$lab_root/.env.example"
 artifacts="$lab_root/artifacts"
+sample_file="$lab_root/samples/default.json"
+accept_sample_policy=false
+force=false
 
-if [ "$command_name" = "proof" ]; then
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --sample)
+      [ "$#" -ge 2 ] || { echo "--sample requires a JSON file path" >&2; exit 2; }
+      sample_file=$2
+      shift 2
+      ;;
+    --accept-sample-policy)
+      accept_sample_policy=true
+      shift
+      ;;
+    --force)
+      force=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+command -v python3 >/dev/null 2>&1 || {
+  echo "python3 is required for fail-closed sample validation." >&2
+  exit 1
+}
+if ! sample_file=$(python3 "$lab_root/workload/scenario.py" --resolve-for-launch "$sample_file" "$lab_root"); then
+  exit 1
+fi
+[ -f "$sample_file" ] || { echo "Sample file could not be resolved." >&2; exit 1; }
+sample_bytes=$(wc -c < "$sample_file" | tr -d ' ')
+[ "$sample_bytes" -gt 0 ] && [ "$sample_bytes" -le 65536 ] || {
+  echo "Sample must be a non-empty JSON file no larger than 64 KiB." >&2
+  exit 1
+}
+LAB_SAMPLE_FILE="$sample_file"
+export LAB_SAMPLE_FILE
+if [ "$accept_sample_policy" = true ]; then
+  LAB_SAMPLE_POLICY_ACK="I_CONFIRM_THIS_SAMPLE_IS_DEIDENTIFIED"
+  export LAB_SAMPLE_POLICY_ACK
+else
+  unset LAB_SAMPLE_POLICY_ACK
+fi
+
+check_sample() {
+  python3 "$lab_root/workload/scenario.py" "$LAB_SAMPLE_FILE"
+}
+
+if [ "$command_name" = "proof" ] || [ "$command_name" = "report" ]; then
   latest_proof="$artifacts/latest-receipt.json"
   [ -f "$latest_proof" ] || { echo "No exported proof exists yet. Run './lab.sh up' first." >&2; exit 1; }
   cat "$latest_proof"
+  exit 0
+fi
+
+if [ "$command_name" = "check-sample" ]; then
+  check_sample
   exit 0
 fi
 
@@ -66,6 +123,16 @@ compose_real() {
   docker compose --env-file "$env_file" -f "$compose_file" --project-name lians-homelab-real -f "$real_model_file" "$@"
 }
 
+verify_lightweight() {
+  compose --profile tools build verify
+  compose --profile tools run --rm verify
+}
+
+verify_real() {
+  compose_real --profile tools build verify
+  compose_real --profile tools run --rm verify
+}
+
 show_endpoints() {
   printf '\n%s\n' \
     "Lians API   http://localhost:8001/docs" \
@@ -78,22 +145,24 @@ show_endpoints() {
 
 case "$command_name" in
   up)
+    check_sample
     compose_real down --remove-orphans
     compose up --build -d
-    compose --profile tools run --rm verify
+    verify_lightweight
     show_endpoints
     ;;
   up-real)
+    check_sample
     compose down --remove-orphans
     compose_real up --build -d
-    compose_real --profile tools run --rm verify
+    verify_real
     show_endpoints
     ;;
   verify)
-    compose --profile tools run --rm verify
+    verify_lightweight
     ;;
   verify-real)
-    compose_real --profile tools run --rm verify
+    verify_real
     ;;
   status)
     echo "Lightweight project"
@@ -112,18 +181,18 @@ case "$command_name" in
     compose down --remove-orphans
     compose_real down --remove-orphans
     ;;
-  reset)
-    if [ "${2:-}" != "--force" ]; then
-      printf "Reset deletes all homelab databases, telemetry, and proof state. Type RESET to continue: "
+  dispose|reset)
+    if [ "$force" != true ]; then
+      printf "Dispose deletes all homelab databases, telemetry, and proof state. Type DISPOSE to continue: "
       read -r answer
-      [ "$answer" = "RESET" ] || { echo "Reset cancelled." >&2; exit 1; }
+      [ "$answer" = "DISPOSE" ] || { echo "Dispose cancelled." >&2; exit 1; }
     fi
     compose down --volumes --remove-orphans
     compose_real down --volumes --remove-orphans
-    echo "Removed homelab containers and named volumes. .env and exported artifacts were preserved."
+    echo "Removed homelab containers and named volumes. .env and sanitized exported reports were preserved."
     ;;
   *)
-    echo "Usage: ./lab.sh {up|up-real|verify|verify-real|status|logs|logs-real|proof|down|reset [--force]}" >&2
+    echo "Usage: ./lab.sh {up|up-real|check-sample|verify|verify-real|status|logs|logs-real|proof|report|down|dispose|reset} [--sample FILE] [--accept-sample-policy] [--force]" >&2
     exit 2
     ;;
 esac

@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("up", "up-real", "verify", "verify-real", "status", "logs", "logs-real", "proof", "down", "reset")]
+    [ValidateSet("up", "up-real", "check-sample", "verify", "verify-real", "status", "logs", "logs-real", "proof", "report", "down", "dispose", "reset")]
     [string]$Command = "up",
+    [string]$SamplePath,
+    [switch]$AcceptSamplePolicy,
     [switch]$Force
 )
 
@@ -12,6 +14,51 @@ $RealModelFile = Join-Path $LabRoot "compose.real-model.yaml"
 $EnvFile = Join-Path $LabRoot ".env"
 $ExampleEnv = Join-Path $LabRoot ".env.example"
 $Artifacts = Join-Path $LabRoot "artifacts"
+$DefaultSample = Join-Path $LabRoot "samples\default.json"
+$SamplePolicyAck = "I_CONFIRM_THIS_SAMPLE_IS_DEIDENTIFIED"
+$HadSampleFile = Test-Path Env:LAB_SAMPLE_FILE
+$PreviousSampleFile = $env:LAB_SAMPLE_FILE
+$HadSamplePolicyAck = Test-Path Env:LAB_SAMPLE_POLICY_ACK
+$PreviousSamplePolicyAck = $env:LAB_SAMPLE_POLICY_ACK
+$HadGitCommit = Test-Path Env:LAB_GIT_COMMIT
+$PreviousGitCommit = $env:LAB_GIT_COMMIT
+
+function Set-LabSample {
+    $candidate = if ($SamplePath) { $SamplePath } else { $DefaultSample }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        throw "Python 3 is required for fail-closed sample validation."
+    }
+    $resolved = (& $python.Source (Join-Path $LabRoot "workload\scenario.py") `
+        --resolve-for-launch $candidate $LabRoot 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $resolved) {
+        throw "Sample file could not be resolved within the local sample policy."
+    }
+    $file = Get-Item -LiteralPath ([string]$resolved).Trim()
+    if (-not $file.PSIsContainer -and $file.Length -gt 0 -and $file.Length -le 65536) {
+        $env:LAB_SAMPLE_FILE = $file.FullName
+    }
+    else {
+        throw "Sample must be a non-empty JSON file no larger than 64 KiB."
+    }
+    if ($AcceptSamplePolicy) {
+        $env:LAB_SAMPLE_POLICY_ACK = $SamplePolicyAck
+    }
+    else {
+        Remove-Item Env:LAB_SAMPLE_POLICY_ACK -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-LabSample {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        throw "Python 3 is required for fail-closed sample validation."
+    }
+    & $python.Source (Join-Path $LabRoot "workload\scenario.py") $env:LAB_SAMPLE_FILE
+    if ($LASTEXITCODE -ne 0) {
+        throw "Sample validation failed. No containers were started."
+    }
+}
 
 function Get-LabRevision {
     $repoRoot = Split-Path -Parent $LabRoot
@@ -68,6 +115,12 @@ function Invoke-Compose {
     }
 }
 
+function Invoke-Verification {
+    param([switch]$RealModel)
+    Invoke-Compose -RealModel:$RealModel -Arguments @("--profile", "tools", "build", "verify")
+    Invoke-Compose -RealModel:$RealModel -Arguments @("--profile", "tools", "run", "--rm", "verify")
+}
+
 function Show-Endpoints {
     Write-Host ""
     Write-Host "Lians API   http://localhost:8001/docs"
@@ -78,12 +131,20 @@ function Show-Endpoints {
     Write-Host "Grafana credentials are in homelab/.env."
 }
 
-if ($Command -eq "proof") {
+try {
+if ($Command -in @("proof", "report")) {
     $latestProof = Join-Path $Artifacts "latest-receipt.json"
     if (-not (Test-Path -LiteralPath $latestProof)) {
         throw "No exported proof exists yet. Run '.\lab.ps1 up' first."
     }
     Get-Content -Raw -LiteralPath $latestProof
+    return
+}
+
+Set-LabSample
+
+if ($Command -eq "check-sample") {
+    Test-LabSample
     return
 }
 
@@ -94,22 +155,24 @@ Assert-DockerEngine
 
 switch ($Command) {
     "up" {
+        Test-LabSample
         Invoke-Compose -RealModel -Arguments @("down", "--remove-orphans")
         Invoke-Compose -Arguments @("up", "--build", "-d")
-        Invoke-Compose -Arguments @("--profile", "tools", "run", "--rm", "verify")
+        Invoke-Verification
         Show-Endpoints
     }
     "up-real" {
+        Test-LabSample
         Invoke-Compose -Arguments @("down", "--remove-orphans")
         Invoke-Compose -RealModel -Arguments @("up", "--build", "-d")
-        Invoke-Compose -RealModel -Arguments @("--profile", "tools", "run", "--rm", "verify")
+        Invoke-Verification -RealModel
         Show-Endpoints
     }
     "verify" {
-        Invoke-Compose -Arguments @("--profile", "tools", "run", "--rm", "verify")
+        Invoke-Verification
     }
     "verify-real" {
-        Invoke-Compose -RealModel -Arguments @("--profile", "tools", "run", "--rm", "verify")
+        Invoke-Verification -RealModel
     }
     "status" {
         Write-Host "Lightweight project"
@@ -128,13 +191,22 @@ switch ($Command) {
         Invoke-Compose -Arguments @("down", "--remove-orphans")
         Invoke-Compose -RealModel -Arguments @("down", "--remove-orphans")
     }
-    "reset" {
+    { $_ -in @("dispose", "reset") } {
         if (-not $Force) {
-            $answer = Read-Host "Reset deletes all homelab databases, telemetry, and proof state. Type RESET to continue"
-            if ($answer -ne "RESET") { throw "Reset cancelled." }
+            $answer = Read-Host "Dispose deletes all homelab databases, telemetry, and proof state. Type DISPOSE to continue"
+            if ($answer -ne "DISPOSE") { throw "Dispose cancelled." }
         }
         Invoke-Compose -Arguments @("down", "--volumes", "--remove-orphans")
         Invoke-Compose -RealModel -Arguments @("down", "--volumes", "--remove-orphans")
-        Write-Host "Removed the homelab containers and named volumes. homelab/.env and exported artifacts were preserved."
+        Write-Host "Removed the homelab containers and named volumes. homelab/.env and sanitized exported reports were preserved."
     }
+}
+}
+finally {
+    if ($HadSampleFile) { $env:LAB_SAMPLE_FILE = $PreviousSampleFile }
+    else { Remove-Item Env:LAB_SAMPLE_FILE -ErrorAction SilentlyContinue }
+    if ($HadSamplePolicyAck) { $env:LAB_SAMPLE_POLICY_ACK = $PreviousSamplePolicyAck }
+    else { Remove-Item Env:LAB_SAMPLE_POLICY_ACK -ErrorAction SilentlyContinue }
+    if ($HadGitCommit) { $env:LAB_GIT_COMMIT = $PreviousGitCommit }
+    else { Remove-Item Env:LAB_GIT_COMMIT -ErrorAction SilentlyContinue }
 }

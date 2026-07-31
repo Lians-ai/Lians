@@ -1,21 +1,22 @@
-"""Provision the homelab tenant and seed a deterministic revision scenario."""
+"""Provision the homelab tenant and seed a validated local sample scenario."""
 
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 from common import (
     HttpFailure,
     atomic_write_bytes,
+    atomic_write_json,
     emit,
     endpoint,
     env_float,
     http_json,
     wait_for_http,
 )
+from scenario import LoadedScenario, load_scenario
 
 LIANS_URL = os.getenv("LIANS_URL", "http://lians:8000")
 ADMIN_SECRET = os.getenv(
@@ -23,68 +24,23 @@ ADMIN_SECRET = os.getenv(
     os.getenv("LIANS_ADMIN_SECRET", "dev-admin-secret-change-in-prod"),
 )
 NAMESPACE = os.getenv("NAMESPACE", "lians-homelab")
-AGENT_ID = os.getenv("AGENT_ID", "risk-demo")
 STATE_DIR = Path(os.getenv("STATE_DIR", "/state"))
 API_KEY_PATH = STATE_DIR / "api-key"
+SAMPLE_MANIFEST_PATH = STATE_DIR / "sample-manifest.json"
+SAMPLE_PATH = Path(os.getenv("SAMPLE_PATH", "/sample/input.json"))
 STARTUP_TIMEOUT = env_float("STARTUP_TIMEOUT_SECONDS", 180.0, minimum=1.0)
-
-
-SCENARIO: tuple[dict[str, Any], ...] = (
-    {
-        "idempotency_key": "lians-homelab-nvda-exposure-limit-r1",
-        "body": {
-            "agent_id": AGENT_ID,
-            "content": (
-                "NVDA counterparty exposure limit is USD 50 million for 2026 Q3 "
-                "under risk policy v1."
-            ),
-            "event_time": "2026-07-01T12:00:00Z",
-            "source": "homelab://risk-engine/policy-feed",
-            "metadata": {
-                "ticker": "NVDA",
-                "metric": "counterparty_exposure_limit",
-                "period": "2026-Q3",
-                "scenario": "lians-homelab",
-                "currency": "USD",
-                "revision": 1,
-            },
-            "importance": 0.9,
-        },
-    },
-    {
-        "idempotency_key": "lians-homelab-nvda-exposure-limit-r2",
-        "body": {
-            "agent_id": AGENT_ID,
-            "content": (
-                "NVDA counterparty exposure limit revised to USD 35 million for "
-                "2026 Q3 under risk policy v2 after the volatility review."
-            ),
-            "event_time": "2026-07-15T12:00:00Z",
-            "source": "homelab://risk-engine/policy-feed",
-            "metadata": {
-                "ticker": "NVDA",
-                "metric": "counterparty_exposure_limit",
-                "period": "2026-Q3",
-                "scenario": "lians-homelab",
-                "currency": "USD",
-                "revision": 2,
-            },
-            "importance": 0.95,
-        },
-    },
-)
 
 
 def api_headers(key: str) -> dict[str, str]:
     return {"X-API-Key": key}
 
 
-def validate_key(key: str) -> bool:
+def validate_key(key: str, agent_id: str) -> bool:
     try:
         result = http_json(
             "POST",
             endpoint(LIANS_URL, "/v1/recall"),
-            json_body={"agent_id": AGENT_ID, "query": "homelab key validation", "k": 1},
+            json_body={"agent_id": agent_id, "query": "homelab key validation", "k": 1},
             headers=api_headers(key),
         )
         return isinstance(result, dict) and "memories" in result
@@ -114,10 +70,10 @@ def provision_key() -> str:
     return key
 
 
-def ensure_key() -> str:
+def ensure_key(agent_id: str) -> str:
     if API_KEY_PATH.is_file():
         key = API_KEY_PATH.read_text(encoding="utf-8").strip()
-        if key and validate_key(key):
+        if key and validate_key(key, agent_id):
             os.chmod(API_KEY_PATH, 0o600)
             emit("api_key_reused", namespace=NAMESPACE)
             return key
@@ -125,22 +81,41 @@ def ensure_key() -> str:
     return provision_key()
 
 
-def seed_scenario(key: str) -> None:
-    for revision in SCENARIO:
+def seed_scenario(key: str, loaded: LoadedScenario) -> None:
+    scenario = loaded.data
+    agent_id = scenario["agent_id"]
+    recall_filters = {
+        **scenario["recall_filters"],
+        "lab_sample_sha256": loaded.sample_sha256,
+    }
+    for index, revision in enumerate(scenario["memories"]):
+        body = {
+            key: value
+            for key, value in revision.items()
+            if key != "idempotency_key"
+        }
+        body["agent_id"] = agent_id
+        body["metadata"] = {
+            **revision["metadata"],
+            "lab_sample_sha256": loaded.sample_sha256,
+        }
         memory = http_json(
             "POST",
             endpoint(LIANS_URL, "/v1/memories"),
-            json_body=revision["body"],
+            json_body=body,
             headers={
                 **api_headers(key),
-                "Idempotency-Key": revision["idempotency_key"],
+                "Idempotency-Key": (
+                    f"homelab-{loaded.sample_sha256[:16]}-{index:02d}"
+                ),
             },
         )
         if not isinstance(memory, dict) or not memory.get("id"):
             raise RuntimeError("memory seed response did not contain an id")
         emit(
             "memory_seeded",
-            revision=revision["body"]["metadata"]["revision"],
+            sample_sha256=loaded.sample_sha256,
+            sample_index=index,
             memory_id=memory["id"],
         )
 
@@ -148,31 +123,42 @@ def seed_scenario(key: str) -> None:
         "POST",
         endpoint(LIANS_URL, "/v1/recall"),
         json_body={
-            "agent_id": AGENT_ID,
-            "query": "current NVDA counterparty exposure limit",
-            "k": 5,
-            "filters": {
-                "ticker": "NVDA",
-                "metric": "counterparty_exposure_limit",
-            },
+            "agent_id": agent_id,
+            "query": scenario["query"],
+            "k": min(10, len(scenario["memories"])),
+            "filters": recall_filters,
         },
         headers=api_headers(key),
     )
     memories = current.get("memories", []) if isinstance(current, dict) else []
-    if not any("USD 35 million" in (item.get("content") or "") for item in memories):
-        raise RuntimeError("seed verification did not recall the active risk-policy revision")
-    emit("scenario_ready", namespace=NAMESPACE, agent_id=AGENT_ID, revisions=2)
+    if not any(
+        scenario["expected_marker"] in (item.get("content") or "") for item in memories
+    ):
+        raise RuntimeError("seed verification did not recall the expected sample marker")
+    atomic_write_json(SAMPLE_MANIFEST_PATH, loaded.manifest)
+    emit(
+        "scenario_ready",
+        namespace=NAMESPACE,
+        agent_id=agent_id,
+        sample_sha256=loaded.sample_sha256,
+        memories=len(scenario["memories"]),
+    )
 
 
 def main() -> int:
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
+        loaded = load_scenario(
+            SAMPLE_PATH,
+            acknowledgement=os.getenv("LAB_SAMPLE_POLICY_ACK"),
+        )
+        emit("sample_accepted", **loaded.manifest)
         wait_for_http(
             endpoint(LIANS_URL, "/readyz"),
             "lians",
             timeout=STARTUP_TIMEOUT,
         )
-        seed_scenario(ensure_key())
+        seed_scenario(ensure_key(loaded.data["agent_id"]), loaded)
         return 0
     except Exception as exc:  # noqa: BLE001 - top-level container boundary
         emit("bootstrap_failed", level="error", error=str(exc), error_type=type(exc).__name__)

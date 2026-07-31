@@ -26,25 +26,22 @@ from common import (
     wait_for_file,
     wait_for_http,
 )
+from scenario import LoadedScenario, load_scenario
 
 LIANS_URL = os.getenv("LIANS_URL", "http://lians:8000")
 ALLOY_URL = os.getenv("ALLOY_URL", "http://alloy:12345")
 OTLP_URL = os.getenv("OTLP_URL", "http://alloy:4318/v1/traces")
 NAMESPACE = os.getenv("NAMESPACE", "lians-homelab")
-AGENT_ID = os.getenv("AGENT_ID", "risk-demo")
 STATE_DIR = Path(os.getenv("STATE_DIR", "/state"))
 API_KEY_PATH = STATE_DIR / "api-key"
 PROOF_PATH = STATE_DIR / "latest-proof.json"
 READY_PATH = STATE_DIR / "ready"
+SAMPLE_PATH = Path(os.getenv("SAMPLE_PATH", "/sample/input.json"))
 STARTUP_TIMEOUT = env_float("STARTUP_TIMEOUT_SECONDS", 180.0, minimum=1.0)
 EVIDENCE_TIMEOUT = env_float("EVIDENCE_TIMEOUT_SECONDS", 45.0, minimum=1.0)
 RUN_INTERVAL = env_float("RUN_INTERVAL_SECONDS", 30.0, minimum=1.0)
 RETRY_INTERVAL = env_float("RETRY_INTERVAL_SECONDS", 5.0, minimum=0.5)
 RUN_ONCE = env_bool("RUN_ONCE")
-
-QUERY = "What is the current NVDA counterparty exposure limit and why was it revised?"
-OUTCOME = "approve_with_usd_35m_limit"
-
 
 def api_headers(key: str) -> dict[str, str]:
     return {"X-API-Key": key}
@@ -69,6 +66,8 @@ def build_otlp_payload(
     receipt_sha256: str,
     started_ns: int,
     ended_ns: int,
+    scenario_id: str,
+    decision_type: str,
 ) -> dict[str, Any]:
     """Build standards-shaped OTLP/HTTP JSON without an SDK dependency."""
 
@@ -89,7 +88,7 @@ def build_otlp_payload(
                             {
                                 "traceId": trace_id,
                                 "spanId": span_id,
-                                "name": "gen_ai.decision counterparty_exposure_review",
+                                "name": f"gen_ai.decision {decision_type}",
                                 "kind": 3,
                                 "startTimeUnixNano": str(started_ns),
                                 "endTimeUnixNano": str(max(ended_ns, started_ns + 1)),
@@ -100,11 +99,11 @@ def build_otlp_payload(
                                         "gen_ai.response.finish_reasons", ["stop"]
                                     ),
                                     otlp_attribute(
-                                        "lians.decision.type", "counterparty_exposure_review"
+                                        "lians.decision.type", decision_type
                                     ),
                                     otlp_attribute("lians.decision.envelope_id", envelope_id),
                                     otlp_attribute("lians.recall.receipt_sha256", receipt_sha256),
-                                    otlp_attribute("lians.demo.scenario", "finance-risk-revision"),
+                                    otlp_attribute("lians.demo.scenario", scenario_id),
                                 ],
                                 "status": {"code": 1},
                             }
@@ -141,7 +140,17 @@ def wait_for_otel_evidence(key: str, envelope_id: str, trace_id: str) -> list[di
     )
 
 
-def run_decision(key: str) -> dict[str, Any]:
+def run_decision(key: str, loaded: LoadedScenario) -> dict[str, Any]:
+    scenario = loaded.data
+    agent_id = scenario["agent_id"]
+    query = scenario["query"]
+    outcome = scenario["outcome"]
+    scenario_id = scenario["scenario_id"]
+    decision_type = scenario["decision_type"]
+    recall_filters = {
+        **scenario["recall_filters"],
+        "lab_sample_sha256": loaded.sample_sha256,
+    }
     trace_id = secrets.token_hex(16)
     span_id = secrets.token_hex(8)
     run_id = f"homelab-{trace_id[:12]}"
@@ -152,16 +161,20 @@ def run_decision(key: str) -> dict[str, Any]:
         "POST",
         endpoint(LIANS_URL, "/v1/decision-envelopes"),
         json_body={
-            "agent_id": AGENT_ID,
-            "decision_type": "counterparty_exposure_review",
+            "agent_id": agent_id,
+            "decision_type": decision_type,
             "regime": "enterprise_homelab",
-            "subject_id": "NVDA",
+            "subject_id": scenario["subject_id"],
             "session_id": run_id,
             "trace_id": trace_id,
             "run_id": run_id,
             "knowledge_as_of": knowledge_as_of,
             "completeness_profile": "regulated_recordkeeping",
-            "metadata": {"scenario": "finance-risk-revision", "environment": "homelab"},
+            "metadata": {
+                "scenario": scenario_id,
+                "environment": "homelab",
+                "sample_sha256": loaded.sample_sha256,
+            },
         },
         headers=api_headers(key),
     )
@@ -172,13 +185,10 @@ def run_decision(key: str) -> dict[str, Any]:
         "POST",
         endpoint(LIANS_URL, "/v1/recall"),
         json_body={
-            "agent_id": AGENT_ID,
-            "query": QUERY,
-            "k": 5,
-            "filters": {
-                "ticker": "NVDA",
-                "metric": "counterparty_exposure_limit",
-            },
+            "agent_id": agent_id,
+            "query": query,
+            "k": min(10, len(scenario["memories"])),
+            "filters": recall_filters,
             "include_context": True,
             "mode": "reconstruct",
             "decision_envelope_id": envelope_id,
@@ -189,8 +199,10 @@ def run_decision(key: str) -> dict[str, Any]:
     receipt_sha256 = recall.get("receipt_sha256", "") if isinstance(recall, dict) else ""
     if not memories or len(receipt_sha256) != 64:
         raise RuntimeError("bound recall did not return seeded memory evidence and a receipt")
-    if not any("USD 35 million" in (memory.get("content") or "") for memory in memories):
-        raise RuntimeError("bound recall did not select the active USD 35 million revision")
+    if not any(
+        scenario["expected_marker"] in (memory.get("content") or "") for memory in memories
+    ):
+        raise RuntimeError("bound recall did not select the expected sample marker")
     emit(
         "recall_bound",
         envelope_id=envelope_id,
@@ -205,6 +217,8 @@ def run_decision(key: str) -> dict[str, Any]:
         receipt_sha256=receipt_sha256,
         started_ns=started_ns,
         ended_ns=time.time_ns(),
+        scenario_id=scenario_id,
+        decision_type=decision_type,
     )
     otlp_status, _, _ = http_request(
         "POST",
@@ -218,29 +232,38 @@ def run_decision(key: str) -> dict[str, Any]:
 
     memory_ids = [str(memory["id"]) for memory in memories if memory.get("id")]
     seal_body = {
-        "outcome": OUTCOME,
-        "reason_codes": ["POLICY_LIMIT_REVISED", "VOLATILITY_REVIEW"],
+        "outcome": outcome,
+        "reason_codes": scenario["reason_codes"],
         "decided_at": utc_now(),
         "knowledge_as_of": knowledge_as_of,
-        "model_id": "lians-risk-demo-v1",
+        "model_id": "lians-homelab-scenario-v1",
         "model_version": "1.0.0",
-        "model_artifact_hash": sha256_text("lians-risk-demo-v1:1.0.0"),
-        "policy_id": "counterparty-exposure-policy",
-        "policy_version": "2.0.0",
-        "policy_artifact_hash": sha256_text("counterparty-exposure-policy:2.0.0"),
-        "prompt_id": "homelab-risk-review",
+        "model_artifact_hash": sha256_text("lians-homelab-scenario-v1:1.0.0"),
+        "policy_id": f"homelab-{scenario_id}",
+        "policy_version": "1.0.0",
+        "policy_artifact_hash": loaded.sample_sha256,
+        "prompt_id": f"homelab-{scenario_id}",
         "prompt_version": "1.0.0",
-        "prompt_artifact_hash": sha256_text(QUERY),
+        "prompt_artifact_hash": sha256_text(query),
         "runtime_version": "homelab-workload/1.0.0",
         "evidence_memory_ids": memory_ids,
         "input_hash": sha256_json(
-            {"query": QUERY, "memory_ids": memory_ids, "receipt_sha256": receipt_sha256}
+            {"query": query, "memory_ids": memory_ids, "receipt_sha256": receipt_sha256}
         ),
-        "output_hash": sha256_text(OUTCOME),
+        "output_hash": sha256_text(outcome),
         "replay_manifest_hash": sha256_json(
-            {"trace_id": trace_id, "model": "lians-risk-demo-v1:1.0.0", "query": QUERY}
+            {
+                "trace_id": trace_id,
+                "model": "lians-homelab-scenario-v1:1.0.0",
+                "query": query,
+                "sample_sha256": loaded.sample_sha256,
+            }
         ),
-        "metadata": {"scenario": "finance-risk-revision", "trace_id": trace_id},
+        "metadata": {
+            "scenario": scenario_id,
+            "trace_id": trace_id,
+            "sample_sha256": loaded.sample_sha256,
+        },
     }
     sealed = http_json(
         "POST",
@@ -270,7 +293,8 @@ def run_decision(key: str) -> dict[str, Any]:
         "schema": "https://lians.ai/schemas/homelab-proof/v1",
         "generated_at": utc_now(),
         "namespace": NAMESPACE,
-        "agent_id": AGENT_ID,
+        "agent_id": agent_id,
+        "sample": loaded.manifest,
         "trace_id": trace_id,
         "span_id": span_id,
         "envelope_id": envelope_id,
@@ -300,6 +324,11 @@ def main() -> int:
         # successful run make a new or broken workload look healthy.
         READY_PATH.unlink(missing_ok=True)
         PROOF_PATH.unlink(missing_ok=True)
+        loaded = load_scenario(
+            SAMPLE_PATH,
+            acknowledgement=os.getenv("LAB_SAMPLE_POLICY_ACK"),
+        )
+        emit("sample_accepted", **loaded.manifest)
         wait_for_http(endpoint(LIANS_URL, "/readyz"), "lians", timeout=STARTUP_TIMEOUT)
         wait_for_http(endpoint(ALLOY_URL, "/-/ready"), "alloy", timeout=STARTUP_TIMEOUT)
         wait_for_file(API_KEY_PATH, timeout=STARTUP_TIMEOUT)
@@ -313,7 +342,7 @@ def main() -> int:
     while True:
         cycle_started = time.monotonic()
         try:
-            run_decision(key)
+            run_decision(key, loaded)
             if RUN_ONCE:
                 return 0
             time.sleep(max(0.0, RUN_INTERVAL - (time.monotonic() - cycle_started)))

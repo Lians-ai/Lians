@@ -187,8 +187,14 @@ services:
       NAMESPACE: lians-homelab
       AGENT_ID: risk-demo
       STATE_DIR: /state
+      SAMPLE_PATH: /sample/input.json
+      LAB_SAMPLE_POLICY_ACK: ${LAB_SAMPLE_POLICY_ACK:-}
     volumes:
       - lab-state:/state
+      - type: bind
+        source: ${LAB_SAMPLE_FILE:-./samples/default.json}
+        target: /sample/input.json
+        read_only: true
     depends_on:
       lians:
         condition: service_healthy
@@ -280,9 +286,15 @@ services:
       NAMESPACE: lians-homelab
       AGENT_ID: risk-demo
       STATE_DIR: /state
+      SAMPLE_PATH: /sample/input.json
+      LAB_SAMPLE_POLICY_ACK: ${LAB_SAMPLE_POLICY_ACK:-}
       RUN_INTERVAL_SECONDS: ${LAB_INTERVAL_SECONDS:-20}
     volumes:
       - lab-state:/state
+      - type: bind
+        source: ${LAB_SAMPLE_FILE:-./samples/default.json}
+        target: /sample/input.json
+        read_only: true
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -316,9 +328,15 @@ services:
       PROOF_MAX_AGE_SECONDS: "180"
       EXPECTED_COMPLETENESS_GRADE: replayable
       LAB_GIT_COMMIT: ${LAB_GIT_COMMIT:-unrecorded}
+      SAMPLE_PATH: /sample/input.json
+      LAB_SAMPLE_POLICY_ACK: ${LAB_SAMPLE_POLICY_ACK:-}
     volumes:
       - lab-state:/state:ro
       - ./artifacts:/artifacts
+      - type: bind
+        source: ${LAB_SAMPLE_FILE:-./samples/default.json}
+        target: /sample/input.json
+        read_only: true
     depends_on:
       workload:
         condition: service_healthy

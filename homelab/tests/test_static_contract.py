@@ -109,6 +109,24 @@ class HomelabStaticContract(unittest.TestCase):
         self.assertIn("local.file.lians_api_key.content", alloy)
         self.assertFalse(any("api-key" in path.name for path in LAB.rglob("*") if path.is_file()))
 
+    def test_customer_sample_is_read_only_and_verifier_is_rebuilt(self):
+        compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
+        powershell = (LAB / "lab.ps1").read_text(encoding="utf-8")
+        shell = (LAB / "lab.sh").read_text(encoding="utf-8")
+        scenario = (LAB / "workload/scenario.py").read_text(encoding="utf-8")
+        verifier = (LAB / "workload/verify.py").read_text(encoding="utf-8")
+        self.assertEqual(compose.count("source: ${LAB_SAMPLE_FILE:-./samples/default.json}"), 3)
+        self.assertEqual(compose.count("target: /sample/input.json"), 3)
+        self.assertGreaterEqual(compose.count("read_only: true"), 3)
+        self.assertIn('@("--profile", "tools", "build", "verify")', powershell)
+        self.assertIn("compose --profile tools build verify", shell)
+        self.assertIn("dispose", powershell)
+        self.assertIn("dispose|reset", shell)
+        self.assertIn("--resolve-for-launch", powershell)
+        self.assertIn("--resolve-for-launch", shell)
+        self.assertIn(".local.json", scenario)
+        self.assertIn("proof_sample == mounted_sample.manifest", verifier)
+
     def test_grafana_app_is_provisioned_and_dashboard_is_portable(self):
         app = (LAB / "grafana/provisioning/plugins/lians-app.yml").read_text(encoding="utf-8")
         self.assertIn("type: lians-lians-app", app)

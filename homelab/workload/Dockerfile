@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY common.py bootstrap.py runner.py verify.py ./
+COPY common.py scenario.py bootstrap.py runner.py verify.py ./
 
 RUN mkdir -p /state \
     && chown -R "${WORKLOAD_UID}:${WORKLOAD_GID}" /app /state

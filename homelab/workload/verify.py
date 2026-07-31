@@ -23,6 +23,7 @@ from common import (
     sha256_json,
     utc_now,
 )
+from scenario import LoadedScenario, load_scenario
 
 LIANS_URL = os.getenv("LIANS_URL", "http://lians:8000")
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090")
@@ -35,6 +36,7 @@ LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
 STATE_DIR = Path(os.getenv("STATE_DIR", "/state"))
 PROOF_PATH = STATE_DIR / "latest-proof.json"
 ARTIFACTS_DIR = Path(os.getenv("ARTIFACTS_DIR", "/artifacts"))
+SAMPLE_PATH = Path(os.getenv("SAMPLE_PATH", "/sample/input.json"))
 VERIFY_TIMEOUT = env_float("VERIFY_TIMEOUT_SECONDS", 45.0, minimum=1.0)
 PROOF_MAX_AGE = env_float("PROOF_MAX_AGE_SECONDS", 180.0, minimum=1.0)
 EXPECTED_COMPLETENESS_GRADE = os.getenv("EXPECTED_COMPLETENESS_GRADE", "replayable")
@@ -53,6 +55,21 @@ class CheckFailure(RuntimeError):
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise CheckFailure(message)
+
+
+def verify_mounted_sample_manifest(
+    proof_sample: Any,
+    sample_path: Path,
+    *,
+    acknowledgement: str | None = None,
+) -> LoadedScenario:
+    mounted_sample = load_scenario(sample_path, acknowledgement=acknowledgement)
+    require(isinstance(proof_sample, dict), "proof does not contain a sample manifest")
+    require(
+        proof_sample == mounted_sample.manifest,
+        "proof sample manifest does not match the independently validated mounted sample",
+    )
+    return mounted_sample
 
 
 def check_lians() -> dict[str, Any]:
@@ -251,6 +268,26 @@ def load_and_check_proof() -> tuple[dict[str, Any], dict[str, Any]]:
     trace_id = proof.get("trace_id", "")
     require(len(trace_id) == 32, "proof does not contain a valid trace id")
 
+    sample = proof.get("sample")
+    verify_mounted_sample_manifest(
+        sample,
+        SAMPLE_PATH,
+        acknowledgement=os.getenv("LAB_SAMPLE_POLICY_ACK"),
+    )
+    require(
+        sample.get("schema") == "https://lians.ai/schemas/homelab-sample/v1",
+        "proof sample schema is unsupported",
+    )
+    require(
+        sample.get("classification") in {"synthetic", "deidentified"},
+        "proof sample classification is invalid",
+    )
+    require(len(str(sample.get("sample_sha256", ""))) == 64, "proof sample hash is invalid")
+    require(
+        isinstance(sample.get("memory_count"), int) and sample["memory_count"] > 0,
+        "proof sample memory count is invalid",
+    )
+
     recall = proof.get("recall")
     require(isinstance(recall, dict), "proof does not contain the bound recall")
     require(recall.get("memories"), "proof recall contains no memories")
@@ -329,6 +366,14 @@ def load_and_check_proof() -> tuple[dict[str, Any], dict[str, Any]]:
         "pack_hash": pack.get("pack_hash"),
         "signature_status": pack.get("signature", {}).get("status"),
         "grade": grade,
+        "sample": {
+            "schema": sample.get("schema"),
+            "classification": sample.get("classification"),
+            "scenario_id": sample.get("scenario_id"),
+            "sample_sha256": sample.get("sample_sha256"),
+            "memory_count": sample.get("memory_count"),
+            "decision_type": sample.get("decision_type"),
+        },
     }
     return proof, detail
 
@@ -402,6 +447,7 @@ def main() -> int:
         "envelope_id": proof.get("envelope_id") if proof else None,
         "git_commit": LAB_GIT_COMMIT,
         "component_images": COMPONENT_IMAGES,
+        "sample": proof_detail.get("sample") if proof_detail else None,
         "evidence": proof_detail,
         "checks": {name: bool(detail.get("ok")) for name, detail in report["checks"].items()},
     }

@@ -64,3 +64,4 @@ agentmem/benchmarks/data/*.sqlite
 homelab/.state/
 homelab/artifacts/
 homelab/.env
+homelab/samples/*.local.json

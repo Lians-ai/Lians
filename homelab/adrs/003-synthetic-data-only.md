@@ -1,11 +1,13 @@
 # ADR 003: synthetic telemetry only
 
-Status: accepted
+Status: superseded in part by ADR 004
 
 ## Decision
 
-The lab accepts only synthetic scenarios. Prompts, model outputs, subject IDs,
-credentials, and production/customer exports are prohibited.
+Lians-operated demos, committed fixtures, and CI accept only synthetic scenarios.
+Prompts, model outputs, subject IDs, credentials, and production/customer exports
+are prohibited in those environments. ADR 004 defines the narrower exception for
+an explicitly acknowledged, de-identified sample inside a customer-run local lab.
 
 ## Why
 

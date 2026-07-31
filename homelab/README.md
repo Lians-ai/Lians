@@ -37,8 +37,10 @@ instrumentation through the partner fan-out would make the instrumented
 
 ## Quickstart
 
-Prerequisites: Docker Desktop/Engine with Compose v2. On Windows, allocate about
-8 GB to Docker and close memory-heavy applications before the first image build.
+Prerequisites: Docker Desktop/Engine with Compose v2 and Python 3 for the
+fail-closed sample preflight. A 4 GB WSL2 cap has passed the cached lightweight
+smoke test on a 16 GB Windows laptop; allow 6–8 GB for a clean first build when
+the host has enough memory.
 
 ```powershell
 Set-Location homelab
@@ -71,10 +73,10 @@ Useful commands:
 ```powershell
 .\lab.ps1 status
 .\lab.ps1 verify
-.\lab.ps1 proof       # print the latest sanitized evidence receipt
+.\lab.ps1 report      # print the latest sanitized evidence receipt
 .\lab.ps1 logs
-.\lab.ps1 down
-.\lab.ps1 reset       # asks before deleting all lab volumes
+.\lab.ps1 down        # stop containers but retain local state
+.\lab.ps1 dispose     # asks before deleting containers and volumes
 ```
 
 `up` uses deterministic hash embeddings so the integration plumbing fits on a
@@ -90,6 +92,49 @@ API worker. It uses a separate Compose project and data volumes so incompatible
 embedding spaces can never mix; `verify-real` and `logs-real` target that project.
 Starting either profile stops the other to avoid loopback-port conflicts. Plan
 for 32 GB RAM for the most reliable full-stack demo experience.
+
+## Run a bounded local sample
+
+The checked-in `samples/default.json` is synthetic. To exercise the same local
+API, telemetry, decision-envelope, and verification path with your own scenario,
+copy it to an ignored `*.local.json` file and change only synthetic or already
+de-identified values:
+
+```powershell
+Copy-Item .\samples\default.json .\samples\my-scenario.local.json
+.\lab.ps1 check-sample -SamplePath .\samples\my-scenario.local.json -AcceptSamplePolicy
+.\lab.ps1 up -SamplePath .\samples\my-scenario.local.json -AcceptSamplePolicy
+.\lab.ps1 report
+.\lab.ps1 dispose
+```
+
+Linux/macOS uses `--sample FILE --accept-sample-policy` with the equivalent
+`lab.sh` commands. The acknowledgement is required only when the file declares
+`"classification": "deidentified"`; it is an attestation, not an automated
+de-identification service.
+
+The v1 format is intentionally small: UTF-8 JSON up to 64 KiB, at most ten
+memories, flat metadata with at most twenty fields, one decision, and one recall
+query. Unknown fields, duplicate JSON keys, mismatched recall filters, common
+credential formats, email addresses, U.S. SSNs, common U.S.-formatted phone
+numbers, payment-card numbers, and sensitive metadata labels fail closed. The scanner is a
+guardrail—not DLP—and the customer remains
+responsible for authorization and de-identification.
+
+Custom files stored inside this repository must be direct children of
+`homelab/samples/` and end in `.local.json`, which is ignored by Git. Files
+outside the repository are also accepted. The launcher resolves the final
+symlink target before applying this rule and before creating the Docker mount.
+
+The sample never leaves the local Docker host through this bundle. Raw
+sample-derived state can remain in named volumes while the lab is running.
+`dispose` deletes those containers and volumes while retaining the sanitized
+reports in `artifacts/`. Reports intentionally include `scenario_id` and
+`decision_type` (and derive some evidence source IDs from `scenario_id`), so use
+opaque, non-sensitive identifiers. They also include the sample hash,
+classification, and counts. They exclude `agent_id`, `subject_id`, query,
+outcome, reason codes, recall-filter names and values, and memory content,
+timestamps, sources, metadata, and importance values.
 
 ## Five-minute partner walkthrough
 
@@ -118,8 +163,10 @@ The verifier fails the command unless it can establish that:
 7. The regulated record reaches `replayable` completeness and the receipt is
    tied to the current Git revision plus declared component image tags.
 
-The proof receipt is evidence for integration compatibility, not a capacity,
-security, compliance, Grafana catalog, or production-readiness certification.
+The receipt shows that the declared local scenario completed against the listed
+component versions. It does not establish general data compatibility, retrieval
+quality, capacity, security, privacy, compliance, availability, Grafana catalog
+status, or production readiness.
 
 ## Spec-driven integration workflow
 
@@ -133,14 +180,18 @@ Every new partner starts from [`specs/TEMPLATE.md`](specs/TEMPLATE.md):
 6. Record limitations honestly before making a public compatibility claim.
 
 The implemented Grafana slice is specified in
-[`specs/001-grafana-local-proof.md`](specs/001-grafana-local-proof.md). Architecture
-choices are recorded under [`adrs/`](adrs/), and recovery exercises live under
-[`runbooks/`](runbooks/).
+[`specs/001-grafana-local-proof.md`](specs/001-grafana-local-proof.md), and the
+customer-run input boundary is specified in
+[`specs/002-customer-run-sample.md`](specs/002-customer-run-sample.md).
+Architecture choices are recorded under [`adrs/`](adrs/), and recovery exercises
+live under [`runbooks/`](runbooks/).
 
 ## Data and security boundaries
 
-- Use synthetic data only. Never load customer prompts, PHI, financial records,
-  credentials, or production exports into this environment.
+- Lians-operated demos, committed fixtures, and CI use synthetic data only. A
+  customer-run local lab may use an explicitly acknowledged, already
+  de-identified sample under ADR 004. Never load PHI, credentials, production
+  exports, or data you are not authorized to process.
 - The Grafana plugin is unsigned development source. Local Grafana explicitly
   allows only `lians-lians-app`; this is not a catalog listing.
 - `/metrics` includes tenant namespace labels and is reachable only on the
@@ -149,8 +200,8 @@ choices are recorded under [`adrs/`](adrs/), and recovery exercises live under
   mount's `:ro` flag does not restrict Docker API operations, so treat Alloy as
   host-privileged, never load untrusted collector code, and replace this path
   with a restricted log collector before any shared or production deployment.
-- Lab volumes retain data for repeatable demos. `lab.ps1 reset` / `lab.sh reset`
-  is the explicit destructive reset path.
+- Lab volumes retain local sample-derived state for repeatable demos.
+  `lab.ps1 dispose` / `lab.sh dispose` is the explicit destructive cleanup path.
 - Local image tags are pinned in `compose.yaml`; production proof bundles should
   additionally record resolved image digests.
 
