@@ -1,0 +1,347 @@
+name: lians-homelab
+
+x-lians-image: &lians-image
+  image: lians-homelab-api:local
+  build:
+    context: ..
+    dockerfile: Dockerfile
+    args:
+      # The base image does not include these optional integration surfaces.
+      EXTRAS: metrics,otel,otel-receiver
+      # The MVP intentionally uses deterministic hash embeddings and does not
+      # download a 1.3 GB model. The polished-demo profile is a later spec.
+      PREDOWNLOAD_MODEL: ""
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-lab-component-images: &lab-component-images
+  LAB_IMAGE_LIANS: lians-homelab-api:local
+  LAB_IMAGE_POSTGRES: pgvector/pgvector:pg16
+  LAB_IMAGE_REDIS: redis:7-alpine
+  LAB_IMAGE_PROMETHEUS: prom/prometheus:v3.12.0
+  LAB_IMAGE_TEMPO: grafana/tempo:2.10.0
+  LAB_IMAGE_LOKI: grafana/loki:3.7.2
+  LAB_IMAGE_ALLOY: grafana/alloy:v1.18.0
+  LAB_IMAGE_GRAFANA: grafana/grafana:12.3.0
+
+x-workload-build: &workload-build
+  context: ./workload
+  dockerfile: Dockerfile
+  args:
+    WORKLOAD_UID: ${LAB_UID:-1000}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: agentmem
+      POSTGRES_PASSWORD: agentmem-local-only
+      POSTGRES_DB: agentmem
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentmem -d agentmem"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis-data:/data
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *default-logging
+
+  migrate:
+    <<: *lians-image
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentmem:agentmem-local-only@postgres:5432/agentmem
+      EMBEDDING_PROVIDER: local
+      MASTER_ENCRYPTION_KEY: ${LIANS_MASTER_ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [data]
+    restart: on-failure:3
+    logging: *default-logging
+
+  lians:
+    <<: *lians-image
+    # One worker is deliberate: Prometheus uses an in-process registry, and
+    # multiple workers would expose a random partial view on each scrape.
+    command:
+      - uvicorn
+      - lians.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+    environment:
+      DEPLOYMENT_ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://agentmem:agentmem-local-only@postgres:5432/agentmem
+      REDIS_URL: redis://redis:6379/0
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_DIM: "1024"
+      MASTER_ENCRYPTION_KEY: ${LIANS_MASTER_ENCRYPTION_KEY}
+      AGENTMEM_ALLOW_UNENCRYPTED: "false"
+      API_SECRET_SEED: lians-homelab-seed-local-only
+      ADMIN_SECRET: ${LIANS_ADMIN_SECRET}
+      SUPERSESSION_LLM_STAGE: "false"
+      RECALL_CACHE_ENABLED: "true"
+      RECALL_CACHE_TTL_SECONDS: "60"
+      METRICS_ENABLED: "true"
+      LOG_JSON: "true"
+      LOG_LEVEL: INFO
+      OTEL_SERVICE_NAME: lians-api
+      # Internal runtime spans use Alloy's trace-only pipeline. They never fan
+      # back into Lians, preventing an instrumentation feedback loop.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:14317
+      RATE_LIMIT_PER_MINUTE: "3000"
+      EXPOSE_HEALTH_DETAILS: "true"
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [data, telemetry, edge]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=24h
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [telemetry, edge]
+    restart: unless-stopped
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:2.10.0
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
+    networks: [telemetry, edge]
+    restart: unless-stopped
+    logging: *default-logging
+
+  loki:
+    image: grafana/loki:3.7.2
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks: [telemetry, edge]
+    restart: unless-stopped
+    logging: *default-logging
+
+  bootstrap:
+    build: *workload-build
+    command: ["python", "bootstrap.py"]
+    environment:
+      LIANS_URL: http://lians:8000
+      ADMIN_SECRET: ${LIANS_ADMIN_SECRET}
+      NAMESPACE: lians-homelab
+      AGENT_ID: risk-demo
+      STATE_DIR: /state
+    volumes:
+      - lab-state:/state
+    depends_on:
+      lians:
+        condition: service_healthy
+    networks: [telemetry]
+    restart: "no"
+    logging: *default-logging
+
+  alloy:
+    image: grafana/alloy:v1.18.0
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    environment:
+      LAB_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-lians-homelab}
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+      - lab-state:/var/lib/lians-lab:ro
+      # The :ro flag protects the socket file itself, not the Docker API. Any
+      # process that can connect remains daemon-privileged; this is local-lab
+      # convenience and must be replaced by restricted collection for production.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      # Standard partner OTLP ports. The internal Lians runtime receiver uses
+      # 14317/14318 and is intentionally not published to the host.
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+    networks: [telemetry, edge]
+    restart: unless-stopped
+    logging: *default-logging
+
+  grafana:
+    image: lians-homelab-grafana:local
+    build:
+      context: ..
+      dockerfile: homelab/grafana/Dockerfile
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-lians-local-only}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Keep mutable state away from baked plugin/dashboard assets so image
+      # upgrades cannot be masked by an older named volume.
+      GF_PATHS_DATA: /var/lib/grafana-data
+      GF_PATHS_PLUGINS: /var/lib/grafana/plugins
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: lians-lians-app
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana-data
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+    networks: [telemetry, edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  workload:
+    build: *workload-build
+    command: ["python", "runner.py"]
+    environment:
+      LIANS_URL: http://lians:8000
+      ALLOY_URL: http://alloy:12345
+      OTLP_URL: http://alloy:4318/v1/traces
+      NAMESPACE: lians-homelab
+      AGENT_ID: risk-demo
+      STATE_DIR: /state
+      RUN_INTERVAL_SECONDS: ${LAB_INTERVAL_SECONDS:-20}
+    volumes:
+      - lab-state:/state
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      alloy:
+        condition: service_started
+    networks: [telemetry]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; import time; p=Path('/state/ready'); raise SystemExit(0 if p.is_file() and time.time() - p.stat().st_mtime <= 180 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  verify:
+    build: *workload-build
+    command: ["python", "verify.py"]
+    environment:
+      <<: *lab-component-images
+      LIANS_URL: http://lians:8000
+      PROMETHEUS_URL: http://prometheus:9090
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-lians-local-only}
+      TEMPO_URL: http://tempo:3200
+      LOKI_URL: http://loki:3100
+      STATE_DIR: /state
+      ARTIFACTS_DIR: /artifacts
+      VERIFY_TIMEOUT_SECONDS: "120"
+      PROOF_MAX_AGE_SECONDS: "180"
+      EXPECTED_COMPLETENESS_GRADE: replayable
+      LAB_GIT_COMMIT: ${LAB_GIT_COMMIT:-unrecorded}
+    volumes:
+      - lab-state:/state:ro
+      - ./artifacts:/artifacts
+    depends_on:
+      workload:
+        condition: service_healthy
+      grafana:
+        condition: service_healthy
+    networks: [telemetry]
+    profiles: [tools]
+    restart: "no"
+    logging: *default-logging
+
+networks:
+  data:
+    internal: true
+  telemetry:
+    internal: true
+  edge:
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  tempo-data:
+  loki-data:
+  alloy-data:
+  grafana-data:
+  lab-state:

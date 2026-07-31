@@ -1,0 +1,129 @@
+"""Fast, daemon-free checks for the versioned homelab contract."""
+
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+LAB = ROOT / "homelab"
+
+
+def expressions(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "expr" and isinstance(item, str):
+                yield item
+            yield from expressions(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from expressions(item)
+
+
+class HomelabStaticContract(unittest.TestCase):
+    def test_dashboard_json_and_metric_names_are_real(self):
+        dashboards = [
+            LAB / "grafana/dashboards/lians-homelab.json",
+            ROOT / "integrations/grafana-lians-app/src/dashboards/lians-operations.json",
+        ]
+        queries: list[str] = []
+        for path in dashboards:
+            queries.extend(expressions(json.loads(path.read_text(encoding="utf-8"))))
+        rendered = "\n".join(queries)
+        self.assertIn("agentmem_memory_writes_total", rendered)
+        self.assertIn("agentmem_memory_recalls_total", rendered)
+        self.assertNotIn("lians_http_requests_total", rendered)
+        self.assertNotIn("lians_http_request_duration_seconds", rendered)
+
+    def test_homelab_dashboard_surfaces_observed_activity_without_false_alarm_colors(self):
+        dashboard = json.loads(
+            (LAB / "grafana/dashboards/lians-homelab.json").read_text(encoding="utf-8")
+        )
+        panels = {panel["title"]: panel for panel in dashboard["panels"]}
+        self.assertIn("Traces observed · session", panels)
+        self.assertIn("Recall throughput by cache result", panels)
+        self.assertNotIn("Memory writes · 1h", panels)
+        self.assertNotIn("Write throughput by supersession outcome", panels)
+        self.assertIn(
+            "tempo_ingester_traces_created_total",
+            panels["Traces observed · session"]["targets"][0]["expr"],
+        )
+        self.assertIn(
+            "sum by (cache_hit)",
+            panels["Recall throughput by cache result"]["targets"][0]["expr"],
+        )
+        self.assertEqual(
+            panels["Recalls · 1h"]["fieldConfig"]["defaults"]["color"],
+            {"mode": "fixed", "fixedColor": "blue"},
+        )
+        self.assertNotIn("continuous-GrYlRd", json.dumps(dashboard))
+
+    def test_packaged_operations_rate_survives_an_absent_write_series(self):
+        dashboard = json.loads(
+            (
+                ROOT / "integrations/grafana-lians-app/src/dashboards/lians-operations.json"
+            ).read_text(encoding="utf-8")
+        )
+        operation_rate = dashboard["panels"][0]["targets"][0]["expr"]
+        self.assertIn("agentmem_memory_writes_total", operation_rate)
+        self.assertIn("agentmem_memory_recalls_total", operation_rate)
+        self.assertEqual(operation_rate.count("or vector(0)"), 2)
+
+    def test_trace_pipelines_are_split_to_prevent_feedback(self):
+        alloy = (LAB / "alloy/config.alloy").read_text(encoding="utf-8")
+        packaged_alloy = (
+            ROOT / "integrations/grafana-lians-app/provisioning/alloy-lians.alloy"
+        ).read_text(encoding="utf-8")
+        plugin_source = (ROOT / "integrations/grafana-lians-app/src/module.tsx").read_text(
+            encoding="utf-8"
+        )
+        compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn('otelcol.receiver.otlp "lians_runtime"', alloy)
+        self.assertIn('endpoint = "0.0.0.0:14317"', alloy)
+        self.assertIn('otelcol.receiver.otlp "integration"', alloy)
+        self.assertIn('endpoint = "0.0.0.0:4318"', alloy)
+        self.assertIn("http://alloy:14317", compose)
+        runtime_block = alloy.split('otelcol.processor.batch "lians_runtime"', 1)[1]
+        runtime_block = runtime_block.split('otelcol.receiver.otlp "integration"', 1)[0]
+        self.assertIn("otelcol.exporter.otlp.tempo.input", runtime_block)
+        self.assertNotIn("otelcol.exporter.otlphttp.lians.input", runtime_block)
+        for packaged in (packaged_alloy, plugin_source):
+            self.assertIn('otelcol.receiver.otlp "integration"', packaged)
+            self.assertIn('otelcol.receiver.otlp "lians_runtime"', packaged)
+            packaged_runtime = packaged.split('otelcol.processor.batch "lians_runtime"', 1)[1]
+            packaged_runtime = packaged_runtime.split('otelcol.exporter.otlphttp "lians"', 1)[0]
+            self.assertNotIn("otelcol.exporter.otlphttp.lians.input", packaged_runtime)
+
+    def test_data_stores_are_not_published_to_host(self):
+        compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
+        postgres_block = compose.split("  postgres:", 1)[1].split("\n  redis:", 1)[0]
+        redis_block = compose.split("  redis:", 1)[1].split("\n  migrate:", 1)[0]
+        self.assertNotIn("ports:", postgres_block)
+        self.assertNotIn("ports:", redis_block)
+        self.assertIn('"127.0.0.1:8001:8000"', compose)
+        self.assertIn('"127.0.0.1:3000:3000"', compose)
+
+    def test_workload_never_embeds_a_raw_api_key(self):
+        alloy = (LAB / "alloy/config.alloy").read_text(encoding="utf-8")
+        self.assertIn("local.file.lians_api_key.content", alloy)
+        self.assertFalse(any("api-key" in path.name for path in LAB.rglob("*") if path.is_file()))
+
+    def test_grafana_app_is_provisioned_and_dashboard_is_portable(self):
+        app = (LAB / "grafana/provisioning/plugins/lians-app.yml").read_text(encoding="utf-8")
+        self.assertIn("type: lians-lians-app", app)
+        self.assertIn("disabled: false", app)
+        dashboard = json.loads(
+            (
+                ROOT / "integrations/grafana-lians-app/src/dashboards/lians-operations.json"
+            ).read_text(encoding="utf-8")
+        )
+        variable = dashboard["templating"]["list"][0]
+        self.assertEqual(variable["name"], "prometheus")
+        self.assertEqual(variable["type"], "datasource")
+        self.assertEqual(variable["query"], "prometheus")
+        self.assertIn("${prometheus}", json.dumps(dashboard))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,7 @@
+apiVersion: 1
+
+apps:
+  - type: lians-lians-app
+    org_id: 1
+    disabled: false
+    jsonData: {}

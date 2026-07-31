@@ -457,6 +457,11 @@ python scripts/seed_demo.py   # prints a demo API key; open demo/index.html
 
 Deploy to Fly.io, Kubernetes, or bare Docker: [docs/deploy.md](docs/deploy.md)
 
+For partner demos and operational prototyping, the
+[local integration homelab](homelab/README.md) launches Lians with Grafana,
+Prometheus, Tempo, Loki, Alloy, a deterministic decision-evidence workload, and
+an automated proof receipt.
+
 ---
 
 ## SDK reference

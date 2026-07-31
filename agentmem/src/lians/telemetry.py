@@ -20,6 +20,7 @@ Usage in service functions:
         span.set_attribute("agent_id", req.agent_id)
         ...
 """
+
 from __future__ import annotations
 
 import os
@@ -27,11 +28,21 @@ import os
 
 class _NoOpSpan:
     """Drop-in replacement when OTel is not installed."""
-    def set_attribute(self, *a, **k): pass
-    def record_exception(self, *a, **k): pass
-    def set_status(self, *a, **k): pass
-    def __enter__(self): return self
-    def __exit__(self, *a): pass
+
+    def set_attribute(self, *a, **k):
+        pass
+
+    def record_exception(self, *a, **k):
+        pass
+
+    def set_status(self, *a, **k):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        pass
 
 
 class _NoOpTracer:
@@ -46,10 +57,10 @@ def _build_tracer():
 
     try:
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
         service_name = os.environ.get("OTEL_SERVICE_NAME", "agentmem")
         resource = Resource.create({"service.name": service_name})
@@ -73,6 +84,7 @@ def instrument_fastapi(app) -> None:
         return
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
         FastAPIInstrumentor.instrument_app(app)
     except ImportError:
         pass
@@ -85,6 +97,10 @@ def instrument_sqlalchemy(engine) -> None:
         return
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-        SQLAlchemyInstrumentor().instrument(engine=engine)
+
+        # SQLAlchemy's instrumentation registers synchronous engine events.
+        # AsyncEngine exposes the supported underlying facade as sync_engine.
+        instrumented_engine = getattr(engine, "sync_engine", engine)
+        SQLAlchemyInstrumentor().instrument(engine=instrumented_engine)
     except ImportError:
         pass

@@ -1,16 +1,16 @@
 """Contract tests for the Grafana/OTLP and ValidMind integration surfaces."""
+
+import gzip
 import hashlib
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
-
 from src.lians.db import get_db
 from src.lians.main import app
 from src.lians.models import ApiKey, OTelSpan
 from src.lians.otlp import decode_trace_request
-
 
 KEY = "partner-integration-key"
 NAMESPACE = "partner-test"
@@ -32,9 +32,7 @@ async def partner_client(db):
 
     app.dependency_overrides[get_db] = override_db
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield client, db
     finally:
         app.dependency_overrides.clear()
@@ -106,9 +104,7 @@ def test_otlp_protobuf_decoding():
     model.key = "gen_ai.request.model"
     model.value.string_value = "gpt-5"
 
-    decoded = decode_trace_request(
-        request.SerializeToString(), "application/x-protobuf"
-    )
+    decoded = decode_trace_request(request.SerializeToString(), "application/x-protobuf")
     assert len(decoded) == 1
     assert decoded[0].is_genai is True
     assert decoded[0].model_id == "gpt-5"
@@ -131,6 +127,31 @@ async def test_otlp_json_ingestion_is_authenticated_and_idempotent(partner_clien
     assert row.is_genai is True
     assert row.model_id == "gpt-5"
     assert row.attributes["gen_ai.usage.input_tokens"] == "42"
+
+
+@pytest.mark.asyncio
+async def test_otlp_gzip_protobuf_ingestion_matches_alloy(partner_client):
+    from google.protobuf.json_format import ParseDict
+    from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+        ExportTraceServiceRequest,
+        ExportTraceServiceResponse,
+    )
+
+    client, _ = partner_client
+    request = ParseDict(_otlp_payload(), ExportTraceServiceRequest())
+    response = await client.post(
+        "/v1/traces",
+        headers={
+            "X-API-Key": KEY,
+            "Content-Type": "application/x-protobuf",
+            "Content-Encoding": "gzip",
+        },
+        content=gzip.compress(request.SerializeToString()),
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-protobuf")
+    ExportTraceServiceResponse.FromString(response.content)
 
 
 @pytest.mark.asyncio

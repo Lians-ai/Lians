@@ -1,0 +1,168 @@
+{
+  "annotations": {"list": []},
+  "description": "Executable local proof that Lians and Grafana work together across metrics, traces, logs, and decision evidence.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {"title": "Lians API", "type": "link", "url": "http://localhost:8001/docs", "targetBlank": true},
+    {"title": "Prometheus", "type": "link", "url": "http://localhost:9090", "targetBlank": true},
+    {"title": "Alloy pipeline", "type": "link", "url": "http://localhost:12345", "targetBlank": true}
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Lians × Grafana integration proof",
+      "gridPos": {"h": 5, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "Synthetic partner traces enter Alloy on standard OTLP ports `:4317/4318` and fan out unsampled to **Tempo** and the authenticated **Lians `/v1/traces` evidence receiver**. Lians runtime spans enter a separate internal OTLP pipeline on `:14317/14318` that goes only to Tempo, preventing a feedback loop. The workload binds recall receipts and the identical trace ID to a Decision Envelope, seals it, and verifies an Evidence Pack."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Lians API",
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "up{job=\"lians\"}", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "READY", "color": "green"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]},
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Traces observed · session",
+      "description": "Tempo traces observed since the current Tempo process started. This includes synthetic partner traces and Lians runtime traces.",
+      "gridPos": {"h": 5, "w": 5, "x": 4, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(tempo_ingester_traces_created_total) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Recalls · 1h",
+      "description": "Governed recall activity observed in the last hour. This is activity, not an error or saturation signal.",
+      "gridPos": {"h": 5, "w": 5, "x": 9, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(increase(agentmem_memory_recalls_total[1h])) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Recall p95 · 5m",
+      "gridPos": {"h": 5, "w": 5, "x": 14, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(agentmem_recall_duration_seconds_bucket[5m])))", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.25}, {"color": "red", "value": 0.5}]},
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "area", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Open conflicts",
+      "gridPos": {"h": 5, "w": 5, "x": 19, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(agentmem_conflict_queue_depth) or vector(0)", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 10}]},
+          "color": {"mode": "thresholds"}
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Recall throughput by cache result",
+      "description": "Cache misses are normal: they route the request to governed retrieval. Both hit and miss series represent successful recall activity.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (cache_hit) (rate(agentmem_memory_recalls_total[$__rate_interval]))", "legendFormat": "cache hit={{cache_hit}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "custom": {"drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Recall throughput by routing path",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (router) (rate(agentmem_memory_recalls_total[$__rate_interval]))", "legendFormat": "{{router}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "custom": {"drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 9,
+      "type": "traces",
+      "title": "Partner traces in Tempo",
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 18},
+      "datasource": {"type": "tempo", "uid": "tempo"},
+      "targets": [{"query": "{ resource.service.name = \"lians-homelab-risk-demo\" }", "queryType": "traceql", "refId": "A", "limit": 20, "tableType": "traces"}],
+      "options": {}
+    },
+    {
+      "id": 10,
+      "type": "logs",
+      "title": "Lians and workload logs in Loki",
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 18},
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [{"expr": "{lab=\"lians-homelab\", service=~\"lians|workload|alloy\"}", "queryType": "range", "refId": "A"}],
+      "options": {"dedupStrategy": "none", "enableLogDetails": true, "prettifyLogMessage": true, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true}
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Subsystem degradations",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 28},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (component, reason) (rate(lians_subsystem_degradations_total[$__rate_interval]))", "legendFormat": "{{component}} · {{reason}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "custom": {"drawStyle": "bars", "fillOpacity": 25, "lineWidth": 1}, "color": {"mode": "palette-classic"}}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}}
+    },
+    {
+      "id": 12,
+      "type": "text",
+      "title": "What this proves",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 28},
+      "options": {
+        "mode": "markdown",
+        "content": "1. Lians exports standard Prometheus metrics and OTLP traces.\n2. Alloy sends the same synthetic application trace to Tempo and Lians.\n3. Lians connects that trace to the exact governed decision and recall receipt.\n4. `lab.ps1 verify` / `lab.sh verify` checks the APIs and writes a JSON proof receipt under `homelab/artifacts/`.\n\nThis is a local integration proof—not a Grafana catalog listing, performance certification, or production deployment."
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["lians", "homelab", "grafana", "opentelemetry", "decision-evidence"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Lians Homelab · Integration Proof",
+  "uid": "lians-homelab-proof",
+  "version": 1,
+  "weekStart": ""
+}

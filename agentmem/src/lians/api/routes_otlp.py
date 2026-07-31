@@ -1,13 +1,17 @@
 """Authenticated OTLP/HTTP trace ingestion."""
+
 from __future__ import annotations
 
+import gzip
+import io
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..db import get_db
 from ..decision_evidence import attach_otel_spans
 from ..models import OTelSpan
@@ -15,6 +19,24 @@ from ..otlp import OtlpDecodeError, decode_trace_request
 from .deps import AuthContext, get_auth
 
 router = APIRouter(tags=["opentelemetry"])
+
+
+def _request_body(body: bytes, content_encoding: str) -> bytes:
+    """Decode standard OTLP compression without allowing decompression bombs."""
+    encoding = content_encoding.strip().lower()
+    if encoding in {"", "identity"}:
+        return body
+    if encoding != "gzip":
+        raise HTTPException(status_code=415, detail=f"unsupported content encoding: {encoding}")
+    maximum = get_settings().max_request_body_bytes
+    try:
+        with gzip.GzipFile(fileobj=io.BytesIO(body)) as stream:
+            decoded = stream.read(maximum + 1)
+    except (EOFError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="invalid gzip request body") from exc
+    if len(decoded) > maximum:
+        raise HTTPException(status_code=413, detail="decompressed request body too large")
+    return decoded
 
 
 @router.post(
@@ -31,12 +53,13 @@ async def ingest_traces(
     """Accept every span in an OTLP export request without server-side sampling."""
     auth.require("write")
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    body = _request_body(await request.body(), request.headers.get("content-encoding", ""))
     try:
-        spans = decode_trace_request(await request.body(), content_type)
+        spans = decode_trace_request(body, content_type)
     except OtlpDecodeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    received_at = datetime.now(timezone.utc)
+    received_at = datetime.now(UTC)
     accepted = 0
     values = [
         {
@@ -53,13 +76,19 @@ async def ingest_traces(
         chunk = values[start : start + 250]
         if dialect == "postgresql":
             from sqlalchemy.dialects.postgresql import insert as dialect_insert
-            stmt = dialect_insert(OTelSpan).values(chunk).on_conflict_do_nothing(
-                index_elements=["namespace", "trace_id", "span_id"]
+
+            stmt = (
+                dialect_insert(OTelSpan)
+                .values(chunk)
+                .on_conflict_do_nothing(index_elements=["namespace", "trace_id", "span_id"])
             )
         elif dialect == "sqlite":
             from sqlalchemy.dialects.sqlite import insert as dialect_insert
-            stmt = dialect_insert(OTelSpan).values(chunk).on_conflict_do_nothing(
-                index_elements=["namespace", "trace_id", "span_id"]
+
+            stmt = (
+                dialect_insert(OTelSpan)
+                .values(chunk)
+                .on_conflict_do_nothing(index_elements=["namespace", "trace_id", "span_id"])
             )
         else:
             stmt = insert(OTelSpan).values(chunk)

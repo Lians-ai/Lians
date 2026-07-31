@@ -1,12 +1,46 @@
-otelcol.receiver.otlp "default" {
-  grpc {}
-  http {}
+// Partner application traces fan out unsampled to both destinations.
+otelcol.receiver.otlp "integration" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
 
   output {
+    traces = [otelcol.processor.batch.integration.input]
+  }
+}
+
+otelcol.processor.batch "integration" {
+  output {
     traces = [
-      otelcol.exporter.otlphttp.lians.input,
       otelcol.exporter.otlp.grafana_cloud.input,
+      otelcol.exporter.otlphttp.lians.input,
     ]
+  }
+}
+
+// Lians runtime telemetry must never be sent back to Lians' own /v1/traces
+// endpoint. Point OTEL_EXPORTER_OTLP_ENDPOINT at this receiver instead.
+otelcol.receiver.otlp "lians_runtime" {
+  grpc {
+    endpoint = "0.0.0.0:14317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:14318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.lians_runtime.input]
+  }
+}
+
+otelcol.processor.batch "lians_runtime" {
+  output {
+    traces = [otelcol.exporter.otlp.grafana_cloud.input]
   }
 }
 

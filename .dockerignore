@@ -1,7 +1,11 @@
 .git/
 .venv/
 .run/
-integrations/
+integrations/*
+!integrations/grafana-lians-app/
+!integrations/grafana-lians-app/**
+integrations/grafana-lians-app/node_modules/
+integrations/grafana-lians-app/dist/
 **/__pycache__/
 **/*.pyc
 **/*.pyo
