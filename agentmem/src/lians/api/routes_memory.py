@@ -9,6 +9,7 @@ from ..db import get_db
 from ..config import get_settings
 from ..admission import evaluate as evaluate_admission
 from ..admission_service import record_rejection, enqueue_pending
+from ..scoring import score_memory
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
@@ -30,6 +31,28 @@ from ..feedback_service import (
 )
 
 router = APIRouter(prefix="/v1", tags=["memory"])
+
+
+def _attach_admission_score(req: MemoryAdd, decision) -> None:
+    """Persist the explainable admission assessment in backward-compatible metadata."""
+    status = {
+        "admit": "safe",
+        "review": "review_needed",
+        "reject": "rejected",
+    }.get(decision.action, "review_needed")
+    breakdown = score_memory(
+        content=req.content,
+        reference_time=req.event_time,
+        event_time=req.event_time,
+        valid_from=req.event_time,
+        metadata=req.metadata,
+        importance=req.importance,
+        source=req.source,
+        safety_status=status,
+        risk_tags=decision.risk_tags,
+        purpose="admission",
+    )
+    req.metadata = {**(req.metadata or {}), "_score": breakdown}
 
 
 @router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)
@@ -111,6 +134,7 @@ async def create_memory(
     decision = evaluate_admission(
         req.content, req.source, mode=settings.admission_mode, blocked_sources=blocked,
     )
+    _attach_admission_score(req, decision)
 
     if decision.action == "reject":
         await record_rejection(db, auth.namespace, req.agent_id, decision)
@@ -164,6 +188,7 @@ async def batch_create_memories(
             mode=settings.admission_mode,
             blocked_sources=blocked,
         )
+        _attach_admission_score(item, decision)
         if decision.action == "reject":
             await record_rejection(db, auth.namespace, item.agent_id, decision)
             raise HTTPException(status_code=422, detail={

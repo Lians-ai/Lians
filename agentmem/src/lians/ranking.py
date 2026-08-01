@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory, LiveFact
 from .crypto import decrypt_content
+from .scoring import score_memory, stable_score_key
 
 _ANN_PREFETCH_MULTIPLIER = 20
 
@@ -934,7 +935,56 @@ async def hybrid_recall(
             if mem is not None:
                 scored.append((mem, score, content))
 
-    scored.sort(key=lambda x: x[1], reverse=True)
+    # Convert the existing retrieval blend into bounded, explainable quality
+    # components. Candidate generation and bitemporal filtering remain
+    # unchanged; safety is a hard gate before normal recall.
+    reference_time = as_of or datetime.now(timezone.utc)
+    explained = []
+    for mem, base_score, content in scored:
+        metadata = dict(mem.metadata_ or {})
+        admission = metadata.get("_admission") if isinstance(metadata.get("_admission"), dict) else {}
+        risk_tags = list(admission.get("risk_tags") or [])
+        action = str(admission.get("action") or "safe")
+        safety_status = "review_needed" if action in {"review", "held_for_review", "pending"} else action
+        breakdown = score_memory(
+            content=content or "",
+            reference_time=reference_time,
+            metadata=metadata,
+            importance=mem.importance,
+            source=mem.source,
+            event_time=mem.event_time,
+            valid_from=mem.valid_from,
+            valid_to=mem.valid_to,
+            superseded=bool(mem.superseded_by),
+            query=query,
+            base_relevance=base_score,
+            safety_status=safety_status,
+            risk_tags=risk_tags,
+            purpose="recall",
+        )
+        quality_score = breakdown["final_score"]
+        ranking_score = 0.8 * max(0.0, min(1.0, float(base_score))) + 0.2 * quality_score
+        breakdown["quality_score"] = quality_score
+        breakdown["final_score"] = round(ranking_score, 6)
+        breakdown["ranking_weights"] = {
+            "existing_retrieval_score": 0.8,
+            "memory_quality_score": 0.2,
+        }
+        breakdown["reasons"].append(
+            "recall rank preserves proven hybrid retrieval with a bounded quality adjustment"
+        )
+        mem._score_breakdown = breakdown
+        if breakdown["eligible"]:
+            explained.append((mem, breakdown["final_score"], content))
+    scored = sorted(
+        explained,
+        key=lambda item: stable_score_key(
+            item[0].id,
+            item[0].event_time,
+            item[0].ingestion_time,
+            item[0]._score_breakdown,
+        ),
+    )
     scored = _collapse_derived(scored)
     if RERANKER_MODEL and apply_reranker:
         return await rerank_cross_encoder_async(query, scored, k)

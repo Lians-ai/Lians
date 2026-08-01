@@ -37,6 +37,9 @@ class MemoryOut(BaseModel):
     # responses only; None on write/snapshot surfaces. Additive for API
     # consumers that rank or threshold on similarity (e.g. the Memory Governor).
     score: Optional[float] = None
+    # Optional deterministic explanation. Additive and backward-compatible;
+    # absent on records created/served by older engine versions.
+    score_breakdown: Optional[dict[str, Any]] = None
     # Adjacent-memory context (recall with include_context=True only): the
     # nearest same-agent memories immediately before/after this one in event
     # time, within the context gap. Event streams split one fact across
@@ -1086,6 +1089,7 @@ class PendingAdmissionOut(BaseModel):
     created_at: datetime
     resolved_at: Optional[datetime]
     memory_id: Optional[UUID]
+    score_breakdown: Optional[dict[str, Any]] = None
 
     model_config = {"from_attributes": True}
 
