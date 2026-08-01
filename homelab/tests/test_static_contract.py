@@ -95,6 +95,27 @@ class HomelabStaticContract(unittest.TestCase):
             packaged_runtime = packaged_runtime.split('otelcol.exporter.otlphttp "lians"', 1)[0]
             self.assertNotIn("otelcol.exporter.otlphttp.lians.input", packaged_runtime)
 
+    def test_tempo_cannot_silently_back_off_its_metrics_generator(self):
+        tempo = (LAB / "tempo/tempo.yml").read_text(encoding="utf-8")
+        verifier = (LAB / "workload/verify.py").read_text(encoding="utf-8")
+        processor_lines = [
+            line for line in tempo.splitlines() if line.strip().startswith("processors:")
+        ]
+        local_blocks_enabled = any("local-blocks" in line for line in processor_lines)
+        traces_wal_configured = "traces_storage:" in tempo
+        self.assertIn("processors: [service-graphs, span-metrics]", tempo)
+        self.assertFalse(local_blocks_enabled and not traces_wal_configured)
+        self.assertIn('endpoint(TEMPO_URL, "/status/config")', verifier)
+        self.assertIn("tempo_metrics_generator_registry_active_series", verifier)
+        for failure in (
+            "local blocks processor requires traces wal",
+            "could not initialize processors",
+            "instance creation in backoff",
+            "failed to forward request to metrics generator",
+            "error tailing wal",
+        ):
+            self.assertIn(failure, verifier)
+
     def test_data_stores_are_not_published_to_host(self):
         compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
         postgres_block = compose.split("  postgres:", 1)[1].split("\n  redis:", 1)[0]

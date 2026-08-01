@@ -210,7 +210,8 @@ The verifier fails the command unless it can establish that:
 1. Lians is dependency-ready and exports real product metrics.
 2. Prometheus is scraping the Lians target.
 3. Grafana is healthy with file-provisioned datasources and dashboards.
-4. Tempo and Loki are ready.
+4. Tempo and Loki are ready; Tempo's effective configuration, metrics-generator
+   active series, and recent logs show no WAL/processor backoff.
 5. The workload produced a sealed decision and Evidence Pack.
 6. The decision contains a bound recall receipt and OpenTelemetry evidence from
    the same trace sent through Alloy.

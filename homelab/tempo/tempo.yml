@@ -43,4 +43,7 @@ metrics_generator:
 overrides:
   defaults:
     metrics_generator:
-      processors: [service-graphs, span-metrics, local-blocks]
+      # local-blocks requires metrics_generator.traces_storage/WAL configuration.
+      # Keep the lightweight demo on processors backed by the configured
+      # generator WAL instead of allowing an internally backing-off processor.
+      processors: [service-graphs, span-metrics]

@@ -57,6 +57,9 @@ Lians, and run an automated verifier that fails when the contract breaks.
 - `GRAF-011`: log/trace/metric retention is bounded to one day in the MVP.
 - `GRAF-012`: the documentation clearly labels synthetic data, unsigned plugin,
   test-grade embeddings, and non-production credentials.
+- `GRAF-013`: verification fails if Tempo enables `local-blocks` without its
+  traces WAL, reports collections with zero active series, or emits a known
+  metrics-generator/WAL backoff error.
 
 ## Acceptance procedure
 
@@ -93,6 +96,7 @@ Lians, and run an automated verifier that fails when the contract breaks.
 | GRAF-010, GRAF-010a | verifier exit status and exported receipt | local and E2E CI |
 | GRAF-011 | pinned one-day service configuration and runtime startup | config review/E2E CI |
 | GRAF-012 | README safety-boundary review | product/security review |
+| GRAF-013 | effective Tempo config, metrics, and recent Loki error scan | verifier and CI |
 
 The reviewer records the Git revision (including a `-dirty` suffix), receipt
 path, and any manual observations before changing this spec's status.

@@ -6,6 +6,7 @@ import base64
 import binascii
 import hashlib
 import json
+import math
 import os
 import sys
 import time
@@ -53,6 +54,13 @@ COMPONENT_IMAGES = {
     for name, value in os.environ.items()
     if name.startswith("LAB_IMAGE_") and value
 }
+TEMPO_BACKOFF_PATTERNS = (
+    "local blocks processor requires traces wal",
+    "could not initialize processors",
+    "instance creation in backoff",
+    "failed to forward request to metrics generator",
+    "error tailing wal",
+)
 
 
 class CheckFailure(RuntimeError):
@@ -256,9 +264,74 @@ def eventually(operation: Callable[[], Any], *, timeout: float) -> Any:
     raise CheckFailure(str(last_error or "timed out"))
 
 
+def prometheus_metric_sum(metrics: str, name: str) -> float | None:
+    """Sum all finite samples for one exact Prometheus metric name."""
+
+    values: list[float] = []
+    for line in metrics.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        sample, separator, remainder = line.partition(" ")
+        if not separator or sample.split("{", 1)[0] != name:
+            continue
+        try:
+            value = float(remainder.split(maxsplit=1)[0])
+        except (IndexError, ValueError):
+            continue
+        if math.isfinite(value):
+            values.append(value)
+    return sum(values) if values else None
+
+
+def verify_tempo_runtime_config(config: str) -> dict[str, bool]:
+    """Reject local-blocks unless Tempo exposes its required traces WAL."""
+
+    normalized = config.lower().replace("_", "-")
+    local_blocks_enabled = "local-blocks" in normalized
+    traces_wal_configured = "traces-storage:" in normalized
+    require(
+        not local_blocks_enabled or traces_wal_configured,
+        "Tempo enables local-blocks without metrics_generator.traces_storage; "
+        "the processor will enter WAL initialization backoff",
+    )
+    return {
+        "local_blocks_enabled": local_blocks_enabled,
+        "traces_wal_configured": traces_wal_configured,
+    }
+
+
+def verify_tempo_metrics_generator(metrics: str) -> dict[str, float]:
+    """Detect the observed ready-but-backing-off metrics-generator state."""
+
+    collections = prometheus_metric_sum(
+        metrics, "tempo_metrics_generator_registry_collections_total"
+    )
+    active_series = prometheus_metric_sum(
+        metrics, "tempo_metrics_generator_registry_active_series"
+    )
+    require(collections is not None, "Tempo exposes no metrics-generator collection metric")
+    require(active_series is not None, "Tempo exposes no metrics-generator active-series metric")
+    require(
+        collections == 0 or active_series > 0,
+        "Tempo metrics generator has completed collections but has zero active series; "
+        "this matches the WAL/processor backoff failure mode",
+    )
+    return {
+        "metrics_generator_collections": collections,
+        "metrics_generator_active_series": active_series,
+    }
+
+
 def check_tempo(trace_id: str) -> dict[str, Any]:
     _, _, ready_raw = http_request("GET", endpoint(TEMPO_URL, "/ready"))
     require("ready" in ready_raw.decode("utf-8", errors="replace").lower(), "Tempo is not ready")
+
+    _, _, config_raw = http_request(
+        "GET", endpoint(TEMPO_URL, "/status/config") + "?mode=diff"
+    )
+    config_detail = verify_tempo_runtime_config(
+        config_raw.decode("utf-8", errors="replace")
+    )
 
     search_state = "ok"
     try:
@@ -280,7 +353,17 @@ def check_tempo(trace_id: str) -> dict[str, Any]:
         return trace
 
     trace = eventually(fetch_trace, timeout=VERIFY_TIMEOUT)
-    return {"ready": True, "search": search_state, "trace_bytes": len(json.dumps(trace))}
+    _, _, metrics_raw = http_request("GET", endpoint(TEMPO_URL, "/metrics"))
+    generator_detail = verify_tempo_metrics_generator(
+        metrics_raw.decode("utf-8", errors="replace")
+    )
+    return {
+        "ready": True,
+        "search": search_state,
+        "trace_bytes": len(json.dumps(trace)),
+        **config_detail,
+        **generator_detail,
+    }
 
 
 def check_loki() -> dict[str, Any]:
@@ -304,7 +387,37 @@ def check_loki() -> dict[str, Any]:
     result = http_json("GET", query_url)
     streams = result.get("data", {}).get("result", [])
     require(result.get("status") == "success" and streams, "Loki has no recent Lians/workload logs")
-    return {"ready": True, "recent_streams": len(streams)}
+
+    failure_query = (
+        '{lab="lians-homelab",service="tempo"} |~ "(?i)('
+        + "|".join(TEMPO_BACKOFF_PATTERNS)
+        + ')"'
+    )
+    failure_url = (
+        endpoint(LOKI_URL, "/loki/api/v1/query_range")
+        + "?"
+        + urlencode(
+            {
+                "query": failure_query,
+                "start": str(end_ns - 2 * 60 * 1_000_000_000),
+                "end": str(end_ns),
+                "limit": "20",
+                "direction": "backward",
+            }
+        )
+    )
+    failures = http_json("GET", failure_url)
+    failure_streams = failures.get("data", {}).get("result", [])
+    require(failures.get("status") == "success", "Loki Tempo safety query failed")
+    require(
+        not failure_streams,
+        "Tempo emitted a known metrics-generator/WAL backoff error in the last two minutes",
+    )
+    return {
+        "ready": True,
+        "recent_streams": len(streams),
+        "tempo_backoff_streams": 0,
+    }
 
 
 def load_and_check_proof() -> tuple[dict[str, Any], dict[str, Any]]:
