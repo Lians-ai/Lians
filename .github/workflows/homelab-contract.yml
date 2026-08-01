@@ -74,8 +74,11 @@ jobs:
       - name: Validate Compose models
         working-directory: homelab
         run: |
-          docker compose --env-file .env.example -f compose.yaml config --quiet
-          docker compose --env-file .env.example -f compose.yaml -f compose.real-model.yaml config --quiet
+          ci_env="$(mktemp)"
+          trap 'rm -f "$ci_env"' EXIT
+          python env_bootstrap.py .env.example "$ci_env"
+          docker compose --env-file "$ci_env" -f compose.yaml config --quiet
+          docker compose --env-file "$ci_env" -f compose.yaml -f compose.real-model.yaml config --quiet
 
       - name: Build the synthetic workload image
         run: docker build --tag lians-homelab-workload:ci homelab/workload
