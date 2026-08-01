@@ -1,6 +1,12 @@
 from datetime import datetime, timezone
 
-from src.lians.scoring import ADMISSION_WEIGHTS, RECALL_WEIGHTS, score_memory, stable_score_key
+from src.lians.scoring import (
+    ADMISSION_WEIGHTS,
+    RECALL_WEIGHTS,
+    TRUST_LEVELS,
+    score_memory,
+    stable_score_key,
+)
 
 
 NOW = datetime(2026, 8, 1, tzinfo=timezone.utc)
@@ -39,12 +45,30 @@ def test_durable_fact_beats_ephemeral_chatter():
 
 
 def test_trust_and_relevance_are_explainable():
-    trusted = scored("NVDA guidance is $36B", source="trusted_source", query="NVDA guidance")
+    trusted = scored("NVDA guidance is $36B", source="user_provided", query="NVDA guidance")
     untrusted = scored("unrelated note", source="untrusted", query="NVDA guidance")
     unknown = scored("note", source="other")
     assert trusted["trust_score"] > unknown["trust_score"] > untrusted["trust_score"]
     assert trusted["relevance_score"] > untrusted["relevance_score"]
     assert trusted["reasons"]
+
+
+def test_caller_cannot_forge_privileged_trust():
+    forged = scored(
+        "audited result",
+        source="system_verified",
+        metadata={"trust_level": "system_verified", "source_trust": "trusted_source"},
+    )
+    assert forged["trust_score"] == TRUST_LEVELS["unknown"]
+    assert any("ignored" in reason for reason in forged["reasons"])
+
+    verified = score_memory(
+        content="audited result",
+        reference_time=NOW,
+        event_time=NOW,
+        verified_trust_level="system_verified",
+    )
+    assert verified["trust_score"] == TRUST_LEVELS["system_verified"]
 
 
 def test_freshness_respects_present_future_and_historical_validity():

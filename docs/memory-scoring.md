@@ -15,7 +15,10 @@ Every component and the final score is bounded to `0.0–1.0`:
   source, and structured metadata.
 - `trust_score`: an explicit source/trust mapping (`system_verified` 1.0,
   `trusted_source` 0.9, `user_provided` 0.75, `chat` 0.65, `imported` 0.6,
-  unknown 0.5, and `untrusted` 0.25).
+  unknown 0.5, and `untrusted` 0.25). Privileged levels require a
+  server-verified provenance input. Caller metadata trust claims are ignored,
+  and public `source` values cannot self-assert `system_verified` or
+  `trusted_source`.
 - `freshness_score`: validity at an explicit reference time plus deterministic
   age decay. Historical recall uses `as_of` as the reference.
 - `relevance_score`: lexical overlap combined with the existing bounded
@@ -49,6 +52,10 @@ ranking blends the existing retrieval score at 0.8 with the seven-component
 quality score at 0.2. These blend weights are returned as `ranking_weights`.
 Ties use final score descending, event time descending, ingestion time
 descending, and memory ID ascending.
+
+Fast-recall cache keys carry a scoring schema version and the generation
+captured before retrieval starts. A concurrent write or erasure makes an
+in-flight fill unreachable rather than allowing it to republish stale recall.
 
 API memory objects may include optional `score_breakdown`; existing required
 fields are unchanged. This is a rule-based quality and governance layer, not a

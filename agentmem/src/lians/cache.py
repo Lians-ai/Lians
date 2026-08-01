@@ -3,7 +3,7 @@
 Architecture:
 
 * Generation: ``agentmem:recall-generation:{namespace_agent_hash}``
-* Value key: ``agentmem:recall:{namespace_agent_hash}:{generation}:...``
+* Value key: ``agentmem:recall:{schema}:{namespace_agent_hash}:{generation}:...``
 * TTL: ``config.recall_cache_ttl_seconds`` (default 60 seconds)
 
 Invalidation is O(1): a write increments the pair's generation. Old-generation
@@ -14,6 +14,10 @@ processes.
 The key includes the complete retrieval policy, not only filters. A fast result
 can never be served for a deep or reconstruction request.
 
+Lookups return the generation they observed. A later cache fill writes only to
+that captured generation, so a concurrent write/erase cannot make stale work
+reachable by advancing the generation between the lookup and fill.
+
 All Redis errors are swallowed because cache availability is never required for
 memory correctness.
 """
@@ -22,11 +26,21 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
 _redis_client: Any = None
 logger = logging.getLogger("agentmem.cache")
+_CACHE_SCHEMA_VERSION = "scoring-v1"
+
+
+@dataclass(frozen=True)
+class RecallCacheLookup:
+    """A cache read bound to the generation observed before recall starts."""
+
+    payload: Optional[str]
+    generation: str
 
 
 def _get_redis() -> Any:
@@ -70,7 +84,8 @@ def _recall_key(
     filters_str = json.dumps(filters or {}, sort_keys=True)
     policy_str = json.dumps(policy or {}, sort_keys=True)
     return (
-        f"agentmem:recall:{_pair_hash(namespace, agent_id)}:{generation}:"
+        f"agentmem:recall:{_CACHE_SCHEMA_VERSION}:"
+        f"{_pair_hash(namespace, agent_id)}:{generation}:"
         f"{_h(query)}:{as_of_str}:{k}:{_h(filters_str)}:{_h(policy_str)}"
     )
 
@@ -89,16 +104,28 @@ async def get_cached_recall(
     k: int,
     filters: Optional[dict],
     policy: Optional[dict] = None,
-) -> Optional[str]:
+) -> Optional[RecallCacheLookup]:
     if not _enabled():
         return None
     try:
         redis = _get_redis()
-        generation = await redis.get(_generation_key(namespace, agent_id)) or "0"
+        generation_key = _generation_key(namespace, agent_id)
+        generation = await redis.get(generation_key) or "0"
         key = _recall_key(
             namespace, agent_id, generation, query, as_of, k, filters, policy
         )
-        return await redis.get(key)
+        payload = await redis.get(key)
+        if payload is not None:
+            # Linearize a hit after reading its value. If invalidation completed
+            # between the generation read and value read, discard the old hit
+            # and let recall compute against the newer database state.
+            current_generation = await redis.get(generation_key) or "0"
+            if current_generation != generation:
+                return RecallCacheLookup(
+                    payload=None,
+                    generation=current_generation,
+                )
+        return RecallCacheLookup(payload=payload, generation=generation)
     except Exception:
         return None
 
@@ -113,12 +140,13 @@ async def set_cached_recall(
     payload: str,
     ttl: int,
     policy: Optional[dict] = None,
+    *,
+    generation: str,
 ) -> None:
     if not _enabled():
         return
     try:
         redis = _get_redis()
-        generation = await redis.get(_generation_key(namespace, agent_id)) or "0"
         key = _recall_key(
             namespace, agent_id, generation, query, as_of, k, filters, policy
         )

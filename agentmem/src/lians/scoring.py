@@ -33,6 +33,7 @@ TRUST_LEVELS = {
     "unknown": 0.5,
     "untrusted": 0.25,
 }
+_PRIVILEGED_TRUST_LEVELS = {"system_verified", "trusted_source"}
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 _EPHEMERAL = re.compile(r"^(?:hi|hello|hey|thanks|thank you|ok|okay|lol|bye)[.! ]*$", re.I)
@@ -96,11 +97,36 @@ def _confidence(content: str, metadata: Mapping[str, Any], event_time: Optional[
     return clamp(score), "structured content, timestamp, source, and metadata evidence evaluated"
 
 
-def _trust(source: Optional[str], metadata: Mapping[str, Any]) -> tuple[float, str]:
-    raw = metadata.get("trust_level") or metadata.get("source_trust") or source or "unknown"
-    level = str(raw).strip().lower()
-    score = TRUST_LEVELS.get(level, TRUST_LEVELS["unknown"])
-    return score, f"source trust level {level if level in TRUST_LEVELS else 'unknown'}"
+def _trust(
+    source: Optional[str],
+    metadata: Mapping[str, Any],
+    verified_trust_level: Optional[str],
+) -> tuple[float, str]:
+    """Score provenance without trusting caller-controlled attestations.
+
+    ``source`` and memory metadata arrive through the public write API, so they
+    can describe provenance but cannot confer privileged trust.  A future
+    server-side verifier may pass ``verified_trust_level`` explicitly after it
+    has authenticated the source; that value is intentionally not read from
+    metadata.
+    """
+    metadata_claim = metadata.get("trust_level") or metadata.get("source_trust")
+    if verified_trust_level is not None:
+        level = str(verified_trust_level).strip().lower()
+        normalized = level if level in TRUST_LEVELS else "unknown"
+        return TRUST_LEVELS[normalized], f"server-verified source trust level {normalized}"
+
+    level = str(source or "unknown").strip().lower()
+    reasons: list[str] = []
+    if metadata_claim is not None:
+        reasons.append("caller metadata trust claim ignored")
+    if level in _PRIVILEGED_TRUST_LEVELS:
+        reasons.append(f"unverified privileged source claim {level} ignored")
+        level = "unknown"
+    elif level not in TRUST_LEVELS:
+        level = "unknown"
+    reasons.append(f"caller-declared source trust level {level}")
+    return TRUST_LEVELS[level], "; ".join(reasons)
 
 
 def _freshness(event_time: Optional[datetime], valid_from: Optional[datetime], valid_to: Optional[datetime], superseded: bool, reference_time: datetime) -> tuple[float, str]:
@@ -162,6 +188,7 @@ def score_memory(
     valid_to: Optional[datetime] = None, superseded: bool = False,
     query: Optional[str] = None, base_relevance: Optional[float] = None,
     safety_status: str = "safe", risk_tags: Optional[list[str]] = None,
+    verified_trust_level: Optional[str] = None,
     purpose: str = "recall",
 ) -> dict[str, Any]:
     """Return bounded component scores, a gated final score, and stable reasons."""
@@ -169,7 +196,7 @@ def score_memory(
     tags = list(risk_tags or [])
     importance_score, importance_reason = _importance(content, meta, importance)
     confidence_score, confidence_reason = _confidence(content, meta, event_time, source)
-    trust_score, trust_reason = _trust(source, meta)
+    trust_score, trust_reason = _trust(source, meta, verified_trust_level)
     freshness_score, freshness_reason = _freshness(event_time, valid_from, valid_to, superseded, reference_time)
     relevance_score, relevance_reason = _relevance(content, meta, query, base_relevance)
     stability_score, stability_reason = _stability(content, meta, event_time)

@@ -40,19 +40,32 @@ def _attach_admission_score(req: MemoryAdd, decision) -> None:
         "review": "review_needed",
         "reject": "rejected",
     }.get(decision.action, "review_needed")
+    caller_metadata = dict(req.metadata or {})
+    # These keys are produced by Lians. Public callers may supply arbitrary
+    # domain metadata, but they cannot forge a prior admission decision or
+    # score explanation.
+    caller_metadata.pop("_admission", None)
+    caller_metadata.pop("_score", None)
     breakdown = score_memory(
         content=req.content,
         reference_time=req.event_time,
         event_time=req.event_time,
         valid_from=req.event_time,
-        metadata=req.metadata,
+        metadata=caller_metadata,
         importance=req.importance,
         source=req.source,
         safety_status=status,
         risk_tags=decision.risk_tags,
         purpose="admission",
     )
-    req.metadata = {**(req.metadata or {}), "_score": breakdown}
+    req.metadata = {
+        **caller_metadata,
+        "_admission": {
+            "action": decision.action,
+            "risk_tags": list(decision.risk_tags),
+        },
+        "_score": breakdown,
+    }
 
 
 @router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)

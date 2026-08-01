@@ -51,6 +51,7 @@ from .crypto import encrypt_content, unwrap_subject_key
 from .pii import get_or_create_subject_key, destroy_subject_key
 from .supersession import run_supersession, _utc
 from .ranking import hybrid_recall
+from .scoring import stable_score_key
 from .cache import get_cached_recall, set_cached_recall, invalidate_agent
 from .config import get_settings
 from .current_facts import compute_predicate_key, upsert_live_fact, remove_live_facts, keyed_lookup
@@ -228,12 +229,42 @@ def _fuse_recall_rankings(
         support = len(entry["scopes"]) / max(1, len(rankings))
         rrf = entry["score"] / ceiling if ceiling else 0.0
         raw = max(0.0, min(1.0, entry["raw_score"]))
-        score = 0.72 * rrf + 0.18 * raw + 0.10 * support
+        score = round(0.72 * rrf + 0.18 * raw + 0.10 * support, 6)
         # Internal provenance is useful for confidence and debugging but does
         # not alter the stored memory record.
-        setattr(entry["memory"], "_retrieval_scopes", sorted(entry["scopes"]))
+        memory = entry["memory"]
+        scopes = sorted(entry["scopes"])
+        setattr(memory, "_retrieval_scopes", scopes)
+        prior_breakdown = getattr(memory, "_score_breakdown", None)
+        if isinstance(prior_breakdown, dict):
+            breakdown = dict(prior_breakdown)
+            reasons = list(breakdown.get("reasons") or [])
+            reasons.append(
+                "adaptive query facets combined with weighted reciprocal-rank fusion"
+            )
+            breakdown.update({
+                "pre_fusion_score": breakdown.get("final_score"),
+                "final_score": score,
+                "fusion": {
+                    "method": "weighted-reciprocal-rank-fusion-v1",
+                    "facet_support": len(scopes),
+                    "facet_count": len(rankings),
+                    "scopes": scopes,
+                    "normalized_rrf_score": round(rrf, 6),
+                    "strongest_input_score": round(raw, 6),
+                },
+                "reasons": reasons,
+            })
+            setattr(memory, "_score_breakdown", breakdown)
         ordered.append((entry["memory"], score, entry["content"]))
-    ordered.sort(key=lambda item: (-item[1], str(item[0].id)))
+    ordered.sort(
+        key=lambda item: stable_score_key(
+            item[0].id,
+            getattr(item[0], "event_time", None),
+            getattr(item[0], "ingestion_time", None),
+            {"final_score": item[1]},
+        )
+    )
     return ordered[:limit]
 
 
@@ -402,6 +433,17 @@ def _memory_to_out(mem: Memory, content: Optional[str]) -> MemoryOut:
         metadata=dict(mem.metadata_ or {}),
         score_breakdown=getattr(mem, "_score_breakdown", None),
     )
+
+
+def _set_public_recall_score(memory: MemoryOut, score: float) -> None:
+    """Keep the public score and its explanation exactly synchronized."""
+    public_score = round(max(0.0, min(1.0, float(score))), 6)
+    memory.score = public_score
+    if memory.score_breakdown is not None:
+        memory.score_breakdown = {
+            **memory.score_breakdown,
+            "final_score": public_score,
+        }
 
 
 async def _mark_parent_stale(
@@ -1360,8 +1402,9 @@ async def recall_memories(
 
         # Hot cache (Redis)
         cache_eligible = execution["mode"] == "fast" and len(plan.variants) == 1
+        cache_lookup = None
         if settings.recall_cache_enabled and cache_eligible and not req.as_of and not near_entity and not rerank and barrier_override is None:
-            cached = await get_cached_recall(
+            cache_lookup = await get_cached_recall(
                 namespace,
                 req.agent_id,
                 req.query,
@@ -1370,10 +1413,10 @@ async def recall_memories(
                 request_filters,
                 execution,
             )
-            if cached is not None:
+            if cache_lookup is not None and cache_lookup.payload is not None:
                 span.set_attribute("cache_hit", True)
                 record_recall(namespace, router="cache", cache_hit=True)
-                cached_result = RecallResult.model_validate_json(cached)
+                cached_result = RecallResult.model_validate_json(cache_lookup.payload)
                 await _commit_recall_evidence(
                     db,
                     namespace,
@@ -1457,7 +1500,9 @@ async def recall_memories(
                             ks.set_attribute("keyed_hit", True)
                             span.set_attribute("router", "keyed")
                             mem_out = _memory_to_out(mem, content)
-                            mem_out.score = mem._score_breakdown["final_score"]
+                            _set_public_recall_score(
+                                mem_out, mem._score_breakdown["final_score"]
+                            )
                             receipt, provenance_coverage, receipt_payload = _recall_receipt(
                                 req,
                                 execution,
@@ -1638,7 +1683,7 @@ async def recall_memories(
             memories_out: list[MemoryOut] = []
             for mem, _score, content in results:
                 mem_out = _memory_to_out(mem, content)
-                mem_out.score = _score
+                _set_public_recall_score(mem_out, _score)
                 scopes = getattr(mem, "_retrieval_scopes", None)
                 if scopes:
                     mem_out.metadata["_retrieval_scopes"] = scopes
@@ -1697,12 +1742,14 @@ async def recall_memories(
         if (
             settings.recall_cache_enabled and cache_eligible and not req.as_of and not near_entity
             and barrier_override is None and not retrieval_degraded
+            and cache_lookup is not None
         ):
             await set_cached_recall(
                 namespace, req.agent_id, req.query, req.as_of, req.k, request_filters,
                 result.model_dump_json(),
                 settings.recall_cache_ttl_seconds,
                 execution,
+                generation=cache_lookup.generation,
             )
 
         record_recall(
