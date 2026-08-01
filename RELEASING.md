@@ -27,6 +27,7 @@ Pushing a `vX.Y.Z` tag triggers:
 | `release.yml` → `c-tarball` | Attaches `lians-c-<version>.tar.gz` (the **C** source) to the Release |
 | `release.yml` → `go-tag` | Mirrors the tag to `agentmem/sdk/go/vX.Y.Z` so `go get …@vX.Y.Z` resolves |
 | `release.yml` → `maven-central` | Publishes **Java** to Maven Central — only when opted in (below) |
+| `publish-mcp-container.yml` | Waits for the exact `lians-sdk` version on PyPI, then publishes normalized GHCR tags (`X.Y.Z`, never `vX.Y.Z`) |
 
 ## Version locations (keep in sync)
 
@@ -35,6 +36,9 @@ Pushing a `vX.Y.Z` tag triggers:
 - Java: `agentmem/sdk/java/pom.xml` → `<version>`
 - C: `agentmem/sdk/c/CMakeLists.txt` → `project(... VERSION ...)` **and** `src/lians.c` user-agent string
 - MCP: `server.json`; Claude plugin: `.claude-plugin/marketplace.json` + `integrations/lians-plugin/.claude-plugin/plugin.json`
+- MCPB: `integrations/mcpb/manifest.json` and
+  `integrations/mcpb/pyproject.toml`; generate `integrations/mcpb/uv.lock` only
+  after the exact Python release is live on PyPI
 - Go: `agentmem/sdk/go/version.go` → `Version` const (the resolvable version is still the git tag)
 
 `check_release_contract.py` verifies source-manifest synchronization only. It
@@ -54,8 +58,12 @@ does not prove that any registry accepted the release.
 1. Wait for every tag-triggered workflow and inspect each publisher log.
 2. Verify clean external installs for Python, TypeScript, Go, Java, and the C
    release asset. Run the installed Python wheel outside this monorepo.
+   Then run `uv lock --directory integrations/mcpb` and rerun
+   `python scripts/check_release_contract.py` before packaging the MCPB.
 3. Publish and verify the MCP Registry manifest, then verify the GHCR version and
-   `latest` tags resolve to the intended digest.
+   `latest` tags resolve to the intended digest. The container workflow strips
+   the Git tag's leading `v`, validates the result against `VERSION`, and uses
+   that same value for the installed Python distribution and runtime image tag.
 4. Update `docs/published-release-status.json` only from observed registry state,
    then run:
 

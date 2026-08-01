@@ -30,6 +30,7 @@
     },
     "ghcr_mcp": {
       "version": "0.4.1",
+      "runtime": "ghcr.io/lians-ai/lians-mcp:0.4.1",
       "url": "https://github.com/Lians-ai/Lians/pkgs/container/lians-mcp"
     },
     "mcp_registry": {

@@ -68,6 +68,14 @@ def validate_status(status: dict[str, Any], source_version: str) -> list[str]:
         and artifacts["c"].get("version") != artifacts["github_release"].get("version")
     ):
         errors.append("C source asset version must match the GitHub release")
+    ghcr = artifacts.get("ghcr_mcp")
+    if isinstance(ghcr, dict):
+        expected_image = f"ghcr.io/lians-ai/lians-mcp:{ghcr.get('version')}"
+        if ghcr.get("runtime") != expected_image:
+            errors.append(
+                "artifacts.ghcr_mcp.runtime must use the normalized, unprefixed "
+                f"version tag {expected_image}"
+            )
     return errors
 
 

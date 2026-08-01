@@ -67,3 +67,33 @@ def test_runtime_docker_context_excludes_generated_dependency_trees():
     rules = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
     for pattern in ("**/node_modules/", "**/dist/", "**/build/", "**/target/"):
         assert pattern in rules
+
+
+def test_ghcr_runtime_uses_normalized_version_tag():
+    status = load_status(ROOT / "docs" / "published-release-status.json")
+    artifact = status["artifacts"]["ghcr_mcp"]
+    assert artifact["runtime"] == (
+        f"ghcr.io/lians-ai/lians-mcp:{artifact['version']}"
+    )
+
+
+def test_glama_default_tracks_verified_public_image():
+    status = load_status(ROOT / "docs" / "published-release-status.json")
+    version = status["artifacts"]["ghcr_mcp"]["version"]
+    dockerfile = (ROOT / "Dockerfile.glama").read_text(encoding="utf-8").splitlines()
+    version_arg = next(line for line in dockerfile if line.startswith("ARG LIANS_VERSION="))
+    assert version_arg == f"ARG LIANS_VERSION={version}"
+
+
+def test_release_status_rejects_prefixed_ghcr_runtime_tag():
+    status = load_status(ROOT / "docs" / "published-release-status.json")
+    status["artifacts"]["ghcr_mcp"]["runtime"] = (
+        "ghcr.io/lians-ai/lians-mcp:v0.4.1"
+    )
+    errors = validate_status(status, (ROOT / "VERSION").read_text().strip())
+    assert errors == [
+        (
+            "artifacts.ghcr_mcp.runtime must use the normalized, unprefixed "
+            "version tag ghcr.io/lians-ai/lians-mcp:0.4.1"
+        )
+    ]

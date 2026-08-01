@@ -318,7 +318,13 @@ jobs:
           python-version: "3.12"
 
       - name: Build Glama image
-        run: docker build --file Dockerfile.glama --tag lians-mcp-glama:test .
+        run: |
+          version="$(python -c 'import json; print(json.load(open("docs/published-release-status.json"))["artifacts"]["ghcr_mcp"]["version"])')"
+          docker build \
+            --file Dockerfile.glama \
+            --build-arg "LIANS_VERSION=$version" \
+            --tag lians-mcp-glama:test \
+            .
 
       - name: Install MCP test client
         run: pip install "mcp>=1,<2"
