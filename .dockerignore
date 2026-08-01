@@ -6,6 +6,10 @@ integrations/*
 !integrations/grafana-lians-app/**
 integrations/grafana-lians-app/node_modules/
 integrations/grafana-lians-app/dist/
+**/node_modules/
+**/dist/
+**/build/
+**/target/
 **/__pycache__/
 **/*.pyc
 **/*.pyo

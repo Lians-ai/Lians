@@ -22,11 +22,11 @@ x-lab-component-images: &lab-component-images
   LAB_IMAGE_LIANS: lians-homelab-api:local
   LAB_IMAGE_POSTGRES: pgvector/pgvector:pg16
   LAB_IMAGE_REDIS: redis:7-alpine
-  LAB_IMAGE_PROMETHEUS: prom/prometheus:v3.12.0
-  LAB_IMAGE_TEMPO: grafana/tempo:2.10.0
-  LAB_IMAGE_LOKI: grafana/loki:3.7.2
+  LAB_IMAGE_PROMETHEUS: prom/prometheus:v3.13.2
+  LAB_IMAGE_TEMPO: grafana/tempo:2.10.3
+  LAB_IMAGE_LOKI: grafana/loki:3.7.4
   LAB_IMAGE_ALLOY: grafana/alloy:v1.18.0
-  LAB_IMAGE_GRAFANA: grafana/grafana:12.3.0
+  LAB_IMAGE_GRAFANA: grafana/grafana:12.4.6
 
 x-workload-build: &workload-build
   context: ./workload
@@ -100,6 +100,8 @@ services:
       EMBEDDING_PROVIDER: local
       EMBEDDING_DIM: "1024"
       MASTER_ENCRYPTION_KEY: ${LIANS_MASTER_ENCRYPTION_KEY}
+      EVIDENCE_SIGNING_PRIVATE_KEY: ${LIANS_EVIDENCE_SIGNING_PRIVATE_KEY:?Run lab.ps1 or lab.sh to generate homelab/.env}
+      EVIDENCE_SIGNING_KEY_ID: ${LIANS_EVIDENCE_SIGNING_KEY_ID:-lians-homelab-ed25519-v1}
       AGENTMEM_ALLOW_UNENCRYPTED: "false"
       API_SECRET_SEED: lians-homelab-seed-local-only
       ADMIN_SECRET: ${LIANS_ADMIN_SECRET}
@@ -137,7 +139,7 @@ services:
     logging: *default-logging
 
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.13.2
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -155,7 +157,7 @@ services:
     logging: *default-logging
 
   tempo:
-    image: grafana/tempo:2.10.0
+    image: grafana/tempo:2.10.3
     command: ["-config.file=/etc/tempo/tempo.yml"]
     volumes:
       - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
@@ -167,7 +169,7 @@ services:
     logging: *default-logging
 
   loki:
-    image: grafana/loki:3.7.2
+    image: grafana/loki:3.7.4
     command: ["-config.file=/etc/loki/loki.yml"]
     volumes:
       - ./loki/loki.yml:/etc/loki/loki.yml:ro
@@ -327,6 +329,7 @@ services:
       VERIFY_TIMEOUT_SECONDS: "120"
       PROOF_MAX_AGE_SECONDS: "180"
       EXPECTED_COMPLETENESS_GRADE: replayable
+      EXPECTED_EVIDENCE_SIGNING_KEY_ID: ${LIANS_EVIDENCE_SIGNING_KEY_ID:-lians-homelab-ed25519-v1}
       LAB_GIT_COMMIT: ${LAB_GIT_COMMIT:-unrecorded}
       SAMPLE_PATH: /sample/input.json
       LAB_SAMPLE_POLICY_ACK: ${LAB_SAMPLE_POLICY_ACK:-}

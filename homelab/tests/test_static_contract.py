@@ -127,6 +127,30 @@ class HomelabStaticContract(unittest.TestCase):
         self.assertIn(".local.json", scenario)
         self.assertIn("proof_sample == mounted_sample.manifest", verifier)
 
+    def test_homelab_requires_signed_offline_verifiable_evidence(self):
+        compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
+        powershell = (LAB / "lab.ps1").read_text(encoding="utf-8")
+        shell = (LAB / "lab.sh").read_text(encoding="utf-8")
+        verifier = (LAB / "workload/verify.py").read_text(encoding="utf-8")
+        workload_image = (LAB / "workload/Dockerfile").read_text(encoding="utf-8")
+        example_env = (LAB / ".env.example").read_text(encoding="utf-8")
+        self.assertIn("LIANS_EVIDENCE_SIGNING_PRIVATE_KEY=", example_env)
+        self.assertIn(
+            "LIANS_EVIDENCE_SIGNING_KEY_ID=lians-homelab-ed25519-v1", example_env
+        )
+        self.assertIn("env_bootstrap.py", powershell)
+        self.assertIn("env_bootstrap.py", shell)
+        self.assertIn("EVIDENCE_SIGNING_PRIVATE_KEY: ${LIANS_EVIDENCE_SIGNING_PRIVATE_KEY:?", compose)
+        self.assertIn(
+            "EVIDENCE_SIGNING_KEY_ID: ${LIANS_EVIDENCE_SIGNING_KEY_ID:-", compose
+        )
+        self.assertIn("EXPECTED_EVIDENCE_SIGNING_KEY_ID:", compose)
+        verify_block = compose.split("  verify:", 1)[1].split("\nnetworks:", 1)[0]
+        self.assertNotIn("LIANS_EVIDENCE_SIGNING_PRIVATE_KEY", verify_block)
+        self.assertIn("Ed25519PublicKey.from_public_bytes", verifier)
+        self.assertIn('signature.get("status") == "signed"', verifier)
+        self.assertIn("cryptography==48.0.1", workload_image)
+
     def test_grafana_app_is_provisioned_and_dashboard_is_portable(self):
         app = (LAB / "grafana/provisioning/plugins/lians-app.yml").read_text(encoding="utf-8")
         self.assertIn("type: lians-lians-app", app)

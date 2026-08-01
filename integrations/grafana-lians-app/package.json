@@ -18,11 +18,17 @@
     "webpack-cli": "^6.0.0"
   },
   "dependencies": {
-    "@grafana/data": "12.3.0",
-    "@grafana/runtime": "12.3.0",
-    "@grafana/ui": "12.3.0",
+    "@grafana/data": "12.4.6",
+    "@grafana/runtime": "12.4.6",
+    "@grafana/ui": "12.4.6",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.12",
+    "immutable": "5.1.9",
+    "lodash": "4.18.1",
+    "uuid": "11.1.1"
   },
   "engines": {
     "node": ">=22"

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import binascii
+import hashlib
 import json
 import os
 import sys
@@ -23,6 +25,8 @@ from common import (
     sha256_json,
     utc_now,
 )
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from scenario import LoadedScenario, load_scenario
 
 LIANS_URL = os.getenv("LIANS_URL", "http://lians:8000")
@@ -40,6 +44,9 @@ SAMPLE_PATH = Path(os.getenv("SAMPLE_PATH", "/sample/input.json"))
 VERIFY_TIMEOUT = env_float("VERIFY_TIMEOUT_SECONDS", 45.0, minimum=1.0)
 PROOF_MAX_AGE = env_float("PROOF_MAX_AGE_SECONDS", 180.0, minimum=1.0)
 EXPECTED_COMPLETENESS_GRADE = os.getenv("EXPECTED_COMPLETENESS_GRADE", "replayable")
+EXPECTED_EVIDENCE_SIGNING_KEY_ID = os.getenv(
+    "EXPECTED_EVIDENCE_SIGNING_KEY_ID", "lians-homelab-ed25519-v1"
+).strip()
 LAB_GIT_COMMIT = os.getenv("LAB_GIT_COMMIT", "unrecorded")
 COMPONENT_IMAGES = {
     name.removeprefix("LAB_IMAGE_").lower(): value
@@ -70,6 +77,59 @@ def verify_mounted_sample_manifest(
         "proof sample manifest does not match the independently validated mounted sample",
     )
     return mounted_sample
+
+
+def _decode_base64_field(value: Any, *, label: str, expected_length: int) -> bytes:
+    require(isinstance(value, str) and value, f"{label} is missing")
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise CheckFailure(f"{label} is not valid base64") from exc
+    require(len(decoded) == expected_length, f"{label} must decode to {expected_length} bytes")
+    return decoded
+
+
+def verify_evidence_pack_signature(
+    pack: dict[str, Any], *, expected_key_id: str
+) -> dict[str, Any]:
+    """Verify the embedded Ed25519 signature without contacting Lians."""
+
+    require(bool(expected_key_id), "expected evidence signing key ID is empty")
+    signature = pack.get("signature")
+    require(isinstance(signature, dict), "evidence pack signature is missing")
+    require(signature.get("status") == "signed", "evidence pack is not signed")
+    require(signature.get("algorithm") == "Ed25519", "evidence signature is not Ed25519")
+    require(
+        signature.get("key_id") == expected_key_id,
+        "evidence signature key ID does not match the homelab key ID",
+    )
+    public_key = _decode_base64_field(
+        signature.get("public_key"), label="evidence signing public key", expected_length=32
+    )
+    signature_value = _decode_base64_field(
+        signature.get("value"), label="evidence signature", expected_length=64
+    )
+    manifest = {
+        key: value
+        for key, value in pack.items()
+        if key not in {"manifest_hash", "signature", "pack_hash"}
+    }
+    canonical_manifest = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), default=str
+    ).encode("utf-8")
+    try:
+        Ed25519PublicKey.from_public_bytes(public_key).verify(
+            signature_value, canonical_manifest
+        )
+    except (InvalidSignature, ValueError) as exc:
+        raise CheckFailure("evidence pack Ed25519 signature is invalid") from exc
+    return {
+        "signature_status": "signed",
+        "signature_algorithm": "Ed25519",
+        "signature_key_id": expected_key_id,
+        "signature_valid": True,
+        "signer_public_key_sha256": hashlib.sha256(public_key).hexdigest(),
+    }
 
 
 def check_lians() -> dict[str, Any]:
@@ -312,6 +372,10 @@ def load_and_check_proof() -> tuple[dict[str, Any], dict[str, Any]]:
         sha256_json(pack_without_hash) == pack.get("pack_hash"),
         "evidence pack hash does not match canonical contents",
     )
+    signature_detail = verify_evidence_pack_signature(
+        pack,
+        expected_key_id=EXPECTED_EVIDENCE_SIGNING_KEY_ID,
+    )
     require(
         pack.get("decision", {}).get("id") == proof.get("decision_id"), "pack decision ID mismatch"
     )
@@ -364,7 +428,6 @@ def load_and_check_proof() -> tuple[dict[str, Any], dict[str, Any]]:
         "evidence_pack_schema": pack.get("schema"),
         "manifest_hash": pack.get("manifest_hash"),
         "pack_hash": pack.get("pack_hash"),
-        "signature_status": pack.get("signature", {}).get("status"),
         "grade": grade,
         "sample": {
             "schema": sample.get("schema"),
@@ -375,6 +438,7 @@ def load_and_check_proof() -> tuple[dict[str, Any], dict[str, Any]]:
             "decision_type": sample.get("decision_type"),
         },
     }
+    detail.update(signature_detail)
     return proof, detail
 
 

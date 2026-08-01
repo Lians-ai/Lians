@@ -10,6 +10,8 @@ WORKDIR /app
 
 COPY common.py scenario.py bootstrap.py runner.py verify.py ./
 
+RUN pip install --no-cache-dir "cryptography==48.0.1"
+
 RUN mkdir -p /state \
     && chown -R "${WORKLOAD_UID}:${WORKLOAD_GID}" /app /state
 

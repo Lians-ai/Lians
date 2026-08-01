@@ -6,7 +6,7 @@ RUN npm ci --ignore-scripts
 COPY integrations/grafana-lians-app/ ./
 RUN npm run typecheck && npm run build
 
-FROM grafana/grafana:12.3.0
+FROM grafana/grafana:12.4.6
 
 USER root
 COPY --from=plugin-builder --chown=472:0 /plugin/dist /var/lib/grafana/plugins/lians-lians-app

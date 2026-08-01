@@ -83,30 +83,13 @@ fi
 export LAB_GIT_COMMIT
 export LAB_UID="${LAB_UID:-$(id -u)}"
 
-if [ ! -f "$env_file" ]; then
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 is required once to generate local lab secrets." >&2
-    exit 1
-  fi
-  python3 - "$example_env" "$env_file" <<'PY'
-import base64
-import os
-import pathlib
-import re
-import sys
-
-source, target = map(pathlib.Path, sys.argv[1:])
-content = source.read_text(encoding="utf-8")
-content = re.sub(r"(?m)^LIANS_ADMIN_SECRET=.*$", f"LIANS_ADMIN_SECRET={os.urandom(32).hex()}", content)
-content = re.sub(
-    r"(?m)^LIANS_MASTER_ENCRYPTION_KEY=.*$",
-    f"LIANS_MASTER_ENCRYPTION_KEY={base64.b64encode(os.urandom(32)).decode()}",
-    content,
-)
-target.write_text(content, encoding="utf-8")
-PY
-  echo "Created homelab/.env with random local secrets."
-fi
+env_status=$(python3 "$lab_root/env_bootstrap.py" "$example_env" "$env_file")
+case "$env_status" in
+  created) echo "Created homelab/.env with random local secrets." ;;
+  upgraded) echo "Added a random Evidence Pack signing key to the existing homelab/.env." ;;
+  unchanged) : ;;
+  *) echo "Unexpected homelab environment bootstrap result." >&2; exit 1 ;;
+esac
 chmod 600 "$env_file"
 
 mkdir -p "$artifacts"

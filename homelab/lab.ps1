@@ -71,26 +71,21 @@ function Get-LabRevision {
 }
 
 function New-LabEnvironment {
-    if (Test-Path -LiteralPath $EnvFile) { return }
-
-    $adminBytes = New-Object byte[] 32
-    $masterBytes = New-Object byte[] 32
-    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
-    try {
-        $rng.GetBytes($adminBytes)
-        $rng.GetBytes($masterBytes)
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        throw "Python 3 is required once to generate local lab secrets."
     }
-    finally {
-        $rng.Dispose()
+    $output = @(& $python.Source (Join-Path $LabRoot "env_bootstrap.py") $ExampleEnv $EnvFile)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not create or safely upgrade homelab/.env."
     }
-    $adminSecret = ([BitConverter]::ToString($adminBytes)).Replace("-", "").ToLowerInvariant()
-    $masterKey = [Convert]::ToBase64String($masterBytes)
-
-    $content = Get-Content -Raw -LiteralPath $ExampleEnv
-    $content = $content -replace '(?m)^LIANS_ADMIN_SECRET=.*$', "LIANS_ADMIN_SECRET=$adminSecret"
-    $content = $content -replace '(?m)^LIANS_MASTER_ENCRYPTION_KEY=.*$', "LIANS_MASTER_ENCRYPTION_KEY=$masterKey"
-    [IO.File]::WriteAllText($EnvFile, $content, [Text.UTF8Encoding]::new($false))
-    Write-Host "Created homelab/.env with random local secrets."
+    $status = ([string]($output | Select-Object -Last 1)).Trim()
+    switch ($status) {
+        "created" { Write-Host "Created homelab/.env with random local secrets." }
+        "upgraded" { Write-Host "Added a random Evidence Pack signing key to the existing homelab/.env." }
+        "unchanged" { }
+        default { throw "Unexpected homelab environment bootstrap result." }
+    }
 }
 
 function Assert-DockerEngine {
