@@ -1,6 +1,6 @@
 # Lians Competitive Landscape
 
-Last reviewed: 2026-06-30.
+Last reviewed: 2026-08-01 against current official product documentation.
 
 This document compares Lians with the current agent-memory landscape. It is not a
 feature-by-feature takedown. The goal is to keep positioning honest: where others
@@ -17,14 +17,19 @@ The memory market is splitting into five lanes:
 | Temporal / graph memory | Zep/Graphiti, Hindsight, Supermemory, MemoryLake | Better long-horizon recall and relationship reasoning | Respect their graph/context strengths; win on regulated evidence and deterministic controls |
 | Personal memory passport | MemoryLake, Supermemory personal app, OpenMemory-style tools | One user memory across many AIs | Mostly not Lians' lane |
 | Self-improving agents | Letta, Honcho, Hindsight | Agents that learn, reflect, dream, and adapt | Integrate or coexist; do not position Lians as an agent identity product |
-| Regulated memory control plane | Lians | Banks, hospitals, law firms, insurers, government | Own this lane |
+| Regulated decision-evidence layer | Lians | Teams that must reconstruct consequential AI decisions | Differentiation target; independent leadership evidence is still gated |
 
 The simplest message:
 
-> mem0 remembers. Zep connects. Supermemory routes context. Hindsight reflects.
-> Letta and Honcho build agents that learn. MemoryLake gives users a portable
-> memory passport. Lians proves what a regulated agent knew, when it knew it, who
-> could see it, and whether that memory was allowed to influence a decision.
+> Temporal memory is now table stakes. Lians is differentiated when one receipt
+> can bind a named decision to event-time and knowledge-time cutoffs, included
+> and excluded source versions, future-leak checks, policy state, and erasure
+> state — then verify that record offline.
+
+Do not position ordinary temporal memory, provenance, or audit logging as unique.
+Graphiti is bitemporal, Mem0 documents temporal/as-of reasoning and history,
+Hindsight documents query-time temporal recall plus audit and OpenTelemetry, and
+Supermemory documents versioning and a temporal graph.
 
 ## Comparison matrix
 
@@ -178,27 +183,38 @@ These are real markets, but they dilute Lians' institutional wedge.
 
 ### What Lians should build next
 
-1. **Memory admission policy.** Source trust, PII/PHI/MNPI detection, prompt
-   injection quarantine, and high-risk fact approval queues.
-2. **Independent benchmark harness.** Run Lians, mem0, Zep/Graphiti, Hindsight,
-   Supermemory, and Honcho where APIs permit. Separate "tested" from
-   "docs-claimed." → **Shipped:** [docs/regulated-eval-results.md](regulated-eval-results.md)
-   scores the five regulated invariants head-to-head (Lians 5.0 / mem0 1.0 /
-   Zep 2.0). Lians is executed live; competitors are scored from their public API
-   surface via runnable adapters (`agentmem/benchmarks/compare_regulated.py`), and
-   any reader with keys can re-run the live competitor columns.
-3. **Connector proof, not connector sprawl.** Build one finance connector, one
-   healthcare connector, and one legal connector that show the vertical story.
-4. **WORM / immutable storage reference.** SEC 17a-4 buyers will ask for this.
-5. **SSO-to-barrier mapping.** Tie OIDC/SAML groups to namespaces, roles, and
-   barrier groups.
-6. **Regulated memory eval.** A benchmark focused on stale revisions, erasure
-   proof, audit reconstruction, barrier leakage, and lookahead contamination.
+1. **Decision Evidence Envelope export.** Bind decision ID, trace/span IDs,
+   model/prompt/tool/code versions, both temporal cutoffs, included/excluded
+   sources, policy/admission results, leak count, receipt hash, audit root, and
+   erasure state. Export it through OTLP/OpenInference to the observability tools
+   customers already operate.
+2. **Live Evidence Explorer.** Decision → receipt → memory/source navigation,
+   then-vs-now replay, excluded future facts, chain verification, approvals, and
+   signed JSON/PDF/CSV/DSSE exports.
+3. **Independent current benchmark.** Run current Mem0, Graphiti, Hindsight, and
+   Supermemory with public fixtures, configs, container digests, latency, token,
+   and cost evidence. The existing regulated eval is a dated product harness, not
+   independent general-product validation.
+4. **Compatibility Lab v2.** Turn the homelab into a one-command customer sample
+   proof with redaction/synthetic boundaries, reconstruction, receipt, leak,
+   security, and telemetry checks plus a signed pack and SBOM.
+5. **Enterprise trust pack.** OIDC/SAML/SCIM, API-key ABAC, BYOK/KMS, externally
+   anchored WORM evidence, signature rotation, HA/restore proof, and templates for
+   governance and sandbox channels.
+
+### Primary sources for the August 2026 review
+
+- Graphiti bitemporal graph and episode provenance: <https://github.com/getzep/graphiti>
+- Zep security posture: <https://help.getzep.com/security-compliance>
+- Mem0 temporal reasoning: <https://docs.mem0.ai/platform/features/temporal-reasoning>
+- Hindsight recall API and release notes: <https://hindsight.vectorize.io/developer/api/recall>
+- Supermemory graph memory and versioning: <https://supermemory.ai/docs/concepts/graph-memory>
+- Letta memory blocks: <https://docs.letta.com/guides/core-concepts/memory/memory-blocks>
 
 ## Positioning line
 
 Use this in sales and docs:
 
-> Lians is not trying to be every agent's memory app. It is the regulated memory
-> control plane for institutions that must prove what an agent knew, when it knew
-> it, who could access it, and whether it was safe to use.
+> Lians is the decision-evidence layer for teams that must reconstruct what an AI
+> could know at both cutoffs, prove what was excluded, and verify the resulting
+> receipt outside the runtime that produced it.

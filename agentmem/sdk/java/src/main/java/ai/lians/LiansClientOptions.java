@@ -44,7 +44,7 @@ public final class LiansClientOptions {
         private String adminSecret;
         private Duration timeout;
 
-        /** Base URL of the Lians server, e.g. {@code https://api.lians.dev}. */
+        /** Base URL of the Lians server, e.g. {@code https://agentmem-lotus.fly.dev}. */
         public Builder baseUrl(String baseUrl) { this.baseUrl = baseUrl; return this; }
 
         /** API key with the scopes your calls require (read/write/admin). */

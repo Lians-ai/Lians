@@ -6,8 +6,8 @@
 
 # Lians Go SDK
 
-Financial-grade agent memory for Go — bitemporal recall, SEC 17a-4 audit chain,
-GDPR/HIPAA crypto-shred, information barriers, and a relationship graph for
+Financial-grade agent memory for Go — bitemporal recall, a tamper-evident audit chain,
+crypto-shred erasure, information barriers, and a relationship graph for
 conflict-of-interest / related-party / care-network queries.
 
 Standard library only (`net/http` + `encoding/json`), `context`-aware, and safe
@@ -40,7 +40,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	c := lians.NewClient("https://api.lians.dev", os.Getenv("LIANS_API_KEY"),
+	c := lians.NewClient("https://agentmem-lotus.fly.dev", os.Getenv("LIANS_API_KEY"),
 		lians.WithAdminSecret(os.Getenv("LIANS_ADMIN_SECRET"))) // admin secret optional
 
 	// Store a fact with its BUSINESS event-time (not now)

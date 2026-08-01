@@ -269,6 +269,7 @@ jobs:
             --app agentmem-lotus \
             --config fly.toml \
             --image-label "$image_label" \
+            --build-arg "LIANS_BUILD_SHA=$GITHUB_SHA" \
             --remote-only \
             --strategy canary \
             --wait-timeout 10m
@@ -368,7 +369,8 @@ jobs:
       - name: Run public production smoke checks
         run: |
           python scripts/check_production_deployment.py \
-            --base-url https://agentmem-lotus.fly.dev
+            --base-url https://agentmem-lotus.fly.dev \
+            --expected-build-sha "$GITHUB_SHA"
 
       - name: Publish rollback command
         if: always()

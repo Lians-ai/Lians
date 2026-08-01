@@ -58,7 +58,7 @@ result = await client.memory.search(session_id="session-123", text="query")
 from lians import AsyncLiansClient
 from datetime import datetime, timezone
 
-async with AsyncLiansClient(base_url="https://api.lians.dev", api_key="lians_...") as mem:
+async with AsyncLiansClient(base_url="https://agentmem-lotus.fly.dev", api_key="lians_...") as mem:
     await mem.add(
         agent_id="session-123",
         content="...",
@@ -77,7 +77,7 @@ await client.memory.add("session-123", { messages: [...] });
 **Lians (TypeScript):**
 ```typescript
 import { LiansClient } from "@lians-ai/lians";
-const mem = new LiansClient({ baseUrl: "https://api.lians.dev", apiKey: "lians_..." });
+const mem = new LiansClient({ baseUrl: "https://agentmem-lotus.fly.dev", apiKey: "lians_..." });
 await mem.add({ agentId: "session-123", content: "...", eventTime: new Date() });
 ```
 

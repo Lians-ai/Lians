@@ -1,4 +1,4 @@
-"""Fail when a Lians release surface drifts from the canonical VERSION file."""
+"""Fail when a Lians source release-candidate manifest drifts from VERSION."""
 
 from __future__ import annotations
 
@@ -73,7 +73,10 @@ def main() -> int:
         for name, version in drift.items():
             print(f"  {name}: {version}", file=sys.stderr)
         return 1
-    print(f"Lians release contract is synchronized at {EXPECTED}.")
+    print(
+        f"Lians source release contract is synchronized at {EXPECTED}. "
+        "Public registries are verified separately."
+    )
     return 0
 
 

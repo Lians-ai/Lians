@@ -367,40 +367,28 @@ Lians fixes this with a bitemporal model:
 - **event_time** — when the fact happened (business time)
 - **valid_from / valid_to** — when it was known (system time)
 
-Superseded facts are excluded at the database layer. Every write is recorded in a tamper-evident SHA-256 hash chain (SEC 17a-4). Per-subject keys can be destroyed for GDPR erasure while the audit trail survives. Information barriers are enforced at PostgreSQL RLS, not the application layer.
+Superseded facts are excluded at the database layer. Every write is recorded in a tamper-evident SHA-256 hash chain; physical immutability and SEC 17a-4 deployment claims require separately configured WORM storage and policy controls. Per-subject keys can be destroyed for governed erasure while the audit trail survives. Information barriers are enforced at PostgreSQL RLS, not only at the application layer.
 
 ### How Lians compares
 
-The two leading open memory layers each solve part of the problem; Lians is built
-for the regulated case where correctness, access, and auditability are all required
-at once.
+Temporal memory is no longer unique: Graphiti documents a bitemporal knowledge
+graph, Mem0 documents temporal reasoning and history, Hindsight documents
+query-time temporal recall and audit controls, and Supermemory documents content
+versioning and a temporal graph. Lians should be evaluated on the compound
+decision-evidence boundary it implements:
 
-| | Lians | mem0 | Zep / Graphiti |
-|---|---|---|---|
-| **Temporal model** | Bitemporal facts **+ edges** (`event_time`, `valid_from/valid_to`) | ADD-only (v3) — versions coexist | Bitemporal graph edges (`valid_at`/`invalid_at`) |
-| **Stale-fact handling** | Excluded at the DB layer (**0/4** stale in top-5) | Accumulated (**4/4** stale) | Edge invalidation (LLM-driven) |
-| **Supersession** | Deterministic, keyed (**100%** on 22-pair benchmark) | None | LLM-extracted |
-| **Point-in-time recall** | `recall_at` + exhaustive `snapshot` (**4/4**) | ✗ | Partial (graph query) |
-| **Relationship graph** | ✓ bitemporal edges, N-hop, COI/related-party `path` | ✗ | ✓ (its core) |
-| **Graph-proximity rerank** | ✓ `recall_near` (node-distance) | ✗ | ✓ |
-| **SEC 17a-4 audit hash chain** | ✓ `verify_chain` | ✗ | ✗ |
-| **GDPR/HIPAA crypto-shred** (audit survives) | ✓ + erasure certificate | ✗ | ✗ |
-| **Information barriers** (DB-layer RLS) | ✓ on facts **and** edges | ✗ (`user_id` filter) | ✗ (cloud-only) |
-| **Conflict review queue** | ✓ detect + human-resolve + webhook | ✗ | ✗ |
-| **Backtest lookahead-bias proof** | ✓ `backtest_check` | ✗ | ✗ |
-| **Datastore** | Postgres + pgvector (one store) | vector DB | graph DB (Neo4j/FalkorDB) |
-| **Determinism** | Reproducible | extraction-dependent | extraction-dependent |
+- reconstruct a named decision at both event-time and knowledge-time cutoffs;
+- enumerate the source versions included and excluded at those cutoffs;
+- detect post-cutoff leakage before a result is accepted;
+- emit a content-addressed Evidence Pack that can be verified offline; and
+- preserve the surrounding chain when subject content is crypto-erased.
 
-**vs mem0** — mem0's v3 is ADD-only, so revised facts (guidance, rates, doses,
-damages) pile up and contaminate recall; it has no documented encryption-at-rest,
-RBAC, or audit. Lians excludes stale versions deterministically and adds the
-compliance spine. → [docs/compare-mem0.md](docs/compare-mem0.md)
-
-**vs Zep / Graphiti** — Graphiti's knowledge graph is excellent, and Lians now has
-one too (built on Postgres, no graph DB) — but Graphiti by its own docs has *no
-access control, multi-tenancy, audit, or compliance*; Zep only adds those in the
-closed cloud. Lians keeps the graph **and** the open compliance spine.
-→ [docs/compare-zep.md](docs/compare-zep.md)
+The repository's regulated-memory harness is useful product evidence, not an
+independent general-product leaderboard. Current leadership language remains
+gated on production load, isolation, restore, failure-injection, public benchmark,
+and independent-reproduction evidence. See [docs/competitive-landscape.md](docs/competitive-landscape.md)
+and the runnable claim policy in
+[`agentmem/benchmarks/release_claims.py`](agentmem/benchmarks/release_claims.py).
 
 → **Lookahead-bias demo** — the same agent backtest with naive vs point-in-time retrieval (Sharpe 4.6 vs −0.6, every leak logged): [ebeirne/lookahead-bias-demo](https://github.com/ebeirne/lookahead-bias-demo) · [in-repo](demo/lookahead-bias/README.md)
 → Full benchmark numbers: [docs/benchmark.md](docs/benchmark.md)
@@ -410,26 +398,23 @@ closed cloud. Lians keeps the graph **and** the open compliance spine.
 
 ## Language SDKs
 
-Lians ships native SDKs across **five languages** — the widest coverage of any open
-agent-memory layer. mem0 is Python/TypeScript; Zep adds Go. Lians matches all of
-those **and** adds **Java and C**, which neither competitor offers — putting the
-full compliance memory layer where regulated systems actually run: JVM risk
-platforms, and native/low-latency C in trading, market-data, and on-prem
-healthcare/legal stacks.
+Lians maintains client implementations across **five languages**. Public package
+versions currently differ by ecosystem; use the explicit coordinates below and
+verify the machine-readable [published release status](docs/published-release-status.json).
 
 | Language | Install | Client | Docs |
 |----------|---------|--------|------|
-| **Python** | `pip install lians-sdk` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
-| **TypeScript / Node** | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
-| **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
-| **Java** (JVM 11+) | `ai.lians:lians-sdk:0.4.0` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
-| **C** (C99 + libcurl) | `cmake --build build` | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
+| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
+| **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
+| **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
+| **Java 0.4.1** (JVM 11+) | `ai.lians:lians-sdk:0.4.1` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
+| **C 0.4.1** (C99 + libcurl) | build from the `v0.4.1` source tag | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
 
 → **One-page install + 30-second quickstart for every language: [docs/install.md](docs/install.md)**
 
-All five cover the same REST API: recall, point-in-time `recall_at`, snapshot,
-backtest, crypto-shred erasure, audit-chain verify, and the relationship graph
-(`relate` / `neighbors` / `path`).
+All five cover core memory operations. Python and TypeScript currently expose a
+broader advanced surface than Go, Java, and C; verify the client you plan to use
+against the OpenAPI contract before a pilot.
 
 ---
 

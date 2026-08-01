@@ -123,6 +123,7 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
       TEST_DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
       REDIS_URL: redis://localhost:6379/0
+      TEST_REDIS_URL: redis://localhost:6379/0
       EMBEDDING_PROVIDER: local
       MASTER_ENCRYPTION_KEY: ""
       AGENTMEM_ALLOW_UNENCRYPTED: "true"

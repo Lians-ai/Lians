@@ -52,7 +52,7 @@ func WithHTTPClient(h *http.Client) Option {
 
 // NewClient creates a client for the given base URL and API key.
 //
-//	c := lians.NewClient("https://api.lians.dev", os.Getenv("LIANS_API_KEY"),
+//	c := lians.NewClient("https://agentmem-lotus.fly.dev", os.Getenv("LIANS_API_KEY"),
 //	    lians.WithAdminSecret(os.Getenv("LIANS_ADMIN_SECRET")))
 func NewClient(baseURL, apiKey string, opts ...Option) *Client {
 	c := &Client{
@@ -275,7 +275,7 @@ func (c *Client) EraseSubject(ctx context.Context, subjectID, requestRef string)
 	return out, nil
 }
 
-// VerifyChain verifies the SEC 17a-4 tamper-evidence hash chain (requires admin secret).
+// VerifyChain verifies the tamper-evident hash chain (requires admin secret).
 func (c *Client) VerifyChain(ctx context.Context, namespace string) (json.RawMessage, error) {
 	params := url.Values{}
 	params.Set("namespace", namespace)

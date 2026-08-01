@@ -43,7 +43,7 @@ int  lians_global_init(void);
 void lians_global_cleanup(void);
 
 /* Create a client. base_url and api_key are required; admin_secret may be NULL
- * (needed only for /v1/admin/* audit endpoints). Returns NULL on failure. */
+ * (needed only for the /v1/admin/ audit endpoints). Returns NULL on failure. */
 lians_client_t *lians_client_new(const char *base_url, const char *api_key,
                                  const char *admin_secret);
 

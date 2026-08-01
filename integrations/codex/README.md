@@ -1,8 +1,8 @@
 # Lians for Codex
 
 Persistent, financial-grade memory for the [Codex](https://github.com/openai/codex)
-agent — with the compliance guarantees regulated teams need (bitemporal recall,
-SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information barriers).
+agent — with inspectable controls regulated teams can validate (bitemporal recall,
+a tamper-evident audit chain, crypto-shred erasure, and information barriers).
 
 ## Two ways to wire it in
 
@@ -18,7 +18,7 @@ pip install lians-sdk          # or lians-sdk[local] for zero-setup SQLite
 ```
 
 Set `LIANS_URL`, `LIANS_API_KEY`, and `LIANS_AGENT_ID` in your environment (free
-key at [api.lians.dev](https://api.lians.dev)). Local mode needs no env vars.
+key in the [Lians Console](https://www.lians.ai/login)). Local mode needs no env vars.
 
 ### 2. MCP server (native tools)
 

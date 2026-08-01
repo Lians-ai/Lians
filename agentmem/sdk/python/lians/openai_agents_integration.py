@@ -99,7 +99,7 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
         for an earnings call on May 10.
 
         The memory is stored with AES-256-GCM encryption and written to a SHA-256
-        tamper-evident audit chain (SEC 17a-4 compliant). If a newer value for the
+        tamper-evident audit chain. If a newer value for the
         same entity+attribute already exists, this fact will be marked as superseded
         automatically, so default recall returns the current truth.
 

@@ -13,8 +13,8 @@ args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
 
 [mcp_servers.lians.env]
 # Point at the managed cloud (free tier) or your self-hosted server.
-LIANS_URL = "https://api.lians.dev"
-# Get a free key at api.lians.dev, or use your self-hosted key.
+LIANS_URL = "https://agentmem-lotus.fly.dev"
+# Create a key at https://www.lians.ai/login, or use your self-hosted key.
 LIANS_API_KEY = "lians_..."
 # Memory namespace for this agent/session.
 LIANS_AGENT_ID = "codex-session"

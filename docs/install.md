@@ -1,8 +1,8 @@
 # Install Lians
 
-One memory API, five native SDKs, and a self-hostable server. Pick your language —
-every client speaks the same REST API (recall, point-in-time `recall_at`, snapshot,
-backtest, crypto-shred erasure, audit-chain verify, relationship graph).
+One memory API, five client implementations, and a self-hostable server. Pick your
+language for the core memory contract; advanced decision-evidence, learning, and
+webhook coverage currently varies by client.
 
 > **Just want to try it?** The fastest path is Python local mode — no server, no
 > Docker, no API key:
@@ -14,14 +14,16 @@ backtest, crypto-shred erasure, audit-chain verify, relationship graph).
 
 | Language | Install | Import / entry point |
 |----------|---------|----------------------|
-| **Python** | `pip install lians-sdk` | `from lians import LiansClient` |
-| **Python (local, no server)** | `pip install lians-sdk[local]` | `from lians import LocalLiansClient` |
-| **TypeScript / Node** | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` |
-| **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.0` | `lians.NewClient(url, key)` |
-| **Java** (JVM 11+) | Maven `ai.lians:lians-sdk:0.4.0` | `new LiansClient(opts)` |
-| **C** (C99 + libcurl) | `cmake -B build && cmake --build build` | `lians_client_new(...)` |
+| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` |
+| **Python 0.4.2 (local, no server)** | `pip install "lians-sdk[local]==0.4.2"` | `from lians import LocalLiansClient` |
+| **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` |
+| **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` |
+| **Java 0.4.1** (JVM 11+) | Maven `ai.lians:lians-sdk:0.4.1` | `new LiansClient(opts)` |
+| **C 0.4.1** (C99 + libcurl) | check out `v0.4.1`, then `cmake -S agentmem/sdk/c -B build` | `lians_client_new(...)` |
 
-All SDKs are released in lock-step at the **same version** (currently `0.4.0`).
+Published versions currently differ by ecosystem. The exact registry state is
+tracked in [`published-release-status.json`](published-release-status.json) and
+can be checked with `python scripts/check_published_artifacts.py` from the repo root.
 
 ## Run the server
 
@@ -82,7 +84,7 @@ _, _ = c.AddMemory(ctx, lians.AddMemoryRequest{
 <dependency>
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.4.0</version>
+  <version>0.4.1</version>
 </dependency>
 ```
 ```java
@@ -116,9 +118,12 @@ pip install lians-sdk[all]          # everything
 ## Verify a release
 
 ```bash
-pip install lians-sdk==0.4.0
+pip install lians-sdk==0.4.2
 npm view @lians-ai/lians version
-go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.0
+go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1
+curl -fsSL https://repo1.maven.org/maven2/ai/lians/lians-sdk/maven-metadata.xml
+python scripts/check_published_artifacts.py
 ```
 
-Maintainers: see [RELEASING.md](../RELEASING.md) — one `vX.Y.Z` tag ships all five.
+Maintainers: see [RELEASING.md](../RELEASING.md). A tag starts the release train;
+do not call it complete until every registry check passes.

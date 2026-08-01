@@ -1,6 +1,46 @@
 # Changelog
 
-All notable changes to Lians. Versions follow semver; SDKs are released in lock-step.
+All notable changes to Lians. Versions follow semver. Source manifests are kept
+synchronized for a release candidate, but public registries are verified
+independently and may differ when a publisher fails. See
+[`docs/published-release-status.json`](docs/published-release-status.json) for the
+current distribution truth.
+
+## Unreleased — source manifests at 0.5.0
+
+The `0.5.0` source version is not a published-release claim. Do not advertise or
+install `0.5.0` until the release checklist verifies PyPI, npm, Go, Maven, the C
+asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
+
+### Added
+- Decision Envelopes, completeness grades, signed Evidence Packs, and offline
+  verification for point-in-time decision reconstruction.
+- RIAD-1 reconstruction gates covering historical state, future-leak detection,
+  revision handling, and receipt verification.
+- Adaptive recall modes, governed feedback learning, correction lineage,
+  scheduled maintenance, and memory-intelligence metrics.
+- Content-addressed `/version` deployment evidence plus a checked-in public
+  release matrix and live registry verifier.
+
+### Changed
+- Versioned audit payload hashing and stronger production deployment gates.
+- Runtime, webhook, artifact, and workflow security hardening.
+- Runtime Docker contexts now exclude nested dependency/build trees; the test
+  harness accepts an explicit `TEST_REDIS_URL` for isolated local and CI runs.
+
+## 0.4.2 — 2026-07-18 (Python SDK only)
+
+- Published `lians-sdk` with real local semantic embeddings included in the
+  `[local]` and `[mcp]` installation paths. Other ecosystems remained on their
+  previously published versions.
+
+## 0.4.1 — 2026-07-17
+
+- Corrected the Java group to `ai.lians` and published Java 0.4.1 to Maven
+  Central, Go 0.4.1 to the module proxy, C 0.4.1 as a GitHub release asset, and
+  MCP manifest/container 0.4.1.
+- Shipped lifecycle, recall-quality, local-MCP, packaging, and benchmark fixes.
+- npm remained at 0.4.0 after the 0.4.1 publisher authorization failure.
 
 ## 0.4.0 — 2026-07-06
 

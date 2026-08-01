@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import ssl
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
+
+SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+
 
 @dataclass(frozen=True)
 class Response:
@@ -77,7 +83,38 @@ def validate_hidden(response: Response, label: str) -> None:
         raise RuntimeError(f"{label} was publicly exposed with HTTP {response.status}")
 
 
-def run(base_url: str, *, health_only: bool = False) -> dict[str, Any]:
+def validate_version(response: Response, expected_build_sha: str | None = None) -> dict[str, str]:
+    if response.status != 200:
+        raise RuntimeError(f"Version endpoint returned HTTP {response.status}")
+    payload = json_body(response, "Version endpoint")
+    if payload.get("schema") != "lians.deployment-evidence.v1":
+        raise RuntimeError("Version endpoint returned an unsupported evidence schema")
+    version = str(payload.get("version", ""))
+    build_sha = str(payload.get("build_sha", ""))
+    openapi_sha256 = str(payload.get("openapi_sha256", ""))
+    if not SEMVER.fullmatch(version):
+        raise RuntimeError("Version endpoint returned an invalid source version")
+    if not GIT_SHA.fullmatch(build_sha):
+        raise RuntimeError("Version endpoint did not expose an exact build commit")
+    if not SHA256.fullmatch(openapi_sha256):
+        raise RuntimeError("Version endpoint returned an invalid OpenAPI digest")
+    if expected_build_sha and build_sha != expected_build_sha.lower():
+        raise RuntimeError(
+            f"deployed build {build_sha} does not match expected {expected_build_sha.lower()}"
+        )
+    return {
+        "version": version,
+        "build_sha": build_sha,
+        "openapi_sha256": openapi_sha256,
+    }
+
+
+def run(
+    base_url: str,
+    *,
+    health_only: bool = False,
+    expected_build_sha: str | None = None,
+) -> dict[str, Any]:
     normalized = validate_base_url(base_url)
     live = request(normalized, "/livez")
     if live.status != 200 or json_body(live, "Liveness").get("status") != "alive":
@@ -93,6 +130,10 @@ def run(base_url: str, *, health_only: bool = False) -> dict[str, Any]:
         "readiness": "ok",
     }
     if not health_only:
+        deployment = validate_version(
+            request(normalized, "/version"),
+            expected_build_sha,
+        )
         validate_hidden(request(normalized, "/docs"), "Docs")
         validate_hidden(request(normalized, "/openapi.json"), "OpenAPI")
         protected = request(normalized, "/v1/decision-envelopes")
@@ -102,6 +143,7 @@ def run(base_url: str, *, health_only: bool = False) -> dict[str, Any]:
             )
         result["authentication_boundary"] = "ok"
         result["documentation_boundary"] = "ok"
+        result["deployment_evidence"] = deployment
     return result
 
 
@@ -109,12 +151,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--health-only", action="store_true")
+    parser.add_argument("--expected-build-sha")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    print(json.dumps(run(args.base_url, health_only=args.health_only), sort_keys=True))
+    result = run(
+        args.base_url,
+        health_only=args.health_only,
+        expected_build_sha=args.expected_build_sha,
+    )
+    print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":

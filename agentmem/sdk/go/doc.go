@@ -3,7 +3,7 @@
 // Lians is built for regulated environments (financial institutions, healthcare,
 // legal). Unlike a plain vector store it uses a bitemporal model — superseded
 // facts are excluded at the database layer, every write lands in a tamper-evident
-// SHA-256 audit chain (SEC 17a-4), per-subject keys give GDPR/HIPAA crypto-shred,
+// SHA-256 tamper-evident audit chain, per-subject keys support crypto-shred erasure,
 // and information barriers are enforced at PostgreSQL row-level security. It also
 // exposes a bitemporal relationship graph for conflict-of-interest / related-party
 // / care-network reachability queries.
@@ -11,7 +11,7 @@
 // The client uses only the standard library (net/http, encoding/json) and is safe
 // for concurrent use. Every method takes a context.Context.
 //
-//	c := lians.NewClient("https://api.lians.dev", os.Getenv("LIANS_API_KEY"))
+//	c := lians.NewClient("https://agentmem-lotus.fly.dev", os.Getenv("LIANS_API_KEY"))
 //
 //	_, err := c.AddMemory(ctx, lians.AddMemoryRequest{
 //	    AgentID:   "equity-desk",

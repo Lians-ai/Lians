@@ -9,7 +9,7 @@ Lians is a **financial-grade memory layer for AI agents**. It solves the stale-f
 Key capabilities:
 - **Bitemporal facts** — `event_time` (when it happened) + `valid_from/valid_to` (when we knew it)
 - **Supersession pipeline** — three-stage detection (metadata overlap → deterministic rules → optional LLM)
-- **Tamper-evident audit chain** — SHA-256 hash chain on every write (SEC 17a-4)
+- **Tamper-evident audit chain** — SHA-256 hash chain on every write; SEC 17a-4 deployments additionally require configured WORM storage and policy controls
 - **GDPR crypto-shred** — per-subject AES-256-GCM keys; destroy key = content unrecoverable
 - **Information barriers** — PostgreSQL RLS enforced at the DB layer, not application layer
 - **Backtest contamination detection** — flags lookahead bias before a backtest runs

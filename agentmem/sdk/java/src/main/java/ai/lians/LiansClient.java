@@ -24,15 +24,15 @@ import java.util.Map;
  * <p>Lians is a memory layer for AI agents built for regulated environments
  * (financial institutions, healthcare, legal). Unlike a plain vector store it
  * uses a bitemporal model — superseded facts are excluded at the database layer,
- * every write lands in a tamper-evident SHA-256 audit chain (SEC 17a-4),
- * per-subject keys give GDPR/HIPAA crypto-shred, and information barriers are
+ * every write lands in a tamper-evident SHA-256 audit chain,
+ * per-subject keys support crypto-shred erasure, and information barriers are
  * enforced at PostgreSQL row-level security. It also exposes a bitemporal
  * relationship graph for conflict-of-interest / related-party / care-network
  * reachability queries.
  *
  * <pre>{@code
  * LiansClient client = new LiansClient(LiansClientOptions.builder()
- *     .baseUrl("https://api.lians.dev")
+ *     .baseUrl("https://agentmem-lotus.fly.dev")
  *     .apiKey(System.getenv("LIANS_API_KEY"))
  *     .build());
  *
@@ -267,7 +267,7 @@ public final class LiansClient {
 
     // ── Admin / audit chain ───────────────────────────────────────────────────
 
-    /** Verify the SEC 17a-4 tamper-evidence hash chain (requires admin secret). */
+    /** Verify the tamper-evident hash chain (requires admin secret). */
     public JsonNode verifyChain(String namespace) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("namespace", namespace);

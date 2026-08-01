@@ -2,7 +2,7 @@
  * Lians C SDK example.
  *
  * Build:  cmake -B build && cmake --build build
- * Run:    LIANS_URL=https://api.lians.dev LIANS_API_KEY=lians_... ./build/lians_example
+ * Run:    LIANS_URL=https://agentmem-lotus.fly.dev LIANS_API_KEY=lians_... ./build/lians_example
  */
 #include "lians.h"
 

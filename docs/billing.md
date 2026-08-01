@@ -80,7 +80,7 @@ import { Webhook } from "svix"
 import { clerkClient } from "@clerk/nextjs/server"
 import { TIER_SCOPES } from "@/lib/lians-tiers"
 
-const LIANS_API = process.env.LIANS_API_URL          // e.g. https://api.lians.dev
+const LIANS_API = process.env.LIANS_API_URL          // e.g. https://agentmem-lotus.fly.dev
 const ADMIN_SECRET = process.env.LIANS_ADMIN_SECRET  // admin_secret from lians config
 
 export async function POST(req: Request) {
@@ -417,7 +417,7 @@ STRIPE_API_KEY=sk_live_...
 ADMIN_SECRET=your-admin-secret
 
 # your website
-LIANS_API_URL=https://api.lians.dev
+LIANS_API_URL=https://agentmem-lotus.fly.dev
 LIANS_ADMIN_SECRET=your-admin-secret     # same value as ADMIN_SECRET above
 CLERK_WEBHOOK_SECRET=whsec_...           # from Clerk dashboard → Webhooks
 ```

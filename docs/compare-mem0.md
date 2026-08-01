@@ -1,5 +1,11 @@
 # Lians vs mem0 — quality & access for regulated work
 
+> **Current-reading notice (2026-08-01):** this comparison contains a frozen
+> June/July snapshot. Mem0 v3 now documents temporal reasoning, as-of queries, and
+> memory history. Treat older absence claims below as historical, verify the
+> current official docs, and compare Lians on its compound decision-evidence
+> envelope rather than temporal memory alone.
+
 mem0 is a strong, popular general-purpose memory layer for AI agents. Lians is
 built for a narrower, harder problem: memory in **regulated environments** —
 financial institutions, healthcare, and legal firms — where a stale fact is not a
