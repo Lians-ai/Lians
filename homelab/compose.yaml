@@ -115,7 +115,7 @@ services:
       # Internal runtime spans use Alloy's trace-only pipeline. They never fan
       # back into Lians, preventing an instrumentation feedback loop.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:14317
-      RATE_LIMIT_PER_MINUTE: "3000"
+      RATE_LIMIT_PER_MINUTE: ${LAB_RATE_LIMIT_PER_MINUTE:-3000}
       EXPOSE_HEALTH_DETAILS: "true"
     ports:
       - "127.0.0.1:8001:8000"
@@ -347,6 +347,37 @@ services:
         condition: service_healthy
     networks: [telemetry]
     profiles: [tools]
+    restart: "no"
+    logging: *default-logging
+
+  bulk-ingest:
+    build: *workload-build
+    command: ["python", "bulk_ingest.py"]
+    environment:
+      LIANS_URL: http://lians:8000
+      STATE_DIR: /state
+      ARTIFACTS_DIR: /artifacts
+      DATASET_PATH: /dataset/input.ndjson
+      LAB_DATASET_POLICY_ACK: ${LAB_DATASET_POLICY_ACK:-}
+      LAB_SCALE_PROFILE: ${LAB_SCALE_PROFILE:-laptop}
+      LAB_BULK_CONCURRENCY: ${LAB_BULK_CONCURRENCY:-4}
+      LAB_DATASET_MAX_RECORDS: ${LAB_DATASET_MAX_RECORDS:-100000}
+      LAB_DATASET_MAX_BYTES: ${LAB_DATASET_MAX_BYTES:-536870912}
+      LAB_DATASET_MAX_LINE_BYTES: ${LAB_DATASET_MAX_LINE_BYTES:-16384}
+      LAB_BULK_REQUEST_TIMEOUT_SECONDS: ${LAB_BULK_REQUEST_TIMEOUT_SECONDS:-15}
+      LAB_GIT_COMMIT: ${LAB_GIT_COMMIT:-unrecorded}
+    volumes:
+      - lab-state:/state:ro
+      - ./artifacts:/artifacts
+      - type: bind
+        source: ${LAB_DATASET_FILE:-./datasets/default.ndjson}
+        target: /dataset/input.ndjson
+        read_only: true
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    networks: [telemetry]
+    profiles: [bulk]
     restart: "no"
     logging: *default-logging
 

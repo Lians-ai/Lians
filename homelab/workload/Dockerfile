@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY common.py scenario.py bootstrap.py runner.py verify.py ./
+COPY common.py scenario.py dataset.py bulk_ingest.py bootstrap.py runner.py verify.py ./
 
 RUN pip install --no-cache-dir "cryptography==48.0.1"
 

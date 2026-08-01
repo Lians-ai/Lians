@@ -65,3 +65,4 @@ homelab/.state/
 homelab/artifacts/
 homelab/.env
 homelab/samples/*.local.json
+homelab/datasets/*.local.ndjson

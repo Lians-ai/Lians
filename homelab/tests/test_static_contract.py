@@ -127,6 +127,61 @@ class HomelabStaticContract(unittest.TestCase):
         self.assertIn(".local.json", scenario)
         self.assertIn("proof_sample == mounted_sample.manifest", verifier)
 
+    def test_streaming_integration_lab_is_bounded_and_versioned(self):
+        compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
+        powershell = (LAB / "lab.ps1").read_text(encoding="utf-8")
+        shell = (LAB / "lab.sh").read_text(encoding="utf-8")
+        dataset = (LAB / "workload/dataset.py").read_text(encoding="utf-8")
+        bulk = (LAB / "workload/bulk_ingest.py").read_text(encoding="utf-8")
+        workload_image = (LAB / "workload/Dockerfile").read_text(encoding="utf-8")
+        catalog = json.loads((LAB / "integrations/catalog.json").read_text(encoding="utf-8"))
+        gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+        bulk_block = compose.split("  bulk-ingest:", 1)[1].split("\nnetworks:", 1)[0]
+        self.assertIn("profiles: [bulk]", bulk_block)
+        self.assertIn("source: ${LAB_DATASET_FILE:-./datasets/default.ndjson}", bulk_block)
+        self.assertIn("target: /dataset/input.ndjson", bulk_block)
+        self.assertIn("read_only: true", bulk_block)
+        self.assertIn("lab-state:/state:ro", bulk_block)
+        self.assertIn("LAB_DATASET_MAX_RECORDS", bulk_block)
+        self.assertIn("LAB_BULK_CONCURRENCY", bulk_block)
+        self.assertIn("RATE_LIMIT_PER_MINUTE: ${LAB_RATE_LIMIT_PER_MINUTE:-3000}", compose)
+
+        for launcher in (powershell, shell):
+            for command in (
+                "list-integrations",
+                "check-dataset",
+                "generate-dataset",
+                "ingest-dataset",
+                "capacity-report",
+            ):
+                self.assertIn(command, launcher)
+            self.assertIn("LAB_DATASET_POLICY_ACK", launcher)
+            self.assertIn("latest-capacity-receipt.json", launcher)
+
+        self.assertIn("preflight_dataset", bulk)
+        self.assertIn("iter_dataset_records", bulk)
+        self.assertIn("ThreadPoolExecutor", bulk)
+        self.assertIn("LatencyHistogram", bulk)
+        self.assertIn("dataset changed", dataset)
+        self.assertIn("dataset.py", workload_image)
+        self.assertIn("bulk_ingest.py", workload_image)
+        self.assertIn("homelab/datasets/*.local.ndjson", gitignore)
+        self.assertIn("homelab/datasets/*.local.ndjson", dockerignore)
+        self.assertIn("homelab/samples/*.local.json", dockerignore)
+
+        integrations = {item["id"]: item for item in catalog["integrations"]}
+        self.assertEqual(
+            set(integrations), {"grafana", "otlp", "scenario-json", "memory-ndjson"}
+        )
+        self.assertEqual(integrations["memory-ndjson"]["status"], "local-lab")
+        for name in ("laptop", "workstation", "dedicated"):
+            profile = (LAB / f"profiles/{name}.env").read_text(encoding="utf-8")
+            self.assertIn(f"LAB_SCALE_PROFILE={name}", profile)
+            self.assertIn("LAB_DATASET_MAX_RECORDS=", profile)
+            self.assertIn("LAB_DATASET_MAX_BYTES=", profile)
+
     def test_homelab_requires_signed_offline_verifiable_evidence(self):
         compose = (LAB / "compose.yaml").read_text(encoding="utf-8")
         powershell = (LAB / "lab.ps1").read_text(encoding="utf-8")

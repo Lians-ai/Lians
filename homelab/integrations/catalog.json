@@ -1,0 +1,41 @@
+{
+  "$schema": "https://lians.ai/schemas/homelab-integration-catalog/v1",
+  "integrations": [
+    {
+      "id": "grafana",
+      "name": "Grafana observability",
+      "status": "verified",
+      "input": "Prometheus metrics, OpenTelemetry traces, and Docker logs",
+      "command": "lab.ps1 up",
+      "proof": "artifacts/latest-receipt.json",
+      "spec": "specs/001-grafana-local-proof.md"
+    },
+    {
+      "id": "otlp",
+      "name": "OpenTelemetry ingest",
+      "status": "verified",
+      "input": "OTLP/gRPC on 127.0.0.1:4317 or OTLP/HTTP on 127.0.0.1:4318",
+      "command": "lab.ps1 up",
+      "proof": "artifacts/latest-receipt.json",
+      "spec": "specs/001-grafana-local-proof.md"
+    },
+    {
+      "id": "scenario-json",
+      "name": "Bounded decision scenario",
+      "status": "verified",
+      "input": "homelab-sample/v1 JSON",
+      "command": "lab.ps1 check-sample -SamplePath samples/default.json",
+      "proof": "artifacts/latest-receipt.json",
+      "spec": "specs/002-customer-run-sample.md"
+    },
+    {
+      "id": "memory-ndjson",
+      "name": "Streaming memory dataset",
+      "status": "local-lab",
+      "input": "homelab-dataset/v1 NDJSON",
+      "command": "lab.ps1 ingest-dataset -DatasetPath datasets/default.ndjson",
+      "proof": "artifacts/latest-capacity-receipt.json",
+      "spec": "specs/003-streaming-integration-dataset.md"
+    }
+  ]
+}

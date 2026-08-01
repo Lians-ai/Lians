@@ -1,9 +1,10 @@
 # Lians integration homelab
 
-The homelab is an executable, local “enterprise-in-a-box” environment for
-integration discovery, partner demos, operational learning, and safe failure
-experiments. It exercises the real Lians API and decision-evidence model; it is
-not a slideware mock.
+The homelab is an executable, plug-and-play integrations lab for partner demos,
+compatibility discovery, operational learning, and safe failure experiments. It
+exercises the real Lians API and decision-evidence model; it is not a slideware
+mock. The default remains a laptop-sized proof, while an optional streaming path
+can measure a larger local dataset without treating a demo as production.
 
 The first proof target is Grafana. A synthetic risk agent recalls governed
 memory, emits a standard OpenTelemetry trace, and seals a Lians Decision
@@ -72,6 +73,7 @@ Useful commands:
 
 ```powershell
 .\lab.ps1 status
+.\lab.ps1 list-integrations
 .\lab.ps1 verify
 .\lab.ps1 report      # print the latest sanitized evidence receipt
 .\lab.ps1 logs
@@ -136,6 +138,58 @@ classification, and counts. They exclude `agent_id`, `subject_id`, query,
 outcome, reason codes, recall-filter names and values, and memory content,
 timestamps, sources, metadata, and importance values.
 
+## Stream a larger compatibility dataset
+
+The NDJSON path answers a different question from the ten-memory decision
+scenario: “Can this exact data shape pass Lians' local memory API, and what did
+this host actually process?” It validates the entire file before the first API
+write, then reads it again through a bounded worker queue. It never loads the
+complete dataset into memory.
+
+Start with the checked-in synthetic fixture:
+
+```powershell
+.\lab.ps1 check-dataset -DatasetPath .\datasets\default.ndjson
+.\lab.ps1 ingest-dataset -DatasetPath .\datasets\default.ndjson -ScaleProfile laptop
+.\lab.ps1 capacity-report
+```
+
+Generate an ignored synthetic fixture when a partner needs more volume:
+
+```powershell
+.\lab.ps1 generate-dataset -DatasetPath .\datasets\partner-shape.local.ndjson -Records 10000
+.\lab.ps1 ingest-dataset -DatasetPath .\datasets\partner-shape.local.ndjson -ScaleProfile laptop
+```
+
+Linux/macOS uses `--dataset FILE`, `--records N`, and
+`--scale-profile laptop|workstation|dedicated` with the same `lab.sh` command
+names. Add `-AcceptSamplePolicy` / `--accept-sample-policy` only for a file that
+declares itself already de-identified. The acknowledgement does not transform,
+authorize, or anonymize data.
+
+Each versioned profile is a safety envelope, not advertised throughput:
+
+| Profile | Bounded workers | Hard record ceiling | Intended host |
+|---|---:|---:|---|
+| `laptop` | 4 | 100,000 | Current developer machine and partner walkthroughs |
+| `workstation` | 16 | 1,000,000 | 32–64 GB single node after laptop measurements |
+| `dedicated` | 32 | 10,000,000 | Dedicated host after a written acceptance target |
+
+Byte, line-size, timeout, rate-limit, and record ceilings live under
+[`profiles/`](profiles/). Actual results depend on the host, dataset shape, disk,
+and build. `artifacts/latest-capacity-receipt.json` records exact counts, elapsed
+time, observed records per second, p50/p95/p99 request latency, the selected
+profile, dataset hash, and Git revision. It excludes the agent ID and every raw
+record field. A failed request is counted; it is never quietly described as
+compatible.
+
+Repository-local custom datasets must be direct
+`homelab/datasets/*.local.ndjson` files, which Git ignores. External resolved
+files are also allowed. Input is mounted read-only and processed only on the
+local Docker host, but derived memory state remains in the lab volumes until
+`dispose` runs. The scanner is a guardrail, not DLP or a general source-system
+adapter.
+
 ## Five-minute partner walkthrough
 
 1. Open the provisioned Grafana dashboard and select a synthetic partner trace
@@ -182,7 +236,9 @@ Every new partner starts from [`specs/TEMPLATE.md`](specs/TEMPLATE.md):
 The implemented Grafana slice is specified in
 [`specs/001-grafana-local-proof.md`](specs/001-grafana-local-proof.md), and the
 customer-run input boundary is specified in
-[`specs/002-customer-run-sample.md`](specs/002-customer-run-sample.md).
+[`specs/002-customer-run-sample.md`](specs/002-customer-run-sample.md). Larger
+bounded intake is specified in
+[`specs/003-streaming-integration-dataset.md`](specs/003-streaming-integration-dataset.md).
 Architecture choices are recorded under [`adrs/`](adrs/), and recovery exercises
 live under [`runbooks/`](runbooks/).
 
@@ -208,23 +264,35 @@ live under [`runbooks/`](runbooks/).
 ## Hardware path
 
 Start with the machine you already own. The current lightweight stack needs no
-GPU and is the right place to learn what partners actually ask for.
+GPU and is the right place to learn what partners actually ask for. On the
+16 GB Windows reference laptop, the full nine-container stack has passed under
+a 4 GB WSL cap and uses roughly 1.6 GiB at steady state. A WSL
+`0x800705aa` failure occurred under severe host-memory pressure, so freeing host
+RAM and allocating Docker/WSL 6–8 GB is the first move—not buying a server.
 
-| Stage | Practical target | Use |
-|---|---|---|
-| Laptop MVP | 8 cores, 16 GB RAM, 100+ GB free | Build, smoke tests, screen-shared demos |
-| Polished single node | 8–16 cores, 32–64 GB RAM, 2 TB NVMe, UPS | Real embeddings, longer retention, outage drills |
-| Three-node lab | 3 × 8 cores / 32 GB / 1 TB, 2.5 GbE | Only when a partner needs node-loss, HA, or Kubernetes proof |
+| Measured trigger | Next investment |
+|---|---|
+| Default proof and 10k-record intake pass | Buy nothing; keep the laptop profile |
+| Builds contend with the IDE/browser or real embeddings page heavily | Upgrade host RAM to 32 GB |
+| Multi-day fixtures or telemetry exhaust local storage | Add NVMe capacity and explicit retention limits |
+| A written single-host throughput/soak target repeatedly fails | Price a 32–64 GB dedicated workstation |
+| A partner requires node-loss, HA, or Kubernetes evidence | Specify a multi-node lab for that proof only |
+| A partner requires local generative-model inference | Evaluate the model's GPU requirement separately |
 
-Do not buy a GPU for this MVP. Add a 16 GB-class GPU only if a customer scenario
-specifically requires local generative-model inference; Lians itself does not.
+Do not buy a GPU for this MVP. Lians' deterministic lab profile is CPU-only.
+Capacity receipts should decide the next purchase, not a theoretical maximum
+dataset size.
 
 ## Next graduation gates
 
 - Create a restricted, `NOBYPASSRLS` application database role; migrations keep
   a separate owner role.
-- Add bounded k6 load scenarios and report measured p50/p95/p99, not theoretical
-  capacity.
+- Define dataset-level idempotency for `/v1/memories/batch` before switching the
+  lab from per-record writes to a higher-throughput batch transport.
+- Add a shared metrics strategy before adding API workers or replicas; the
+  single-worker demo topology is deliberate today.
+- Add bounded mixed write/recall and soak scenarios; continue reporting measured
+  p50/p95/p99 rather than theoretical capacity.
 - Add automated collector, Redis, and Grafana outage drills.
 - Correlate JSON logs with trace/span IDs and automatically scan telemetry for
   prohibited content.
