@@ -87,8 +87,13 @@ jobs:
     needs: contract
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      LIANS_HOMELAB_ENV: ${{ runner.temp }}/lians-homelab.env
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Bootstrap the ephemeral lab environment
+        run: python3 homelab/env_bootstrap.py homelab/.env.example "$LIANS_HOMELAB_ENV"
 
       - name: Match artifact ownership to the runner
         run: |
@@ -100,7 +105,7 @@ jobs:
           LAB_GIT_COMMIT: ${{ github.sha }}
         run: >-
           docker compose
-          --env-file homelab/.env.example
+          --env-file "$LIANS_HOMELAB_ENV"
           -f homelab/compose.yaml
           up --build -d
 
@@ -109,7 +114,7 @@ jobs:
           LAB_GIT_COMMIT: ${{ github.sha }}
         run: >-
           docker compose
-          --env-file homelab/.env.example
+          --env-file "$LIANS_HOMELAB_ENV"
           -f homelab/compose.yaml
           --profile tools run --rm verify
 
@@ -117,7 +122,7 @@ jobs:
         if: failure()
         run: >-
           docker compose
-          --env-file homelab/.env.example
+          --env-file "$LIANS_HOMELAB_ENV"
           -f homelab/compose.yaml
           logs --no-color --tail 300
 
@@ -132,6 +137,6 @@ jobs:
         if: always()
         run: >-
           docker compose
-          --env-file homelab/.env.example
+          --env-file "$LIANS_HOMELAB_ENV"
           -f homelab/compose.yaml
           down --volumes --remove-orphans
