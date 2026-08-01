@@ -49,6 +49,9 @@ class TestRecall:
             out = h.recall("NVDA revenue guidance")
             assert out and isinstance(out[0], RecalledMemory)
             assert "NVDA" in out[0].content
+            assert out[0].score is not None
+            assert out[0].score_breakdown is not None
+            assert out[0].score == out[0].score_breakdown["final_score"]
 
     def test_recall_context_renders_block(self):
         with LocalLiansClient() as mem:

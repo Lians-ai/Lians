@@ -105,6 +105,8 @@ class RecalledMemory:
     importance: float = 0.5
     source: Optional[str] = None
     id: Optional[str] = None
+    score: Optional[float] = None
+    score_breakdown: Optional[dict[str, Any]] = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "RecalledMemory":
@@ -115,6 +117,8 @@ class RecalledMemory:
             importance=raw.get("importance", 0.5),
             source=raw.get("source"),
             id=str(raw["id"]) if raw.get("id") is not None else None,
+            score=raw.get("score"),
+            score_breakdown=raw.get("score_breakdown"),
         )
 
 

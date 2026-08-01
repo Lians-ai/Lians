@@ -4,6 +4,7 @@ export type {
   LiansClientOptions,
   MemoryAdd,
   MemoryOut,
+  MemoryScoreBreakdown,
   MemoryBatchResult,
   MessageIngestRequest,
   RecallRequest,
