@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      LIANS_HOMELAB_ENV: ${{ runner.temp }}/lians-homelab.env
+      LIANS_HOMELAB_ENV: homelab/.env.ci
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
