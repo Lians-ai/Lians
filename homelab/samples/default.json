@@ -1,0 +1,49 @@
+{
+  "$schema": "https://lians.ai/schemas/homelab-sample/v1",
+  "classification": "synthetic",
+  "scenario_id": "lending-policy-revision",
+  "agent_id": "risk-demo",
+  "decision_type": "counterparty_exposure_review",
+  "subject_id": "SYNTHETIC-COUNTERPARTY-001",
+  "query": "What is the current synthetic counterparty exposure limit and why was it revised?",
+  "outcome": "approve_with_usd_35m_limit",
+  "reason_codes": [
+    "POLICY_LIMIT_REVISED",
+    "VOLATILITY_REVIEW"
+  ],
+  "recall_filters": {
+    "entity": "SYNTHETIC-COUNTERPARTY-001",
+    "metric": "counterparty_exposure_limit"
+  },
+  "expected_marker": "USD 35 million",
+  "memories": [
+    {
+      "idempotency_key": "synthetic-exposure-limit-r1",
+      "content": "Synthetic counterparty exposure limit is USD 50 million for 2026 Q3 under risk policy v1.",
+      "event_time": "2026-07-01T12:00:00Z",
+      "source": "sample://synthetic-risk-engine/policy-feed",
+      "metadata": {
+        "entity": "SYNTHETIC-COUNTERPARTY-001",
+        "metric": "counterparty_exposure_limit",
+        "period": "2026-Q3",
+        "currency": "USD",
+        "revision": 1
+      },
+      "importance": 0.9
+    },
+    {
+      "idempotency_key": "synthetic-exposure-limit-r2",
+      "content": "Synthetic counterparty exposure limit revised to USD 35 million for 2026 Q3 under risk policy v2 after the volatility review.",
+      "event_time": "2026-07-15T12:00:00Z",
+      "source": "sample://synthetic-risk-engine/policy-feed",
+      "metadata": {
+        "entity": "SYNTHETIC-COUNTERPARTY-001",
+        "metric": "counterparty_exposure_limit",
+        "period": "2026-Q3",
+        "currency": "USD",
+        "revision": 2
+      },
+      "importance": 0.95
+    }
+  ]
+}

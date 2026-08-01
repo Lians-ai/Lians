@@ -1,0 +1,4 @@
+{"$schema":"https://lians.ai/schemas/homelab-dataset/v1","classification":"synthetic","dataset_id":"lians-integration-demo-v1","agent_id":"integration-lab"}
+{"content":"Synthetic lending policy memory: verify income evidence before a final approval.","event_time":"2026-01-01T09:00:00Z","source":"dataset://synthetic/default","metadata":{"domain":"lending","policy_version":"v1","sequence":1},"importance":0.8}
+{"content":"Synthetic lending policy memory: escalate a material affordability exception for review.","event_time":"2026-01-01T09:00:01Z","source":"dataset://synthetic/default","metadata":{"domain":"lending","policy_version":"v1","sequence":2},"importance":0.8}
+{"content":"Synthetic lending policy memory: preserve the evidence references used for the decision.","event_time":"2026-01-01T09:00:02Z","source":"dataset://synthetic/default","metadata":{"domain":"lending","policy_version":"v1","sequence":3},"importance":0.8}

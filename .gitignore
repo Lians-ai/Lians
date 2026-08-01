@@ -59,3 +59,10 @@ agentmem/sdk/typescript/live_smoke.mjs
 # Benchmark artifacts (regenerable; checkpoint DBs run to GBs)
 agentmem/results/
 agentmem/benchmarks/data/*.sqlite
+
+# Local integration homelab runtime state and generated proof bundles.
+homelab/.state/
+homelab/artifacts/
+homelab/.env
+homelab/samples/*.local.json
+homelab/datasets/*.local.ndjson

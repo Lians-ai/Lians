@@ -1,12 +1,25 @@
 .git/
 .venv/
 .run/
-integrations/
+integrations/*
+!integrations/grafana-lians-app/
+!integrations/grafana-lians-app/**
+integrations/grafana-lians-app/node_modules/
+integrations/grafana-lians-app/dist/
+**/node_modules/
+**/dist/
+**/build/
+**/target/
 **/__pycache__/
 **/*.pyc
 **/*.pyo
 **/.pytest_cache/
 .env
+homelab/.env
+homelab/.state/
+homelab/artifacts/
+homelab/samples/*.local.json
+homelab/datasets/*.local.ndjson
 agentmem/tests/
 agentmem/benchmarks/
 # benchmark artifacts (checkpoint DBs, embedding caches, datasets) — 2.9GB+

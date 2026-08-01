@@ -1,0 +1,47 @@
+groups:
+  - name: lians-homelab
+    interval: 10s
+    rules:
+      - alert: LiansApiDown
+        expr: up{job="lians"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: Lians API is unavailable to Prometheus
+
+      - alert: LiansRecallP95High
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(agentmem_recall_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Lians recall p95 is above the 500 ms homelab objective
+
+      - alert: LiansRecallDegraded
+        expr: sum(rate(agentmem_memory_recalls_total{router="semantic_degraded"}[2m])) > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Lians is serving lexical-only degraded recall
+
+      - alert: LiansConflictQueueOpen
+        expr: sum(agentmem_conflict_queue_depth) > 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: A Lians decision-evidence conflict needs human review
+
+      - alert: LiansSubsystemDegraded
+        expr: sum(rate(lians_subsystem_degradations_total[2m])) > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: A fail-open or optional Lians subsystem is degraded

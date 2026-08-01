@@ -1,0 +1,138 @@
+logging {
+  level  = "info"
+  format = "json"
+}
+
+// Bootstrap provisions this key through Lians' supported admin API. Keeping it
+// in a local.file component avoids committing a secret or baking it into Alloy.
+local.file "lians_api_key" {
+  filename = "/var/lib/lians-lab/api-key"
+}
+
+// Lians' own runtime telemetry goes to Tempo only. If it were also sent back to
+// /v1/traces, instrumenting that endpoint would create a telemetry feedback loop.
+otelcol.receiver.otlp "lians_runtime" {
+  grpc {
+    endpoint = "0.0.0.0:14317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:14318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.lians_runtime.input]
+  }
+}
+
+otelcol.processor.batch "lians_runtime" {
+  timeout         = "1s"
+  send_batch_size = 256
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// Partner/demo application telemetry fans out, unsampled, to both Grafana
+// Tempo and Lians' authenticated evidence receiver.
+otelcol.receiver.otlp "integration" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.integration.input]
+  }
+}
+
+otelcol.processor.batch "integration" {
+  timeout         = "1s"
+  send_batch_size = 256
+
+  output {
+    traces = [
+      otelcol.exporter.otlp.tempo.input,
+      otelcol.exporter.otlphttp.lians.input,
+    ]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+otelcol.exporter.otlphttp "lians" {
+  client {
+    endpoint = "http://lians:8000"
+    headers = {
+      "X-API-Key" = local.file.lians_api_key.content,
+    }
+  }
+}
+
+// Discover only this Compose project and ship bounded Docker stdout/stderr to
+// Loki. Socket access is Docker-daemon privileged even when the filesystem
+// mount is marked :ro; this collector configuration is trusted lab code.
+discovery.docker "homelab" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=" + sys.env("LAB_COMPOSE_PROJECT")]
+  }
+}
+
+discovery.relabel "homelab_logs" {
+  targets = discovery.docker.homelab.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    target_label = "lab"
+    replacement  = "lians-homelab"
+  }
+}
+
+loki.source.docker "homelab" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.homelab_logs.output
+  forward_to       = [loki.process.homelab.receiver]
+  refresh_interval = "5s"
+}
+
+loki.process "homelab" {
+  stage.static_labels {
+    values = {
+      environment = "homelab",
+      product     = "lians",
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

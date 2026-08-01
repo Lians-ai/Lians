@@ -1,0 +1,142 @@
+name: Homelab contract
+
+on:
+  pull_request:
+    paths:
+      - "homelab/**"
+      - "integrations/grafana-lians-app/**"
+      - "agentmem/src/lians/metrics.py"
+      - "agentmem/src/lians/api/routes_otlp.py"
+      - "agentmem/src/lians/otlp.py"
+      - "agentmem/src/lians/telemetry.py"
+      - "agentmem/tests/test_metrics.py"
+      - "agentmem/tests/test_partner_integrations.py"
+      - "agentmem/tests/test_telemetry.py"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - ".github/workflows/homelab-contract.yml"
+  push:
+    branches: [master]
+    paths:
+      - "homelab/**"
+      - "integrations/grafana-lians-app/**"
+      - "agentmem/src/lians/metrics.py"
+      - "agentmem/src/lians/api/routes_otlp.py"
+      - "agentmem/src/lians/otlp.py"
+      - "agentmem/src/lians/telemetry.py"
+      - "agentmem/tests/test_metrics.py"
+      - "agentmem/tests/test_partner_integrations.py"
+      - "agentmem/tests/test_telemetry.py"
+      - "Dockerfile"
+      - "pyproject.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install every observability extra
+        run: python -m pip install -e ".[dev,metrics,otel,otel-receiver]"
+
+      - name: Test metrics and partner contracts
+        run: >-
+          pytest -q
+          agentmem/tests/test_metrics.py
+          agentmem/tests/test_partner_integrations.py
+          agentmem/tests/test_telemetry.py
+
+      - name: Test daemon-free homelab invariants
+        run: python -m unittest discover -s homelab/tests -p "test_*.py"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integrations/grafana-lians-app/package-lock.json
+
+      - name: Build the Grafana app
+        working-directory: integrations/grafana-lians-app
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm run build
+
+      - name: Validate Compose models
+        working-directory: homelab
+        run: |
+          ci_env="$(mktemp)"
+          trap 'rm -f "$ci_env"' EXIT
+          python env_bootstrap.py .env.example "$ci_env"
+          docker compose --env-file "$ci_env" -f compose.yaml config --quiet
+          docker compose --env-file "$ci_env" -f compose.yaml -f compose.real-model.yaml config --quiet
+
+      - name: Build the synthetic workload image
+        run: docker build --tag lians-homelab-workload:ci homelab/workload
+
+  e2e:
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      LIANS_HOMELAB_ENV: homelab/.env.ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Bootstrap the ephemeral lab environment
+        run: python3 homelab/env_bootstrap.py homelab/.env.example "$LIANS_HOMELAB_ENV"
+
+      - name: Match artifact ownership to the runner
+        run: |
+          echo "LAB_UID=$(id -u)" >> "$GITHUB_ENV"
+          mkdir -p homelab/artifacts
+
+      - name: Launch the complete lightweight lab
+        env:
+          LAB_GIT_COMMIT: ${{ github.sha }}
+        run: >-
+          docker compose
+          --env-file "$LIANS_HOMELAB_ENV"
+          -f homelab/compose.yaml
+          up --build -d
+
+      - name: Verify the live partner proof
+        env:
+          LAB_GIT_COMMIT: ${{ github.sha }}
+        run: >-
+          docker compose
+          --env-file "$LIANS_HOMELAB_ENV"
+          -f homelab/compose.yaml
+          --profile tools run --rm verify
+
+      - name: Capture service logs on failure
+        if: failure()
+        run: >-
+          docker compose
+          --env-file "$LIANS_HOMELAB_ENV"
+          -f homelab/compose.yaml
+          logs --no-color --tail 300
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: homelab-proof-${{ github.run_id }}
+          path: homelab/artifacts/
+          if-no-files-found: warn
+
+      - name: Stop the lab
+        if: always()
+        run: >-
+          docker compose
+          --env-file "$LIANS_HOMELAB_ENV"
+          -f homelab/compose.yaml
+          down --volumes --remove-orphans

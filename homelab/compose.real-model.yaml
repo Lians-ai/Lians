@@ -1,0 +1,31 @@
+# Optional polished-demo override. This downloads BAAI/bge-large-en-v1.5 at
+# image-build time and needs substantially more RAM/disk than the default
+# deterministic integration-plumbing profile.
+services:
+  migrate:
+    image: lians-homelab-api:real-model
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        EXTRAS: local,metrics,otel,otel-receiver
+        PREDOWNLOAD_MODEL: BAAI/bge-large-en-v1.5
+    environment:
+      EMBEDDING_PROVIDER: sentence-transformers
+      SENTENCE_TRANSFORMER_MODEL: BAAI/bge-large-en-v1.5
+
+  lians:
+    image: lians-homelab-api:real-model
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        EXTRAS: local,metrics,otel,otel-receiver
+        PREDOWNLOAD_MODEL: BAAI/bge-large-en-v1.5
+    environment:
+      EMBEDDING_PROVIDER: sentence-transformers
+      SENTENCE_TRANSFORMER_MODEL: BAAI/bge-large-en-v1.5
+
+  verify:
+    environment:
+      LAB_IMAGE_LIANS: lians-homelab-api:real-model

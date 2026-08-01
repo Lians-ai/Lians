@@ -3,6 +3,7 @@
 The receiver deliberately accepts the standard JSON and protobuf encodings but
 stores a stable, vendor-neutral representation. It does not sample.
 """
+
 from __future__ import annotations
 
 import base64
@@ -15,6 +16,21 @@ from typing import Any
 
 class OtlpDecodeError(ValueError):
     pass
+
+
+SPAN_KIND_VALUES = {
+    "SPAN_KIND_UNSPECIFIED": 0,
+    "SPAN_KIND_INTERNAL": 1,
+    "SPAN_KIND_SERVER": 2,
+    "SPAN_KIND_CLIENT": 3,
+    "SPAN_KIND_PRODUCER": 4,
+    "SPAN_KIND_CONSUMER": 5,
+}
+STATUS_CODE_VALUES = {
+    "STATUS_CODE_UNSET": 0,
+    "STATUS_CODE_OK": 1,
+    "STATUS_CODE_ERROR": 2,
+}
 
 
 @dataclass(frozen=True)
@@ -45,8 +61,13 @@ def _any_value(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
     names = (
-        "stringValue", "boolValue", "intValue", "doubleValue", "bytesValue",
-        "arrayValue", "kvlistValue",
+        "stringValue",
+        "boolValue",
+        "intValue",
+        "doubleValue",
+        "bytesValue",
+        "arrayValue",
+        "kvlistValue",
     )
     for name in names:
         if name not in value:
@@ -83,6 +104,16 @@ def _hex_id(value: Any, width: int) -> str:
     if len(result) != width or any(c not in "0123456789abcdef" for c in result):
         raise OtlpDecodeError(f"invalid {width * 4}-bit OTLP identifier")
     return result
+
+
+def _enum_number(value: Any, names: dict[str, int], label: str) -> int:
+    """Accept native OTLP JSON integers and MessageToDict enum names."""
+    if isinstance(value, str) and value in names:
+        return names[value]
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise OtlpDecodeError(f"invalid OTLP {label}") from exc
 
 
 def _event(item: dict[str, Any]) -> dict[str, Any]:
@@ -132,10 +163,14 @@ def normalize_trace_request(data: dict[str, Any]) -> list[NormalizedSpan]:
                             _hex_id(raw["parentSpanId"], 16) if raw.get("parentSpanId") else None
                         ),
                         name=str(raw.get("name") or "unnamed"),
-                        kind=int(raw.get("kind", 0)),
+                        kind=_enum_number(raw.get("kind", 0), SPAN_KIND_VALUES, "span kind"),
                         start_time_unix_nano=str(raw.get("startTimeUnixNano", "0")),
                         end_time_unix_nano=str(raw.get("endTimeUnixNano", "0")),
-                        status_code=int((raw.get("status") or {}).get("code", 0)),
+                        status_code=_enum_number(
+                            (raw.get("status") or {}).get("code", 0),
+                            STATUS_CODE_VALUES,
+                            "status code",
+                        ),
                         status_message=(raw.get("status") or {}).get("message"),
                         service_name=str(service_name) if service_name is not None else None,
                         scope_name=scope.get("name"),
@@ -146,9 +181,7 @@ def normalize_trace_request(data: dict[str, Any]) -> list[NormalizedSpan]:
                         links=[_link(item) for item in raw.get("links", [])],
                         is_genai=is_genai,
                         model_id=str(model_id) if model_id is not None else None,
-                        model_version=(
-                            str(model_version) if model_version is not None else None
-                        ),
+                        model_version=(str(model_version) if model_version is not None else None),
                         payload_hash=hashlib.sha256(canonical.encode()).hexdigest(),
                     )
                 )
@@ -179,9 +212,7 @@ def decode_trace_request(body: bytes, content_type: str) -> list[NormalizedSpan]
             message.ParseFromString(body)
         except Exception as exc:
             raise OtlpDecodeError("invalid OTLP protobuf request") from exc
-        return normalize_trace_request(
-            MessageToDict(message, preserving_proto_field_name=False)
-        )
+        return normalize_trace_request(MessageToDict(message, preserving_proto_field_name=False))
     raise OtlpDecodeError(
         "unsupported Content-Type; use application/json or application/x-protobuf"
     )
