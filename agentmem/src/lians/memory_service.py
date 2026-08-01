@@ -400,6 +400,7 @@ def _memory_to_out(mem: Memory, content: Optional[str]) -> MemoryOut:
         content_hash=mem.content_hash,
         erased_at=mem.erased_at,
         metadata=dict(mem.metadata_ or {}),
+        score_breakdown=getattr(mem, "_score_breakdown", None),
     )
 
 
@@ -1418,10 +1419,45 @@ async def recall_memories(
                         # Build a synthetic Memory-like result for the schema
                         mem = await db.get(Memory, live_fact.memory_id)
                         if mem is not None:
+                            from .scoring import score_memory
+                            metadata = dict(mem.metadata_ or {})
+                            admission = (
+                                metadata.get("_admission")
+                                if isinstance(metadata.get("_admission"), dict)
+                                else {}
+                            )
+                            breakdown = score_memory(
+                                content=content or "",
+                                reference_time=datetime.now(timezone.utc),
+                                metadata=metadata,
+                                importance=mem.importance,
+                                source=mem.source,
+                                event_time=mem.event_time,
+                                valid_from=mem.valid_from,
+                                valid_to=mem.valid_to,
+                                superseded=bool(mem.superseded_by),
+                                query=req.query,
+                                base_relevance=1.0,
+                                safety_status=str(admission.get("action") or "safe"),
+                                risk_tags=list(admission.get("risk_tags") or []),
+                                purpose="recall",
+                            )
+                            quality_score = breakdown["final_score"]
+                            breakdown["quality_score"] = quality_score
+                            breakdown["final_score"] = round(0.8 + 0.2 * quality_score, 6)
+                            breakdown["ranking_weights"] = {
+                                "existing_retrieval_score": 0.8,
+                                "memory_quality_score": 0.2,
+                            }
+                            if breakdown["eligible"]:
+                                mem._score_breakdown = breakdown
+                            else:
+                                mem = None
+                        if mem is not None:
                             ks.set_attribute("keyed_hit", True)
                             span.set_attribute("router", "keyed")
                             mem_out = _memory_to_out(mem, content)
-                            mem_out.score = 1.0  # exact keyed match
+                            mem_out.score = mem._score_breakdown["final_score"]
                             receipt, provenance_coverage, receipt_payload = _recall_receipt(
                                 req,
                                 execution,

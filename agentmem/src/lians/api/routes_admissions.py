@@ -40,7 +40,10 @@ async def get_admissions(
     return AdmissionListResult(
         pending=[
             PendingAdmissionOut.model_validate(r).model_copy(
-                update={"content": decrypt_pending_content(r)}
+                update={
+                    "content": decrypt_pending_content(r),
+                    "score_breakdown": dict(r.metadata_ or {}).get("_score"),
+                }
             )
             for r in rows
         ],

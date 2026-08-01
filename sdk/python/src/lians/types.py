@@ -44,6 +44,8 @@ class MemoryOut(BaseModel):
     content_hash: str
     erased_at: Optional[datetime]
     metadata: dict[str, Any]
+    score: Optional[float] = None
+    score_breakdown: Optional[dict[str, Any]] = None
 
 
 # ── Recall ────────────────────────────────────────────────────────────────────
