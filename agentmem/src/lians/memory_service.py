@@ -595,7 +595,9 @@ async def add_memory(
                     req.metadata = enriched_meta
                     span.set_attribute("auto_metadata_keys", ",".join(auto_prov["keys"]))
             except Exception:
-                pass  # fail-open: enrichment must never break ingestion
+                # Fail-open: enrichment must never break ingestion, but the
+                # degraded path must remain observable to operators.
+                logger.debug("Auto-metadata enrichment failed", exc_info=True)
 
         # Compile a typed, versioned memory artifact into reserved metadata.
         # The raw content is never rewritten and the projection includes the

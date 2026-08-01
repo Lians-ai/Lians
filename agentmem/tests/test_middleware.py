@@ -265,7 +265,7 @@ class TestRateLimitMiddleware:
         assert resp.headers.get("X-RateLimit-Remaining") == "0"
 
     async def test_redis_down_fails_open(self, client):
-        """If Redis is unreachable, rate limiting must not block requests."""
+        """The first local-fallback request passes when Redis is unreachable."""
         with patch("src.lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.incr = AsyncMock(side_effect=ConnectionError("Redis down"))
             resp = await client.post(
@@ -275,6 +275,38 @@ class TestRateLimitMiddleware:
             )
         # Should get a normal response (401/200/422) â€” NOT 429
         assert resp.status_code != 429
+
+    async def test_redis_down_uses_bounded_local_fallback(self):
+        """Redis failure must not silently disable throttling."""
+        from fastapi import FastAPI
+        from src.lians.middleware import RateLimitMiddleware
+
+        limited_app = FastAPI()
+
+        @limited_app.get("/limited")
+        async def limited():
+            return {"ok": True}
+
+        limited_app.add_middleware(RateLimitMiddleware, requests_per_minute=1)
+        with patch("src.lians.cache._get_redis") as mock_redis:
+            mock_redis.return_value.incr = AsyncMock(
+                side_effect=ConnectionError("Redis down")
+            )
+            async with AsyncClient(
+                transport=ASGITransport(app=limited_app),
+                base_url="http://test",
+            ) as local_client:
+                first = await local_client.get(
+                    "/limited", headers={"X-API-Key": "fallback-key"}
+                )
+                second = await local_client.get(
+                    "/limited", headers={"X-API-Key": "fallback-key"}
+                )
+
+        assert first.status_code == 200
+        assert first.headers["X-RateLimit-Remaining"] == "0"
+        assert second.status_code == 429
+        assert second.headers["Retry-After"] == "60"
 
     async def test_health_exempt_from_rate_limit(self, client):
         """Health checks must never be rate-limited regardless of Redis state."""
@@ -341,6 +373,29 @@ class TestRateLimitMiddleware:
             "RateLimitMiddleware is not wired to the configured limit — "
             "RATE_LIMIT_PER_MINUTE is being ignored"
         )
+
+
+@pytest.mark.asyncio
+async def test_production_security_headers_are_applied():
+    from fastapi import FastAPI
+    from src.lians.middleware import SecurityHeadersMiddleware
+
+    secured_app = FastAPI()
+
+    @secured_app.get("/resource")
+    async def resource():
+        return {"ok": True}
+
+    secured_app.add_middleware(SecurityHeadersMiddleware, production=True)
+    async with AsyncClient(
+        transport=ASGITransport(app=secured_app), base_url="https://test"
+    ) as security_client:
+        response = await security_client.get("/resource")
+
+    assert response.headers["Strict-Transport-Security"].startswith("max-age=")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert "default-src 'none'" in response.headers["Content-Security-Policy"]
 
 
 @pytest.mark.asyncio

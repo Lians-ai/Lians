@@ -22,6 +22,7 @@ Point-in-time queries (as_of set) still go to the ``memories`` table because
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import os
 import re
@@ -35,6 +36,7 @@ from .models import Memory, LiveFact
 from .crypto import decrypt_content
 
 _ANN_PREFETCH_MULTIPLIER = 20
+logger = logging.getLogger("agentmem.ranking")
 
 W_SEM = 0.50
 # BM25 is unbounded while cosine lives in [-1, 1]; at 0.20 a single strong
@@ -507,7 +509,10 @@ async def _fetch_live_candidates(
             result = await db.execute(ann_stmt)
             return list(result.scalars().all())
         except Exception:
-            pass
+            logger.debug(
+                "Live-fact ANN query failed; falling back to deterministic scan",
+                exc_info=True,
+            )
 
     result = await db.execute(base_stmt)
     return list(result.scalars().all())
@@ -554,7 +559,10 @@ async def _fetch_historical_candidates(
             result = await db.execute(ann_stmt)
             return list(result.scalars().all())
         except Exception:
-            pass
+            logger.debug(
+                "Historical ANN query failed; falling back to deterministic scan",
+                exc_info=True,
+            )
 
     result = await db.execute(base_stmt)
     return list(result.scalars().all())

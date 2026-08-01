@@ -21,10 +21,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime
 from typing import Any, Optional
 
 _redis_client: Any = None
+logger = logging.getLogger("agentmem.cache")
 
 
 def _get_redis() -> Any:
@@ -122,7 +124,7 @@ async def set_cached_recall(
         )
         await redis.setex(key, ttl, payload)
     except Exception:
-        pass
+        logger.debug("Recall cache write failed; continuing without cache", exc_info=True)
 
 
 async def invalidate_agent(namespace: str, agent_id: str) -> None:
@@ -132,4 +134,4 @@ async def invalidate_agent(namespace: str, agent_id: str) -> None:
     try:
         await _get_redis().incr(_generation_key(namespace, agent_id))
     except Exception:
-        pass
+        logger.debug("Recall cache invalidation failed; continuing without cache", exc_info=True)

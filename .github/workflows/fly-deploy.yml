@@ -100,6 +100,15 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
 
+      - name: Install migration dependencies
+        run: >-
+          python -m pip install
+          "alembic>=1.13,<2"
+          "sqlalchemy[asyncio]>=2.0.30,<3"
+          "asyncpg>=0.29,<1"
+          "pydantic-settings>=2.14,<3"
+          "pgvector>=0.3,<1"
+
       - name: Record rollback image
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
@@ -186,7 +195,38 @@ jobs:
           echo "- Age: $snapshot_age_seconds seconds" >> "$GITHUB_STEP_SUMMARY"
           echo "- Volume: encrypted" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Deploy with release migration and canary health checks
+      - name: Run migration through the private database tunnel
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_DB_TOKEN }}
+          MIGRATION_DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          flyctl proxy 15433:5432 \
+            --app agentmem-lotus-db \
+            --bind-addr 127.0.0.1 \
+            --quiet \
+            >"$RUNNER_TEMP/fly-production-proxy.log" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.monotonic() + 60
+          while time.monotonic() < deadline:
+              try:
+                  with socket.create_connection(("127.0.0.1", 15433), timeout=1):
+                      break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Fly production proxy did not become ready within 60 seconds")
+          PY
+
+          python scripts/migrate_via_fly_proxy.py --host 127.0.0.1 --port 15433
+
+      - name: Deploy with canary health checks
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
         run: |
@@ -196,7 +236,6 @@ jobs:
             --config fly.toml \
             --remote-only \
             --strategy canary \
-            --release-command-timeout 10m \
             --wait-timeout 10m
 
       - name: Resolve the production machine
