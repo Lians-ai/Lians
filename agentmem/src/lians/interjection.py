@@ -22,7 +22,6 @@ clauses and stores each as a *derived* memory alongside the raw turn:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 _MAX_CLAUSES = 3
 _MIN_LEN = 15
@@ -32,19 +31,160 @@ _MAX_LEN = 240
 # extracted clauses so they stay self-attributing.
 _SPEAKER_RE = re.compile(r"^([A-Za-z][\w .'&-]{0,24}):\s+(.*)$", re.DOTALL)
 
-# Segment boundaries: sentence enders and spoken-style em/en dashes.
-_SEGMENT_SPLIT = re.compile(r"(?<=[.!?…])\s+|\s+[—–]\s*|\s*[—–]\s+|\s+--\s+")
+# Segment boundaries: sentence enders and spoken-style em/en dashes.  These
+# used to be expressed as overlapping ``\s+`` regex alternatives.  Searching
+# an untrusted, long whitespace run forced the regex engine to retry the run at
+# every character (quadratic time).  The scanners below consume every input
+# character at most a constant number of times instead.
+_SENTENCE_ENDERS = frozenset(".!?…")
+_SPOKEN_DASHES = frozenset("—–")
+_COMMA_CONNECTORS = ("so", "since", "because", "but", "although", "though", "anyway")
 
-# Conservative intra-segment clause connectors. Splitting is only ever on
-# these; a fact stated across a bare comma ("I eat fish now, I'm not
-# vegetarian anymore") stays intact.
-_CLAUSE_SPLIT = re.compile(
-    r",\s+(?:so|since|because|but|although|though|anyway)\b\s*|\s+because\s+"
-    # a first-person fact riding a conjunction ("...steakhouse and I'm
-    # pescatarian now") splits off; "and they/it/..." stays joined.
-    r"|,?\s+and\s+(?=I\b|I'm\b|my\b)",
-    re.IGNORECASE,
-)
+
+def _space_end(value: str, start: int) -> int:
+    """Return the first index after one contiguous whitespace run."""
+    end = start
+    while end < len(value) and value[end].isspace():
+        end += 1
+    return end
+
+
+def _is_word_char(char: str) -> bool:
+    """Match the word-character behavior needed by the former ``\b`` checks."""
+    return char == "_" or char.isalnum()
+
+
+def _word_at(value: str, start: int, word: str) -> bool:
+    """Case-insensitive ASCII word match with a trailing word boundary."""
+    end = start + len(word)
+    return (
+        end <= len(value)
+        and value[start:end].casefold() == word
+        and (end == len(value) or not _is_word_char(value[end]))
+    )
+
+
+def _split_segments(body: str) -> list[str]:
+    """Split sentence/dash segments in linear time.
+
+    This preserves the former separator rules: sentence-ending whitespace,
+    em/en dashes with whitespace on either side, and ``--`` surrounded by
+    whitespace.
+    """
+    parts: list[str] = []
+    start = 0
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char.isspace():
+            separator_start = index
+            whitespace_end = _space_end(body, index)
+
+            if separator_start > 0 and body[separator_start - 1] in _SENTENCE_ENDERS:
+                parts.append(body[start:separator_start])
+                start = whitespace_end
+                index = whitespace_end
+                continue
+
+            if whitespace_end < len(body) and body[whitespace_end] in _SPOKEN_DASHES:
+                separator_end = _space_end(body, whitespace_end + 1)
+                parts.append(body[start:separator_start])
+                start = separator_end
+                index = separator_end
+                continue
+
+            if (
+                body.startswith("--", whitespace_end)
+                and whitespace_end + 2 < len(body)
+                and body[whitespace_end + 2].isspace()
+            ):
+                separator_end = _space_end(body, whitespace_end + 2)
+                parts.append(body[start:separator_start])
+                start = separator_end
+                index = separator_end
+                continue
+
+            index = whitespace_end
+            continue
+
+        if char in _SPOKEN_DASHES and index + 1 < len(body) and body[index + 1].isspace():
+            separator_end = _space_end(body, index + 1)
+            parts.append(body[start:index])
+            start = separator_end
+            index = separator_end
+            continue
+
+        index += 1
+
+    parts.append(body[start:])
+    return parts
+
+
+def _first_person_at(value: str, start: int) -> bool:
+    # ``I\b`` intentionally also covers "I'm": apostrophes are non-word
+    # characters, matching the previous lookahead.
+    return _word_at(value, start, "i") or _word_at(value, start, "my")
+
+
+def _comma_connector_end(value: str, comma: int) -> int | None:
+    if comma + 1 >= len(value) or not value[comma + 1].isspace():
+        return None
+
+    word_start = _space_end(value, comma + 1)
+    for connector in _COMMA_CONNECTORS:
+        if _word_at(value, word_start, connector):
+            return _space_end(value, word_start + len(connector))
+
+    if _word_at(value, word_start, "and"):
+        whitespace_start = word_start + len("and")
+        if whitespace_start < len(value) and value[whitespace_start].isspace():
+            clause_start = _space_end(value, whitespace_start)
+            if _first_person_at(value, clause_start):
+                return clause_start
+    return None
+
+
+def _whitespace_connector_end(value: str, whitespace_start: int) -> int | None:
+    word_start = _space_end(value, whitespace_start)
+    for connector in ("because", "and"):
+        if not _word_at(value, word_start, connector):
+            continue
+        trailing_start = word_start + len(connector)
+        if trailing_start >= len(value) or not value[trailing_start].isspace():
+            continue
+        clause_start = _space_end(value, trailing_start)
+        if connector == "because" or _first_person_at(value, clause_start):
+            return clause_start
+    return None
+
+
+def _split_clauses(segment: str) -> list[str]:
+    """Split conservative clause connectors in a single linear scan."""
+    parts: list[str] = []
+    start = 0
+    index = 0
+    while index < len(segment):
+        char = segment[index]
+        if char == ",":
+            separator_end = _comma_connector_end(segment, index)
+            if separator_end is not None:
+                parts.append(segment[start:index])
+                start = separator_end
+                index = separator_end
+                continue
+        elif char.isspace():
+            separator_end = _whitespace_connector_end(segment, index)
+            if separator_end is not None:
+                parts.append(segment[start:index])
+                start = separator_end
+                index = separator_end
+                continue
+            index = _space_end(segment, index)
+            continue
+        index += 1
+
+    parts.append(segment[start:])
+    return parts
 
 # Aside markers: the clause is an explicit "store this" interjection — trim to
 # the marker so the stored fact starts at the request, not the task chatter.
@@ -75,11 +215,11 @@ def _clauses(body: str) -> list[tuple[str, str]]:
     left too short ("my day rate is $900" before ", so we can build off that")
     falls back to its segment, so the fact is never dropped on a length gate."""
     out: list[tuple[str, str]] = []
-    for segment in _SEGMENT_SPLIT.split(body):
+    for segment in _split_segments(body):
         segment = (segment or "").strip(" ,;")
         if not segment:
             continue
-        for clause in _CLAUSE_SPLIT.split(segment):
+        for clause in _split_clauses(segment):
             clause = (clause or "").strip(" ,;")
             if clause:
                 out.append((clause, segment))
@@ -95,7 +235,7 @@ def extract_interjections(content: str, max_clauses: int = _MAX_CLAUSES) -> list
     if not content:
         return []
 
-    speaker: Optional[str] = None
+    speaker: str | None = None
     body = content.strip()
     m = _SPEAKER_RE.match(body)
     if m:

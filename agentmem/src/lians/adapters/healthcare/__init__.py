@@ -61,6 +61,86 @@ def _normalize_npi(value: str) -> str:
     return digits if len(digits) == 10 else value.strip()
 
 
+_MEDICATION_UNITS = (
+    "mg",
+    "mcg",
+    "ml",
+    "g",
+    "iu",
+    "units",
+    "unit",
+    "tablets",
+    "tablet",
+    "tabs",
+    "tab",
+    "capsules",
+    "capsule",
+    "caps",
+    "cap",
+)
+
+
+def _is_word_char(char: str) -> bool:
+    return char == "_" or char.isalnum()
+
+
+def _space_end(value: str, start: int) -> int:
+    end = start
+    while end < len(value) and value[end].isspace():
+        end += 1
+    return end
+
+
+def _tail_matches_dot_star_end(value: str, start: int, last_newline: int, prior_newline: int) -> bool:
+    """Preserve the old regex's ``.*$`` behavior without rescanning each tail."""
+    if last_newline == -1 or start > last_newline:
+        return True
+    return last_newline == len(value) - 1 and start > prior_newline
+
+
+def _dosage_suffix_start(value: str) -> int | None:
+    r"""Locate a trailing dosage/form suffix in linear time.
+
+    The previous unanchored ``\s+\d+...`` regex retried a long whitespace run
+    at every character when it did not contain a dosage.  This scanner skips
+    each whitespace and digit run once while retaining the same accepted unit
+    forms and word-boundary behavior.
+    """
+    last_newline = value.rfind("\n")
+    prior_newline = value.rfind("\n", 0, last_newline) if last_newline != -1 else -1
+    index = 0
+    while index < len(value):
+        if not value[index].isspace():
+            index += 1
+            continue
+
+        suffix_start = index
+        number_start = _space_end(value, index)
+        if number_start >= len(value) or not value[number_start].isdecimal():
+            index = number_start
+            continue
+
+        number_end = number_start
+        while number_end < len(value) and value[number_end].isdecimal():
+            number_end += 1
+        unit_start = _space_end(value, number_end)
+
+        for unit in _MEDICATION_UNITS:
+            unit_end = unit_start + len(unit)
+            if unit_end > len(value) or value[unit_start:unit_end].casefold() != unit:
+                continue
+            if unit_end < len(value) and _is_word_char(value[unit_end]):
+                continue
+            if _tail_matches_dot_star_end(value, unit_end, last_newline, prior_newline):
+                return suffix_start
+
+        # The consumed digit run cannot begin another dosage match.  Resume at
+        # its end so any later whitespace-delimited dosage is still considered.
+        index = number_end
+
+    return None
+
+
 def _normalize_medication(value: str) -> str:
     """
     Canonical drug name: lowercase, strip trailing dosage/form.
@@ -68,12 +148,8 @@ def _normalize_medication(value: str) -> str:
     "Metformin HCl 500mg tabs" → "metformin hcl"
     Preserves salt forms (HCl, Na, etc.) for accurate supersession matching.
     """
-    v = re.sub(
-        r"\s+\d+\s*(mg|mcg|ml|g|iu|units?|tab(let)?s?|cap(sule)?s?)\b.*$",
-        "",
-        value,
-        flags=re.IGNORECASE,
-    )
+    dosage_start = _dosage_suffix_start(value)
+    v = value if dosage_start is None else value[:dosage_start]
     return v.strip().lower()
 
 
@@ -119,7 +195,7 @@ class HealthcareAdapter:
         if key in _KEY_ALIASES:
             return _KEY_ALIASES[key]
         # If key is an alias, find its canonical group
-        for canonical, aliases in _KEY_ALIASES.items():
+        for aliases in _KEY_ALIASES.values():
             if key in aliases:
                 return aliases
         return [key]
