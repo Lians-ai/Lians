@@ -3,13 +3,16 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Text, DateTime, Float, Boolean,
     ForeignKey, Index, LargeBinary, JSON, Integer,
-    UniqueConstraint, text, types as sa_types,
+    UniqueConstraint, Uuid as UUID, text, types as sa_types,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import Dialect
 from pgvector.sqlalchemy import Vector
 from .db import Base
 from .config import get_settings
+
+# Use SQLAlchemy's cross-dialect type: native UUID on PostgreSQL and CHAR(32)
+# on SQLite. PostgreSQL's dialect-only UUID type gives SQLite numeric affinity,
+# which can coerce rare numeric-looking UUID hex strings into integers/floats.
 
 
 class _FlexVector(sa_types.TypeDecorator):
