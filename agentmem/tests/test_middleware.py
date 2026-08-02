@@ -287,7 +287,11 @@ class TestRateLimitMiddleware:
         async def limited():
             return {"ok": True}
 
-        limited_app.add_middleware(RateLimitMiddleware, requests_per_minute=1)
+        limited_app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_minute=1,
+            fingerprint_secret="test-rate-limit-fingerprint-secret",
+        )
         with patch("src.lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.incr = AsyncMock(
                 side_effect=ConnectionError("Redis down")
@@ -307,6 +311,37 @@ class TestRateLimitMiddleware:
         assert first.headers["X-RateLimit-Remaining"] == "0"
         assert second.status_code == 429
         assert second.headers["Retry-After"] == "60"
+
+    def test_api_key_discriminator_is_keyed_and_stable(self):
+        """Bucket IDs must not expose a reusable digest of the API key."""
+        from src.lians.middleware import RateLimitMiddleware
+
+        middleware_a = RateLimitMiddleware(
+            app=AsyncMock(),
+            fingerprint_secret="fingerprint-secret-a",
+        )
+        middleware_b = RateLimitMiddleware(
+            app=AsyncMock(),
+            fingerprint_secret="fingerprint-secret-b",
+        )
+
+        first = middleware_a._api_key_discriminator("customer-api-key")
+        repeated = middleware_a._api_key_discriminator("customer-api-key")
+        other_key = middleware_a._api_key_discriminator("other-api-key")
+        other_secret = middleware_b._api_key_discriminator("customer-api-key")
+
+        assert first == repeated
+        assert first.startswith("api:")
+        assert len(first.removeprefix("api:")) == 32
+        assert "customer-api-key" not in first
+        assert first != other_key
+        assert first != other_secret
+
+    def test_api_key_discriminator_rejects_an_empty_secret(self):
+        from src.lians.middleware import RateLimitMiddleware
+
+        with pytest.raises(ValueError, match="fingerprint_secret must not be empty"):
+            RateLimitMiddleware(app=AsyncMock(), fingerprint_secret="")
 
     async def test_health_exempt_from_rate_limit(self, client):
         """Health checks must never be rate-limited regardless of Redis state."""
@@ -373,6 +408,7 @@ class TestRateLimitMiddleware:
             "RateLimitMiddleware is not wired to the configured limit — "
             "RATE_LIMIT_PER_MINUTE is being ignored"
         )
+        assert entry.kwargs.get("fingerprint_secret") == get_settings().api_secret_seed
 
 
 @pytest.mark.asyncio

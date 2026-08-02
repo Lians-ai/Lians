@@ -375,7 +375,11 @@ app.add_middleware(
 # Wire the configured limit through: without this argument the middleware silently
 # pins every deployment to its hardcoded 300/min default and RATE_LIMIT_PER_MINUTE
 # (documented as tunable in .env.example) has no effect.
-app.add_middleware(RateLimitMiddleware, requests_per_minute=get_settings().rate_limit_per_minute)
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=get_settings().rate_limit_per_minute,
+    fingerprint_secret=get_settings().api_secret_seed,
+)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(

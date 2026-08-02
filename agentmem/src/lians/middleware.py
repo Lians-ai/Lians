@@ -11,6 +11,7 @@ every request uniformly, including 4xx/5xx responses from FastAPI's own validati
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import time
@@ -213,16 +214,34 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Redis is unavailable, a bounded per-process fallback keeps throttling
     active instead of silently disabling the control.
 
-    The raw API key is never written to Redis; only the first 16 hex chars
-    of its SHA-256 hash are used as the key discriminator.
+    The raw API key is never written to Redis. A server-keyed HMAC produces
+    a stable, non-reversible bucket discriminator shared by all workers.
     """
 
-    def __init__(self, app, requests_per_minute: int = 300):
+    def __init__(
+        self,
+        app,
+        requests_per_minute: int = 300,
+        *,
+        fingerprint_secret: str,
+    ):
         super().__init__(app)
+        if not fingerprint_secret:
+            raise ValueError("fingerprint_secret must not be empty")
         self._limit = requests_per_minute
         self._window = 60  # seconds
+        self._fingerprint_secret = fingerprint_secret.encode()
         self._fallback: OrderedDict[str, tuple[int, int]] = OrderedDict()
         self._fallback_max_buckets = 10_000
+
+    def _api_key_discriminator(self, raw_key: str) -> str:
+        """Return a stable keyed bucket ID without exposing the API key."""
+        digest = hmac.new(
+            self._fingerprint_secret,
+            b"lians-rate-limit-v1\0" + raw_key.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        return f"api:{digest[:32]}"
 
     def _fallback_increment(self, discriminator: str) -> int:
         """Return the local count using a bounded fixed-minute window."""
@@ -259,7 +278,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         raw_key = request.headers.get("X-API-Key", "")
         if raw_key:
-            discriminator = f"api:{hashlib.sha256(raw_key.encode()).hexdigest()[:16]}"
+            discriminator = self._api_key_discriminator(raw_key)
         elif request.url.path.startswith("/v1/admin/"):
             # Admin auth uses a separate header. Keying this bucket by the
             # supplied secret would let an attacker evade throttling by changing
