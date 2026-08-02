@@ -6,13 +6,17 @@ introspection pipeline.
 ## Build specification
 
 - Dockerfile: `Dockerfile.glama`
+- Build argument: optional; `LIANS_VERSION` defaults to the verified public
+  GHCR release recorded in `published-release-status.json`
 - Command: use the image entrypoint without additional arguments
 - Transport: stdio
 - Persistent volume: `/data`
 - API key: not required for local SQLite mode
 
-The image runs `lians-sdk[mcp]==0.4.1` as a non-root user. Its default database
-path is `/data/mcp.db`.
+The default image runs `lians-sdk[mcp]==0.4.1` as a non-root user. Release
+automation overrides the default with the validated release version and checks
+the installed distribution before publishing. The database path is
+`/data/mcp.db`.
 
 ## Local build
 

@@ -53,6 +53,9 @@ COPY agentmem/ /app/agentmem/
 
 RUN chown -R lians:lians /app /opt/venv /home/lians
 
+ARG LIANS_BUILD_SHA=unknown
+ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}"
+
 WORKDIR /app/agentmem
 USER 10001:10001
 

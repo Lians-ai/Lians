@@ -7,7 +7,7 @@
 # Lians C SDK
 
 Financial-grade agent memory for native, low-latency, and embedded systems —
-bitemporal recall, SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information
+bitemporal recall, a tamper-evident audit chain, crypto-shred erasure, information
 barriers, and a relationship graph (conflict-of-interest / related-party /
 care-network).
 
@@ -41,7 +41,7 @@ This produces the `lians` library, a `lians_example` binary, and the test runner
 
 int main(void) {
     lians_global_init();
-    lians_client_t *c = lians_client_new("https://api.lians.dev", getenv("LIANS_API_KEY"), NULL);
+    lians_client_t *c = lians_client_new("https://agentmem-lotus.fly.dev", getenv("LIANS_API_KEY"), NULL);
 
     /* Store a fact with its BUSINESS event-time (ISO-8601 UTC). */
     lians_response_t r = lians_add(c, "equity-desk",
@@ -84,7 +84,7 @@ See [`examples/example.c`](examples/example.c) for a complete program.
 | `lians_backtest_check` | Lookahead-bias detection |
 | `lians_fact_history` | Time-series of a ticker+metric |
 | `lians_erase` | GDPR/HIPAA crypto-shred a subject |
-| `lians_verify_chain` | Verify the SEC 17a-4 audit chain (admin) |
+| `lians_verify_chain` | Verify the tamper-evident audit chain (admin) |
 | `lians_relate` / `lians_unrelate` | Assert / invalidate a graph edge |
 | `lians_neighbors` | N-hop neighbors of an entity |
 | `lians_path` | Connection between two entities (COI / related-party) |

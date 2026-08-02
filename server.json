@@ -3,7 +3,7 @@
   "name": "io.github.ebeirne/lians",
   "title": "Lians Agent Memory",
   "description": "Bitemporal memory for AI agents with point-in-time recall and tamper-evident audit history.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "websiteUrl": "https://www.lians.ai",
   "repository": {
     "url": "https://github.com/Lians-ai/Lians",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "lians-sdk",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "runtimeHint": "uvx",
       "runtimeArguments": [
         {

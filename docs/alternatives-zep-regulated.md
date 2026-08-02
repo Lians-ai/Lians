@@ -1,5 +1,9 @@
 # Zep Alternative for Regulated Industries (2026)
 
+> **Update (2026-08-01):** Graphiti remains a strong bitemporal/provenance engine,
+> and managed Zep documents enterprise controls. This page is a dated deployment
+> comparison; verify current official documentation before procurement claims.
+
 *Last updated: July 2026. Facts below reflect Zep's public docs and Graphiti's
 repository as of this date; corrections welcome via issue or PR.*
 

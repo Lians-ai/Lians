@@ -123,6 +123,7 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
       TEST_DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
       REDIS_URL: redis://localhost:6379/0
+      TEST_REDIS_URL: redis://localhost:6379/0
       EMBEDDING_PROVIDER: local
       MASTER_ENCRYPTION_KEY: ""
       AGENTMEM_ALLOW_UNENCRYPTED: "true"
@@ -317,7 +318,13 @@ jobs:
           python-version: "3.12"
 
       - name: Build Glama image
-        run: docker build --file Dockerfile.glama --tag lians-mcp-glama:test .
+        run: |
+          version="$(python -c 'import json; print(json.load(open("docs/published-release-status.json"))["artifacts"]["ghcr_mcp"]["version"])')"
+          docker build \
+            --file Dockerfile.glama \
+            --build-arg "LIANS_VERSION=$version" \
+            --tag lians-mcp-glama:test \
+            .
 
       - name: Install MCP test client
         run: pip install "mcp>=1,<2"

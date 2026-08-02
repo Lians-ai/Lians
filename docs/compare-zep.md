@@ -1,5 +1,10 @@
 # Lians vs Zep / Graphiti — what to learn from a temporal knowledge graph
 
+> **Current-reading notice (2026-08-01):** Graphiti's bitemporal model and episode
+> provenance are established strengths, while managed Zep documents enterprise
+> security and access controls. Treat older absence claims below as historical and
+> evaluate the current products on a live, version-pinned decision-evidence test.
+
 [Zep](https://www.getzep.com) is a managed agent-memory platform; its open-source
 engine is [Graphiti](https://github.com/getzep/graphiti), a **bitemporal knowledge
 graph**. Graphiti and Lians independently arrived at the same core insight —

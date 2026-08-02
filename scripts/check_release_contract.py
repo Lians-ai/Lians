@@ -1,4 +1,4 @@
-"""Fail when a Lians release surface drifts from the canonical VERSION file."""
+"""Fail when a Lians source release-candidate manifest drifts from VERSION."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import sys
 import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
@@ -27,6 +26,28 @@ def _match(path: str, pattern: str) -> str:
     return match.group(1)
 
 
+def _exact_dependency_version(path: str, package: str) -> str:
+    dependencies = _toml(path)["project"].get("dependencies", [])
+    pattern = re.compile(
+        rf"{re.escape(package)}(?:\[[^\]]+\])?==([0-9A-Za-z.+-]+)"
+    )
+    for requirement in dependencies:
+        if requirement.startswith(package):
+            match = pattern.fullmatch(requirement)
+            return match.group(1) if match else f"not exact: {requirement}"
+    return "missing"
+
+
+def _locked_package_version(path: str, package: str) -> str:
+    lock = _toml(path)
+    matches = [
+        entry.get("version", "missing")
+        for entry in lock.get("package", [])
+        if entry.get("name") == package
+    ]
+    return matches[0] if len(matches) == 1 else "missing or ambiguous"
+
+
 def _java_version() -> str:
     root = ET.parse(ROOT / "agentmem/sdk/java/pom.xml").getroot()
     namespace = {"m": "http://maven.apache.org/POM/4.0.0"}
@@ -37,6 +58,19 @@ def _java_version() -> str:
 
 
 def main() -> int:
+    server_manifest = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    mcpb_project = _toml("integrations/mcpb/pyproject.toml")
+    mcpb_manifest = json.loads(
+        (ROOT / "integrations/mcpb/manifest.json").read_text(encoding="utf-8")
+    )
+    plugin_manifest = json.loads(
+        (ROOT / "integrations/lians-plugin/.claude-plugin/plugin.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    plugin_marketplace = json.loads(
+        (ROOT / ".claude-plugin/marketplace.json").read_text(encoding="utf-8")
+    )
     package_json = json.loads(
         (ROOT / "agentmem/sdk/typescript/package.json").read_text(encoding="utf-8")
     )
@@ -66,14 +100,34 @@ def main() -> int:
         "Go SDK": _match(
             "agentmem/sdk/go/version.go", r'const Version = "([^"]+)"'
         ),
+        "MCP Registry server": server_manifest["version"],
+        "MCP Registry Python package": server_manifest["packages"][0]["version"],
+        "MCPB manifest": mcpb_manifest["version"],
+        "MCPB project": mcpb_project["project"]["version"],
+        "MCPB runtime pin": _exact_dependency_version(
+            "integrations/mcpb/pyproject.toml", "lians-sdk"
+        ),
+        "Claude plugin": plugin_manifest["version"],
+        "Claude plugin marketplace": plugin_marketplace["plugins"][0]["version"],
     }
+    mcpb_lock = ROOT / "integrations/mcpb/uv.lock"
+    if mcpb_lock.exists():
+        versions["MCPB lock project"] = _locked_package_version(
+            "integrations/mcpb/uv.lock", "lians-agent-memory-mcpb"
+        )
+        versions["MCPB lock runtime"] = _locked_package_version(
+            "integrations/mcpb/uv.lock", "lians-sdk"
+        )
     drift = {name: version for name, version in versions.items() if version != EXPECTED}
     if drift:
         print(f"Release version must be {EXPECTED}. Drift detected:", file=sys.stderr)
         for name, version in drift.items():
             print(f"  {name}: {version}", file=sys.stderr)
         return 1
-    print(f"Lians release contract is synchronized at {EXPECTED}.")
+    print(
+        f"Lians source release contract is synchronized at {EXPECTED}. "
+        "Public registries are verified separately."
+    )
     return 0
 
 

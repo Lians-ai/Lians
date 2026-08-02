@@ -29,12 +29,18 @@ import src.lians.kms as _kms
 # Tests that need specific values set them explicitly (monkeypatch/fixtures).
 # ---------------------------------------------------------------------------
 Settings.model_config["env_file"] = "__lians_tests_ignore_dotenv__"
+_TEST_REDIS_URL = os.environ.get("TEST_REDIS_URL")
 for _var in (
     "MASTER_ENCRYPTION_KEY", "KMS_PROVIDER", "EMBEDDING_PROVIDER",
     "RATE_LIMIT_PER_MINUTE", "RECALL_CACHE_ENABLED", "WORM_MODE",
     "ADMISSION_MODE", "SIEM_URL", "AIRGAP_MODE", "DATABASE_URL", "REDIS_URL",
 ):
     os.environ.pop(_var, None)
+if _TEST_REDIS_URL:
+    # Like TEST_DATABASE_URL, this is an explicit test-harness input rather
+    # than ambient application configuration. Preserve it so isolated Redis
+    # ports work locally and in parallel CI jobs.
+    os.environ["REDIS_URL"] = _TEST_REDIS_URL
 get_settings.cache_clear()
 
 _COMPOSE_DIR = Path(__file__).parent.parent

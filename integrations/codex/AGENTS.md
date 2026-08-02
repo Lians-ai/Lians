@@ -1,13 +1,13 @@
 # Lians Memory — Codex Agent Instructions
 
 This repository (or session) uses **Lians**, a financial-grade memory layer, to
-give the agent persistent, compliance-safe memory across runs. When working here,
-treat Lians as the source of truth for facts that change over time — guidance
+give the agent persistent, governed memory across runs. When working here,
+use Lians as the configured source of truth for facts that change over time — guidance
 revisions, dosage changes, matter status, prior decisions.
 
 Use it in regulated contexts: **financial institutions, healthcare, and legal
-firms**. Lians' bitemporal model means stale facts are excluded automatically, so
-the context you reason over is never contaminated by outdated revisions.
+firms**. Lians' bitemporal model and configured supersession policy can exclude
+outdated revisions before context assembly.
 
 ## When to use memory
 
@@ -28,8 +28,8 @@ pip install lians-sdk[local]     # zero-setup local SQLite, no server/API key
 Environment (hosted/self-hosted mode):
 
 ```
-LIANS_URL=https://api.lians.dev          # or your self-hosted server
-LIANS_API_KEY=lians_...                  # free key at api.lians.dev
+LIANS_URL=https://agentmem-lotus.fly.dev # or your self-hosted server
+LIANS_API_KEY=lians_...                  # create at https://www.lians.ai/login
 LIANS_AGENT_ID=codex-session             # memory namespace for this agent
 ```
 

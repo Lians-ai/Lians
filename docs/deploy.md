@@ -165,7 +165,7 @@ scrape_configs:
 
 ### Audit chain
 - [ ] `/v1/admin/audit/verify` run weekly and on every major release to confirm chain integrity
-- [ ] Audit log archived to WORM storage (S3 Object Lock, Azure Immutable Blob) for SEC 17a-4 compliance
+- [ ] Audit log archived to WORM storage (S3 Object Lock, Azure Immutable Blob) when required by the applicable retention policy; counsel validates any SEC 17a-4 claim
 
 ---
 

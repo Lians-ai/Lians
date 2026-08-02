@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 SCRIPT_PATH = Path(__file__).parents[2] / "scripts" / "check_production_deployment.py"
+WORKFLOW_PATH = Path(__file__).parents[2] / ".github" / "workflows" / "fly-deploy.yml"
+DOCKERFILE_PATH = Path(__file__).parents[2] / "Dockerfile"
 SPEC = importlib.util.spec_from_file_location("check_production_deployment", SCRIPT_PATH)
 assert SPEC is not None
 assert SPEC.loader is not None
@@ -35,6 +37,24 @@ def test_validate_base_url_requires_secret_free_https() -> None:
             MODULE.validate_base_url(value)
 
 
+def test_fly_deploy_preserves_exact_image_and_build_evidence_contract() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert '--image-label "$image_label"' in workflow
+    assert '--build-arg "LIANS_BUILD_SHA=$GITHUB_SHA"' in workflow
+    assert 'select_fly_production_machine.py \\\n' in workflow
+    assert '--expected-build-sha "$GITHUB_SHA"' in workflow
+
+
+def test_build_sha_does_not_invalidate_heavy_runtime_layers() -> None:
+    dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
+    assert dockerfile.index("RUN chown -R lians:lians") < dockerfile.index(
+        "ARG LIANS_BUILD_SHA=unknown"
+    )
+    assert dockerfile.index("ARG LIANS_BUILD_SHA=unknown") < dockerfile.index(
+        'ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}"'
+    )
+
+
 def test_validate_health_requires_sanitized_success() -> None:
     MODULE.validate_health(response(200, {"status": "ok"}), "Health")
     for payload in (
@@ -52,10 +72,20 @@ def test_validate_hidden_requires_not_found() -> None:
 
 
 def test_run_validates_hardened_production_contract(monkeypatch) -> None:
+    sha = "a" * 40
     responses = {
         "/livez": response(200, {"status": "alive"}),
         "/health": response(200, {"status": "ok"}),
         "/readyz": response(200, {"status": "ok"}),
+        "/version": response(
+            200,
+            {
+                "schema": "lians.deployment-evidence.v1",
+                "version": "0.5.0",
+                "build_sha": sha,
+                "openapi_sha256": "b" * 64,
+            },
+        ),
         "/docs": response(404, {"detail": "Not Found"}),
         "/openapi.json": response(404, {"detail": "Not Found"}),
         "/v1/decision-envelopes": response(401, {"detail": "Unauthorized"}),
@@ -67,11 +97,12 @@ def test_run_validates_hardened_production_contract(monkeypatch) -> None:
         return responses[path]
 
     monkeypatch.setattr(MODULE, "request", fake_request)
-    result = MODULE.run("https://api.example.com")
+    result = MODULE.run("https://api.example.com", expected_build_sha=sha)
 
     assert requested == list(responses)
     assert result["authentication_boundary"] == "ok"
     assert result["documentation_boundary"] == "ok"
+    assert result["deployment_evidence"]["build_sha"] == sha
 
 
 def test_run_rejects_exposed_openapi(monkeypatch) -> None:
@@ -79,6 +110,15 @@ def test_run_rejects_exposed_openapi(monkeypatch) -> None:
         "/livez": response(200, {"status": "alive"}),
         "/health": response(200, {"status": "ok"}),
         "/readyz": response(200, {"status": "ok"}),
+        "/version": response(
+            200,
+            {
+                "schema": "lians.deployment-evidence.v1",
+                "version": "0.5.0",
+                "build_sha": "a" * 40,
+                "openapi_sha256": "b" * 64,
+            },
+        ),
         "/docs": response(404, {"detail": "Not Found"}),
         "/openapi.json": response(200, {"openapi": "3.1.0"}),
     }
@@ -97,3 +137,18 @@ def test_validate_health_rejects_non_200() -> None:
             response(503, {"status": "degraded"}),
             "Health",
         )
+
+
+def test_validate_version_binds_build_and_openapi_digests() -> None:
+    sha = "a" * 40
+    payload = {
+        "schema": "lians.deployment-evidence.v1",
+        "version": "0.5.0",
+        "build_sha": sha,
+        "openapi_sha256": "b" * 64,
+    }
+    assert MODULE.validate_version(response(200, payload), sha)["build_sha"] == sha
+    with pytest.raises(RuntimeError, match="does not match expected"):
+        MODULE.validate_version(response(200, payload), "c" * 40)
+    with pytest.raises(RuntimeError, match="exact build commit"):
+        MODULE.validate_version(response(200, {**payload, "build_sha": "unknown"}))

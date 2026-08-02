@@ -90,6 +90,18 @@ async def test_livez_is_cheap_and_alive(client):
 
 
 @pytest.mark.asyncio
+async def test_version_exposes_content_addressed_deployment_evidence(client):
+    r = await client.get("/version")
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["schema"] == "lians.deployment-evidence.v1"
+    assert payload["version"] == "0.5.0"
+    assert payload["build_sha"] == "unknown"
+    assert len(payload["openapi_sha256"]) == 64
+    assert payload["openapi_sha256"] == (await client.get("/version")).json()["openapi_sha256"]
+
+
+@pytest.mark.asyncio
 async def test_readyz_deep_check(client):
     r = await client.get("/readyz")
     assert r.status_code in (200, 503)          # deep check; shape always present

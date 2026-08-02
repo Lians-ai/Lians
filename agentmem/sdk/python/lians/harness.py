@@ -10,9 +10,9 @@ The harness wraps the two operations every memory-augmented agent needs:
        regulated deployments require.
 
 Unlike a raw vector store, the harness inherits Lians' bitemporal model:
-superseded facts are excluded at the database layer, so the context you inject
-is never contaminated by stale revisions. Every write lands in the tamper-evident
-audit chain, and per-subject scoping keeps GDPR/HIPAA crypto-shred intact.
+superseded facts are excluded at the database layer, so the context you inject is
+filtered for stale revisions under the configured policy. Every write lands in the
+tamper-evident audit chain, and per-subject scoping supports crypto-shred erasure.
 
 It is deliberately framework-agnostic. It works with any Lians client that
 exposes the shared synchronous surface (``add``, ``recall``, ``recall_at``,

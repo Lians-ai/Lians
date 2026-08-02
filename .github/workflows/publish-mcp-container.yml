@@ -32,13 +32,98 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
+      - name: Resolve and validate release version
+        id: release
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${REQUESTED_VERSION#v}"
+          source_version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release version: $REQUESTED_VERSION" >&2
+            exit 1
+          fi
+          if [ "$version" != "$source_version" ]; then
+            echo "Requested MCP image version $version does not match VERSION=$source_version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE_NAME}:$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
 
+      - name: Wait for the exact SDK release on PyPI
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["EXPECTED_VERSION"]
+          base_url = f"https://pypi.org/pypi/lians-sdk/{version}/json"
+          deadline = time.monotonic() + 30 * 60
+          attempt = 0
+          while True:
+              attempt += 1
+              request = urllib.request.Request(
+                  f"{base_url}?attempt={attempt}&t={time.time_ns()}",
+                  headers={
+                      "Accept": "application/json",
+                      "Cache-Control": "no-cache",
+                      "User-Agent": "lians-mcp-release/1",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      published = str(json.load(response)["info"]["version"])
+                  if published == version:
+                      print(f"lians-sdk {version} is available on PyPI.")
+                      break
+                  print(f"PyPI returned unexpected version {published!r}.")
+              except (
+                  urllib.error.URLError,
+                  TimeoutError,
+                  json.JSONDecodeError,
+                  KeyError,
+              ) as exc:
+                  print(f"PyPI attempt {attempt} is not ready: {exc}")
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise SystemExit(
+                      f"lians-sdk {version} did not become available on PyPI within 30 minutes"
+                  )
+              time.sleep(min(30, remaining))
+          PY
+
       - name: Build verification image
-        run: docker build --file Dockerfile.glama --tag lians-mcp-glama:test .
+        run: >-
+          docker build
+          --file Dockerfile.glama
+          --build-arg LIANS_VERSION=${{ steps.release.outputs.version }}
+          --tag lians-mcp-glama:test
+          .
+
+      - name: Verify installed SDK and image version
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          installed="$(docker run --rm --entrypoint python lians-mcp-glama:test -c \
+            'import importlib.metadata as m; print(m.version("lians-sdk"))')"
+          label="$(docker image inspect lians-mcp-glama:test \
+            --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
+          test "$installed" = "$EXPECTED_VERSION"
+          test "$label" = "$EXPECTED_VERSION"
 
       - name: Install MCP test client
         run: pip install "mcp>=1,<2"
@@ -61,10 +146,12 @@ jobs:
         with:
           context: .
           file: Dockerfile.glama
+          build-args: |
+            LIANS_VERSION=${{ steps.release.outputs.version }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ inputs.version || github.ref_name }}
+            ${{ steps.release.outputs.image }}
             ${{ env.IMAGE_NAME }}:latest
           sbom: true
           provenance: mode=max

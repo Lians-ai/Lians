@@ -1,5 +1,9 @@
 # mem0 Alternative, Fully Self-Hosted (2026)
 
+> **Update (2026-08-01):** Mem0's temporal/as-of and history surfaces have evolved.
+> This page is a dated self-hosting comparison, not proof that Mem0 lacks temporal
+> reasoning. Verify current official documentation before procurement claims.
+
 *Last updated: July 2026. Facts below reflect mem0's public docs and pricing
 pages as of this date; corrections welcome via issue or PR.*
 

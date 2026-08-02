@@ -1,0 +1,45 @@
+{
+  "schema": "lians.published-release-status.v1",
+  "verified_at": "2026-08-01T06:00:00Z",
+  "source_version": "0.5.0",
+  "production_api": {
+    "version": "0.5.0",
+    "url": "https://agentmem-lotus.fly.dev",
+    "verification_url": "https://agentmem-lotus.fly.dev/version"
+  },
+  "artifacts": {
+    "pypi": {
+      "version": "0.4.2",
+      "url": "https://pypi.org/project/lians-sdk/"
+    },
+    "npm": {
+      "version": "0.4.0",
+      "url": "https://www.npmjs.com/package/@lians-ai/lians"
+    },
+    "go": {
+      "version": "0.4.1",
+      "url": "https://pkg.go.dev/github.com/Lians-ai/Lians/agentmem/sdk/go"
+    },
+    "maven": {
+      "version": "0.4.1",
+      "url": "https://central.sonatype.com/artifact/ai.lians/lians-sdk"
+    },
+    "c": {
+      "version": "0.4.1",
+      "url": "https://github.com/Lians-ai/Lians/releases/tag/v0.4.1"
+    },
+    "ghcr_mcp": {
+      "version": "0.4.1",
+      "runtime": "ghcr.io/lians-ai/lians-mcp:0.4.1",
+      "url": "https://github.com/Lians-ai/Lians/pkgs/container/lians-mcp"
+    },
+    "mcp_registry": {
+      "version": "0.4.1",
+      "url": "https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians"
+    },
+    "github_release": {
+      "version": "0.4.1",
+      "url": "https://github.com/Lians-ai/Lians/releases/tag/v0.4.1"
+    }
+  }
+}

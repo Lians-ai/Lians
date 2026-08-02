@@ -72,9 +72,9 @@ The main additions are:
 from lians import LocalLiansClient
 mem = LocalLiansClient()
 
-# Hosted mode (your server or api.lians.dev)
+# Hosted mode (your server or the current Lians API endpoint)
 from lians import LiansClient
-mem = LiansClient(base_url="https://api.lians.dev", api_key="lians_...")
+mem = LiansClient(base_url="https://agentmem-lotus.fly.dev", api_key="lians_...")
 
 # Both share the same API surface — one line change
 ```

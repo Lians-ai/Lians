@@ -1,5 +1,11 @@
 # Lians Benchmark: Financial Memory Quality vs mem0, Zep, and Letta
 
+> **Historical benchmark notice (2026-08-01):** this document records a dated
+> harness and is not a current vendor leaderboard. Competitor products have since
+> added or documented temporal, history, versioning, audit, and observability
+> capabilities. Use the frozen results only with their exact versions and method;
+> see [competitive-landscape.md](competitive-landscape.md) for current positioning.
+
 This document compares Lians against mem0 and Zep across four dimensions that
 matter most for financial AI agents: stale-fact contamination, supersession
 accuracy, point-in-time recall, and compliance auditability.

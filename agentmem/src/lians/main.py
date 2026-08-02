@@ -1,6 +1,11 @@
 import asyncio
+import hashlib
+import json
 import logging
+import os
+import re
 from contextlib import asynccontextmanager
+from functools import lru_cache
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import __version__
 from .config import get_settings
 from .pii import SubjectKeyDestroyedError
 from .db import get_db as _get_db
@@ -47,6 +53,7 @@ from .middleware import (
 logger = logging.getLogger("lians.startup")
 
 _AIRGAP_SAFE_PROVIDERS = {"sentence-transformers", "local"}
+_BUILD_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 _DEV_SECRETS = {
@@ -410,6 +417,34 @@ app.include_router(otlp_router)
 app.include_router(validmind_router)
 app.include_router(validmind_legacy_router)
 app.include_router(learning_router)
+
+
+def _build_sha() -> str:
+    candidate = os.environ.get("LIANS_BUILD_SHA", "").strip().lower()
+    return candidate if _BUILD_SHA_PATTERN.fullmatch(candidate) else "unknown"
+
+
+@lru_cache(maxsize=1)
+def _openapi_sha256() -> str:
+    payload = json.dumps(
+        app.openapi(),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+@app.get("/version", include_in_schema=False)
+async def deployment_version():
+    """Return content-addressed public evidence of the deployed API build."""
+    return {
+        "schema": "lians.deployment-evidence.v1",
+        "version": __version__,
+        "build_sha": _build_sha(),
+        "openapi_sha256": _openapi_sha256(),
+        "deployment_environment": _runtime_settings.deployment_environment,
+    }
 
 
 @app.get("/health", include_in_schema=False)
