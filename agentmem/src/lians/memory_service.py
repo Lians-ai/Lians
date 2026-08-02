@@ -812,9 +812,12 @@ async def add_memory(
                     identifier=f"w:{mem.id}",
                 )
 
+            # Materialize the response while the instance is live. Supported
+            # session factories use expire_on_commit=False, but avoiding a
+            # post-commit SELECT also prevents SQLite local-mode writers from
+            # racing another transaction for an unnecessary refresh lock.
+            memory_out = _memory_to_out(mem, req.content)
             await db.commit()
-
-        await db.refresh(mem)
 
         # Change 7: invalidate in-process session cache on write
         invalidate_working_set(namespace, req.agent_id)
@@ -827,7 +830,7 @@ async def add_memory(
         record_write(namespace, supersession.relation)
         observe_add(namespace, _time.perf_counter() - _add_t0)
 
-        return _memory_to_out(mem, req.content)
+        return memory_out
 
 
 async def add_memory_idempotent(

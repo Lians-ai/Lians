@@ -303,7 +303,8 @@ class TestConcurrentAsyncioWrites:
                     metadata=meta,
                 ))
 
-        await asyncio.gather(*[_add(i) for i in range(5)])
+        results = await asyncio.gather(*[_add(i) for i in range(5)])
+        assert len({result.id for result in results}) == 5
 
         async with session_factory() as db:
             open_mems = (await db.execute(
