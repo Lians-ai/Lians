@@ -40,7 +40,7 @@ async def test_policy_is_part_of_cache_key(enabled):
     first_key = redis.get.await_args_list[1].args[0]
     second_key = redis.get.await_args_list[3].args[0]
     assert first_key != second_key
-    assert first_key.startswith("agentmem:recall:scoring-v1:")
+    assert first_key.startswith("agentmem:recall:scoring-v2:")
     assert not first_key.startswith("agentmem:recall:" + cache._pair_hash("tenant", "agent"))
 
 

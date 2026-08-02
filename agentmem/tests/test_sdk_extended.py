@@ -229,9 +229,7 @@ class TestLocalSupersessionReview:
         )
 
     def test_reject_supersession_does_not_succeed_until_invalidation_recovers(self):
-        invalidator = AsyncMock(
-            side_effect=RecallCacheInvalidationError("redis unavailable")
-        )
+        invalidator = AsyncMock(return_value=True)
         with patch("src.lians.cache_invalidation.invalidate_agent", invalidator):
             with LocalLiansClient(embedding_provider="local") as mem:
                 old = mem.add(
@@ -247,6 +245,9 @@ class TestLocalSupersessionReview:
                     metadata={"ticker": "NVDA", "metric": "guidance"},
                 )
 
+                invalidator.side_effect = RecallCacheInvalidationError(
+                    "redis unavailable"
+                )
                 with pytest.raises(RecallCacheInvalidationError):
                     mem.reject_supersession(memory_id=old["id"])
 
@@ -257,7 +258,9 @@ class TestLocalSupersessionReview:
 
         assert repaired["action"] == "reject"
         assert old["id"] in {item["id"] for item in after["memories"]}
-        assert invalidator.await_count == 2
+        # Both writes and both reviewer attempts are durable, fail-closed
+        # invalidation boundaries.
+        assert invalidator.await_count == 4
 
 
 # ===========================================================================

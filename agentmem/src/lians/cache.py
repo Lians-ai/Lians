@@ -35,7 +35,7 @@ from typing import Any, Iterator, Optional
 
 _redis_client: Any = None
 logger = logging.getLogger("agentmem.cache")
-_CACHE_SCHEMA_VERSION = "scoring-v1"
+_CACHE_SCHEMA_VERSION = "scoring-v2"
 _cache_bypass_pairs: set[str] = set()
 _cache_disabled: ContextVar[bool] = ContextVar(
     "lians_recall_cache_disabled", default=False
@@ -200,6 +200,25 @@ async def cache_generation_is_current(
         return str(current) == str(generation) and pair not in _cache_bypass_pairs
     except Exception:
         return False
+
+
+async def get_agent_cache_generation(
+    namespace: str,
+    agent_id: str,
+) -> Optional[str]:
+    """Return the shared generation that an in-process working set must match.
+
+    ``None`` means no safe cross-worker clock is available, so callers must use
+    the database rather than trusting process-local state.
+    """
+    pair = _pair_hash(namespace, agent_id)
+    if not _enabled() or pair in _cache_bypass_pairs:
+        return None
+    try:
+        generation = await _get_redis().get(_generation_key(namespace, agent_id))
+        return str(generation or "0")
+    except Exception:
+        return None
 
 
 async def invalidate_agent(

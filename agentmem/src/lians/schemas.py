@@ -57,6 +57,15 @@ class MemoryOut(BaseModel):
     context_after_2_id: Optional[UUID] = None
     context_before_2_metadata: Optional[dict[str, Any]] = None
     context_after_2_metadata: Optional[dict[str, Any]] = None
+    # Canonical provenance for attached neighbors. It is intentionally omitted
+    # from the memory object itself and emitted only inside the signed/content-
+    # addressed receipt, where callers can verify the returned plaintext and
+    # metadata without expanding the public MemoryOut compatibility surface.
+    context_evidence: dict[str, Any] = Field(
+        default_factory=dict,
+        exclude=True,
+        repr=False,
+    )
 
     model_config = {"from_attributes": True}
 

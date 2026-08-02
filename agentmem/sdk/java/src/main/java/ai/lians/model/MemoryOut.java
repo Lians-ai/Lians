@@ -27,6 +27,8 @@ public final class MemoryOut {
     @JsonProperty("content_hash")    public String contentHash;
     @JsonProperty("erased_at")       public String erasedAt;
     @JsonProperty("metadata")        public JsonNode metadata;
+    @JsonProperty("score")           public Double score;
+    @JsonProperty("score_breakdown") public MemoryScoreBreakdown scoreBreakdown;
 
     @Override
     public String toString() {

@@ -9,7 +9,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 from typing import Annotated, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Security, status
 from fastapi.security import APIKeyHeader
@@ -27,6 +27,12 @@ from ..schemas import (
     NamespaceBillingIn, NamespaceBillingOut,
 )
 from ..memory_service import get_retention_policy, set_retention_policy, prune_expired_content
+from ..cache_invalidation import (
+    flush_recall_invalidation,
+    invalidation_reference,
+    queue_recall_invalidation,
+)
+from ..session_cache import invalidate_working_set
 from ..audit_chain import verify_chain, export_audit_log, chain_log
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -278,7 +284,19 @@ async def assign_barrier_group(
         op="admin.barrier_assign",
         payload={"agent_id": body.agent_id, "group_name": body.group_name},
     )
+    invalidation_job = await queue_recall_invalidation(
+        db,
+        namespace,
+        body.agent_id,
+        operation="admin.barrier.assign",
+        operation_ref=invalidation_reference(
+            "admin.barrier.assign", namespace, body.agent_id,
+            body.group_name, uuid4(),
+        ),
+    )
     await db.commit()
+    invalidate_working_set(namespace, body.agent_id)
+    await flush_recall_invalidation(db, invalidation_job)
     await db.refresh(row)
     return BarrierGroupOut.model_validate(row)
 
@@ -319,7 +337,18 @@ async def remove_barrier_group(
         op="admin.barrier_remove",
         payload={"agent_id": agent_id},
     )
+    invalidation_job = await queue_recall_invalidation(
+        db,
+        namespace,
+        agent_id,
+        operation="admin.barrier.remove",
+        operation_ref=invalidation_reference(
+            "admin.barrier.remove", namespace, agent_id, uuid4()
+        ),
+    )
     await db.commit()
+    invalidate_working_set(namespace, agent_id)
+    await flush_recall_invalidation(db, invalidation_job)
     return Response(status_code=204)
 
 

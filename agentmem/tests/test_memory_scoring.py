@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from time import perf_counter
 
 from src.lians.scoring import (
     ADMISSION_WEIGHTS,
@@ -6,6 +7,7 @@ from src.lians.scoring import (
     TRUST_LEVELS,
     score_memory,
     stable_score_key,
+    tokenize_for_scoring,
 )
 
 
@@ -75,13 +77,26 @@ def test_freshness_respects_present_future_and_historical_validity():
     current = scored("current fact", valid_from=NOW)
     future = score_memory(content="future fact", reference_time=NOW,
                           event_time=datetime(2026, 9, 1, tzinfo=timezone.utc))
+    not_yet_valid = score_memory(
+        content="scheduled fact",
+        reference_time=NOW,
+        event_time=NOW,
+        valid_from=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
     expired = score_memory(content="old fact", reference_time=NOW, event_time=NOW,
                            valid_to=datetime(2026, 7, 1, tzinfo=timezone.utc))
     historical = score_memory(content="old fact", reference_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
                               event_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
                               valid_to=datetime(2026, 7, 1, tzinfo=timezone.utc))
     assert current["freshness_score"] > future["freshness_score"]
+    assert future["final_score"] == 0.0
+    assert not future["eligible"]
+    assert not future["temporal_eligible"]
+    assert not_yet_valid["final_score"] == 0.0
+    assert not not_yet_valid["eligible"]
+    assert not not_yet_valid["temporal_eligible"]
     assert expired["freshness_score"] == 0.0
+    assert not expired["eligible"]
     assert historical["freshness_score"] > 0.0
 
 
@@ -100,3 +115,41 @@ def test_stable_tie_breaker_uses_times_then_id():
     newer = datetime(2026, 2, 1, tzinfo=timezone.utc)
     rows = [("b", older), ("z", newer), ("a", older)]
     assert [row[0] for row in sorted(rows, key=lambda row: stable_score_key(row[0], row[1], row[1], breakdown))] == ["z", "a", "b"]
+
+
+def test_reserved_engine_metadata_cannot_boost_quality():
+    plain = scored("ordinary preference note", metadata={})
+    reserved = scored(
+        "ordinary preference note",
+        metadata={
+            "_admission": {"action": "allow", "confidence": 1.0},
+            "_learning": {"average_reward": 1.0},
+        },
+    )
+    assert reserved["importance_score"] == plain["importance_score"]
+    assert reserved["confidence_score"] == plain["confidence_score"]
+    assert reserved["stability_score"] == plain["stability_score"]
+    assert reserved["final_score"] == plain["final_score"]
+
+
+def test_unicode_unsegmented_text_has_lexical_relevance():
+    matched = scored("贷款风险评估已经完成", query="贷款风险")
+    unrelated = scored("天气预报今天晴朗", query="贷款风险")
+    assert matched["relevance_score"] > unrelated["relevance_score"]
+    assert tokenize_for_scoring("credit_limit") == ("credit", "limit")
+
+
+def test_metadata_scoring_work_is_bounded_for_large_nested_values():
+    metadata = {
+        "evidence": [
+            {"payload": "x" * 1_500_000, "ignored": ["y" * 100_000] * 100}
+        ] * 100,
+    }
+    started = perf_counter()
+    result = scored("bounded evidence", metadata=metadata, query="evidence")
+    elapsed = perf_counter() - started
+    assert result["eligible"]
+    assert result["scoring_limits"]["metadata_value_chars"] == 512
+    # This is a generous regression guard (normal runs are a few milliseconds)
+    # that catches accidental whole-object stringification without being flaky.
+    assert elapsed < 0.25

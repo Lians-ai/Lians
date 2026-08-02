@@ -42,6 +42,29 @@ asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
 - Shipped lifecycle, recall-quality, local-MCP, packaging, and benchmark fixes.
 - npm remained at 0.4.0 after the 0.4.1 publisher authorization failure.
 
+## Unreleased
+
+### Changed
+
+- Recall policy `lians-recall-policy-v3` caps each query facet at 400 candidates
+  (at most four facets) and publishes both the per-facet and request-wide upper
+  bounds alongside per-memory work limits in its evidence.
+- Recall evidence advances to `lians.recall-receipt.v2`, which binds each
+  result's final score and complete breakdown alongside policy and reference
+  time, plus any attached neighbor's returned content, metadata, temporal
+  provenance, source, and information barrier. Compiled context advances to
+  `lians.context-receipt.v2`. Cache schema `scoring-v2` isolates older receipt
+  payloads. Typed SDK score fields are additive; receipt-JSON consumers should
+  branch on `schema`.
+- Context neighbors now use bounded indexed lookups with event, ingestion,
+  validity, and post-commit information-barrier checks. Retrieval and optional
+  cross-encoder scoring use bounded text/token samples; cached scoring packs
+  have explicit plaintext and slot ceilings, and timed-out rerankers cannot
+  mutate returned evidence.
+- Idempotent writes now commit their retry key and durable recall-invalidation
+  barrier atomically with the memory. A retry repairs a post-commit cache outage
+  and returns the original memory instead of inserting a duplicate.
+
 ## 0.4.0 — 2026-07-06
 
 The memory-lifecycle release: flush, resurface, decay, degrade, export.

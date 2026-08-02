@@ -4,13 +4,19 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .audit_chain import chain_log
+from .cache_invalidation import (
+    flush_recall_invalidation,
+    invalidation_reference,
+    queue_recall_invalidation,
+)
 from .models import LiveFact, Memory, MemoryFeedback
+from .session_cache import invalidate_working_set
 from .schemas import (
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
@@ -88,11 +94,17 @@ async def record_memory_feedback(
             "policy_action": action,
         },
     )
+    invalidation_job = await queue_recall_invalidation(
+        db,
+        namespace,
+        req.agent_id,
+        operation="memory.feedback",
+        operation_ref=invalidation_reference("memory.feedback", row.id),
+        memory_ids=[memory_id],
+    )
     await db.commit()
-    from .cache import invalidate_agent
-    from .session_cache import invalidate_working_set
-    await invalidate_agent(namespace, req.agent_id)
     invalidate_working_set(namespace, req.agent_id)
+    await flush_recall_invalidation(db, invalidation_job)
     return MemoryFeedbackOut(
         id=row.id,
         memory_id=memory_id,
@@ -228,11 +240,19 @@ async def resolve_memory_review(
             "replacement_memory_id": str(replacement_id) if replacement_id else None,
         },
     )
+    invalidation_job = await queue_recall_invalidation(
+        db,
+        namespace,
+        req.agent_id,
+        operation="memory.review.resolve",
+        operation_ref=invalidation_reference(
+            "memory.review.resolve", memory_id, req.action, resolved_at.isoformat()
+        ),
+        memory_ids=[memory_id, *([replacement_id] if replacement_id else [])],
+    )
     await db.commit()
-    from .cache import invalidate_agent
-    from .session_cache import invalidate_working_set
-    await invalidate_agent(namespace, req.agent_id)
     invalidate_working_set(namespace, req.agent_id)
+    await flush_recall_invalidation(db, invalidation_job)
     return MemoryReviewResult(
         memory_id=memory_id,
         agent_id=req.agent_id,
@@ -266,6 +286,7 @@ async def run_memory_maintenance(
         by_memory.setdefault(memory_id, {})[str(signal)] = int(count)
 
     candidates: list[UUID] = []
+    invalidation_memory_ids: dict[str, list[UUID]] = {}
     demoted = 0
     for memory_id, counts in by_memory.items():
         negative = counts.get("ignored", 0) + counts.get("duplicate", 0)
@@ -299,21 +320,27 @@ async def run_memory_maintenance(
             content_hash=memory.content_hash,
             payload={"action": "bounded_decay", "signals": negative},
         )
+        invalidation_memory_ids.setdefault(str(memory.agent_id), []).append(memory.id)
         demoted += 1
     if not dry_run:
+        run_id = uuid4()
+        invalidation_jobs = []
+        for agent_id, memory_ids in invalidation_memory_ids.items():
+            invalidation_jobs.append(await queue_recall_invalidation(
+                db,
+                namespace,
+                agent_id,
+                operation="memory.maintenance",
+                operation_ref=invalidation_reference(
+                    "memory.maintenance", run_id, agent_id
+                ),
+                memory_ids=memory_ids,
+            ))
         await db.commit()
-        from .cache import invalidate_agent
-        from .session_cache import invalidate_working_set
-        agent_ids = {
-            str(row[0]) for row in (await db.execute(
-                select(Memory.agent_id).where(
-                    Memory.namespace == namespace, Memory.id.in_(candidates)
-                )
-            )).all()
-        }
-        for agent_id in agent_ids:
-            await invalidate_agent(namespace, agent_id)
+        for job in invalidation_jobs:
+            agent_id = str((job.payload or {})["agent_id"])
             invalidate_working_set(namespace, agent_id)
+            await flush_recall_invalidation(db, job)
     return MemoryMaintenanceResult(
         namespace=namespace,
         memories_scanned=len(by_memory),

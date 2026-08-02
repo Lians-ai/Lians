@@ -12,13 +12,17 @@ financial corpus and eliminating temporal predicates from the hot path.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import delete, select, and_, or_
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import LiveFact, Memory
+
+_MAX_WORKING_SET_FACTS = 400
+
 
 def _get_structured_keys() -> frozenset[str]:
     """Read structured keys from the active domain adapter (no finance hardcoding)."""
@@ -91,6 +95,7 @@ async def keyed_lookup(
     agent_id: str,
     predicate_key: str,
     barrier_group: Optional[str],
+    reference_time: Optional[datetime] = None,
 ) -> Optional[LiveFact]:
     """Exact-match lookup for a keyed fact — no embedding, no ANN.
 
@@ -103,11 +108,18 @@ async def keyed_lookup(
         LiveFact.agent_id == agent_id,
         LiveFact.predicate_key == predicate_key,
     ]
+    if reference_time is not None:
+        conditions.append(LiveFact.event_time <= reference_time)
     if barrier_group is not None:
         conditions.append(
             or_(LiveFact.barrier_group == barrier_group, LiveFact.barrier_group.is_(None))
         )
-    result = await db.execute(select(LiveFact).where(and_(*conditions)).limit(1))
+    result = await db.execute(
+        select(LiveFact)
+        .where(and_(*conditions))
+        .order_by(LiveFact.event_time.desc(), LiveFact.id.asc())
+        .limit(1)
+    )
     return result.scalar_one_or_none()
 
 
@@ -116,15 +128,27 @@ async def fetch_working_set(
     namespace: str,
     agent_id: str,
     barrier_group: Optional[str],
+    reference_time: Optional[datetime] = None,
 ) -> list[LiveFact]:
     """Load all live facts for an agent — used to warm the in-process cache."""
     conditions = [
         LiveFact.namespace == namespace,
         LiveFact.agent_id == agent_id,
     ]
+    if reference_time is not None:
+        conditions.append(LiveFact.event_time <= reference_time)
     if barrier_group is not None:
         conditions.append(
             or_(LiveFact.barrier_group == barrier_group, LiveFact.barrier_group.is_(None))
         )
-    result = await db.execute(select(LiveFact).where(and_(*conditions)))
+    result = await db.execute(
+        select(LiveFact)
+        .where(and_(*conditions))
+        .order_by(
+            LiveFact.importance.desc(),
+            LiveFact.event_time.desc(),
+            LiveFact.id.asc(),
+        )
+        .limit(_MAX_WORKING_SET_FACTS)
+    )
     return list(result.scalars().all())

@@ -50,11 +50,19 @@ blocked-source, or still-pending content receives a final score of zero and is
 not returned by normal recall. Existing admission enforcement still decides
 whether a write is rejected or held.
 
-Recall candidate generation and bitemporal filtering are unchanged. Current
-recall still reads `live_facts`; historical recall still selects only memory
-versions valid at `as_of`. To protect measured retrieval quality, final recall
-ranking blends the existing retrieval score at 0.8 with the seven-component
-quality score at 0.2. These blend weights are returned as `ranking_weights`.
+Current recall reads `live_facts`; historical recall selects only memory
+versions valid at `as_of`. Present and historical candidate generation also
+excludes memories whose event time is later than the single reference time
+resolved for the request. Policy `lians-recall-policy-v3` bounds each query
+facet to 400 candidates and permits no more than four facets. It exposes both
+`candidate_cap` and the request-specific `max_scored_candidates` upper bound.
+Lexical, entity, quality, and optional cross-encoder work use a deterministic
+8,192-character head/tail sample and no more than 1,024 tokens per candidate.
+Only selected public results are rehydrated to their full content. Cached
+scoring packs retain at most 1 MiB of sampled plaintext and 32 agent slots.
+To protect measured retrieval quality, final recall ranking blends the existing
+retrieval score at 0.8 with the seven-component quality score at 0.2. These
+blend weights are returned as `ranking_weights`.
 Ties use final score descending, event time descending, ingestion time
 descending, and memory ID ascending.
 
@@ -76,9 +84,21 @@ erasure, retention pruning, and supersession rejection also commit a durable
 invalidation job in the same database transaction as the mutation. Every
 worker checks that database barrier before trusting a Redis hit and revalidates
 the generation afterward. If Redis is unavailable, stale cache is bypassed
-cross-worker, the API fails closed, the durable worker retries, and an explicit
-request retry repairs the same operation even after the underlying data change
-has already committed.
+cross-worker, the API fails closed, and the durable worker retries. Operations
+with a stable retry identity (privacy erasure, retention pruning, supersession
+review, and idempotent memory add) can also repair the same invalidation on an
+explicit request retry after the underlying data change has committed. Other
+mutations remain visibly barriered until the worker completes their job.
+
+Recall receipts use schema `lians.recall-receipt.v2`. In addition to identity,
+content hash, temporal fields, source, policy, and reference time, v2 binds the
+final public score and full score breakdown for every returned memory. Cache
+schema `scoring-v2` isolates all older payloads. Clients that parse receipt JSON
+should branch on the `schema` field; the typed memory fields remain additive.
+When neighbor context is requested, v2 also binds each neighbor's ID, content
+hash, temporal/source/barrier provenance, returned plaintext hash, and metadata
+hash. Compiled context uses `lians.context-receipt.v2` and revalidates neighbor
+visibility after resolving the post-recall information barrier.
 
 API memory objects may include optional `score_breakdown`; existing required
 fields are unchanged. This is a rule-based quality and governance layer, not a

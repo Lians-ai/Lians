@@ -37,7 +37,19 @@ export interface MemoryScoreBreakdown {
   safety_score: number;
   final_score: number;
   eligible: boolean;
+  safety_eligible?: boolean;
+  temporal_eligible?: boolean;
   purpose: "admission" | "recall";
+  scoring_policy_version?: string;
+  reference_time?: string;
+  scoring_limits?: {
+    text_sample_chars: number;
+    token_cap: number;
+    metadata_chars: number;
+    metadata_items: number;
+    metadata_depth: number;
+    metadata_value_chars: number;
+  };
   weights: Record<string, number>;
   reasons: string[];
   quality_score?: number;
