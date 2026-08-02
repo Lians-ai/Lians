@@ -231,3 +231,57 @@ def stable_score_key(memory_id: Any, event_time: Optional[datetime], created_at:
     return (-clamp(breakdown.get("final_score")),
             -(event.timestamp() if event else float("-inf")),
             -(created.timestamp() if created else float("-inf")), str(memory_id))
+
+
+def rank_position_score(position: int, total: int, input_score: Any) -> float:
+    """Encode an explicit returned order as a bounded, strictly descending score.
+
+    Rerankers such as MMR and graph proximity are order-producing algorithms;
+    their raw objectives are not calibrated to the hybrid recall score.  Each
+    returned position therefore receives its own score bucket, while half of a
+    bucket remains available to preserve the prior score as a deterministic
+    secondary signal.  For the public recall limit (200), six-place rounding
+    cannot collapse adjacent buckets.
+    """
+    count = max(1, int(total))
+    index = min(max(0, int(position)), count - 1)
+    bucket = count - index
+    return round((bucket + 0.5 * clamp(input_score)) / (count + 1.0), 6)
+
+
+def record_ranking_stage(
+    memory: Any,
+    *,
+    stage: str,
+    input_score: Any,
+    output_score: Any,
+    details: Optional[Mapping[str, Any]] = None,
+    reason: Optional[str] = None,
+) -> float:
+    """Synchronize one reranking stage with a memory's public explanation."""
+    before = round(clamp(input_score), 6)
+    after = round(clamp(output_score), 6)
+    prior = getattr(memory, "_score_breakdown", None)
+    if not isinstance(prior, dict):
+        return after
+
+    breakdown = dict(prior)
+    stages = [dict(item) for item in breakdown.get("ranking_stages", [])
+              if isinstance(item, Mapping)]
+    stage_record = {
+        "stage": str(stage),
+        "input_score": before,
+        "output_score": after,
+        **dict(details or {}),
+    }
+    stages.append(stage_record)
+    reasons = list(breakdown.get("reasons") or [])
+    if reason:
+        reasons.append(reason)
+    breakdown.update({
+        "final_score": after,
+        "ranking_stages": stages,
+        "reasons": reasons,
+    })
+    setattr(memory, "_score_breakdown", breakdown)
+    return after

@@ -99,3 +99,47 @@ def test_fusion_score_explanation_and_full_tie_order_stay_synchronized():
         assert public_score == memory_row._score_breakdown["final_score"]
         assert memory_row._score_breakdown["pre_fusion_score"] == 0.7
         assert memory_row._score_breakdown["fusion"]["facet_count"] == 4
+
+
+def test_fusion_keeps_breakdown_from_strongest_facet_not_last_facet():
+    memory = _memory()
+    memory.event_time = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    memory.ingestion_time = memory.event_time
+    strongest = {
+        "final_score": 0.7,
+        "quality_score": 0.65,
+        "relevance_score": 0.95,
+        "reasons": ["original facet"],
+    }
+    last = {
+        "final_score": 0.2,
+        "quality_score": 0.15,
+        "relevance_score": 0.1,
+        "reasons": ["last facet"],
+    }
+    # This mirrors production ORM identity reuse: the final facet leaves its
+    # explanation on the shared object before fusion starts.
+    memory._score_breakdown = last
+    rankings = [
+        [(memory, 0.9, "shared")],
+        [(memory, 0.2, "shared")],
+    ]
+    plan = QueryPlan(
+        ("original", "history"), ("episodic", "history"), True
+    )
+
+    fused = _fuse_recall_rankings(
+        rankings,
+        plan,
+        limit=1,
+        facet_breakdowns=[{str(memory.id): strongest}, {str(memory.id): last}],
+    )
+
+    assert fused[0][0] is memory
+    breakdown = memory._score_breakdown
+    assert breakdown["pre_fusion_score"] == 0.7
+    assert breakdown["relevance_score"] == 0.95
+    assert breakdown["fusion"]["strongest_input_score"] == 0.9
+    assert breakdown["fusion"]["strongest_scope"] == "episodic"
+    assert "original facet" in breakdown["reasons"]
+    assert "last facet" not in breakdown["reasons"]

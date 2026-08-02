@@ -8,7 +8,10 @@ from src.lians import cache
 
 @pytest.fixture
 def enabled(monkeypatch):
+    cache._cache_bypass_pairs.clear()
     monkeypatch.setattr(cache, "_enabled", lambda: True)
+    yield
+    cache._cache_bypass_pairs.clear()
 
 
 @pytest.mark.asyncio
@@ -49,6 +52,28 @@ async def test_invalidation_is_single_increment_without_scan(enabled):
     redis.incr.assert_awaited_once()
     assert not redis.scan_iter.called
     assert not redis.delete.called
+
+
+@pytest.mark.asyncio
+async def test_failed_required_invalidation_quarantines_cache_and_raises(enabled):
+    redis = AsyncMock()
+    redis.incr.side_effect = ConnectionError("redis unavailable")
+    with patch.object(cache, "_get_redis", return_value=redis):
+        with pytest.raises(cache.RecallCacheInvalidationError):
+            await cache.invalidate_agent(
+                "tenant", "agent", fail_closed=True
+            )
+        lookup = await cache.get_cached_recall(
+            "tenant", "agent", "query", None, 5, {}, {"mode": "fast"}
+        )
+        await cache.set_cached_recall(
+            "tenant", "agent", "query", None, 5, {}, "stale", 60,
+            {"mode": "fast"}, generation="0",
+        )
+
+    assert lookup is None
+    redis.get.assert_not_awaited()
+    redis.setex.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,26 @@ from src.lians.db import Base
 from src.lians.config import get_settings, Settings
 from src.lians.degradation import reset_degradations
 import src.lians.kms as _kms
+import src.lians.cache as _recall_cache
+
+
+class _InMemoryRecallRedis:
+    """Minimal hermetic Redis surface used by the recall-cache unit paths."""
+
+    def __init__(self):
+        self.values: dict[str, str] = {}
+
+    async def get(self, key: str):
+        return self.values.get(key)
+
+    async def setex(self, key: str, _ttl: int, value: str):
+        self.values[key] = value
+        return True
+
+    async def incr(self, key: str):
+        value = int(self.values.get(key, "0")) + 1
+        self.values[key] = str(value)
+        return value
 
 # ---------------------------------------------------------------------------
 # Determinism guard: a developer's local `agentmem/.env` (e.g. a Docker-stack
@@ -128,10 +148,16 @@ def test_settings(monkeypatch):
     # in os.environ; pin it so later tests see the server default regardless of
     # test order.
     monkeypatch.setenv("RECALL_CACHE_ENABLED", "true")
+    # Keep cache-on behavior covered without relying on a developer's Redis
+    # daemon. Tests that exercise Redis failures patch ``_get_redis`` directly.
+    _recall_cache._redis_client = _InMemoryRecallRedis()
+    _recall_cache._cache_bypass_pairs.clear()
     get_settings.cache_clear()
     _kms._reset_cache()
     yield
     reset_degradations()
+    _recall_cache._redis_client = None
+    _recall_cache._cache_bypass_pairs.clear()
     get_settings.cache_clear()
     _kms._reset_cache()
 

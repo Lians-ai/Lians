@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..config import get_settings
-from ..admission import evaluate as evaluate_admission
-from ..admission_service import record_rejection, enqueue_pending
-from ..scoring import score_memory
+from ..admission_service import (
+    enqueue_pending,
+    evaluate_memory_admission,
+    record_rejection,
+)
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
@@ -31,41 +33,6 @@ from ..feedback_service import (
 )
 
 router = APIRouter(prefix="/v1", tags=["memory"])
-
-
-def _attach_admission_score(req: MemoryAdd, decision) -> None:
-    """Persist the explainable admission assessment in backward-compatible metadata."""
-    status = {
-        "admit": "safe",
-        "review": "review_needed",
-        "reject": "rejected",
-    }.get(decision.action, "review_needed")
-    caller_metadata = dict(req.metadata or {})
-    # These keys are produced by Lians. Public callers may supply arbitrary
-    # domain metadata, but they cannot forge a prior admission decision or
-    # score explanation.
-    caller_metadata.pop("_admission", None)
-    caller_metadata.pop("_score", None)
-    breakdown = score_memory(
-        content=req.content,
-        reference_time=req.event_time,
-        event_time=req.event_time,
-        valid_from=req.event_time,
-        metadata=caller_metadata,
-        importance=req.importance,
-        source=req.source,
-        safety_status=status,
-        risk_tags=decision.risk_tags,
-        purpose="admission",
-    )
-    req.metadata = {
-        **caller_metadata,
-        "_admission": {
-            "action": decision.action,
-            "risk_tags": list(decision.risk_tags),
-        },
-        "_score": breakdown,
-    }
 
 
 @router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)
@@ -143,11 +110,11 @@ async def create_memory(
     auth.require("write")
 
     settings = get_settings()
-    blocked = {s.strip().lower() for s in settings.admission_blocked_sources.split(",") if s.strip()}
-    decision = evaluate_admission(
-        req.content, req.source, mode=settings.admission_mode, blocked_sources=blocked,
+    decision = evaluate_memory_admission(
+        req,
+        mode=settings.admission_mode,
+        blocked_sources=settings.admission_blocked_sources,
     )
-    _attach_admission_score(req, decision)
 
     if decision.action == "reject":
         await record_rejection(db, auth.namespace, req.agent_id, decision)
@@ -166,9 +133,6 @@ async def create_memory(
         })
 
     # admitted — record any risk findings on the memory for downstream visibility
-    if decision.risk_tags:
-        req.metadata = {**(req.metadata or {}),
-                        "_admission": {"action": "admit", "risk_tags": decision.risk_tags}}
     return await add_memory_idempotent(
         db, auth.namespace, req, idempotency_key, barrier_override=auth.barrier_group,
     )
@@ -189,19 +153,12 @@ async def batch_create_memories(
     """
     auth.require("write")
     settings = get_settings()
-    blocked = {
-        s.strip().lower()
-        for s in settings.admission_blocked_sources.split(",")
-        if s.strip()
-    }
     for item in req.memories:
-        decision = evaluate_admission(
-            item.content,
-            item.source,
+        decision = evaluate_memory_admission(
+            item,
             mode=settings.admission_mode,
-            blocked_sources=blocked,
+            blocked_sources=settings.admission_blocked_sources,
         )
-        _attach_admission_score(item, decision)
         if decision.action == "reject":
             await record_rejection(db, auth.namespace, item.agent_id, decision)
             raise HTTPException(status_code=422, detail={
@@ -220,14 +177,6 @@ async def batch_create_memories(
                 "risk_tags": decision.risk_tags,
                 "reasons": decision.reasons,
             })
-        if decision.risk_tags:
-            item.metadata = {
-                **(item.metadata or {}),
-                "_admission": {
-                    "action": "admit",
-                    "risk_tags": decision.risk_tags,
-                },
-            }
     return await batch_add_memories(
         db, auth.namespace, req.memories, barrier_override=auth.barrier_group
     )

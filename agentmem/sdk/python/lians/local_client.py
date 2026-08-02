@@ -136,10 +136,6 @@ class LocalLiansClient:
         # enforces MASTER_ENCRYPTION_KEY at startup.
         os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
         os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
-        # Local mode has no Redis: every cache attempt would burn ~1-2s in
-        # connection timeouts per call. Callers can still opt back in.
-        os.environ.setdefault("RECALL_CACHE_ENABLED", "false")
-
         # Build the async engine
         if db_path is None:
             url = "sqlite+aiosqlite:///:memory:"
@@ -202,10 +198,64 @@ class LocalLiansClient:
     # ------------------------------------------------------------------
 
     def _run(self, coro):  # type: ignore[type-arg]
-        return self._loop.run_until_complete(coro)
+        # Local mode has no shared Redis cache.  Scope the bypass to this
+        # execution context so a LocalLiansClient embedded in a hosted process
+        # cannot disable caching for concurrent HTTP requests (or inherit the
+        # hosted process's enabled cache and fail a local privacy erase).
+        from src.lians.cache import recall_cache_disabled
+
+        with recall_cache_disabled():
+            return self._loop.run_until_complete(coro)
 
     def _session(self) -> Any:
         return self._session_factory()
+
+    @staticmethod
+    def _evaluate_memory_admission(req: Any) -> Any:
+        from src.lians.admission_service import evaluate_memory_admission
+        from src.lians.config import get_settings
+
+        settings = get_settings()
+        return evaluate_memory_admission(
+            req,
+            mode=settings.admission_mode,
+            blocked_sources=settings.admission_blocked_sources,
+        )
+
+    async def _handle_blocked_admission(
+        self,
+        db: AsyncSession,
+        req: Any,
+        decision: Any,
+        *,
+        allow_review_result: bool,
+    ) -> Optional[dict[str, Any]]:
+        """Apply reject/review side effects for an evaluated local write."""
+        from src.lians.admission_service import enqueue_pending, record_rejection
+
+        if decision.action == "reject":
+            await record_rejection(db, self._namespace, req.agent_id, decision)
+            reasons = "; ".join(decision.reasons) or "write rejected by admission policy"
+            raise ValueError(
+                f"Memory admission rejected: {reasons} "
+                f"(risk_tags={decision.risk_tags})"
+            )
+        if decision.action != "review":
+            return None
+
+        pending = await enqueue_pending(db, self._namespace, req, decision)
+        result = {
+            "status": "held_for_review",
+            "pending_id": str(pending.id),
+            "risk_tags": list(decision.risk_tags),
+            "reasons": list(decision.reasons),
+        }
+        if allow_review_result:
+            return result
+        raise ValueError(
+            "Memory admission held for review: "
+            f"pending_id={pending.id} (risk_tags={decision.risk_tags})"
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -232,7 +282,13 @@ class LocalLiansClient:
         from src.lians.schemas import MemoryAdd
         from src.lians.memory_service import add_memory
         req = MemoryAdd(**kwargs)
+        decision = self._evaluate_memory_admission(req)
         async with self._session_factory() as db:
+            blocked = await self._handle_blocked_admission(
+                db, req, decision, allow_review_result=True,
+            )
+            if blocked is not None:
+                return blocked
             result = await add_memory(db, self._namespace, req)
         return result.model_dump(mode="json")
 
@@ -247,12 +303,18 @@ class LocalLiansClient:
         from src.lians.schemas import MemoryAdd
         from src.lians.memory_service import add_memory
         from src.lians.embeddings import get_embedding_provider
+        reqs = [MemoryAdd(agent_id=agent_id, **item) for item in items]
+        decisions = [self._evaluate_memory_admission(req) for req in reqs]
+        async with self._session_factory() as db:
+            for req, decision in zip(reqs, decisions):
+                await self._handle_blocked_admission(
+                    db, req, decision, allow_review_result=False,
+                )
         provider = get_embedding_provider()
-        embeddings = await provider.embed([it["content"] for it in items])
+        embeddings = await provider.embed([req.content for req in reqs])
         out = []
         async with self._session_factory() as db:
-            for it, emb in zip(items, embeddings):
-                req = MemoryAdd(agent_id=agent_id, **it)
+            for req, emb in zip(reqs, embeddings):
                 result = await add_memory(
                     db, self._namespace, req, precomputed_embedding=emb
                 )
@@ -491,7 +553,12 @@ class LocalLiansClient:
         from src.lians.schemas import MemoryAdd
         from src.lians.memory_service import batch_add_memories
         items = [MemoryAdd(**m) for m in memories]
+        decisions = [self._evaluate_memory_admission(item) for item in items]
         async with self._session_factory() as db:
+            for item, decision in zip(items, decisions):
+                await self._handle_blocked_admission(
+                    db, item, decision, allow_review_result=False,
+                )
             result = await batch_add_memories(db, self._namespace, items)
         return result.model_dump(mode="json")
 

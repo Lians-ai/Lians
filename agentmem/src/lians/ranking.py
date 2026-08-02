@@ -34,7 +34,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory, LiveFact
 from .crypto import decrypt_content
-from .scoring import score_memory, stable_score_key
+from .scoring import (
+    rank_position_score,
+    record_ranking_stage,
+    score_memory,
+    stable_score_key,
+)
 
 _ANN_PREFETCH_MULTIPLIER = 20
 logger = logging.getLogger("agentmem.ranking")
@@ -74,6 +79,59 @@ def _get_reranker():
     return _reranker
 
 
+def _stable_entry_key(entry: tuple[Any, float, Optional[str]]) -> tuple[Any, ...]:
+    memory, score, _content = entry
+    breakdown = getattr(memory, "_score_breakdown", None)
+    if not isinstance(breakdown, dict):
+        breakdown = {"final_score": score}
+    return stable_score_key(
+        getattr(memory, "id", ""),
+        getattr(memory, "event_time", None),
+        getattr(memory, "ingestion_time", None),
+        breakdown,
+    )
+
+
+def apply_ordered_ranking_stage(
+    ordered: list[tuple[Any, float, Optional[str]]],
+    *,
+    stage: str,
+    details: Optional[list[dict[str, Any]]] = None,
+    reason: str,
+) -> list[tuple[Any, float, Optional[str]]]:
+    """Assign explainable, strictly descending public scores to a new order."""
+    total = len(ordered)
+    if total == 0:
+        return ordered
+    explained: list[tuple[Any, float, Optional[str]]] = []
+    detail_rows = details or [{} for _ in ordered]
+    if len(detail_rows) != total:
+        raise ValueError("ranking-stage details must match the ordered candidates")
+    for position, ((memory, input_score, content), stage_details) in enumerate(
+        zip(ordered, detail_rows)
+    ):
+        output_score = (
+            input_score
+            if total == 1
+            else rank_position_score(position, total, input_score)
+        )
+        output_score = record_ranking_stage(
+            memory,
+            stage=stage,
+            input_score=input_score,
+            output_score=output_score,
+            details={
+                "method": "rank-calibration-v1",
+                "position": position + 1,
+                "candidate_count": total,
+                **dict(stage_details),
+            },
+            reason=reason,
+        )
+        explained.append((memory, output_score, content))
+    return explained
+
+
 def rerank_cross_encoder(
     query: str,
     scored: list[tuple[Any, float, Optional[str]]],
@@ -91,11 +149,34 @@ def rerank_cross_encoder(
         ce = _get_reranker()
         pairs = [(query, content or "") for _, _, content in window]
         ce_scores = ce.predict(pairs, show_progress_bar=False)
-        order = sorted(range(len(window)), key=lambda i: -float(ce_scores[i]))
-        reranked = [window[i] for i in order]
+        raw_scores = [float(value) for value in ce_scores]
+        if len(raw_scores) != len(window) or any(
+            not math.isfinite(value) for value in raw_scores
+        ):
+            raise ValueError("cross-encoder returned invalid scores")
+        order = sorted(
+            range(len(window)),
+            key=lambda i: (-raw_scores[i], _stable_entry_key(window[i])),
+        )
+        ordered = ([window[i] for i in order] + rest)[:k]
+        detail_rows = [{
+            "model": RERANKER_MODEL,
+            "evaluated": True,
+            "raw_model_score": round(raw_scores[i], 6),
+        } for i in order]
+        detail_rows.extend({
+            "model": RERANKER_MODEL,
+            "evaluated": False,
+        } for _entry in rest)
+        reranked = apply_ordered_ranking_stage(
+            ordered,
+            stage="cross-encoder",
+            details=detail_rows[:len(ordered)],
+            reason="cross-encoder relevance reranking applied",
+        )
     except Exception:
         return scored[:k]
-    return (reranked + rest)[:k]
+    return reranked
 
 
 async def rerank_cross_encoder_async(
@@ -333,6 +414,9 @@ def mmr_rerank(
     zero similarity (treated as maximally diverse).
     """
     lambda_ = min(1.0, max(0.0, lambda_))
+    if lambda_ >= 1.0 or len(results) <= 1:
+        return results
+
     def _emb_or_none(row: Any) -> Optional[list[float]]:
         # Memory rows arrive with the embedding column deferred (recall
         # hydration skips it); touching it here would lazy-load outside the
@@ -346,9 +430,12 @@ def mmr_rerank(
     embs: list[Optional[list[float]]] = [_emb_or_none(r[0]) for r in results]
     remaining = list(range(len(results)))
     order: list[int] = []
+    selection: list[dict[str, Any]] = []
     while remaining:
         best_i: Optional[int] = None
         best_val: Optional[float] = None
+        best_rel = 0.0
+        best_sim = 0.0
         for i in remaining:
             rel = results[i][1]
             if order and embs[i] is not None:
@@ -361,9 +448,21 @@ def mmr_rerank(
             val = lambda_ * rel - (1.0 - lambda_) * sim
             if best_val is None or val > best_val:
                 best_val, best_i = val, i
+                best_rel, best_sim = float(rel), float(sim)
         order.append(best_i)  # type: ignore[arg-type]
         remaining.remove(best_i)
-    return [results[i] for i in order]
+        selection.append({
+            "lambda": round(lambda_, 6),
+            "selection_objective": round(float(best_val or 0.0), 6),
+            "input_relevance": round(best_rel, 6),
+            "max_selected_similarity": round(best_sim, 6),
+        })
+    return apply_ordered_ranking_stage(
+        [results[i] for i in order],
+        stage="mmr-rerank",
+        details=selection,
+        reason="maximal marginal relevance diversity reranking applied",
+    )
 
 
 _BM25_K1 = 1.5
@@ -1024,9 +1123,17 @@ def _mmr_select(
     }
 
     selected: list[tuple[Any, float, Optional[str]]] = [scored[0]]
+    selection: list[dict[str, Any]] = [{
+        "lambda": round(lam, 6),
+        "selection_objective": round(lam, 6),
+        "normalized_relevance": 1.0,
+        "max_selected_similarity": 0.0,
+    }]
     remaining = scored[1:]
     while remaining and len(selected) < k:
         best, best_val = None, -math.inf
+        best_rel = 0.0
+        best_sim = 0.0
         for entry in remaining:
             rel = (entry[1] - lo) / span
             emb = embs.get(id(entry))
@@ -1041,6 +1148,18 @@ def _mmr_select(
             val = lam * rel - (1.0 - lam) * max_sim
             if val > best_val:
                 best, best_val = entry, val
+                best_rel, best_sim = rel, max_sim
         selected.append(best)
         remaining.remove(best)
-    return selected
+        selection.append({
+            "lambda": round(lam, 6),
+            "selection_objective": round(best_val, 6),
+            "normalized_relevance": round(best_rel, 6),
+            "max_selected_similarity": round(best_sim, 6),
+        })
+    return apply_ordered_ranking_stage(
+        selected,
+        stage="mmr-selection",
+        details=selection,
+        reason="configured maximal marginal relevance selection applied",
+    )

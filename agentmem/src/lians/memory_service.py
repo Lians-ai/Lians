@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import math
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -50,14 +51,28 @@ from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, unwrap_subject_key
 from .pii import get_or_create_subject_key, destroy_subject_key
 from .supersession import run_supersession, _utc
-from .ranking import hybrid_recall
+from .ranking import apply_ordered_ranking_stage, hybrid_recall
 from .scoring import stable_score_key
-from .cache import get_cached_recall, set_cached_recall, invalidate_agent
+from .cache import (
+    cache_generation_is_current,
+    get_cached_recall,
+    set_cached_recall,
+    invalidate_agent,
+)
+from .cache_invalidation import (
+    flush_pending_recall_invalidations,
+    flush_recall_invalidation,
+    has_pending_recall_invalidation,
+    invalidation_reference,
+    queue_recall_invalidation,
+)
 from .config import get_settings
 from .current_facts import compute_predicate_key, upsert_live_fact, remove_live_facts, keyed_lookup
 from .dek_cache import get_cached_dek, cache_dek, evict_dek
 from .session_cache import get_working_set, set_working_set, invalidate_working_set
 from .query_planner import QueryPlan, plan_query
+from .admission import AdmissionDecision
+from .admission_service import attach_memory_admission, enforce_memory_admission
 
 logger = logging.getLogger("agentmem.memory_service")
 
@@ -190,6 +205,7 @@ def _fuse_recall_rankings(
     plan: QueryPlan,
     *,
     limit: int,
+    facet_breakdowns: Optional[list[dict[str, dict[str, Any]]]] = None,
 ) -> list[tuple[Any, float, Optional[str]]]:
     """Fuse query-facet rankings without allowing duplicate memories.
 
@@ -207,18 +223,33 @@ def _fuse_recall_rankings(
         scope = plan.scopes[facet_index]
         for rank, (memory, raw_score, content) in enumerate(ranking, start=1):
             key = str(memory.id)
+            candidate_breakdown: Any = None
+            if facet_breakdowns is not None and facet_index < len(facet_breakdowns):
+                candidate_breakdown = facet_breakdowns[facet_index].get(key)
+            if not isinstance(candidate_breakdown, dict):
+                candidate_breakdown = getattr(memory, "_score_breakdown", None)
             entry = fused.setdefault(
                 key,
                 {
                     "memory": memory,
                     "content": content,
                     "score": 0.0,
-                    "raw_score": float(raw_score),
+                    "raw_score": float("-inf"),
+                    "strongest_breakdown": None,
+                    "strongest_scope": scope,
                     "scopes": set(),
                 },
             )
             entry["score"] += weight / (_RRF_K + rank)
-            entry["raw_score"] = max(entry["raw_score"], float(raw_score))
+            if float(raw_score) > entry["raw_score"]:
+                entry["raw_score"] = float(raw_score)
+                entry["strongest_breakdown"] = (
+                    deepcopy(candidate_breakdown)
+                    if isinstance(candidate_breakdown, dict)
+                    else None
+                )
+                entry["strongest_scope"] = scope
+                entry["content"] = content
             entry["scopes"].add(scope)
 
     # Normalize against the best possible RRF score, then retain a small
@@ -235,24 +266,36 @@ def _fuse_recall_rankings(
         memory = entry["memory"]
         scopes = sorted(entry["scopes"])
         setattr(memory, "_retrieval_scopes", scopes)
-        prior_breakdown = getattr(memory, "_score_breakdown", None)
+        prior_breakdown = entry.get("strongest_breakdown")
         if isinstance(prior_breakdown, dict):
             breakdown = dict(prior_breakdown)
             reasons = list(breakdown.get("reasons") or [])
             reasons.append(
                 "adaptive query facets combined with weighted reciprocal-rank fusion"
             )
+            pre_fusion_score = breakdown.get("final_score")
+            fusion = {
+                "method": "weighted-reciprocal-rank-fusion-v1",
+                "facet_support": len(scopes),
+                "facet_count": len(rankings),
+                "scopes": scopes,
+                "normalized_rrf_score": round(rrf, 6),
+                "strongest_input_score": round(raw, 6),
+                "strongest_scope": entry["strongest_scope"],
+            }
+            stages = [dict(item) for item in breakdown.get("ranking_stages", [])
+                      if isinstance(item, dict)]
+            stages.append({
+                "stage": "adaptive-fusion",
+                "input_score": pre_fusion_score,
+                "output_score": score,
+                **fusion,
+            })
             breakdown.update({
-                "pre_fusion_score": breakdown.get("final_score"),
+                "pre_fusion_score": pre_fusion_score,
                 "final_score": score,
-                "fusion": {
-                    "method": "weighted-reciprocal-rank-fusion-v1",
-                    "facet_support": len(scopes),
-                    "facet_count": len(rankings),
-                    "scopes": scopes,
-                    "normalized_rrf_score": round(rrf, 6),
-                    "strongest_input_score": round(raw, 6),
-                },
+                "fusion": fusion,
+                "ranking_stages": stages,
                 "reasons": reasons,
             })
             setattr(memory, "_score_breakdown", breakdown)
@@ -605,6 +648,7 @@ async def add_memory(
     *,
     barrier_override: Optional[str] = None,
     precomputed_embedding: Optional[list[float]] = None,
+    _trusted_admission: Optional[AdmissionDecision] = None,
 ) -> MemoryOut:
     """``precomputed_embedding`` lets batch writers embed many contents in one
     model call (10-20x faster on local models) and pass each vector through;
@@ -614,6 +658,26 @@ async def add_memory(
         span.set_attribute("namespace", namespace)
         span.set_attribute("agent_id", req.agent_id)
         span.set_attribute("has_subject", bool(req.subject_id))
+
+        # Admission lives at the storage boundary, not only in an HTTP route.
+        # Published and internal untrusted callers therefore cannot bypass it
+        # by reaching add_memory through feedback, MCP, or an embedded client.
+        # The sole override is an explicit already-reviewed decision created by
+        # Lians itself (for example, approval of a sealed pending admission).
+        if _trusted_admission is None:
+            await enforce_memory_admission(
+                db,
+                namespace,
+                req,
+                barrier_override=barrier_override,
+            )
+        else:
+            attach_memory_admission(
+                req,
+                _trusted_admission,
+                action="approved",
+                safety_status="approved",
+            )
 
         if precomputed_embedding is not None:
             embedding = precomputed_embedding
@@ -1404,46 +1468,62 @@ async def recall_memories(
         cache_eligible = execution["mode"] == "fast" and len(plan.variants) == 1
         cache_lookup = None
         if settings.recall_cache_enabled and cache_eligible and not req.as_of and not near_entity and not rerank and barrier_override is None:
-            cache_lookup = await get_cached_recall(
-                namespace,
-                req.agent_id,
-                req.query,
-                req.as_of,
-                req.k,
-                request_filters,
-                execution,
+            cache_barrier = await has_pending_recall_invalidation(
+                db, namespace, req.agent_id,
             )
-            if cache_lookup is not None and cache_lookup.payload is not None:
-                span.set_attribute("cache_hit", True)
-                record_recall(namespace, router="cache", cache_hit=True)
-                cached_result = RecallResult.model_validate_json(cache_lookup.payload)
-                await _commit_recall_evidence(
-                    db,
+            if not cache_barrier:
+                cache_lookup = await get_cached_recall(
                     namespace,
-                    req,
+                    req.agent_id,
+                    req.query,
+                    req.as_of,
+                    req.k,
+                    request_filters,
                     execution,
-                    cached_result.memories,
-                    query_variants=list(cached_result.query_variants),
-                    receipt_sha256=cached_result.receipt_sha256,
-                    receipt=cached_result.receipt,
-                    provenance_coverage=cached_result.provenance_coverage,
-                    retrieval_degraded=cached_result.retrieval_degraded,
-                    router="cache",
-                    filters=request_filters,
                 )
-                elapsed = _time.perf_counter() - _recall_t0
-                cached_result.latency_ms = round(elapsed * 1000, 3)
-                cached_result.deadline_exceeded = (
-                    cached_result.latency_ms > execution["latency_budget_ms"]
+            if cache_lookup is not None and cache_lookup.payload is not None:
+                # The database barrier closes the cross-worker failure window;
+                # the generation recheck closes the race where a worker clears
+                # that barrier after this process fetched an older payload.
+                cache_hit_safe = (
+                    not await has_pending_recall_invalidation(
+                        db, namespace, req.agent_id,
+                    )
+                    and await cache_generation_is_current(
+                        namespace, req.agent_id, cache_lookup.generation,
+                    )
                 )
-                observe_recall(namespace, elapsed)
-                observe_recall_mode(
-                    namespace,
-                    execution["mode"],
-                    elapsed,
-                    deadline_exceeded=cached_result.deadline_exceeded,
-                )
-                return cached_result
+                if cache_hit_safe:
+                    span.set_attribute("cache_hit", True)
+                    record_recall(namespace, router="cache", cache_hit=True)
+                    cached_result = RecallResult.model_validate_json(cache_lookup.payload)
+                    await _commit_recall_evidence(
+                        db,
+                        namespace,
+                        req,
+                        execution,
+                        cached_result.memories,
+                        query_variants=list(cached_result.query_variants),
+                        receipt_sha256=cached_result.receipt_sha256,
+                        receipt=cached_result.receipt,
+                        provenance_coverage=cached_result.provenance_coverage,
+                        retrieval_degraded=cached_result.retrieval_degraded,
+                        router="cache",
+                        filters=request_filters,
+                    )
+                    elapsed = _time.perf_counter() - _recall_t0
+                    cached_result.latency_ms = round(elapsed * 1000, 3)
+                    cached_result.deadline_exceeded = (
+                        cached_result.latency_ms > execution["latency_budget_ms"]
+                    )
+                    observe_recall(namespace, elapsed)
+                    observe_recall_mode(
+                        namespace,
+                        execution["mode"],
+                        elapsed,
+                        deadline_exceeded=cached_result.deadline_exceeded,
+                    )
+                    return cached_result
         span.set_attribute("cache_hit", False)
 
         # Change 2: keyed router — exact lookup if filters resolve to a known predicate
@@ -1627,8 +1707,9 @@ async def recall_memories(
                 else execution["candidate_floor"]
             )
             rankings = []
+            facet_breakdowns: list[dict[str, dict[str, Any]]] = []
             for query_variant, query_embedding in zip(plan.variants, query_embeddings):
-                rankings.append(await hybrid_recall(
+                ranking = await hybrid_recall(
                     db=db,
                     namespace=namespace,
                     agent_id=req.agent_id,
@@ -1641,11 +1722,22 @@ async def recall_memories(
                     barrier_group=barrier_group,
                     live_facts_override=live_facts_cache,
                     apply_reranker=len(plan.variants) == 1,
-                ))
+                )
+                rankings.append(ranking)
+                facet_breakdowns.append({
+                    str(memory.id): deepcopy(memory._score_breakdown)
+                    for memory, _score, _content in ranking
+                    if isinstance(getattr(memory, "_score_breakdown", None), dict)
+                })
             fusion_limit = (
                 req.k if len(plan.variants) == 1 else execution["candidate_floor"]
             )
-            results = _fuse_recall_rankings(rankings, plan, limit=fusion_limit)
+            results = _fuse_recall_rankings(
+                rankings,
+                plan,
+                limit=fusion_limit,
+                facet_breakdowns=facet_breakdowns,
+            )
             if len(plan.variants) > 1:
                 from .ranking import RERANKER_MODEL, rerank_cross_encoder_async
                 if RERANKER_MODEL:
@@ -1739,10 +1831,15 @@ async def recall_memories(
 
         # Never cache a degraded result — it would keep serving lexical-only
         # recall after the embedding provider recovers.
+        cache_barrier = (
+            await has_pending_recall_invalidation(db, namespace, req.agent_id)
+            if cache_lookup is not None
+            else False
+        )
         if (
             settings.recall_cache_enabled and cache_eligible and not req.as_of and not near_entity
             and barrier_override is None and not retrieval_degraded
-            and cache_lookup is not None
+            and cache_lookup is not None and not cache_barrier
         ):
             await set_cached_recall(
                 namespace, req.agent_id, req.query, req.as_of, req.k, request_filters,
@@ -1800,14 +1897,44 @@ async def _rerank_by_proximity(
         barrier_override=barrier_override,
     )
 
-    def _key(item):
+    ranked: list[tuple[float, tuple[Any, float, Optional[str]], dict[str, Any]]] = []
+    for item in results:
         mem, score, _content = item
         val = (mem.metadata_ or {}).get(near_key)
         dist = distances.get(canon_entity(str(val))) if val else None
         bonus = 1.0 / (1.0 + dist) if dist is not None else 0.0
-        return score + bonus
-
-    return sorted(results, key=_key, reverse=True)
+        ranked.append((
+            float(score) + bonus,
+            item,
+            {
+                "anchor": anchor,
+                "entity_key": near_key,
+                "entity": str(val) if val is not None else None,
+                "distance": dist,
+                "proximity_bonus": round(bonus, 6),
+                "combined_objective": round(float(score) + bonus, 6),
+            },
+        ))
+    if not any(row[2]["proximity_bonus"] > 0.0 for row in ranked):
+        return results
+    ranked.sort(
+        key=lambda row: (
+            -row[0],
+            stable_score_key(
+                row[1][0].id,
+                getattr(row[1][0], "event_time", None),
+                getattr(row[1][0], "ingestion_time", None),
+                getattr(row[1][0], "_score_breakdown", None)
+                or {"final_score": row[1][1]},
+            ),
+        )
+    )
+    return apply_ordered_ranking_stage(
+        [row[1] for row in ranked],
+        stage="graph-proximity",
+        details=[row[2] for row in ranked],
+        reason="graph proximity reranking applied",
+    )
 
 
 async def batch_add_memories(
@@ -1898,6 +2025,23 @@ async def apply_supersession_action(
         raise HTTPException(status_code=422, detail="action must be 'confirm' or 'reject'")
 
     now = datetime.now(timezone.utc)
+    operation_ref = invalidation_reference(memory_id, action.action)
+
+    if action.action == "reject":
+        repaired = await flush_pending_recall_invalidations(
+            db,
+            namespace,
+            agent_id=mem.agent_id,
+            operation="supersession.reject",
+            operation_ref=operation_ref,
+        )
+        if repaired:
+            invalidate_working_set(namespace, mem.agent_id)
+            return SupersessionActionResult(
+                memory_id=memory_id,
+                action=action.action,
+                applied_at=now,
+            )
 
     if action.action == "reject":
         mem.valid_to = None
@@ -1907,8 +2051,17 @@ async def apply_supersession_action(
         predicate_key = compute_predicate_key(dict(mem.metadata_ or {}))
         await upsert_live_fact(db, mem, predicate_key)
         op = "supersession_rejected"
+        invalidation_job = await queue_recall_invalidation(
+            db,
+            namespace,
+            mem.agent_id,
+            operation="supersession.reject",
+            operation_ref=operation_ref,
+            memory_ids=[mem.id],
+        )
     else:
         op = "supersession_confirmed"
+        invalidation_job = None
 
     await chain_log(
         db, namespace=namespace, agent_id=mem.agent_id,
@@ -1922,6 +2075,10 @@ async def apply_supersession_action(
     )
     await db.commit()
     invalidate_working_set(namespace, mem.agent_id)
+    if invalidation_job is not None:
+        await flush_recall_invalidation(db, invalidation_job)
+    else:
+        await invalidate_agent(namespace, mem.agent_id)
     return SupersessionActionResult(memory_id=memory_id, action=action.action, applied_at=now)
 
 
@@ -1964,6 +2121,11 @@ async def set_retention_policy(
 
 
 async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPruneResult:
+    # Repair any prior committed prune whose Redis generation bump failed.
+    # Until this succeeds its durable job keeps every worker off stale cache.
+    await flush_pending_recall_invalidations(
+        db, namespace, operation="retention.prune",
+    )
     pol = await db.get(NamespacePolicy, namespace)
     if pol is None or pol.content_ttl_days is None:
         cutoff = datetime.min.replace(tzinfo=timezone.utc)
@@ -1990,12 +2152,12 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
     result = await db.execute(stmt)
     memories = result.scalars().all()
 
-    pruned_agents: set[str] = set()
+    pruned_by_agent: dict[str, list[UUID]] = {}
     for mem in memories:
         mem.content_encrypted = None
         mem.embedding = None
         mem.erased_at = now
-        pruned_agents.add(mem.agent_id)
+        pruned_by_agent.setdefault(mem.agent_id, []).append(mem.id)
         await chain_log(
             db, namespace=namespace, agent_id=mem.agent_id,
             op="retention_prune", memory_id=mem.id,
@@ -2007,11 +2169,27 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
     # present-time read model and caches, or recall returns empty husks.
     await remove_live_facts(db, [mem.id for mem in memories])
 
+    operation_ref = invalidation_reference(
+        "retention.prune", *(sorted(str(mem.id) for mem in memories))
+    )
+    invalidation_jobs = [
+        await queue_recall_invalidation(
+            db,
+            namespace,
+            agent_id,
+            operation="retention.prune",
+            operation_ref=operation_ref,
+            memory_ids=memory_ids,
+        )
+        for agent_id, memory_ids in sorted(pruned_by_agent.items())
+    ]
+
     await db.commit()
 
-    for aid in pruned_agents:
+    for aid in pruned_by_agent:
         invalidate_working_set(namespace, aid)
-        await invalidate_agent(namespace, aid)
+    for job in invalidation_jobs:
+        await flush_recall_invalidation(db, job)
 
     return RetentionPruneResult(namespace=namespace, memories_pruned=len(memories), cutoff_date=cutoff)
 
@@ -2022,6 +2200,17 @@ async def erase_subject(
     subject_id: str,
     request_ref: str,
 ) -> int:
+    operation_ref = invalidation_reference(
+        "privacy.erase", subject_id, request_ref,
+    )
+    # A failed post-commit generation bump is durable. Retrying the same
+    # erasure repairs that barrier even though the content is already shredded.
+    await flush_pending_recall_invalidations(
+        db,
+        namespace,
+        operation="privacy.erase",
+        operation_ref=operation_ref,
+    )
     stmt = select(Memory).where(
         and_(
             Memory.namespace == namespace,
@@ -2058,6 +2247,18 @@ async def erase_subject(
 
     await destroy_subject_key(db, subject_id, namespace)
 
+    invalidation_jobs = [
+        await queue_recall_invalidation(
+            db,
+            namespace,
+            agent_id,
+            operation="privacy.erase",
+            operation_ref=operation_ref,
+            memory_ids=[mem.id for mem in memories if mem.agent_id == agent_id],
+        )
+        for agent_id in sorted(agent_ids)
+    ]
+
     if memories:
         from .webhook_service import dispatch_event, MEMORY_ERASED
         await dispatch_event(db, namespace, MEMORY_ERASED, {
@@ -2073,7 +2274,8 @@ async def erase_subject(
     # Change 7: invalidate session caches for all agents that had this subject's data
     for aid in agent_ids:
         invalidate_working_set(namespace, aid)
-        await invalidate_agent(namespace, aid)
+    for job in invalidation_jobs:
+        await flush_recall_invalidation(db, job)
 
     record_erase(namespace, len(memories))
     return len(memories)

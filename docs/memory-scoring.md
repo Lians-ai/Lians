@@ -38,7 +38,12 @@ reasons used for every component.
 Admission stores its breakdown under reserved metadata key `_score`. Held
 candidates retain that explanation in the review queue. Approval keeps the
 existing admission provenance and allows the recall scorer to reassess safety
-as approved.
+as approved. Admission and reserved-metadata normalization run at the storage
+boundary, so HTTP, embedded `LocalLiansClient`, local MCP, feedback corrections,
+and other service callers cannot bypass them. Caller-provided `_admission` or
+`_score` values are always replaced. A previously reviewed sealed admission or
+admin-approved reflection uses an explicit internal trusted-review decision;
+even then the content is rescored and injection-like text remains ineligible.
 
 Safety is a gate, not a small penalty. Rejected, quarantined, injection-like,
 blocked-source, or still-pending content receives a final score of zero and is
@@ -53,9 +58,27 @@ quality score at 0.2. These blend weights are returned as `ranking_weights`.
 Ties use final score descending, event time descending, ingestion time
 descending, and memory ID ascending.
 
+Adaptive fusion retains the component breakdown associated with the strongest
+facet input and reports that facet under `fusion.strongest_scope`. Later
+order-producing stages (cross-encoder, MMR, or graph proximity) append a
+`ranking_stages` record containing their raw objective/provenance, input score,
+returned position, and output score. Because those objectives are not mutually
+calibrated, `rank-calibration-v1` assigns non-overlapping position buckets while
+retaining the prior score inside each bucket. Consequently the returned order,
+the public `score`, and `score_breakdown.final_score` stay synchronized after
+every enabled reranker.
+
 Fast-recall cache keys carry a scoring schema version and the generation
 captured before retrieval starts. A concurrent write or erasure makes an
 in-flight fill unreachable rather than allowing it to republish stale recall.
+Every recall-affecting supersession decision advances that generation. Privacy
+erasure, retention pruning, and supersession rejection also commit a durable
+invalidation job in the same database transaction as the mutation. Every
+worker checks that database barrier before trusting a Redis hit and revalidates
+the generation afterward. If Redis is unavailable, stale cache is bypassed
+cross-worker, the API fails closed, the durable worker retries, and an explicit
+request retry repairs the same operation even after the underlying data change
+has already committed.
 
 API memory objects may include optional `score_breakdown`; existing required
 fields are unchanged. This is a rule-based quality and governance layer, not a

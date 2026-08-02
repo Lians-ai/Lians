@@ -17,6 +17,16 @@ export interface MemoryAdd {
 
 // ── Core memory object ───────────────────────────────────────────────────────
 
+export interface MemoryRankingStage {
+  stage: string;
+  input_score: number;
+  output_score: number;
+  method?: string;
+  position?: number;
+  candidate_count?: number;
+  [key: string]: unknown;
+}
+
 export interface MemoryScoreBreakdown {
   importance_score: number;
   confidence_score: number;
@@ -33,6 +43,7 @@ export interface MemoryScoreBreakdown {
   quality_score?: number;
   pre_fusion_score?: number;
   ranking_weights?: Record<string, number>;
+  ranking_stages?: MemoryRankingStage[];
   fusion?: {
     method: string;
     facet_support: number;
@@ -40,6 +51,7 @@ export interface MemoryScoreBreakdown {
     scopes: string[];
     normalized_rrf_score: number;
     strongest_input_score: number;
+    strongest_scope?: string;
   };
   [key: string]: unknown;
 }

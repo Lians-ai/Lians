@@ -10,12 +10,16 @@ import asyncio
 import pytest
 import pytest_asyncio
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
 from src.lians.models import Memory, NamespacePolicy, EventLog
 from src.lians.scheduler import _run_prune_cycle, run_retention_scheduler
+from src.lians.cache import RecallCacheInvalidationError
+from src.lians.cache_invalidation import pending_recall_invalidations
+from src.lians.memory_service import prune_expired_content
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +171,38 @@ class TestPruneCycle:
             )
             events = result.scalars().all()
         assert len(events) >= 1
+
+    @pytest.mark.asyncio
+    async def test_failed_prune_invalidation_is_durable_and_retryable(
+        self, session_factory, monkeypatch,
+    ):
+        namespace = "retry-prune"
+        async with session_factory() as db:
+            db.add(NamespacePolicy(namespace=namespace, content_ttl_days=30))
+            await db.commit()
+            await _seed_memory(db, namespace, "agent-1", days_ago=60)
+
+            invalidator = AsyncMock(
+                side_effect=RecallCacheInvalidationError("redis unavailable")
+            )
+            monkeypatch.setattr(
+                "src.lians.cache_invalidation.invalidate_agent", invalidator
+            )
+            with pytest.raises(RecallCacheInvalidationError):
+                await prune_expired_content(db, namespace)
+
+            pending = await pending_recall_invalidations(
+                db, namespace, agent_id="agent-1",
+            )
+            assert len(pending) == 1
+
+            invalidator.side_effect = None
+            invalidator.return_value = True
+            repaired = await prune_expired_content(db, namespace)
+            assert repaired.memories_pruned == 0
+            assert not await pending_recall_invalidations(
+                db, namespace, agent_id="agent-1",
+            )
 
     @pytest.mark.asyncio
     async def test_multiple_namespaces_pruned_independently(self, session_factory):
