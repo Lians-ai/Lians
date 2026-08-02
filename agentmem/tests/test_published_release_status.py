@@ -5,6 +5,7 @@ from scripts.check_published_artifacts import (
     load_status,
     parse_go_versions,
     parse_maven_metadata,
+    parse_mcp_registry,
     source_sync_drift,
     validate_status,
 )
@@ -37,6 +38,16 @@ def test_registry_parsers_select_authoritative_release_versions():
         == "0.4.1"
     )
 
+    assert (
+        parse_mcp_registry(
+            b'{"servers":[{"server":{"name":"io.github.ebeirne/lians",'
+            b'"version":"0.4.1"},"_meta":{'
+            b'"io.modelcontextprotocol.registry/official":{'
+            b'"status":"active","isLatest":true}}}]}'
+        )
+        == "0.4.1"
+    )
+
 
 def test_live_comparison_reports_expected_and_actual_versions():
     status = load_status(ROOT / "docs" / "published-release-status.json")
@@ -54,13 +65,9 @@ def test_production_verification_uses_version_endpoint() -> None:
         "https://agentmem-lotus.fly.dev/version"
     )
 
-    status["production_api"]["verification_url"] = (
-        "https://agentmem-lotus.fly.dev/openapi.json"
-    )
+    status["production_api"]["verification_url"] = "https://agentmem-lotus.fly.dev/openapi.json"
     errors = validate_status(status, (ROOT / "VERSION").read_text().strip())
-    assert errors == [
-        "production_api.verification_url must use the public /version endpoint"
-    ]
+    assert errors == ["production_api.verification_url must use the public /version endpoint"]
 
 
 def test_runtime_docker_context_excludes_generated_dependency_trees():
@@ -72,9 +79,7 @@ def test_runtime_docker_context_excludes_generated_dependency_trees():
 def test_ghcr_runtime_uses_normalized_version_tag():
     status = load_status(ROOT / "docs" / "published-release-status.json")
     artifact = status["artifacts"]["ghcr_mcp"]
-    assert artifact["runtime"] == (
-        f"ghcr.io/lians-ai/lians-mcp:{artifact['version']}"
-    )
+    assert artifact["runtime"] == (f"ghcr.io/lians-ai/lians-mcp:{artifact['version']}")
 
 
 def test_glama_default_tracks_verified_public_image():
@@ -87,9 +92,7 @@ def test_glama_default_tracks_verified_public_image():
 
 def test_release_status_rejects_prefixed_ghcr_runtime_tag():
     status = load_status(ROOT / "docs" / "published-release-status.json")
-    status["artifacts"]["ghcr_mcp"]["runtime"] = (
-        "ghcr.io/lians-ai/lians-mcp:v0.4.1"
-    )
+    status["artifacts"]["ghcr_mcp"]["runtime"] = "ghcr.io/lians-ai/lians-mcp:v0.4.1"
     errors = validate_status(status, (ROOT / "VERSION").read_text().strip())
     assert errors == [
         (

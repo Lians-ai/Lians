@@ -115,6 +115,35 @@ def parse_maven_metadata(payload: bytes) -> str:
     return release
 
 
+def parse_mcp_registry(payload: bytes) -> str:
+    document = json.loads(payload)
+    entries = document.get("servers")
+    if not isinstance(entries, list):
+        raise TypeError("MCP Registry response has no servers list")
+
+    matches: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        server = entry.get("server")
+        metadata = entry.get("_meta", {}).get("io.modelcontextprotocol.registry/official", {})
+        if (
+            isinstance(server, dict)
+            and server.get("name") == "io.github.ebeirne/lians"
+            and isinstance(metadata, dict)
+            and metadata.get("status") == "active"
+            and metadata.get("isLatest") is True
+        ):
+            matches.append(str(server.get("version", "")))
+
+    if len(matches) != 1 or not SEMVER.fullmatch(matches[0]):
+        raise ValueError(
+            "MCP Registry must return exactly one active latest "
+            "io.github.ebeirne/lians semver entry"
+        )
+    return matches[0]
+
+
 REGISTRIES: dict[str, tuple[str, Callable[[bytes], str]]] = {
     "production_api": (
         "https://agentmem-lotus.fly.dev/version",
@@ -137,8 +166,8 @@ REGISTRIES: dict[str, tuple[str, Callable[[bytes], str]]] = {
         parse_maven_metadata,
     ),
     "mcp_registry": (
-        "https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest",
-        lambda payload: _json_path(payload, "server", "version"),
+        "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.ebeirne%2Flians&version=latest",
+        parse_mcp_registry,
     ),
     "github_release": (
         "https://api.github.com/repos/Lians-ai/Lians/releases/latest",
