@@ -353,10 +353,58 @@ jobs:
 
       - name: Verify schema revision inside the production app
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_MACHINE_EXEC_TOKEN }}
+          # Attenuate this existing app-scoped token locally. The verifier only
+          # receives the 10-minute, exact-command derivative below.
+          FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
         run: |
-          python scripts/verify_production_schema.py \
+          set -euo pipefail
+          base_token="$FLY_API_TOKEN"
+          unset FLY_API_TOKEN FLY_ACCESS_TOKEN
+          schema_shell_command="cd /app/agentmem && /opt/venv/bin/alembic -c alembic.ini current"
+          now="$(date -u +%s)"
+          caveats="$(
+            jq -cn \
+              --arg shell "$schema_shell_command" \
+              --argjson nb "$((now - 30))" \
+              --argjson na "$((now + 600))" '
+                [
+                  {
+                    type: "IfPresent",
+                    body: {
+                      ifs: [
+                        {
+                          type: "Commands",
+                          body: [
+                            {
+                              args: ["/bin/sh", "-c", $shell],
+                              exact: true
+                            }
+                          ]
+                        }
+                      ],
+                      else: "r"
+                    }
+                  },
+                  {
+                    type: "ValidityWindow",
+                    body: {not_before: $nb, not_after: $na}
+                  }
+                ]
+              '
+          )"
+          schema_token="$(
+            FLY_API_TOKEN="$base_token" flyctl tokens attenuate <<<"$caveats"
+          )"
+          test -n "$schema_token"
+          test "$schema_token" != "$base_token"
+          [[ "$schema_token" != *$'\n'* && "$schema_token" != *$'\r'* ]]
+          echo "::add-mask::$schema_token"
+          base_token=""
+          caveats=""
+
+          FLY_API_TOKEN="$schema_token" python scripts/verify_production_schema.py \
             --machine-id "$PRODUCTION_MACHINE_ID"
+          schema_token=""
 
       - name: Run public production smoke checks
         run: |

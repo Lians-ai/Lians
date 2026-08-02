@@ -22,7 +22,7 @@ def result(returncode: int, *, stdout: str = "", stderr: str = "") -> subprocess
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
 
 
-def test_retries_restricted_exec_and_preserves_exact_command(capsys: pytest.CaptureFixture[str]) -> None:
+def test_retries_machine_exec_and_preserves_exact_command(capsys: pytest.CaptureFixture[str]) -> None:
     calls: list[tuple[list[str], dict[str, object]]] = []
     responses = iter(
         [

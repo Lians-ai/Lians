@@ -42,5 +42,31 @@ def test_post_deploy_release_identity_and_smoke_gates_remain() -> None:
     assert "Verify schema revision inside the production app" in workflow
     assert "python scripts/verify_production_schema.py" in workflow
     assert '--machine-id "$PRODUCTION_MACHINE_ID"' in workflow
+    schema_step = workflow.split(
+        "- name: Verify schema revision inside the production app", maxsplit=1
+    )[1].split("\n      - name:", maxsplit=1)[0]
+    assert "FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}" in schema_step
+    assert "FLY_MACHINE_EXEC_TOKEN" not in schema_step
+    assert "flyctl tokens attenuate" in schema_step
+    assert "tokens create" not in schema_step
+    assert "tokens revoke" not in schema_step
+    assert 'schema_shell_command="cd /app/agentmem && /opt/venv/bin/alembic -c alembic.ini current"' in schema_step
+    assert 'args: ["/bin/sh", "-c", $shell]' in schema_step
+    assert "exact: true" in schema_step
+    assert 'else: "r"' in schema_step
+    assert 'body: {not_before: $nb, not_after: $na}' in schema_step
+    assert '"$((now - 30))"' in schema_step
+    assert '"$((now + 600))"' in schema_step
+    assert 'echo "::add-mask::$schema_token"' in schema_step
+    assert 'test "$schema_token" != "$base_token"' in schema_step
+    assert 'FLY_API_TOKEN="$schema_token" python scripts/verify_production_schema.py' in schema_step
+    assert "unset FLY_API_TOKEN FLY_ACCESS_TOKEN" in schema_step
+    assert schema_step.index("unset FLY_API_TOKEN FLY_ACCESS_TOKEN") < schema_step.index(
+        'FLY_API_TOKEN="$schema_token" python'
+    )
+    assert schema_step.index('base_token=""') < schema_step.index(
+        'FLY_API_TOKEN="$schema_token" python'
+    )
+    assert "FLY_MACHINE_EXEC_TOKEN" not in workflow
     assert "scripts/check_production_deployment.py" in workflow
     assert '--expected-build-sha "$GITHUB_SHA"' in workflow
