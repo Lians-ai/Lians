@@ -2,6 +2,11 @@ name: Publish lians to npm
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing TypeScript or unified release tag to publish (for example, v0.5.0)
+        required: true
+        type: string
   push:
     tags:
       - "v*"            # unified release tag; one `vX.Y.Z` ships every language
@@ -16,6 +21,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+
+      - name: Verify release version
+        shell: bash
+        working-directory: agentmem/sdk/typescript
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            expected_version="${RELEASE_TAG#v}"
+          elif [[ "${RELEASE_TAG}" =~ ^lians-ts-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            expected_version="${RELEASE_TAG#lians-ts-v}"
+          else
+            echo "release_tag must be vX.Y.Z or lians-ts-vX.Y.Z" >&2
+            exit 1
+          fi
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "${package_version}" != "${expected_version}" ]]; then
+            echo "package.json=${package_version} does not match ${RELEASE_TAG}" >&2
+            exit 1
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
@@ -23,6 +51,22 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
+
+      - name: Verify npm supports trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm_version="$(npm --version)"
+          echo "npm ${npm_version}"
+          node -e '
+            const actual = process.argv[1].split(".").map(Number);
+            const minimum = [11, 5, 1];
+            const supported = actual.some((part, index) => part > minimum[index] && actual.slice(0, index).every((value, prior) => value === minimum[prior]))
+              || actual.every((part, index) => part === minimum[index]);
+            if (!supported) {
+              throw new Error(`npm ${process.argv[1]} does not support trusted publishing; expected >=11.5.1`);
+            }
+          ' "${npm_version}"
 
       - name: Install dependencies
         working-directory: agentmem/sdk/typescript
@@ -39,8 +83,3 @@ jobs:
       - name: Publish to npm
         working-directory: agentmem/sdk/typescript
         run: npm publish --access public
-        # npm CLI 11.5.1+ prefers the short-lived GitHub OIDC credential. Keep
-        # the existing token as a migration fallback until trusted publishing
-        # is verified, then remove the secret from the repository.
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

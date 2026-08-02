@@ -5,6 +5,12 @@ name: Release SDK artifacts
 # own publish workflows; this covers Java (jar) and C (source tarball), and
 # sanity-builds Go. See docs/publishing.md.
 on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing unified release tag to recover or republish (for example, v0.5.0)
+        required: true
+        type: string
   push:
     tags:
       - "v*"
@@ -12,12 +18,65 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sdk-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
 jobs:
-  java-jar:
-    name: Build Java jar
+  release-context:
+    name: Validate release context
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Verify tag and source version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release_tag must be an existing stable semver tag (vX.Y.Z)" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          source_version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "${source_version}" != "${version}" ]]; then
+            echo "VERSION=${source_version} does not match ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          tag_sha="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          head_sha="$(git rev-parse HEAD)"
+          if [[ "${tag_sha}" != "${head_sha}" ]]; then
+            echo "checked-out SHA ${head_sha} does not match ${RELEASE_TAG} (${tag_sha})" >&2
+            exit 1
+          fi
+      - name: Create GitHub release if absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${RELEASE_TAG} already exists"
+          else
+            gh release create "${RELEASE_TAG}" \
+              --verify-tag \
+              --title "Lians ${RELEASE_TAG}" \
+              --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  java-jar:
+    name: Build Java jar
+    needs: release-context
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: temurin
@@ -27,31 +86,38 @@ jobs:
         run: mvn -B --no-transfer-progress package
         working-directory: agentmem/sdk/java
       - name: Attach jar to release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
-        with:
-          files: agentmem/sdk/java/target/*.jar
+        shell: bash
+        run: gh release upload "${RELEASE_TAG}" agentmem/sdk/java/target/*.jar --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   c-tarball:
     name: Package C source
+    needs: release-context
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - name: Create tarball
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           tar -czf "lians-c-${version}.tar.gz" -C agentmem/sdk c
       - name: Attach tarball to release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
-        with:
-          files: lians-c-*.tar.gz
+        shell: bash
+        run: gh release upload "${RELEASE_TAG}" lians-c-*.tar.gz --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   go-tag:
     name: Tag Go module for go get
+    needs: release-context
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version: "1.22"
@@ -63,18 +129,27 @@ jobs:
       # tag to agentmem/sdk/go/vX.Y.Z so consumers can pin a version.
       - name: Push module-path tag
         run: |
-          gotag="agentmem/sdk/go/${GITHUB_REF_NAME}"
-          if git rev-parse "$gotag" >/dev/null 2>&1; then
-            echo "$gotag already exists; skipping"
+          set -euo pipefail
+          gotag="agentmem/sdk/go/${RELEASE_TAG}"
+          target_sha="$(git rev-list -n 1 "${RELEASE_TAG}")"
+          if git ls-remote --exit-code origin "refs/tags/${gotag}" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/${gotag}:refs/tags/${gotag}"
+            existing_sha="$(git rev-list -n 1 "${gotag}")"
+            if [[ "${existing_sha}" != "${target_sha}" ]]; then
+              echo "${gotag} already points to ${existing_sha}, expected ${target_sha}" >&2
+              exit 1
+            fi
+            echo "${gotag} already exists at the verified release commit"
           else
-            git tag "$gotag" "${GITHUB_REF_NAME}"
-            git push origin "$gotag"
+            git tag "${gotag}" "${target_sha}"
+            git push origin "refs/tags/${gotag}"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   maven-central:
     name: Publish to Maven Central
+    needs: release-context
     runs-on: ubuntu-latest
     # Opt-in: set repository variable PUBLISH_MAVEN_CENTRAL=true and configure the
     # OSSRH_* / MAVEN_GPG_* secrets first (see docs/publishing.md). Until then the
@@ -82,6 +157,8 @@ jobs:
     if: ${{ vars.PUBLISH_MAVEN_CENTRAL == 'true' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: temurin

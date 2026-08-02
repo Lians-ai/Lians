@@ -9,7 +9,7 @@
   "homepage": "https://www.lians.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Lians-ai/Lians.git"
+    "url": "git+https://github.com/Lians-ai/Lians.git"
   },
   "bugs": {
     "url": "https://github.com/Lians-ai/Lians/issues"
