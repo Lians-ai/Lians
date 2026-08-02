@@ -35,21 +35,65 @@ def test_validate_base_url_requires_secret_free_https() -> None:
             MODULE.validate_base_url(value)
 
 
-def test_validate_health_requires_database() -> None:
-    MODULE.validate_health(
-        response(200, {"status": "ok", "checks": {"db": "ok", "redis": "disabled"}}),
-        "Health",
+def test_validate_health_requires_sanitized_success() -> None:
+    MODULE.validate_health(response(200, {"status": "ok"}), "Health")
+    for payload in (
+        {"status": "degraded"},
+        {"status": "ok", "checks": {"db": "ok", "redis": "disabled"}},
+    ):
+        with pytest.raises(RuntimeError, match="sanitized healthy response"):
+            MODULE.validate_health(response(200, payload), "Health")
+
+
+def test_validate_hidden_requires_not_found() -> None:
+    MODULE.validate_hidden(response(404, {"detail": "Not Found"}), "OpenAPI")
+    with pytest.raises(RuntimeError, match="publicly exposed"):
+        MODULE.validate_hidden(response(200, {"openapi": "3.1.0"}), "OpenAPI")
+
+
+def test_run_validates_hardened_production_contract(monkeypatch) -> None:
+    responses = {
+        "/livez": response(200, {"status": "alive"}),
+        "/health": response(200, {"status": "ok"}),
+        "/readyz": response(200, {"status": "ok"}),
+        "/docs": response(404, {"detail": "Not Found"}),
+        "/openapi.json": response(404, {"detail": "Not Found"}),
+        "/v1/decision-envelopes": response(401, {"detail": "Unauthorized"}),
+    }
+    requested: list[str] = []
+
+    def fake_request(_base_url: str, path: str, **_kwargs):
+        requested.append(path)
+        return responses[path]
+
+    monkeypatch.setattr(MODULE, "request", fake_request)
+    result = MODULE.run("https://api.example.com")
+
+    assert requested == list(responses)
+    assert result["authentication_boundary"] == "ok"
+    assert result["documentation_boundary"] == "ok"
+
+
+def test_run_rejects_exposed_openapi(monkeypatch) -> None:
+    responses = {
+        "/livez": response(200, {"status": "alive"}),
+        "/health": response(200, {"status": "ok"}),
+        "/readyz": response(200, {"status": "ok"}),
+        "/docs": response(404, {"detail": "Not Found"}),
+        "/openapi.json": response(200, {"openapi": "3.1.0"}),
+    }
+    monkeypatch.setattr(
+        MODULE,
+        "request",
+        lambda _base_url, path, **_kwargs: responses[path],
     )
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="OpenAPI was publicly exposed"):
+        MODULE.run("https://api.example.com")
+
+
+def test_validate_health_rejects_non_200() -> None:
+    with pytest.raises(RuntimeError, match="HTTP 503"):
         MODULE.validate_health(
-            response(200, {"status": "degraded", "checks": {"db": "ok"}}),
+            response(503, {"status": "degraded"}),
             "Health",
         )
-
-
-def test_validate_openapi_requires_release_paths() -> None:
-    MODULE.validate_openapi(
-        response(200, {"paths": {path: {} for path in MODULE.REQUIRED_OPENAPI_PATHS}})
-    )
-    with pytest.raises(RuntimeError, match="/v1/decision-envelopes"):
-        MODULE.validate_openapi(response(200, {"paths": {}}))
