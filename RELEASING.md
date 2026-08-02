@@ -22,7 +22,7 @@ Pushing a `vX.Y.Z` tag triggers:
 | Workflow | Does |
 |----------|------|
 | `publish-lian.yml` | Builds + publishes **Python** `lians-sdk` to PyPI (OIDC trusted publishing) |
-| `publish-lian-npm.yml` | `npm publish` **TypeScript** `@lians-ai/lians` (needs `NPM_TOKEN`) |
+| `publish-lian-npm.yml` | `npm publish` **TypeScript** `@lians-ai/lians` through npm trusted publishing (GitHub OIDC) |
 | `release.yml` → `java-jar` | Attaches the **Java** jar to the GitHub Release |
 | `release.yml` → `c-tarball` | Attaches `lians-c-<version>.tar.gz` (the **C** source) to the Release |
 | `release.yml` → `go-tag` | Mirrors the tag to `agentmem/sdk/go/vX.Y.Z` so `go get …@vX.Y.Z` resolves |
@@ -49,7 +49,7 @@ does not prove that any registry accepted the release.
 | Registry | Setup |
 |----------|-------|
 | **PyPI** | Configure a *Trusted Publisher* for `lians-sdk` pointing at `publish-lian.yml` (no token needed). |
-| **npm** | Create the `@lians-ai` org (or your chosen scope), add repo secret `NPM_TOKEN` with publish rights. |
+| **npm** | Configure `@lians-ai/lians` trusted publishing for `Lians-ai/Lians`, workflow `publish-lian-npm.yml`, with `npm publish` allowed. |
 | **Maven Central** | Create a [Central Portal](https://central.sonatype.com) account for `ai.lians` (verified via a TXT record on lians.ai); add secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`, `MAVEN_GPG_KEY` (ASCII-armored private key), `MAVEN_GPG_PASSPHRASE`; set repo **variable** `PUBLISH_MAVEN_CENTRAL=true`. Until then, the jar is attached to the GitHub Release. |
 | **Go / pkg.go.dev** | Nothing — `go-tag` creates the resolvable tag automatically. |
 

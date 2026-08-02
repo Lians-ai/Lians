@@ -30,7 +30,7 @@ git push origin v0.4.2
 | SDK | Registry | Publication path | Authentication |
 |---|---|---|---|
 | Python | [PyPI](https://pypi.org/project/lians-sdk/) | `publish-lian.yml` builds the sdist and wheel, then publishes them | PyPI trusted publisher through GitHub OIDC |
-| TypeScript | [npm](https://www.npmjs.com/package/@lians-ai/lians) | `publish-lian-npm.yml` builds, tests, and runs `npm publish` | npm trusted publisher through GitHub OIDC, with `NPM_TOKEN` retained temporarily as a migration fallback |
+| TypeScript | [npm](https://www.npmjs.com/package/@lians-ai/lians) | `publish-lian-npm.yml` builds, tests, and runs `npm publish` | npm trusted publisher through GitHub OIDC; no long-lived publish token |
 | Go | proxy.golang.org and pkg.go.dev | `release.yml` creates a module-path tag | GitHub token supplied to the workflow |
 | Java | Maven Central and GitHub Release JAR | `release.yml` signs and deploys with the `release` Maven profile | Sonatype credentials and GPG signing secrets |
 | C | GitHub Release source archive | `release.yml` creates `lians-c-<version>.tar.gz` | GitHub token supplied to the workflow |
@@ -47,9 +47,9 @@ Configure the existing `@lians-ai/lians` package on npmjs.com with this trusted 
 | Workflow filename | `publish-lian-npm.yml` |
 | Allowed action | `npm publish` |
 
-The workflow uses a GitHub-hosted runner, Node 24, npm 11.5.1 or later, and `id-token: write`. After one OIDC publication succeeds, remove the `NPM_TOKEN` repository secret and the fallback environment variable from the workflow.
+The workflow uses a GitHub-hosted runner, Node 24, npm 11.5.1 or later, and `id-token: write`. Publishing is OIDC-only: configure the trusted publisher before dispatching the workflow, and do not add a long-lived `NPM_TOKEN` fallback.
 
-The workflow also supports manual dispatch. This is useful when registry authorization fails after a tag has already published successfully to the other registries. A manual rerun publishes the version currently present on the selected branch, so verify that the npm version is still unpublished first.
+The workflow also supports manual dispatch. This is useful when registry authorization fails after a tag has already published successfully to the other registries. Supply the existing release tag; the workflow checks out that immutable tag and verifies its package version before publishing. Verify that the npm version is still unpublished first.
 
 ## Go module tags
 
