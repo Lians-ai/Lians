@@ -1,4 +1,4 @@
-"""Verify the production schema through a restricted Fly Machine exec token."""
+"""Verify the production schema through Fly Machine exec."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ ATTEMPTS = 3
 EXEC_TIMEOUT_SECONDS = 120
 RETRY_DELAY_SECONDS = 5
 
-# FLY_MACHINE_EXEC_TOKEN is caveated to this exact remote command. Changing
-# its spelling, quoting, paths, or arguments requires updating the token policy
-# and the protected GitHub environment secret before the next deployment.
+# The protected workflow locally attenuates its app-scoped deploy token to this
+# exact command and a 10-minute validity window before invoking this script.
+# Keep the remote command fixed and reviewable.
 SCHEMA_COMMAND = (
     "/bin/sh -c 'cd /app/agentmem && "
     "/opt/venv/bin/alembic -c alembic.ini current'"
@@ -30,7 +30,7 @@ Sleeper = Callable[[float], None]
 
 
 class SchemaVerificationError(RuntimeError):
-    """Raised when restricted schema verification cannot prove the expected head."""
+    """Raised when production schema verification cannot prove the expected head."""
 
 
 def _as_text(value: str | bytes | None) -> str:
@@ -96,7 +96,7 @@ def verify_schema(
                 print(f"Production schema revision: {EXPECTED_REVISION}")
                 return EXPECTED_REVISION
             raise SchemaVerificationError(
-                "restricted Machine exec succeeded but did not report the expected schema head"
+                "Machine exec succeeded but did not report the expected schema head"
             )
 
         if attempt < ATTEMPTS:
@@ -104,7 +104,7 @@ def verify_schema(
             sleeper(RETRY_DELAY_SECONDS)
 
     raise SchemaVerificationError(
-        f"restricted Machine exec failed after {ATTEMPTS} attempts"
+        f"Machine exec failed after {ATTEMPTS} attempts"
     )
 
 
