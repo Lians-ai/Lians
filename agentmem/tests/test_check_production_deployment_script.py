@@ -47,12 +47,23 @@ def test_fly_deploy_preserves_exact_image_and_build_evidence_contract() -> None:
 
 def test_build_sha_does_not_invalidate_heavy_runtime_layers() -> None:
     dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
-    assert dockerfile.index("RUN chown -R lians:lians") < dockerfile.index(
-        "ARG LIANS_BUILD_SHA=unknown"
-    )
-    assert dockerfile.index("ARG LIANS_BUILD_SHA=unknown") < dockerfile.index(
-        'ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}"'
-    )
+    build_arg_index = dockerfile.index("ARG LIANS_BUILD_SHA=unknown")
+    build_env_index = dockerfile.index('ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}"')
+
+    # Keep the commit-specific build argument after every materialized runtime
+    # artifact so a new SHA does not invalidate the venv, offline model, or app
+    # ownership layers.
+    for runtime_copy in (
+        "COPY --from=builder --chown=10001:10001 /opt/venv /opt/venv",
+        (
+            "COPY --from=builder --chown=10001:10001 "
+            "/app/.model_cache /app/.model_cache"
+        ),
+        "COPY --chown=10001:10001 agentmem/ /app/agentmem/",
+    ):
+        assert dockerfile.index(runtime_copy) < build_arg_index
+
+    assert build_arg_index < build_env_index
 
 
 def test_validate_health_requires_sanitized_success() -> None:
