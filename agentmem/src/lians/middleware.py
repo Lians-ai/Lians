@@ -19,6 +19,9 @@ from collections import OrderedDict
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
+from cryptography.hazmat.primitives import cmac, hashes
+from cryptography.hazmat.primitives.ciphers import algorithms
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -213,16 +216,36 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Redis is unavailable, a bounded per-process fallback keeps throttling
     active instead of silently disabling the control.
 
-    The raw API key is never written to Redis; only the first 16 hex chars
-    of its SHA-256 hash are used as the key discriminator.
+    The raw API key is never written to Redis. A server-keyed AES-CMAC produces
+    a stable, non-reversible bucket discriminator shared by all workers.
     """
 
-    def __init__(self, app, requests_per_minute: int = 300):
+    def __init__(
+        self,
+        app,
+        requests_per_minute: int = 300,
+        *,
+        fingerprint_secret: str,
+    ):
         super().__init__(app)
+        if not fingerprint_secret:
+            raise ValueError("fingerprint_secret must not be empty")
         self._limit = requests_per_minute
         self._window = 60  # seconds
+        self._fingerprint_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b"lians-rate-limit-v1",
+            info=b"api-key-bucket",
+        ).derive(fingerprint_secret.encode())
         self._fallback: OrderedDict[str, tuple[int, int]] = OrderedDict()
         self._fallback_max_buckets = 10_000
+
+    def _api_key_discriminator(self, raw_key: str) -> str:
+        """Return a stable keyed bucket ID without exposing the API key."""
+        mac = cmac.CMAC(algorithms.AES(self._fingerprint_key))
+        mac.update(raw_key.encode())
+        return f"api:{mac.finalize().hex()}"
 
     def _fallback_increment(self, discriminator: str) -> int:
         """Return the local count using a bounded fixed-minute window."""
@@ -259,7 +282,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         raw_key = request.headers.get("X-API-Key", "")
         if raw_key:
-            discriminator = f"api:{hashlib.sha256(raw_key.encode()).hexdigest()[:16]}"
+            discriminator = self._api_key_discriminator(raw_key)
         elif request.url.path.startswith("/v1/admin/"):
             # Admin auth uses a separate header. Keying this bucket by the
             # supplied secret would let an attacker evade throttling by changing

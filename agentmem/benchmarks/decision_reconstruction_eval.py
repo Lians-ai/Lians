@@ -37,13 +37,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from src.lians.config import get_settings
 from src.lians.db import get_db
 from src.lians.main import app
-from src.lians.models import ApiKey, Base, EventLog
+from src.lians.models import Base, EventLog
 
 
 NAMESPACE = "riad-benchmark"
-API_KEY = "riad-local-benchmark-key"
 AGENT = "underwriting-agent"
 SESSION = "loan-2026-0042"
 
@@ -90,29 +90,33 @@ async def run_benchmark(repetitions: int = 10) -> dict[str, Any]:
         await connection.run_sync(Base.metadata.create_all)
 
     sessions = async_sessionmaker(engine, expire_on_commit=False)
-    async with sessions() as seed:
-        seed.add(
-            ApiKey(
-                hashed_key=_sha(API_KEY),
-                namespace=NAMESPACE,
-                scopes=["read", "write", "admin"],
-            )
-        )
-        await seed.commit()
 
     async def benchmark_db():
         async with sessions() as session:
             yield session
 
     app.dependency_overrides[get_db] = benchmark_db
-    headers = {"X-API-Key": API_KEY}
 
     try:
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://benchmark",
-            headers=headers,
         ) as client:
+            provisioned = await _checked(
+                await client.post(
+                    "/v1/admin/api-keys",
+                    json={
+                        "namespace": NAMESPACE,
+                        "scopes": ["read", "write", "admin"],
+                        "label": "riad-ephemeral-benchmark",
+                    },
+                    headers={"X-Admin-Secret": get_settings().admin_secret},
+                ),
+                expected=201,
+            )
+            headers = {"X-API-Key": provisioned["key"]}
+            client.headers.update(headers)
+
             evidence_payloads = [
                 {
                     "content": "Applicant verified annual income is USD 120000.",
