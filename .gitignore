@@ -53,6 +53,8 @@ node_modules/
 agentmem/docker-compose.override.yml
 # Local docker-stack env holding a real MASTER_ENCRYPTION_KEY — never commit.
 agentmem/.env.dockerstack
+# Example owner-only bearer-key export from agentmem/scripts/seed_demo.py.
+.demo-read-key
 # Scratch live-smoke script used for cross-language SDK testing.
 agentmem/sdk/typescript/live_smoke.mjs
 
