@@ -142,56 +142,88 @@ jobs:
               --app agentmem-lotus-db \
               --json
           )"
+          before_snapshot_ids="$(jq -c '[.[].id]' <<<"$before_snapshots")"
+          snapshot_started_at="$(date -u +%s)"
 
-          # Fly currently prints a scheduling message even when --json is
-          # requested. Confirm the backup through the snapshot list instead
-          # of trying to parse the create command's stdout.
+          # The Fly CLI can keep waiting after the control plane has already
+          # created the snapshot. Start it asynchronously and treat the
+          # snapshot list as the source of truth.
+          snapshot_create_log="$RUNNER_TEMP/production-snapshot-create.log"
           flyctl volumes snapshots create "$volume_id" \
             --app agentmem-lotus-db \
-            >"$RUNNER_TEMP/production-snapshot-create.log"
+            >"$snapshot_create_log" 2>&1 &
+          snapshot_create_pid=$!
+
+          cleanup_snapshot_create() {
+            if [ -n "${snapshot_create_pid:-}" ]; then
+              if kill -0 "$snapshot_create_pid" 2>/dev/null; then
+                kill "$snapshot_create_pid" 2>/dev/null || true
+              fi
+              wait "$snapshot_create_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup_snapshot_create EXIT
 
           selected_snapshot=""
-          for _ in $(seq 1 30); do
+          for _ in $(seq 1 90); do
             snapshots="$(
               flyctl volumes snapshots list "$volume_id" \
                 --app agentmem-lotus-db \
                 --json
             )"
             selected_snapshot="$(
-              jq -ec '
+              jq -ec \
+                --argjson before_ids "$before_snapshot_ids" \
+                --argjson started_at "$snapshot_started_at" '
                 map(select(.status == "created"))
+                | map(
+                    select(
+                      .id as $id
+                      | ($before_ids | index($id) | not)
+                    )
+                  )
                 | sort_by(.created_at)
                 | last
                 | select(. != null)
                 | . + {
+                    created_epoch: (.created_at | fromdateiso8601),
                     age_seconds: (
                       (now - (.created_at | fromdateiso8601))
                       | floor
                     )
                   }
-                | select(.age_seconds >= 0 and .age_seconds <= 7200)
+                | select(.created_epoch >= ($started_at - 30))
+                | select(.age_seconds >= 0 and .age_seconds <= 600)
               ' <<<"$snapshots" || true
             )"
             if [ -n "$selected_snapshot" ]; then
               break
             fi
+            if [ -n "${snapshot_create_pid:-}" ] && \
+              ! kill -0 "$snapshot_create_pid" 2>/dev/null; then
+              wait "$snapshot_create_pid" 2>/dev/null || true
+              snapshot_create_pid=""
+            fi
             sleep 2
           done
 
-          test -n "$selected_snapshot"
-          snapshot_id="$(jq -er '.id' <<<"$selected_snapshot")"
-          snapshot_age_seconds="$(jq -er '.age_seconds' <<<"$selected_snapshot")"
-          if jq -e --arg id "$snapshot_id" \
-            'any(.[]; .id == $id)' <<<"$before_snapshots" >/dev/null; then
-            snapshot_source="existing recent"
-          else
-            snapshot_source="new"
+          cleanup_snapshot_create
+          trap - EXIT
+          snapshot_create_pid=""
+
+          if [ -z "$selected_snapshot" ]; then
+            echo "Fly did not confirm a new production snapshot." >&2
+            cat "$snapshot_create_log" >&2 || true
+            exit 1
           fi
 
-          echo "Production database snapshot selected: $snapshot_id ($snapshot_source)"
+          snapshot_id="$(jq -er '.id' <<<"$selected_snapshot")"
+          snapshot_age_seconds="$(jq -er '.age_seconds' <<<"$selected_snapshot")"
+
+          echo "Production database snapshot confirmed: $snapshot_id"
           echo "### Database safety" >> "$GITHUB_STEP_SUMMARY"
           echo "- Snapshot: \`$snapshot_id\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Source: $snapshot_source" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: new snapshot created by this deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "- Age: $snapshot_age_seconds seconds" >> "$GITHUB_STEP_SUMMARY"
           echo "- Volume: encrypted" >> "$GITHUB_STEP_SUMMARY"
 
