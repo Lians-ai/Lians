@@ -11,14 +11,6 @@ from urllib.error import HTTPError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-REQUIRED_OPENAPI_PATHS = {
-    "/v1/decision-envelopes",
-    "/v1/evidence/blast-radius",
-    "/v1/memories",
-    "/v1/recall",
-}
-
-
 @dataclass(frozen=True)
 class Response:
     status: int
@@ -76,23 +68,13 @@ def validate_health(response: Response, label: str) -> None:
     if response.status != 200:
         raise RuntimeError(f"{label} returned HTTP {response.status}")
     payload = json_body(response, label)
-    if payload.get("status") != "ok":
-        raise RuntimeError(f"{label} reported status {payload.get('status')!r}")
-    checks = payload.get("checks")
-    if not isinstance(checks, dict) or checks.get("db") != "ok":
-        raise RuntimeError(f"{label} did not report a healthy database")
+    if payload != {"status": "ok"}:
+        raise RuntimeError(f"{label} did not return the sanitized healthy response")
 
 
-def validate_openapi(response: Response) -> None:
-    if response.status != 200:
-        raise RuntimeError(f"OpenAPI returned HTTP {response.status}")
-    payload = json_body(response, "OpenAPI")
-    paths = payload.get("paths")
-    if not isinstance(paths, dict):
-        raise TypeError("OpenAPI document has no paths object")
-    missing = sorted(REQUIRED_OPENAPI_PATHS.difference(paths))
-    if missing:
-        raise RuntimeError(f"OpenAPI is missing required paths: {', '.join(missing)}")
+def validate_hidden(response: Response, label: str) -> None:
+    if response.status != 404:
+        raise RuntimeError(f"{label} was publicly exposed with HTTP {response.status}")
 
 
 def run(base_url: str, *, health_only: bool = False) -> dict[str, Any]:
@@ -111,14 +93,15 @@ def run(base_url: str, *, health_only: bool = False) -> dict[str, Any]:
         "readiness": "ok",
     }
     if not health_only:
-        validate_openapi(request(normalized, "/openapi.json"))
+        validate_hidden(request(normalized, "/docs"), "Docs")
+        validate_hidden(request(normalized, "/openapi.json"), "OpenAPI")
         protected = request(normalized, "/v1/decision-envelopes")
         if protected.status != 401:
             raise RuntimeError(
                 "Protected endpoint did not reject missing credentials with HTTP 401"
             )
         result["authentication_boundary"] = "ok"
-        result["openapi_contract"] = "ok"
+        result["documentation_boundary"] = "ok"
     return result
 
 
