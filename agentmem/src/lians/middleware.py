@@ -11,7 +11,6 @@ every request uniformly, including 4xx/5xx responses from FastAPI's own validati
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import logging
 import time
@@ -20,6 +19,9 @@ from collections import OrderedDict
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
+from cryptography.hazmat.primitives import cmac, hashes
+from cryptography.hazmat.primitives.ciphers import algorithms
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -214,7 +216,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Redis is unavailable, a bounded per-process fallback keeps throttling
     active instead of silently disabling the control.
 
-    The raw API key is never written to Redis. A server-keyed HMAC produces
+    The raw API key is never written to Redis. A server-keyed AES-CMAC produces
     a stable, non-reversible bucket discriminator shared by all workers.
     """
 
@@ -230,18 +232,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             raise ValueError("fingerprint_secret must not be empty")
         self._limit = requests_per_minute
         self._window = 60  # seconds
-        self._fingerprint_secret = fingerprint_secret.encode()
+        self._fingerprint_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b"lians-rate-limit-v1",
+            info=b"api-key-bucket",
+        ).derive(fingerprint_secret.encode())
         self._fallback: OrderedDict[str, tuple[int, int]] = OrderedDict()
         self._fallback_max_buckets = 10_000
 
     def _api_key_discriminator(self, raw_key: str) -> str:
         """Return a stable keyed bucket ID without exposing the API key."""
-        digest = hmac.new(
-            self._fingerprint_secret,
-            b"lians-rate-limit-v1\0" + raw_key.encode(),
-            hashlib.sha256,
-        ).hexdigest()
-        return f"api:{digest[:32]}"
+        mac = cmac.CMAC(algorithms.AES(self._fingerprint_key))
+        mac.update(raw_key.encode())
+        return f"api:{mac.finalize().hex()}"
 
     def _fallback_increment(self, discriminator: str) -> int:
         """Return the local count using a bounded fixed-minute window."""

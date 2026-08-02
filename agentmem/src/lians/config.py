@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     kms_vault_mount_point: str = "secret"
 
     # API
-    # Server-side HMAC key for non-reversible API-key fingerprints.
+    # Server-side key for non-reversible API-key fingerprints.
     api_secret_seed: str = "dev-seed-change-in-prod"
     admin_secret: str = "dev-admin-secret-change-in-prod"
     # None follows the environment: enabled in development, disabled in production.
