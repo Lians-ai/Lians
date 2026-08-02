@@ -10,18 +10,24 @@ Verifies:
 - get_adapter() returns the configured adapter (finance by default)
 - Adapter can be overridden at runtime (for custom verticals)
 """
-import pytest
+import re
 
-from src.lians.adapters import get_adapter, register_adapter
-from src.lians.adapters.finance import FinanceAdapter
-from src.lians.adapters.passthrough import PassthroughAdapter
-from src.lians.adapters.healthcare import HealthcareAdapter
-from src.lians.adapters.legal import LegalAdapter
+import pytest
 from src.lians._types import (
     _FINANCE_STRUCTURED_KEYS,
-    _PASSTHROUGH_STRUCTURED_KEYS,
     _HEALTHCARE_STRUCTURED_KEYS,
     _LEGAL_STRUCTURED_KEYS,
+    _PASSTHROUGH_STRUCTURED_KEYS,
+)
+from src.lians.adapters import get_adapter, register_adapter
+from src.lians.adapters.finance import FinanceAdapter
+from src.lians.adapters.healthcare import HealthcareAdapter
+from src.lians.adapters.legal import LegalAdapter
+from src.lians.adapters.passthrough import PassthroughAdapter
+
+_REFERENCE_MEDICATION_SUFFIX = re.compile(
+    r"\s+\d+\s*(mg|mcg|ml|g|iu|units?|tab(let)?s?|cap(sule)?s?)\b.*$",
+    re.IGNORECASE,
 )
 
 
@@ -118,8 +124,8 @@ def test_get_adapter_returns_finance_by_default(monkeypatch):
 
 
 def test_get_adapter_returns_passthrough_when_configured(monkeypatch):
-    from src.lians.config import get_settings
     from src.lians.adapters import _registry
+    from src.lians.config import get_settings
     _registry.clear()
     monkeypatch.setattr(get_settings(), "domain_adapter", "passthrough", raising=False)
     # Directly instantiate to avoid settings cache issues in tests
@@ -207,6 +213,40 @@ class TestHealthcareAdapter:
     def test_normalize_medication_preserves_salt(self):
         # Salt forms must survive to distinguish metformin HCl from metformin ER
         assert self.adapter.normalize("medication", "Metformin HCl") == "metformin hcl"
+
+    def test_normalize_medication_handles_maximum_unmatched_whitespace_run(self):
+        prefix = "Metformin HCl"
+        suffix = "not-a-dosage"
+        value = prefix + (" " * (100_000 - len(prefix) - len(suffix))) + suffix
+
+        assert len(value) == 100_000
+        assert self.adapter.normalize("medication", value) == value.strip().lower()
+
+    def test_normalize_medication_strips_dosage_after_maximum_whitespace_run(self):
+        prefix = "Metformin HCl"
+        suffix = "500mg tablets"
+        value = prefix + (" " * (100_000 - len(prefix) - len(suffix))) + suffix
+
+        assert len(value) == 100_000
+        assert self.adapter.normalize("medication", value) == "metformin hcl"
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "Metformin HCl 500mg tabs",
+            "Lisinopril 10 mg tablet after breakfast",
+            "Insulin Glargine 100 units",
+            "Medication 5 capsules nightly",
+            "Medication 5 milligrams",
+            "Medication500mg",
+            "Medication 5 mg\n",
+            "Medication 5 mg\ncontinued",
+            "Medication 5 mg\ncontinued 10 mg",
+        ],
+    )
+    def test_normalize_medication_matches_bounded_reference_semantics(self, value):
+        expected = _REFERENCE_MEDICATION_SUFFIX.sub("", value).strip().lower()
+        assert self.adapter.normalize("medication", value) == expected
 
     def test_normalize_patient_id_strips_whitespace(self):
         assert self.adapter.normalize("patient_id", "  MRN-0012345  ") == "MRN-0012345"

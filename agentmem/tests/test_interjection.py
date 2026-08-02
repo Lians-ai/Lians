@@ -10,10 +10,24 @@ Two layers under test:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import re
+from datetime import UTC, datetime
 
-from src.lians.interjection import extract_interjections
-from src.lians.ranking import _collapse_derived, _stale_clause_penalty, STALE_CLAUSE_PENALTY
+import pytest
+from src.lians.interjection import _split_clauses, _split_segments, extract_interjections
+from src.lians.ranking import STALE_CLAUSE_PENALTY, _collapse_derived, _stale_clause_penalty
+
+# Test-only references over bounded literals.  Production parsing must use the
+# linear scanners; these preserve an executable record of their former regex
+# semantics without applying the expressions to untrusted input.
+_REFERENCE_SEGMENT_SPLIT = re.compile(
+    r"(?<=[.!?…])\s+|\s+[—–]\s*|\s*[—–]\s+|\s+--\s+"
+)
+_REFERENCE_CLAUSE_SPLIT = re.compile(
+    r",\s+(?:so|since|because|but|although|though|anyway)\b\s*|\s+because\s+"
+    r"|,?\s+and\s+(?=I\b|I'm\b|my\b)",
+    re.IGNORECASE,
+)
 
 
 # ── Layer 1: pure deterministic extractor ────────────────────────────────────
@@ -102,6 +116,66 @@ def test_task_chatter_ignored():
     assert extract_interjections(turn) == []
 
 
+def test_maximum_size_unmatched_whitespace_run_is_ignored():
+    """A maximum-size write with no separator remains a single clause."""
+    prefix = "User: keep planning"
+    suffix = "then finish the task"
+    turn = prefix + (" " * (100_000 - len(prefix) - len(suffix))) + suffix
+
+    assert len(turn) == 100_000
+    assert extract_interjections(turn) == []
+
+
+def test_maximum_size_whitespace_run_preserves_connector_semantics():
+    prefix = "User: keep planning"
+    suffix = "because my studio in Portland is ready."
+    turn = prefix + (" " * (100_000 - len(prefix) - len(suffix))) + suffix
+
+    assert len(turn) == 100_000
+    assert extract_interjections(turn) == ["User: my studio in Portland is ready."]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "first.   second",
+        "first?\tsecond",
+        "first…\nsecond",
+        "first   —second",
+        "first—   second",
+        "first   –   second",
+        "first   --   second",
+        "first—second",
+        "first-- second",
+    ],
+)
+def test_segment_scanner_matches_bounded_reference_semantics(value):
+    assert _split_segments(value) == _REFERENCE_SEGMENT_SPLIT.split(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "first, so second",
+        "first, since second",
+        "first, because second",
+        "first, but second",
+        "first, although second",
+        "first, though second",
+        "first, anyway second",
+        "first because second",
+        "first and I moved",
+        "first, and I'm ready",
+        "first and my studio moved",
+        "first and they moved",
+        "first becauseful second",
+        "first, somehow second",
+    ],
+)
+def test_clause_scanner_matches_bounded_reference_semantics(value):
+    assert _split_clauses(value) == _REFERENCE_CLAUSE_SPLIT.split(value)
+
+
 # ── Layer 2: ranking helpers ─────────────────────────────────────────────────
 
 
@@ -129,10 +203,10 @@ def test_collapse_noop_without_derived_rows():
 
 
 def test_stale_penalty_is_time_aware():
-    closure = datetime(2026, 6, 9, tzinfo=timezone.utc)
+    closure = datetime(2026, 6, 9, tzinfo=UTC)
     meta = {"_stale_clauses": [closure.isoformat()]}
-    before = datetime(2026, 5, 25, tzinfo=timezone.utc)
-    after = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    before = datetime(2026, 5, 25, tzinfo=UTC)
+    after = datetime(2026, 7, 1, tzinfo=UTC)
     assert _stale_clause_penalty(meta, before) == 0.0
     assert _stale_clause_penalty(meta, after) == STALE_CLAUSE_PENALTY
     assert _stale_clause_penalty({}, after) == 0.0
