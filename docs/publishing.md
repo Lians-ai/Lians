@@ -1,29 +1,46 @@
 # Publishing the SDKs
 
-Lians ships Python, TypeScript, Go, Java, and C SDKs. A unified `vX.Y.Z` tag runs the language-specific publication workflows and creates GitHub Release artifacts.
+Lians ships Python, TypeScript, Go, Java, and C SDKs plus an MCP container and
+Registry manifest. A unified annotated `vX.Y.Z` tag starts four GitHub Actions
+workflows; the MCP Registry manifest is published separately after the matching
+Python package is live.
 
 ## Release checklist
 
-1. Set the same version in:
+1. Set the same version in `VERSION` and every release manifest, including:
    - `agentmem/sdk/python/pyproject.toml`
    - `agentmem/sdk/typescript/package.json`
    - `agentmem/sdk/typescript/package-lock.json`
    - `agentmem/sdk/java/pom.xml`
+   - `agentmem/sdk/go/version.go`
+   - `agentmem/sdk/c/CMakeLists.txt`
+   - `server.json`
 2. Update package README installation examples.
-3. Merge the release PR only after the full CI matrix passes.
-4. Confirm PyPI trusted publishing, npm trusted publishing, and Maven Central credentials are configured.
+3. Run `python scripts/check_release_contract.py`, then merge the release PR only
+   after the full CI matrix passes.
+4. Confirm PyPI and npm trusted publishing, Maven Central credentials and opt-in,
+   GHCR package permissions, and GitHub Release permissions are configured.
 5. Create and push one annotated tag:
 
 ```bash
-git tag -a v0.4.2 -m "release: v0.4.2"
-git push origin v0.4.2
+git tag -a vX.Y.Z -m "release: vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-6. Monitor all three workflows until completion:
+6. Monitor all four tag-triggered workflows until completion:
    - `publish-lian.yml`
    - `publish-lian-npm.yml`
    - `release.yml`
-7. Verify the published version from each public registry. A successful workflow is not proof that a registry search index has propagated.
+   - `publish-mcp-container.yml`
+7. After PyPI exposes the exact release, publish `server.json` to the MCP Registry:
+
+   ```bash
+   mcp-publisher login github
+   mcp-publisher publish server.json
+   ```
+
+8. Verify the published version from every public registry. A successful
+   workflow is not proof that a registry or search index has propagated.
 
 ## Registry matrix
 
@@ -34,6 +51,8 @@ git push origin v0.4.2
 | Go | proxy.golang.org and pkg.go.dev | `release.yml` creates a module-path tag | GitHub token supplied to the workflow |
 | Java | Maven Central and GitHub Release JAR | `release.yml` signs and deploys with the `release` Maven profile | Sonatype credentials and GPG signing secrets |
 | C | GitHub Release source archive | `release.yml` creates `lians-c-<version>.tar.gz` | GitHub token supplied to the workflow |
+| MCP container | GitHub Container Registry | `publish-mcp-container.yml` waits for the exact PyPI release, smoke-tests the server, and publishes multi-architecture `X.Y.Z` and `latest` tags with SBOM and provenance | GitHub package permissions plus OIDC attestation permission |
+| MCP manifest | Official MCP Registry | `mcp-publisher publish server.json` after the referenced PyPI package is live | Short-lived GitHub login for the `io.github.ebeirne/lians` namespace |
 
 ## npm trusted publishing
 
@@ -56,7 +75,7 @@ The workflow also supports manual dispatch. This is useful when registry authori
 The Go module lives in a subdirectory. `release.yml` mirrors `vX.Y.Z` to `agentmem/sdk/go/vX.Y.Z` automatically so consumers can run:
 
 ```bash
-go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1
+go get github.com/Lians-ai/Lians/agentmem/sdk/go@vX.Y.Z
 ```
 
 ## Maven Central
@@ -73,3 +92,17 @@ It also requires the repository variable `PUBLISH_MAVEN_CENTRAL=true`. The Maven
 ## C source archive
 
 The C SDK is distributed as source. `release.yml` packages `agentmem/sdk/c` into `lians-c-<version>.tar.gz` for consumers to vendor into their own build.
+
+## Container and MCP Registry
+
+`publish-mcp-container.yml` validates the unprefixed `X.Y.Z` tag against
+`VERSION`, waits for that exact `lians-sdk` version on PyPI, smoke-tests the
+stdio MCP server, and publishes `ghcr.io/lians-ai/lians-mcp:X.Y.Z` plus
+`latest`. Verify both tags resolve to the same OCI index and that it contains
+`linux/amd64` and `linux/arm64` images.
+
+The public Registry identity remains `io.github.ebeirne/lians`; the GitHub
+organization hosting the repository does not change that established package
+name. Publish the checked-in manifest explicitly with
+`mcp-publisher publish server.json`, then verify exactly one active `isLatest`
+entry for that identity.

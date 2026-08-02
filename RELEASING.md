@@ -13,7 +13,7 @@ python scripts/check_openapi_contract.py
 # 3. Run the full test/build/package matrix and inspect the release diff.
 # 4. Confirm PyPI trusted publishing, npm scope authorization, Maven secrets,
 #    and the Maven opt-in variable before creating the tag.
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "release: vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
@@ -55,15 +55,18 @@ does not prove that any registry accepted the release.
 
 ## After a release
 
-1. Wait for every tag-triggered workflow and inspect each publisher log.
+1. Wait for `publish-lian.yml`, `publish-lian-npm.yml`, `release.yml`, and
+   `publish-mcp-container.yml`, then inspect each publisher log.
 2. Verify clean external installs for Python, TypeScript, Go, Java, and the C
    release asset. Run the installed Python wheel outside this monorepo.
    Then run `uv lock --directory integrations/mcpb` and rerun
    `python scripts/check_release_contract.py` before packaging the MCPB.
-3. Publish and verify the MCP Registry manifest, then verify the GHCR version and
-   `latest` tags resolve to the intended digest. The container workflow strips
-   the Git tag's leading `v`, validates the result against `VERSION`, and uses
-   that same value for the installed Python distribution and runtime image tag.
+3. Publish `server.json` to the MCP Registry, then verify the Registry entry and
+   the GHCR version and `latest` tags. Both GHCR tags must resolve to the intended
+   OCI index, including `linux/amd64`, `linux/arm64`, SBOM, and provenance
+   manifests. The container workflow strips the Git tag's leading `v`, validates
+   the result against `VERSION`, and uses that same value for the installed
+   Python distribution and runtime image tag.
 4. Update `docs/published-release-status.json` only from observed registry state,
    then run:
 
@@ -74,11 +77,13 @@ does not prove that any registry accepted the release.
    ```
 
    The script checks registries with stable unauthenticated metadata endpoints.
-   The C release asset and GHCR container remain explicit manual checks; both are
-   still required before `--require-source-sync` may be treated as a release gate.
+   The C release asset and GHCR container remain explicit manual checks. The
+   source-sync command is the final all-surfaces gate and is expected to fail if
+   any publisher remains on an older version.
 
-5. Update public install instructions only after both commands pass. If any
-   publisher fails, leave the matrix split and record the failure explicitly.
+5. Update each public install instruction to the version actually observed for
+   that ecosystem. If a publisher fails, leave the matrix split and record the
+   older public version explicitly; never advertise the source version as live.
 
 - **Publish to the MCP registry — manual, easy to forget** (0.3.3 and the
   first day of 0.3.4 were missing because this step lives outside the
@@ -87,7 +92,7 @@ does not prove that any registry accepted the release.
   ```bash
   # from the repo root (reads server.json, which the version bump updated)
   mcp-publisher login github     # interactive device flow; token expires
-  mcp-publisher publish
+  mcp-publisher publish server.json
   # verify:
   curl -fsS "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.ebeirne%2Flians&version=latest"
   ```

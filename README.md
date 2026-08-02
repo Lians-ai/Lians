@@ -404,11 +404,11 @@ verify the machine-readable [published release status](docs/published-release-st
 
 | Language | Install | Client | Docs |
 |----------|---------|--------|------|
-| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
+| **Python 0.5.0** | `pip install lians-sdk==0.5.0` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
 | **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
-| **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
-| **Java 0.4.1** (JVM 11+) | `ai.lians:lians-sdk:0.4.1` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
-| **C 0.4.1** (C99 + libcurl) | build from the `v0.4.1` source tag | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
+| **Go 0.5.0** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.5.0` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
+| **Java 0.5.0** (JVM 11+) | `ai.lians:lians-sdk:0.5.0` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
+| **C 0.5.0** (C99 + libcurl) | build from the `v0.5.0` release asset | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
 
 → **One-page install + 30-second quickstart for every language: [docs/install.md](docs/install.md)**
 

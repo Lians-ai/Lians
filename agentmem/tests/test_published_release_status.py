@@ -18,34 +18,27 @@ def test_checked_in_release_status_is_valid_and_explicit_about_drift():
     errors = validate_status(status, (ROOT / "VERSION").read_text().strip())
     assert errors == []
     assert source_sync_drift(status) == {
-        "pypi": "0.4.2",
         "npm": "0.4.0",
-        "go": "0.4.1",
-        "maven": "0.4.1",
-        "c": "0.4.1",
-        "ghcr_mcp": "0.4.1",
-        "mcp_registry": "0.4.1",
-        "github_release": "0.4.1",
     }
 
 
 def test_registry_parsers_select_authoritative_release_versions():
-    assert parse_go_versions(b"v0.4.0\nv0.3.4\nv0.4.1\n") == "0.4.1"
+    assert parse_go_versions(b"v0.4.1\nv0.3.4\nv0.5.0\n") == "0.5.0"
     assert (
         parse_maven_metadata(
-            b"<metadata><versioning><release>0.4.1</release></versioning></metadata>"
+            b"<metadata><versioning><release>0.5.0</release></versioning></metadata>"
         )
-        == "0.4.1"
+        == "0.5.0"
     )
 
     assert (
         parse_mcp_registry(
             b'{"servers":[{"server":{"name":"io.github.ebeirne/lians",'
-            b'"version":"0.4.1"},"_meta":{'
+            b'"version":"0.5.0"},"_meta":{'
             b'"io.modelcontextprotocol.registry/official":{'
             b'"status":"active","isLatest":true}}}]}'
         )
-        == "0.4.1"
+        == "0.5.0"
     )
 
 
@@ -53,10 +46,10 @@ def test_live_comparison_reports_expected_and_actual_versions():
     status = load_status(ROOT / "docs" / "published-release-status.json")
     live = {
         "production_api": "0.5.0",
-        "pypi": "0.4.2",
-        "npm": "0.4.1",
+        "pypi": "0.5.0",
+        "npm": "0.5.0",
     }
-    assert compare_live(status, live) == {"npm": ("0.4.0", "0.4.1")}
+    assert compare_live(status, live) == {"npm": ("0.4.0", "0.5.0")}
 
 
 def test_production_verification_uses_version_endpoint() -> None:
@@ -92,11 +85,11 @@ def test_glama_default_tracks_verified_public_image():
 
 def test_release_status_rejects_prefixed_ghcr_runtime_tag():
     status = load_status(ROOT / "docs" / "published-release-status.json")
-    status["artifacts"]["ghcr_mcp"]["runtime"] = "ghcr.io/lians-ai/lians-mcp:v0.4.1"
+    status["artifacts"]["ghcr_mcp"]["runtime"] = "ghcr.io/lians-ai/lians-mcp:v0.5.0"
     errors = validate_status(status, (ROOT / "VERSION").read_text().strip())
     assert errors == [
         (
             "artifacts.ghcr_mcp.runtime must use the normalized, unprefixed "
-            "version tag ghcr.io/lians-ai/lians-mcp:0.4.1"
+            "version tag ghcr.io/lians-ai/lians-mcp:0.5.0"
         )
     ]

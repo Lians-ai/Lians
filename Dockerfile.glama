@@ -3,7 +3,7 @@ FROM python:3.12-slim
 # Hosted builders such as Glama may not support build arguments, so this
 # fallback tracks the verified public image. The publisher always overrides
 # and verifies this value before creating a versioned GHCR tag.
-ARG LIANS_VERSION=0.4.1
+ARG LIANS_VERSION=0.5.0
 
 RUN groupadd --system lians \
     && useradd --system --gid lians --create-home lians \

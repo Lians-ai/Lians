@@ -6,11 +6,7 @@ independently and may differ when a publisher fails. See
 [`docs/published-release-status.json`](docs/published-release-status.json) for the
 current distribution truth.
 
-## Unreleased — source manifests at 0.5.0
-
-The `0.5.0` source version is not a published-release claim. Do not advertise or
-install `0.5.0` until the release checklist verifies PyPI, npm, Go, Maven, the C
-asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
+## 0.5.0 — 2026-08-02
 
 ### Added
 - Decision Envelopes, completeness grades, signed Evidence Packs, and offline
@@ -27,25 +23,6 @@ asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
 - Runtime, webhook, artifact, and workflow security hardening.
 - Runtime Docker contexts now exclude nested dependency/build trees; the test
   harness accepts an explicit `TEST_REDIS_URL` for isolated local and CI runs.
-
-## 0.4.2 — 2026-07-18 (Python SDK only)
-
-- Published `lians-sdk` with real local semantic embeddings included in the
-  `[local]` and `[mcp]` installation paths. Other ecosystems remained on their
-  previously published versions.
-
-## 0.4.1 — 2026-07-17
-
-- Corrected the Java group to `ai.lians` and published Java 0.4.1 to Maven
-  Central, Go 0.4.1 to the module proxy, C 0.4.1 as a GitHub release asset, and
-  MCP manifest/container 0.4.1.
-- Shipped lifecycle, recall-quality, local-MCP, packaging, and benchmark fixes.
-- npm remained at 0.4.0 after the 0.4.1 publisher authorization failure.
-
-## Unreleased
-
-### Changed
-
 - Recall policy `lians-recall-policy-v3` caps each query facet at 400 candidates
   (at most four facets) and publishes both the per-facet and request-wide upper
   bounds alongside per-memory work limits in its evidence.
@@ -64,6 +41,20 @@ asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
 - Idempotent writes now commit their retry key and durable recall-invalidation
   barrier atomically with the memory. A retry repairs a post-commit cache outage
   and returns the original memory instead of inserting a duplicate.
+
+## 0.4.2 — 2026-07-18 (Python SDK only)
+
+- Published `lians-sdk` with real local semantic embeddings included in the
+  `[local]` and `[mcp]` installation paths. Other ecosystems remained on their
+  previously published versions.
+
+## 0.4.1 — 2026-07-17
+
+- Corrected the Java group to `ai.lians` and published Java 0.4.1 to Maven
+  Central, Go 0.4.1 to the module proxy, C 0.4.1 as a GitHub release asset, and
+  MCP manifest/container 0.4.1.
+- Shipped lifecycle, recall-quality, local-MCP, packaging, and benchmark fixes.
+- npm remained at 0.4.0 after the 0.4.1 publisher authorization failure.
 
 ## 0.4.0 — 2026-07-06
 

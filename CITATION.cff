@@ -8,8 +8,8 @@ authors:
 repository-code: "https://github.com/Lians-ai/Lians"
 url: "https://www.lians.ai"
 license: Apache-2.0
-version: 0.4.0
-date-released: 2026-07-06
+version: 0.5.0
+date-released: 2026-08-02
 keywords:
   - agent memory
   - bitemporal data
