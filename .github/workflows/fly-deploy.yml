@@ -87,7 +87,7 @@ jobs:
     name: Snapshot and deploy production
     needs: staging-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment:
       name: production
       url: https://agentmem-lotus.fly.dev
@@ -258,20 +258,23 @@ jobs:
 
           python scripts/migrate_via_fly_proxy.py --host 127.0.0.1 --port 15433
 
-      - name: Deploy with canary health checks
+      - name: Deploy with blue-green health-gated cutover
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_APP_TOKEN }}
         run: |
           set -euo pipefail
           image_label="deployment-github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           deployed_image="registry.fly.io/agentmem-lotus:${image_label}"
+          # Canary destroys its temporary check Machine before replacing the
+          # only serving Machine. Blue-green keeps the old Machine routed until
+          # its replacement passes the configured /readyz health check.
           flyctl deploy \
             --app agentmem-lotus \
             --config fly.toml \
             --image-label "$image_label" \
             --build-arg "LIANS_BUILD_SHA=$GITHUB_SHA" \
             --remote-only \
-            --strategy canary \
+            --strategy bluegreen \
             --wait-timeout 10m
           echo "DEPLOYED_IMAGE=$deployed_image" >> "$GITHUB_ENV"
 
@@ -352,19 +355,8 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_MACHINE_EXEC_TOKEN }}
         run: |
-          set -euo pipefail
-          output="$(
-            flyctl machine exec \
-              "$PRODUCTION_MACHINE_ID" \
-              "/bin/sh -c 'cd /app/agentmem && /opt/venv/bin/alembic -c alembic.ini current'" \
-              --app agentmem-lotus \
-              --timeout 60 \
-              2>&1
-          )"
-          printf '%s\n' "$output"
-          revision="$(grep -oE '^0028_decision_envelopes' <<<"$output" | head -n 1)"
-          test "$revision" = "0028_decision_envelopes"
-          echo "Production schema revision: $revision"
+          python scripts/verify_production_schema.py \
+            --machine-id "$PRODUCTION_MACHINE_ID"
 
       - name: Run public production smoke checks
         run: |

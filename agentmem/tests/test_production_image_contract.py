@@ -8,6 +8,9 @@ DEPLOY_WORKFLOW = (ROOT / ".github" / "workflows" / "fly-deploy.yml").read_text(
 MACHINE_SELECTOR = (ROOT / "scripts" / "select_fly_production_machine.py").read_text(
     encoding="utf-8"
 )
+SCHEMA_VERIFIER = (ROOT / "scripts" / "verify_production_schema.py").read_text(
+    encoding="utf-8"
+)
 
 
 def test_local_embedding_image_is_cpu_only_by_contract() -> None:
@@ -71,7 +74,8 @@ def test_offline_model_and_deployment_identity_contracts_are_preserved() -> None
     # Production post-deploy verification must keep targeting the isolated
     # venv and exact GitHub commit embedded in both the image environment and
     # Fly image metadata.
-    assert "/opt/venv/bin/alembic" in DEPLOY_WORKFLOW
+    assert "scripts/verify_production_schema.py" in DEPLOY_WORKFLOW
+    assert "/opt/venv/bin/alembic" in SCHEMA_VERIFIER
     assert '--build-arg "LIANS_BUILD_SHA=$GITHUB_SHA"' in DEPLOY_WORKFLOW
     assert '--expected-sha "$GITHUB_SHA"' in DEPLOY_WORKFLOW
     assert '--expected-build-sha "$GITHUB_SHA"' in DEPLOY_WORKFLOW
