@@ -14,12 +14,12 @@ webhook coverage currently varies by client.
 
 | Language | Install | Import / entry point |
 |----------|---------|----------------------|
-| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` |
-| **Python 0.4.2 (local, no server)** | `pip install "lians-sdk[local]==0.4.2"` | `from lians import LocalLiansClient` |
+| **Python 0.5.0** | `pip install lians-sdk==0.5.0` | `from lians import LiansClient` |
+| **Python 0.5.0 (local, no server)** | `pip install "lians-sdk[local]==0.5.0"` | `from lians import LocalLiansClient` |
 | **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` |
-| **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` |
-| **Java 0.4.1** (JVM 11+) | Maven `ai.lians:lians-sdk:0.4.1` | `new LiansClient(opts)` |
-| **C 0.4.1** (C99 + libcurl) | check out `v0.4.1`, then `cmake -S agentmem/sdk/c -B build` | `lians_client_new(...)` |
+| **Go 0.5.0** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.5.0` | `lians.NewClient(url, key)` |
+| **Java 0.5.0** (JVM 11+) | Maven `ai.lians:lians-sdk:0.5.0` | `new LiansClient(opts)` |
+| **C 0.5.0** (C99 + libcurl) | download the `v0.5.0` source asset, then run CMake | `lians_client_new(...)` |
 
 Published versions currently differ by ecosystem. The exact registry state is
 tracked in [`published-release-status.json`](published-release-status.json) and
@@ -84,7 +84,7 @@ _, _ = c.AddMemory(ctx, lians.AddMemoryRequest{
 <dependency>
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.4.1</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 ```java
@@ -118,9 +118,9 @@ pip install lians-sdk[all]          # everything
 ## Verify a release
 
 ```bash
-pip install lians-sdk==0.4.2
+pip install lians-sdk==0.5.0
 npm view @lians-ai/lians version
-go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1
+go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.5.0
 curl -fsSL https://repo1.maven.org/maven2/ai/lians/lians-sdk/maven-metadata.xml
 python scripts/check_published_artifacts.py
 ```

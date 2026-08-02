@@ -20,7 +20,7 @@ Add this server entry to the MCP configuration used by your client:
   "mcpServers": {
     "lians": {
       "command": "uvx",
-      "args": ["--from", "lians-sdk[mcp]==0.4.1", "lians-mcp"]
+      "args": ["--from", "lians-sdk[mcp]==0.5.0", "lians-mcp"]
     }
   }
 }
@@ -34,7 +34,7 @@ eight memory tools. No environment variables are required for local mode.
 To start the stdio server directly:
 
 ```bash
-uvx --from 'lians-sdk[mcp]==0.4.1' lians-mcp
+uvx --from 'lians-sdk[mcp]==0.5.0' lians-mcp
 ```
 
 The process waits for MCP messages on standard input. This is expected. Stop it
@@ -50,7 +50,7 @@ Set `LIANS_LOCAL_DB` only when a specific database path is needed:
   "mcpServers": {
     "lians": {
       "command": "uvx",
-      "args": ["--from", "lians-sdk[mcp]==0.4.1", "lians-mcp"],
+      "args": ["--from", "lians-sdk[mcp]==0.5.0", "lians-mcp"],
       "env": {
         "LIANS_LOCAL_DB": "/absolute/path/to/lians-mcp.db"
       }

@@ -10,7 +10,7 @@ body:
     id: version
     attributes:
       label: Lians version
-      placeholder: v0.4.1, container digest, or commit SHA
+      placeholder: vX.Y.Z, container digest, or commit SHA
     validations:
       required: true
   - type: dropdown
