@@ -60,7 +60,16 @@ class LiansClientTest {
                         + "\"metadata\":{\"ticker\":\"NVDA\"}}";
             } else if (path.equals("/v1/recall")) {
                 resp = "{\"memories\":[{\"id\":\"m-1\",\"content\":\"NVDA guidance $40B\","
-                        + "\"event_time\":\"2025-11-19T16:00:00Z\",\"metadata\":{\"ticker\":\"NVDA\"}}],"
+                        + "\"event_time\":\"2025-11-19T16:00:00Z\",\"metadata\":{\"ticker\":\"NVDA\"},"
+                        + "\"score\":0.875,\"score_breakdown\":{\"importance_score\":0.8,"
+                        + "\"confidence_score\":0.7,\"trust_score\":0.5,\"freshness_score\":0.9,"
+                        + "\"relevance_score\":1.0,\"stability_score\":0.8,\"safety_score\":1.0,"
+                        + "\"final_score\":0.875,\"eligible\":true,\"purpose\":\"recall\","
+                        + "\"scoring_policy_version\":\"lians-memory-scoring-v2\","
+                        + "\"scoring_limits\":{\"text_sample_chars\":8192,\"token_cap\":1024,"
+                        + "\"metadata_chars\":4096,\"metadata_items\":64,\"metadata_depth\":4,"
+                        + "\"metadata_value_chars\":512},"
+                        + "\"weights\":{\"relevance_score\":0.35},\"reasons\":[],\"ranking_stages\":[]}}],"
                         + "\"as_of\":null,\"total_candidates\":1}";
             } else if (path.equals("/v1/graph/path")) {
                 resp = "{\"src\":\"Attorney\",\"dst\":\"PartyY\",\"connected\":true,"
@@ -116,6 +125,18 @@ class LiansClientTest {
         assertEquals(1, r.memories.size());
         assertEquals("NVDA guidance $40B", r.memories.get(0).content);
         assertEquals(1, r.totalCandidates);
+        assertNotNull(r.memories.get(0).score);
+        assertEquals(0.875, r.memories.get(0).score.doubleValue(), 0.0);
+        assertNotNull(r.memories.get(0).scoreBreakdown);
+        assertEquals(r.memories.get(0).score.doubleValue(),
+                r.memories.get(0).scoreBreakdown.finalScore, 0.0);
+        assertEquals("lians-memory-scoring-v2",
+                r.memories.get(0).scoreBreakdown.scoringPolicyVersion);
+        assertNotNull(r.memories.get(0).scoreBreakdown.scoringLimits);
+        assertEquals(8192,
+                r.memories.get(0).scoreBreakdown.scoringLimits.textSampleChars);
+        assertEquals(512,
+                r.memories.get(0).scoreBreakdown.scoringLimits.metadataValueChars);
     }
 
     @Test

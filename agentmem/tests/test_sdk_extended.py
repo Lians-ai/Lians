@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
 
 from lians import LocalLiansClient, LiansClient
+from src.lians.cache import RecallCacheInvalidationError
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 T1 = datetime(2026, 5, 10, tzinfo=timezone.utc)
@@ -202,19 +203,64 @@ class TestLocalSupersessionReview:
 
     def test_reject_supersession_restores_old_memory(self):
         """After reject, the old memory should reappear in present-time recall."""
-        with LocalLiansClient() as mem:
-            old = mem.add(agent_id="a", content="NVDA guidance $32B",
-                          event_time=T0, metadata={"ticker": "NVDA", "metric": "guidance"})
-            mem.add(agent_id="a", content="NVDA guidance $36B",
-                    event_time=T1, metadata={"ticker": "NVDA", "metric": "guidance"})
+        invalidator = AsyncMock(return_value=True)
+        with patch("src.lians.cache_invalidation.invalidate_agent", invalidator):
+            with LocalLiansClient() as mem:
+                old = mem.add(agent_id="a", content="NVDA guidance $32B",
+                              event_time=T0, metadata={"ticker": "NVDA", "metric": "guidance"})
+                mem.add(agent_id="a", content="NVDA guidance $36B",
+                        event_time=T1, metadata={"ticker": "NVDA", "metric": "guidance"})
+                before = mem.recall("a", "NVDA guidance", k=5)
+                assert old["id"] not in {item["id"] for item in before["memories"]}
 
-            # Reject: the supersession was wrong
-            result = mem.reject_supersession(
-                memory_id=old["id"],
-                reviewer_note="Source retracted the revision",
-            )
+                # Reject: the supersession was wrong
+                result = mem.reject_supersession(
+                    memory_id=old["id"],
+                    reviewer_note="Source retracted the revision",
+                )
+                after = mem.recall("a", "NVDA guidance", k=5)
 
         assert result["action"] == "reject"
+        assert old["id"] in {item["id"] for item in after["memories"]}
+        assert any(call.args == ("local", "a") for call in invalidator.await_args_list)
+        assert all(
+            call.kwargs == {"fail_closed": True}
+            for call in invalidator.await_args_list
+        )
+
+    def test_reject_supersession_does_not_succeed_until_invalidation_recovers(self):
+        invalidator = AsyncMock(return_value=True)
+        with patch("src.lians.cache_invalidation.invalidate_agent", invalidator):
+            with LocalLiansClient(embedding_provider="local") as mem:
+                old = mem.add(
+                    agent_id="a",
+                    content="NVDA guidance $32B",
+                    event_time=T0,
+                    metadata={"ticker": "NVDA", "metric": "guidance"},
+                )
+                mem.add(
+                    agent_id="a",
+                    content="NVDA guidance $36B",
+                    event_time=T1,
+                    metadata={"ticker": "NVDA", "metric": "guidance"},
+                )
+
+                invalidator.side_effect = RecallCacheInvalidationError(
+                    "redis unavailable"
+                )
+                with pytest.raises(RecallCacheInvalidationError):
+                    mem.reject_supersession(memory_id=old["id"])
+
+                invalidator.side_effect = None
+                invalidator.return_value = True
+                repaired = mem.reject_supersession(memory_id=old["id"])
+                after = mem.recall("a", "NVDA guidance", k=5)
+
+        assert repaired["action"] == "reject"
+        assert old["id"] in {item["id"] for item in after["memories"]}
+        # Both writes and both reviewer attempts are durable, fail-closed
+        # invalidation boundaries.
+        assert invalidator.await_count == 4
 
 
 # ===========================================================================

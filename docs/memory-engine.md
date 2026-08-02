@@ -81,7 +81,11 @@ confidence, and degradation state.
 
 ## Verifiable recall receipts
 
-`receipt_sha256` commits to:
+Recall policy `lians-recall-policy-v3` emits
+`lians.recall-receipt.v2`. The v2 receipt is an intentional schema revision:
+consumers that parse receipt JSON should branch on `schema`; consumers that
+only retain or verify `receipt_sha256` require no change. `receipt_sha256`
+commits to:
 
 - the hashed query
 - requested point in time
@@ -92,6 +96,10 @@ confidence, and degradation state.
 - content hashes
 - event times
 - sources
+- the final public score and complete score breakdown for each result
+- attached-neighbor IDs, content hashes, temporal provenance, barrier, source,
+  and hashes of the exact returned neighbor plaintext and metadata
+- the exact scoring reference time and resolved retrieval policy
 
 `provenance_coverage` reports how much of the result set is content-addressed.
 The receipt lets a caller prove which governed records were presented to the
@@ -103,12 +111,30 @@ agent without placing the query or memory content in the receipt.
   and conflict signals.
 - Multi-facet searches use weighted reciprocal-rank fusion and perform at most
   one cross-encoder rerank after fusion.
-- Cross-encoder work runs outside the event loop and has a bounded timeout.
+- Cross-encoder work runs outside the event loop with bounded concurrency and
+  timeout. Timed-out work cannot mutate returned ranking evidence.
+- Policy v3 scores at most 400 candidates per query facet and permits at most
+  four deterministic facets. The resolved policy exposes `candidate_cap` and
+  `max_scored_candidates` (the request-specific upper bound), and every score
+  breakdown publishes its text, token, metadata-size, metadata-depth, and
+  metadata-item limits.
+- BM25, entity, quality, and cross-encoder scoring use the same deterministic
+  8,192-character head/tail sample and 1,024-token ceiling. Cached scoring
+  packs retain at most 1 MiB of sampled plaintext across at most 32 agents.
 - Redis recall keys include the complete execution policy.
+- Recall cache schema `scoring-v2` deliberately ignores older cache payloads
+  whose receipts did not bind final ranking evidence.
 - Write invalidation increments an agent generation in constant time. It does
   not scan Redis.
 - Present-time working sets remain isolated by namespace, agent, and
   information barrier.
+- Context neighbors use bounded indexed queries and must satisfy event-time,
+  ingestion-time, validity-window, and current information-barrier checks.
+  Context assembly reattaches them after its post-commit barrier recheck.
+
+Context assembly emits `lians.context-receipt.v2`; it binds the final compiled
+context, exclusions, conflicts, learning-adjusted order, budget, and the same
+neighbor evidence described above.
 
 ## Outcome learning
 

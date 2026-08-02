@@ -17,6 +17,57 @@ export interface MemoryAdd {
 
 // ── Core memory object ───────────────────────────────────────────────────────
 
+export interface MemoryRankingStage {
+  stage: string;
+  input_score: number;
+  output_score: number;
+  method?: string;
+  position?: number;
+  candidate_count?: number;
+  [key: string]: unknown;
+}
+
+export interface MemoryScoreBreakdown {
+  importance_score: number;
+  confidence_score: number;
+  trust_score: number;
+  freshness_score: number;
+  relevance_score: number;
+  stability_score: number;
+  safety_score: number;
+  final_score: number;
+  eligible: boolean;
+  safety_eligible?: boolean;
+  temporal_eligible?: boolean;
+  purpose: "admission" | "recall";
+  scoring_policy_version?: string;
+  reference_time?: string;
+  scoring_limits?: {
+    text_sample_chars: number;
+    token_cap: number;
+    metadata_chars: number;
+    metadata_items: number;
+    metadata_depth: number;
+    metadata_value_chars: number;
+  };
+  weights: Record<string, number>;
+  reasons: string[];
+  quality_score?: number;
+  pre_fusion_score?: number;
+  ranking_weights?: Record<string, number>;
+  ranking_stages?: MemoryRankingStage[];
+  fusion?: {
+    method: string;
+    facet_support: number;
+    facet_count: number;
+    scopes: string[];
+    normalized_rrf_score: number;
+    strongest_input_score: number;
+    strongest_scope?: string;
+  };
+  [key: string]: unknown;
+}
+
 export interface MemoryOut {
   id: string;
   namespace: string;
@@ -35,6 +86,10 @@ export interface MemoryOut {
   content_hash: string;
   erased_at: string | null;
   metadata: Record<string, unknown>;
+  /** Final bounded recall rank. Null/absent on non-recall surfaces. */
+  score?: number | null;
+  /** Deterministic component scores and ranking provenance for this recall hit. */
+  score_breakdown?: MemoryScoreBreakdown | null;
 }
 
 // ── Recall ───────────────────────────────────────────────────────────────────

@@ -26,10 +26,13 @@ audit, not just internal correctness.
 from __future__ import annotations
 import pytest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from src.lians.schemas import MemoryAdd, RecallRequest
 from src.lians.memory_service import add_memory, recall_memories, erase_subject
+from src.lians.cache import RecallCacheInvalidationError, _cache_bypass_pairs
+from src.lians.cache_invalidation import pending_recall_invalidations
 from src.lians.audit import reconstruct as audit_reconstruct
 from src.lians.schemas import AuditReconstructRequest
 
@@ -183,6 +186,70 @@ class TestAgentIsolation:
 # ---------------------------------------------------------------------------
 
 class TestCryptoShred:
+
+    @pytest.mark.asyncio
+    async def test_erasure_requires_shared_cache_invalidation(self, db, monkeypatch):
+        subject_id = f"subject-{uuid4().hex[:8]}"
+        await add_memory(db, NS, MemoryAdd(
+            agent_id=AGENT,
+            content="Client privacy record scheduled for erasure",
+            event_time=NOW,
+            subject_id=subject_id,
+        ))
+        invalidator = AsyncMock(return_value=True)
+        monkeypatch.setattr(
+            "src.lians.cache_invalidation.invalidate_agent", invalidator
+        )
+
+        await erase_subject(db, NS, subject_id, request_ref="gdpr-cache-safe")
+
+        invalidator.assert_awaited_once_with(
+            NS, AGENT, fail_closed=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_failed_erasure_invalidation_blocks_other_workers_and_retries(
+        self, db, monkeypatch,
+    ):
+        subject_id = f"subject-{uuid4().hex[:8]}"
+        await add_memory(db, NS, MemoryAdd(
+            agent_id=AGENT,
+            content="Cross-worker cached privacy record",
+            event_time=NOW,
+            subject_id=subject_id,
+        ))
+        request = RecallRequest(
+            agent_id=AGENT, query="cached privacy record", k=5,
+        )
+        await recall_memories(db, NS, request)  # populate the shared-cache double
+
+        invalidator = AsyncMock(side_effect=RecallCacheInvalidationError("offline"))
+        monkeypatch.setattr(
+            "src.lians.cache_invalidation.invalidate_agent", invalidator
+        )
+        with pytest.raises(RecallCacheInvalidationError):
+            await erase_subject(
+                db, NS, subject_id, request_ref="gdpr-retryable-cache-barrier",
+            )
+
+        pending = await pending_recall_invalidations(db, NS, agent_id=AGENT)
+        assert len(pending) == 1
+
+        # A different worker has no process-local quarantine. The durable DB
+        # barrier must still prevent it from trusting the stale Redis payload.
+        _cache_bypass_pairs.clear()
+        recalled = await recall_memories(db, NS, request)
+        assert all(
+            "Cross-worker cached privacy record" != (memory.content or "")
+            for memory in recalled.memories
+        )
+
+        invalidator.side_effect = None
+        invalidator.return_value = True
+        assert await erase_subject(
+            db, NS, subject_id, request_ref="gdpr-retryable-cache-barrier",
+        ) == 0
+        assert not await pending_recall_invalidations(db, NS, agent_id=AGENT)
 
     @pytest.mark.asyncio
     async def test_erased_content_is_permanently_unreadable(self, db):

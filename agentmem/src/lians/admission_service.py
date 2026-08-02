@@ -5,6 +5,7 @@ admission trail itself is examiner-grade.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -12,11 +13,132 @@ from uuid import UUID
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .admission import AdmissionDecision
+from .admission import AdmissionDecision, evaluate
 from .audit_chain import chain_log
 from .models import PendingAdmission
+from .scoring import score_memory
 from .schemas import MemoryAdd
 from .secret_storage import PENDING_CONTENT_PURPOSE, seal_text, unseal_text
+
+
+class MemoryAdmissionRejected(ValueError):
+    """A candidate was rejected by the configured admission policy."""
+
+    def __init__(self, decision: AdmissionDecision):
+        self.decision = decision
+        super().__init__("; ".join(decision.reasons) or "memory admission rejected")
+
+
+class MemoryAdmissionReviewRequired(ValueError):
+    """A candidate was durably parked for admission review."""
+
+    def __init__(self, decision: AdmissionDecision, pending_id: UUID):
+        self.decision = decision
+        self.pending_id = pending_id
+        super().__init__(f"memory admission held for review: pending_id={pending_id}")
+
+
+def attach_memory_admission(
+    req: MemoryAdd,
+    decision: AdmissionDecision,
+    *,
+    action: Optional[str] = None,
+    safety_status: Optional[str] = None,
+) -> None:
+    """Replace caller-controlled engine metadata with one evaluated decision."""
+    recorded_action = action or decision.action
+    status = safety_status or {
+        "admit": "safe",
+        "review": "review_needed",
+        "reject": "rejected",
+    }.get(decision.action, "review_needed")
+    caller_metadata = dict(req.metadata or {})
+    caller_metadata.pop("_admission", None)
+    caller_metadata.pop("_score", None)
+    breakdown = score_memory(
+        content=req.content,
+        reference_time=req.event_time,
+        event_time=req.event_time,
+        valid_from=req.event_time,
+        metadata=caller_metadata,
+        importance=req.importance,
+        source=req.source,
+        safety_status=status,
+        risk_tags=decision.risk_tags,
+        purpose="admission",
+    )
+    req.metadata = {
+        **caller_metadata,
+        "_admission": {
+            "action": recorded_action,
+            "risk_tags": list(decision.risk_tags),
+        },
+        "_score": breakdown,
+    }
+
+
+def evaluate_memory_admission(
+    req: MemoryAdd,
+    *,
+    mode: str,
+    blocked_sources: str | Iterable[str] | None = None,
+) -> AdmissionDecision:
+    """Evaluate a write and replace caller-controlled admission metadata.
+
+    ``_admission`` and ``_score`` are reserved engine fields. Keeping their
+    normalization beside admission evaluation gives HTTP and embedded clients
+    one canonical safety boundary, so callers cannot forge an eligible score
+    or a prior approval through any published write path.
+    """
+    if isinstance(blocked_sources, str):
+        source_values: Iterable[str] = blocked_sources.split(",")
+    else:
+        source_values = blocked_sources or ()
+    normalized_blocked_sources = {
+        str(source).strip().lower()
+        for source in source_values
+        if str(source).strip()
+    }
+
+    decision = evaluate(
+        req.content,
+        req.source,
+        mode=mode,
+        blocked_sources=normalized_blocked_sources,
+    )
+    attach_memory_admission(req, decision)
+    return decision
+
+
+async def enforce_memory_admission(
+    db: AsyncSession,
+    namespace: str,
+    req: MemoryAdd,
+    *,
+    barrier_override: Optional[str] = None,
+) -> AdmissionDecision:
+    """Canonical storage-boundary admission check for every untrusted write."""
+    from .config import get_settings
+
+    settings = get_settings()
+    decision = evaluate_memory_admission(
+        req,
+        mode=settings.admission_mode,
+        blocked_sources=settings.admission_blocked_sources,
+    )
+    if decision.action == "reject":
+        await record_rejection(db, namespace, req.agent_id, decision)
+        raise MemoryAdmissionRejected(decision)
+    if decision.action == "review":
+        pending = await enqueue_pending(
+            db,
+            namespace,
+            req,
+            decision,
+            barrier_override=barrier_override,
+        )
+        raise MemoryAdmissionReviewRequired(decision, pending.id)
+    return decision
 
 
 def decrypt_pending_content(pending: PendingAdmission) -> str:
@@ -157,7 +279,15 @@ async def resolve_pending(
     # must never turn the resulting memory into an unbarriered/shared record.
     effective_barrier = pending.barrier_group or barrier_override
     mem = await add_memory(
-        db, namespace, req, barrier_override=effective_barrier
+        db,
+        namespace,
+        req,
+        barrier_override=effective_barrier,
+        _trusted_admission=AdmissionDecision(
+            "admit",
+            list(pending.risk_tags or []),
+            list(pending.reasons or []),
+        ),
     )
     pending.status = "approved"
     pending.memory_id = mem.id

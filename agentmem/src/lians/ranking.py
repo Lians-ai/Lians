@@ -34,8 +34,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Memory, LiveFact
 from .crypto import decrypt_content
+from .scoring import (
+    _bounded_scoring_text,
+    rank_position_score,
+    record_ranking_stage,
+    score_memory,
+    stable_score_key,
+    tokenize_for_scoring,
+)
 
 _ANN_PREFETCH_MULTIPLIER = 20
+MAX_RECALL_SCORING_CANDIDATES = 400
 logger = logging.getLogger("agentmem.ranking")
 
 W_SEM = 0.50
@@ -61,8 +70,12 @@ MMR_LAMBDA = float(os.getenv("RECALL_MMR_LAMBDA", "1.0"))
 RERANKER_MODEL = os.getenv("RECALL_RERANKER_MODEL", "")
 RERANKER_PREFETCH = int(os.getenv("RECALL_RERANKER_PREFETCH", "30"))
 RERANKER_TIMEOUT_MS = float(os.getenv("RECALL_RERANKER_TIMEOUT_MS", "300"))
+RERANKER_MAX_CONCURRENCY = max(
+    1, min(8, int(os.getenv("RECALL_RERANKER_MAX_CONCURRENCY", "1")))
+)
 
 _reranker = None
+_reranker_slots = asyncio.Semaphore(RERANKER_MAX_CONCURRENCY)
 
 
 def _get_reranker():
@@ -73,28 +86,116 @@ def _get_reranker():
     return _reranker
 
 
+def _stable_entry_key(entry: tuple[Any, float, Optional[str]]) -> tuple[Any, ...]:
+    memory, score, _content = entry
+    breakdown = getattr(memory, "_score_breakdown", None)
+    if not isinstance(breakdown, dict):
+        breakdown = {"final_score": score}
+    return stable_score_key(
+        getattr(memory, "id", ""),
+        getattr(memory, "event_time", None),
+        getattr(memory, "ingestion_time", None),
+        breakdown,
+    )
+
+
+def apply_ordered_ranking_stage(
+    ordered: list[tuple[Any, float, Optional[str]]],
+    *,
+    stage: str,
+    details: Optional[list[dict[str, Any]]] = None,
+    reason: str,
+) -> list[tuple[Any, float, Optional[str]]]:
+    """Assign explainable, strictly descending public scores to a new order."""
+    total = len(ordered)
+    if total == 0:
+        return ordered
+    explained: list[tuple[Any, float, Optional[str]]] = []
+    detail_rows = details or [{} for _ in ordered]
+    if len(detail_rows) != total:
+        raise ValueError("ranking-stage details must match the ordered candidates")
+    for position, ((memory, input_score, content), stage_details) in enumerate(
+        zip(ordered, detail_rows)
+    ):
+        output_score = (
+            input_score
+            if total == 1
+            else rank_position_score(position, total, input_score)
+        )
+        output_score = record_ranking_stage(
+            memory,
+            stage=stage,
+            input_score=input_score,
+            output_score=output_score,
+            details={
+                "method": "rank-calibration-v1",
+                "position": position + 1,
+                "candidate_count": total,
+                **dict(stage_details),
+            },
+            reason=reason,
+        )
+        explained.append((memory, output_score, content))
+    return explained
+
+
+def _cross_encoder_plan(
+    query: str,
+    scored: list[tuple[Any, float, Optional[str]]],
+    k: int,
+) -> tuple[
+    list[tuple[Any, float, Optional[str]]],
+    list[dict[str, Any]],
+]:
+    """Compute an immutable rerank plan; never mutate public score evidence."""
+    window = scored[:max(RERANKER_PREFETCH, k)]
+    rest = scored[len(window):]
+    ce = _get_reranker()
+    pairs = [
+        (_bounded_scoring_text(query), _bounded_scoring_text(content or ""))
+        for _, _, content in window
+    ]
+    ce_scores = ce.predict(pairs, show_progress_bar=False)
+    raw_scores = [float(value) for value in ce_scores]
+    if len(raw_scores) != len(window) or any(
+        not math.isfinite(value) for value in raw_scores
+    ):
+        raise ValueError("cross-encoder returned invalid scores")
+    order = sorted(
+        range(len(window)),
+        key=lambda i: (-raw_scores[i], _stable_entry_key(window[i])),
+    )
+    ordered = ([window[i] for i in order] + rest)[:k]
+    detail_rows = [{
+        "model": RERANKER_MODEL,
+        "evaluated": True,
+        "raw_model_score": round(raw_scores[i], 6),
+    } for i in order]
+    detail_rows.extend({
+        "model": RERANKER_MODEL,
+        "evaluated": False,
+    } for _entry in rest)
+    return ordered, detail_rows[:len(ordered)]
+
+
 def rerank_cross_encoder(
     query: str,
     scored: list[tuple[Any, float, Optional[str]]],
     k: int,
 ) -> list[tuple[Any, float, Optional[str]]]:
-    """Rerank the top RERANKER_PREFETCH candidates by cross-encoder relevance
-    and return the new top-k. Rows without decrypted content keep their blend
-    order at the back of the prefetch window. Fail-open: any model error
-    returns the blend ordering untouched."""
+    """Synchronously rerank and apply evidence only after model completion."""
     if not RERANKER_MODEL or len(scored) <= 1:
         return scored[:k]
-    window = scored[:max(RERANKER_PREFETCH, k)]
-    rest = scored[len(window):]
     try:
-        ce = _get_reranker()
-        pairs = [(query, content or "") for _, _, content in window]
-        ce_scores = ce.predict(pairs, show_progress_bar=False)
-        order = sorted(range(len(window)), key=lambda i: -float(ce_scores[i]))
-        reranked = [window[i] for i in order]
+        ordered, detail_rows = _cross_encoder_plan(query, scored, k)
+        return apply_ordered_ranking_stage(
+            ordered,
+            stage="cross-encoder",
+            details=detail_rows,
+            reason="cross-encoder relevance reranking applied",
+        )
     except Exception:
         return scored[:k]
-    return (reranked + rest)[:k]
 
 
 async def rerank_cross_encoder_async(
@@ -109,13 +210,43 @@ async def rerank_cross_encoder_async(
     """
     if not RERANKER_MODEL or len(scored) <= 1:
         return scored[:k]
+    timeout = max(0.001, RERANKER_TIMEOUT_MS / 1000.0)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
     try:
-        return await asyncio.wait_for(
-            asyncio.to_thread(rerank_cross_encoder, query, scored, k),
-            timeout=max(0.001, RERANKER_TIMEOUT_MS / 1000.0),
-        )
-    except Exception:
+        await asyncio.wait_for(_reranker_slots.acquire(), timeout=timeout)
+    except (asyncio.TimeoutError, TimeoutError):
         return scored[:k]
+
+    remaining = max(0.001, deadline - loop.time())
+    task = asyncio.create_task(
+        asyncio.to_thread(_cross_encoder_plan, query, scored, k)
+    )
+    release_on_completion = False
+    try:
+        ordered, detail_rows = await asyncio.wait_for(
+            asyncio.shield(task), timeout=remaining,
+        )
+    except asyncio.CancelledError:
+        release_on_completion = True
+        raise
+    except Exception:
+        release_on_completion = not task.done()
+        return scored[:k]
+    finally:
+        if release_on_completion:
+            task.add_done_callback(lambda _task: _reranker_slots.release())
+        else:
+            _reranker_slots.release()
+
+    # Only the event-loop thread mutates Memory._score_breakdown, and only
+    # after the model completed within the advertised deadline.
+    return apply_ordered_ranking_stage(
+        ordered,
+        stage="cross-encoder",
+        details=detail_rows,
+        reason="cross-encoder relevance reranking applied",
+    )
 
 # Temporal-context smoothing: a memory inherits a fraction of its strongest
 # temporally-adjacent neighbor's semantic match. Dialogue and event streams
@@ -332,6 +463,9 @@ def mmr_rerank(
     zero similarity (treated as maximally diverse).
     """
     lambda_ = min(1.0, max(0.0, lambda_))
+    if lambda_ >= 1.0 or len(results) <= 1:
+        return results
+
     def _emb_or_none(row: Any) -> Optional[list[float]]:
         # Memory rows arrive with the embedding column deferred (recall
         # hydration skips it); touching it here would lazy-load outside the
@@ -345,9 +479,12 @@ def mmr_rerank(
     embs: list[Optional[list[float]]] = [_emb_or_none(r[0]) for r in results]
     remaining = list(range(len(results)))
     order: list[int] = []
+    selection: list[dict[str, Any]] = []
     while remaining:
         best_i: Optional[int] = None
         best_val: Optional[float] = None
+        best_rel = 0.0
+        best_sim = 0.0
         for i in remaining:
             rel = results[i][1]
             if order and embs[i] is not None:
@@ -360,9 +497,21 @@ def mmr_rerank(
             val = lambda_ * rel - (1.0 - lambda_) * sim
             if best_val is None or val > best_val:
                 best_val, best_i = val, i
+                best_rel, best_sim = float(rel), float(sim)
         order.append(best_i)  # type: ignore[arg-type]
         remaining.remove(best_i)
-    return [results[i] for i in order]
+        selection.append({
+            "lambda": round(lambda_, 6),
+            "selection_objective": round(float(best_val or 0.0), 6),
+            "input_relevance": round(best_rel, 6),
+            "max_selected_similarity": round(best_sim, 6),
+        })
+    return apply_ordered_ranking_stage(
+        [results[i] for i in order],
+        stage="mmr-rerank",
+        details=selection,
+        reason="maximal marginal relevance diversity reranking applied",
+    )
 
 
 _BM25_K1 = 1.5
@@ -373,6 +522,7 @@ _BM25_AVG_DOC_LEN = 50.0
 # as words, and punctuation never glues onto a token the way naive
 # str.split() left it: "revenue." must match a query for "revenue").
 _BM25_WORD = re.compile(r"\w+", re.UNICODE)
+_MAX_BM25_TOKENS = 1_024
 # Scripts written without spaces between words (Han, Hiragana, Katakana,
 # Hangul, Thai, Lao, Myanmar, Khmer). A whitespace tokenizer sees a whole
 # sentence as one "word" there, so no query can ever match; index character
@@ -415,7 +565,9 @@ def _light_stem(token: str) -> str:
 def _bm25_tokens(text: str) -> list[str]:
     """Shared query/content tokenizer for the lexical half of hybrid recall."""
     tokens: list[str] = []
-    for word in _BM25_WORD.findall(text.lower()):
+    bounded = _bounded_scoring_text(text).casefold()
+    for word_match in _BM25_WORD.finditer(bounded):
+        word = word_match.group(0)
         last = 0
         for m in _BM25_UNSEG_SPAN.finditer(word):
             if m.start() > last:
@@ -426,9 +578,13 @@ def _bm25_tokens(text: str) -> list[str]:
             else:
                 tokens.extend(span[i:i + 2] for i in range(len(span) - 1))
             last = m.end()
+            if len(tokens) >= _MAX_BM25_TOKENS:
+                return tokens[:_MAX_BM25_TOKENS]
         if last < len(word):
             tokens.append(_light_stem(word[last:]))
-    return tokens
+        if len(tokens) >= _MAX_BM25_TOKENS:
+            break
+    return tokens[:_MAX_BM25_TOKENS]
 
 
 def _bm25_score(query: str, content: str) -> float:
@@ -480,11 +636,13 @@ async def _fetch_live_candidates(
     filters: Optional[dict],
     query_embedding: list[float],
     k: int,
+    reference_time: datetime,
 ) -> list[LiveFact]:
     """Fetch from live_facts — the compact present-time projection."""
     conditions = [
         LiveFact.namespace == namespace,
         LiveFact.agent_id == agent_id,
+        LiveFact.event_time <= reference_time,
     ]
     # Change 4: barrier filter is structural — only the agent's partition is scanned
     if barrier_group is not None:
@@ -499,7 +657,10 @@ async def _fetch_live_candidates(
 
     if query_embedding:
         try:
-            pre_k = max(k * _ANN_PREFETCH_MULTIPLIER, 100)
+            pre_k = min(
+                max(k * _ANN_PREFETCH_MULTIPLIER, 100),
+                MAX_RECALL_SCORING_CANDIDATES,
+            )
             vec_lit = "[" + ",".join(f"{x:.8f}" for x in query_embedding) + "]"
             ann_stmt = (
                 base_stmt
@@ -514,7 +675,16 @@ async def _fetch_live_candidates(
                 exc_info=True,
             )
 
-    result = await db.execute(base_stmt)
+    result = await db.execute(
+        base_stmt.order_by(
+            LiveFact.importance.desc(),
+            LiveFact.event_time.desc(),
+            LiveFact.id.asc(),
+        ).limit(min(
+            max(k * _ANN_PREFETCH_MULTIPLIER, 100),
+            MAX_RECALL_SCORING_CANDIDATES,
+        ))
+    )
     return list(result.scalars().all())
 
 
@@ -549,7 +719,10 @@ async def _fetch_historical_candidates(
 
     if query_embedding:
         try:
-            pre_k = max(k * _ANN_PREFETCH_MULTIPLIER, 100)
+            pre_k = min(
+                max(k * _ANN_PREFETCH_MULTIPLIER, 100),
+                MAX_RECALL_SCORING_CANDIDATES,
+            )
             vec_lit = "[" + ",".join(f"{x:.8f}" for x in query_embedding) + "]"
             ann_stmt = (
                 base_stmt
@@ -564,7 +737,16 @@ async def _fetch_historical_candidates(
                 exc_info=True,
             )
 
-    result = await db.execute(base_stmt)
+    result = await db.execute(
+        base_stmt.order_by(
+            Memory.importance.desc(),
+            Memory.event_time.desc(),
+            Memory.id.asc(),
+        ).limit(min(
+            max(k * _ANN_PREFETCH_MULTIPLIER, 100),
+            MAX_RECALL_SCORING_CANDIDATES,
+        ))
+    )
     return list(result.scalars().all())
 
 
@@ -598,7 +780,8 @@ def _score_components(
     """(sem, lex, rec_imp, content) for a LiveFact or Memory row; the caller
     applies context smoothing to sem before blending. ``decay_anchor`` pins
     the recency clock for as_of recall."""
-    content = _decrypt(row, subject_keys)
+    decrypted = _decrypt(row, subject_keys)
+    content = _bounded_scoring_text(decrypted) if decrypted else decrypted
     emb = list(row.embedding) if row.embedding is not None else None
     sem = _cosine(query_embedding, emb) if emb else 0.0
     lex = _bm25_score(query, content or "") if content else 0.0
@@ -611,7 +794,7 @@ class _ScoringPack:
     """Precomputed per-agent scoring artifacts (Change 7 extension).
 
     Everything about the pool that does not depend on the query — decrypted
-    contents, an embedding matrix with row norms, BM25 term frequencies,
+    plaintext samples, an embedding matrix with row norms, BM25 term frequencies,
     event timestamps, materiality half-lives, stale-clause marks, temporal
     neighbor indices — computed once per working set and reused until the
     next write invalidates it. Recall scoring then reduces to one matrix
@@ -621,13 +804,15 @@ class _ScoringPack:
 
     __slots__ = ("rows", "contents", "emb", "emb_norm", "doc_tf", "doc_len",
                  "ts", "half_life", "importance", "stale_ts",
-                 "prev_idx", "next_idx", "fingerprint", "mem_by_id")
+                 "prev_idx", "next_idx", "fingerprint")
 
     def __init__(self, facts: list, subject_keys: dict[str, bytes]):
         n = len(facts)
-        self.mem_by_id: Optional[dict] = None  # hydrated Memory rows, lazy
         self.rows = list(facts)
-        self.contents = [_decrypt(f, subject_keys) for f in facts]
+        self.contents = [
+            _bounded_scoring_text(content) if content else content
+            for content in (_decrypt(f, subject_keys) for f in facts)
+        ]
         dim = None
         embs = []
         for f in facts:
@@ -834,6 +1019,8 @@ async def hybrid_recall(
     barrier_group: Optional[str] = None,
     live_facts_override: Optional[list] = None,
     apply_reranker: bool = True,
+    reference_time: Optional[datetime] = None,
+    use_scoring_pack: bool = False,
 ) -> list[tuple[Any, float, Optional[str]]]:
     """Return list of (row, score, decrypted_content).
 
@@ -845,13 +1032,16 @@ async def hybrid_recall(
     filter — as_of recall always hits the bitemporal log.
     """
     subject_keys = subject_keys or {}
+    reference = as_of or reference_time or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
 
     if as_of is not None:
         # Point-in-time: must go to the bitemporal log
         candidates = await _fetch_historical_candidates(
             db, namespace, agent_id, barrier_group, filters, query_embedding, k, as_of
         )
-        cutoff = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+        cutoff = reference
         parts = [
             _score_components(mem, query, query_embedding, subject_keys,
                               decay_anchor=cutoff)
@@ -871,7 +1061,14 @@ async def hybrid_recall(
     else:
         # Present-time: use live_facts (Change 1)
         if live_facts_override is not None:
-            facts = live_facts_override
+            facts = [
+                fact for fact in live_facts_override
+                if (
+                    fact.event_time
+                    if fact.event_time.tzinfo
+                    else fact.event_time.replace(tzinfo=timezone.utc)
+                ) <= reference
+            ][:MAX_RECALL_SCORING_CANDIDATES]
             if barrier_group is not None:
                 facts = [f for f in facts if f.barrier_group is None or f.barrier_group == barrier_group]
             if filters:
@@ -881,14 +1078,21 @@ async def hybrid_recall(
                 ]
         else:
             facts = await _fetch_live_candidates(
-                db, namespace, agent_id, barrier_group, filters, query_embedding, k
+                db, namespace, agent_id, barrier_group, filters, query_embedding, k,
+                reference,
             )
 
         # Vectorized fast path (Change 7 extension): when the pool is the
         # agent's whole working set, score against the cached _ScoringPack —
         # one matrix product instead of per-row python.
         pack = None
-        if _np is not None and facts and not filters and barrier_group is None:
+        if (
+            use_scoring_pack
+            and _np is not None
+            and facts
+            and not filters
+            and barrier_group is None
+        ):
             from .session_cache import get_scoring_pack, set_scoring_pack
             pack = get_scoring_pack(namespace, agent_id)
             if pack is None or pack.fingerprint != _pack_fingerprint(facts):
@@ -906,10 +1110,9 @@ async def hybrid_recall(
             sems = _smoothed_sems(facts, [p[0] for p in parts])
             bonuses = _temporal_bonus(facts, query_time_windows(query))
             ent_bonuses = _entity_bonus([p[3] for p in parts], query_entities(query))
-            now = datetime.now(timezone.utc)
             pack_scores = [
                 W_SEM * sem + W_LEX * lex + rest + bonus + ent
-                - _stale_clause_penalty(fact.metadata_, now)
+                - _stale_clause_penalty(fact.metadata_, reference)
                 for fact, sem, bonus, ent, (_, lex, rest, _c)
                 in zip(facts, sems, bonuses, ent_bonuses, parts)
             ]
@@ -919,34 +1122,87 @@ async def hybrid_recall(
         # Memory rows so callers can use .id, .valid_to, .erased_at, etc.
         # Batched (one IN-query per 500), the embedding column deferred (the
         # recall response never carries it, and decoding 685 JSON vectors was
-        # 330ms of every warm recall), and the hydrated map cached on the
-        # scoring pack so repeat recalls skip the query entirely.
-        if pack is not None and pack.mem_by_id is not None:
-            mem_by_id = pack.mem_by_id
-        else:
-            from sqlalchemy.orm import defer
-            mem_by_id = {}
-            fact_ids = [fact.memory_id for fact in facts]
-            for i in range(0, len(fact_ids), 500):
-                chunk = fact_ids[i:i + 500]
-                rows = await db.execute(
-                    select(Memory).options(defer(Memory.embedding))
-                    .where(Memory.id.in_(chunk)))
-                for m in rows.scalars():
-                    mem_by_id[m.id] = m
-            if pack is not None:
-                pack.mem_by_id = mem_by_id
+        # 330ms of every warm recall). Canonical rows are request-local: a
+        # scoring pack must never retain full encrypted payloads indefinitely.
+        from sqlalchemy.orm import defer
+        mem_by_id = {}
+        fact_ids = [fact.memory_id for fact in facts]
+        for i in range(0, len(fact_ids), 500):
+            chunk = fact_ids[i:i + 500]
+            rows = await db.execute(
+                select(Memory).options(defer(Memory.embedding))
+                .where(Memory.id.in_(chunk)))
+            for m in rows.scalars():
+                mem_by_id[m.id] = m
         scored = []
         for fact, score, content in zip(facts, pack_scores, contents):
             mem = mem_by_id.get(fact.memory_id)
             if mem is not None:
                 scored.append((mem, score, content))
 
-    scored.sort(key=lambda x: x[1], reverse=True)
+    # Convert the existing retrieval blend into bounded, explainable quality
+    # components. Candidate generation and bitemporal filtering remain
+    # unchanged; safety is a hard gate before normal recall.
+    explained = []
+    scoring_query_tokens = tokenize_for_scoring(query)
+    for mem, base_score, content in scored:
+        metadata = dict(mem.metadata_ or {})
+        admission = metadata.get("_admission") if isinstance(metadata.get("_admission"), dict) else {}
+        risk_tags = list(admission.get("risk_tags") or [])
+        action = str(admission.get("action") or "safe")
+        safety_status = "review_needed" if action in {"review", "held_for_review", "pending"} else action
+        breakdown = score_memory(
+            content=content or "",
+            reference_time=reference,
+            metadata=metadata,
+            importance=mem.importance,
+            source=mem.source,
+            event_time=mem.event_time,
+            valid_from=mem.valid_from,
+            valid_to=mem.valid_to,
+            superseded=bool(mem.superseded_by),
+            query=query,
+            query_tokens=scoring_query_tokens,
+            base_relevance=base_score,
+            safety_status=safety_status,
+            risk_tags=risk_tags,
+            purpose="recall",
+        )
+        quality_score = breakdown["final_score"]
+        ranking_score = 0.8 * max(0.0, min(1.0, float(base_score))) + 0.2 * quality_score
+        breakdown["quality_score"] = quality_score
+        breakdown["final_score"] = round(ranking_score, 6)
+        breakdown["ranking_weights"] = {
+            "existing_retrieval_score": 0.8,
+            "memory_quality_score": 0.2,
+        }
+        breakdown["reasons"].append(
+            "recall rank preserves proven hybrid retrieval with a bounded quality adjustment"
+        )
+        mem._score_breakdown = breakdown
+        if breakdown["eligible"]:
+            explained.append((mem, breakdown["final_score"], content))
+    scored = sorted(
+        explained,
+        key=lambda item: stable_score_key(
+            item[0].id,
+            item[0].event_time,
+            item[0].ingestion_time,
+            item[0]._score_breakdown,
+        ),
+    )
     scored = _collapse_derived(scored)
     if RERANKER_MODEL and apply_reranker:
-        return await rerank_cross_encoder_async(query, scored, k)
-    return _mmr_select(scored, k)
+        selected = await rerank_cross_encoder_async(query, scored, k)
+    else:
+        selected = _mmr_select(scored, k)
+    # Candidate scoring and optional reranking use deterministic bounded text
+    # samples. Rehydrate only the final public rows so API content remains
+    # lossless while candidate work and cached plaintext remain bounded.
+    return [
+        (memory, score, _decrypt(memory, subject_keys))
+        for memory, score, _sample in selected
+    ]
 
 
 def _mmr_select(
@@ -974,9 +1230,17 @@ def _mmr_select(
     }
 
     selected: list[tuple[Any, float, Optional[str]]] = [scored[0]]
+    selection: list[dict[str, Any]] = [{
+        "lambda": round(lam, 6),
+        "selection_objective": round(lam, 6),
+        "normalized_relevance": 1.0,
+        "max_selected_similarity": 0.0,
+    }]
     remaining = scored[1:]
     while remaining and len(selected) < k:
         best, best_val = None, -math.inf
+        best_rel = 0.0
+        best_sim = 0.0
         for entry in remaining:
             rel = (entry[1] - lo) / span
             emb = embs.get(id(entry))
@@ -991,6 +1255,18 @@ def _mmr_select(
             val = lam * rel - (1.0 - lam) * max_sim
             if val > best_val:
                 best, best_val = entry, val
+                best_rel, best_sim = rel, max_sim
         selected.append(best)
         remaining.remove(best)
-    return selected
+        selection.append({
+            "lambda": round(lam, 6),
+            "selection_objective": round(best_val, 6),
+            "normalized_relevance": round(best_rel, 6),
+            "max_selected_similarity": round(best_sim, 6),
+        })
+    return apply_ordered_ranking_stage(
+        selected,
+        stage="mmr-selection",
+        details=selection,
+        reason="configured maximal marginal relevance selection applied",
+    )

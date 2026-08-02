@@ -1,6 +1,7 @@
 """Engine-owned outcome learning and governed reflection tests."""
 
 import hashlib
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -95,6 +96,26 @@ async def test_completed_experience_changes_context_ranking_transparently(client
     learned = next(item for item in body["memories"] if item["id"] == ids[1])
     assert learned["metadata"]["_learning"]["completed_uses"] == 1
     assert learned["metadata"]["_base_score"] <= learned["score"]
+    assert learned["score_breakdown"]["final_score"] == learned["score"]
+    assert learned["score_breakdown"]["ranking_stages"][-1]["stage"] == (
+        "reviewed-outcome-learning"
+    )
+    assert body["receipt"]["schema"] == "lians.context-receipt.v2"
+    assert len(body["receipt"]["results"]) == len(body["memories"])
+    for evidence, item in zip(body["receipt"]["results"], body["memories"]):
+        assert evidence == {
+            "id": item["id"],
+            "content_hash": item["content_hash"],
+            "event_time": item["event_time"],
+            "source": item["source"],
+            "score": item["score"],
+            "score_breakdown": item["score_breakdown"],
+            "context_neighbors": evidence["context_neighbors"],
+        }
+    canonical = json.dumps(
+        body["receipt"], sort_keys=True, separators=(",", ":")
+    ).encode()
+    assert hashlib.sha256(canonical).hexdigest() == body["receipt_sha256"]
 
 
 @pytest.mark.asyncio

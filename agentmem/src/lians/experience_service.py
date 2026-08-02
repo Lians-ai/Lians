@@ -275,8 +275,13 @@ async def review_reflection(
         return None
     promoted_id = None
     if req.action == "approve":
+        from .admission import AdmissionDecision, detect_risk_tags
         from .memory_service import add_memory
 
+        # Reflection approval is an explicit admin-controlled trust boundary.
+        # Still classify and score the promoted text; unsafe content remains
+        # ineligible even though the reviewer authorized its storage.
+        risk_tags = detect_risk_tags(proposal.content)
         promoted = await add_memory(
             db,
             namespace,
@@ -293,6 +298,7 @@ async def review_reflection(
                 },
             ),
             barrier_override=barrier_override,
+            _trusted_admission=AdmissionDecision("admit", risk_tags, []),
         )
         promoted_id = promoted.id
     proposal.status = "approved" if req.action == "approve" else "rejected"

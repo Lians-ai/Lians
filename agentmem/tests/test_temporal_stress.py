@@ -48,7 +48,10 @@ class TestLongRevisionChain:
         agent = f"{AGENT}-chain10"
         meta  = {"ticker": "NVDA", "metric": "guidance"}
         values = [f"NVDA guidance ${28 + 2*i}B" for i in range(10)]
-        times  = [_t(month=1+i) for i in range(10)]
+        # Keep the whole chain in the past. Present recall intentionally gates
+        # future event-time facts, so a fixed current-year chain becomes a
+        # calendar-dependent time bomb late in the year.
+        times  = [_t(year=2025, month=1+i) for i in range(10)]
 
         mems = []
         for content, t in zip(values, times):

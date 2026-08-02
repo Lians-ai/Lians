@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..config import get_settings
-from ..admission import evaluate as evaluate_admission
-from ..admission_service import record_rejection, enqueue_pending
+from ..admission_service import (
+    enqueue_pending,
+    evaluate_memory_admission,
+    record_rejection,
+)
 from ..schemas import (
     MemoryAdd, MemoryOut, RecallRequest, RecallResult,
     MemoryBatchAdd, MemoryBatchResult, MemoryLineageResult,
@@ -107,9 +110,10 @@ async def create_memory(
     auth.require("write")
 
     settings = get_settings()
-    blocked = {s.strip().lower() for s in settings.admission_blocked_sources.split(",") if s.strip()}
-    decision = evaluate_admission(
-        req.content, req.source, mode=settings.admission_mode, blocked_sources=blocked,
+    decision = evaluate_memory_admission(
+        req,
+        mode=settings.admission_mode,
+        blocked_sources=settings.admission_blocked_sources,
     )
 
     if decision.action == "reject":
@@ -129,9 +133,6 @@ async def create_memory(
         })
 
     # admitted — record any risk findings on the memory for downstream visibility
-    if decision.risk_tags:
-        req.metadata = {**(req.metadata or {}),
-                        "_admission": {"action": "admit", "risk_tags": decision.risk_tags}}
     return await add_memory_idempotent(
         db, auth.namespace, req, idempotency_key, barrier_override=auth.barrier_group,
     )
@@ -152,17 +153,11 @@ async def batch_create_memories(
     """
     auth.require("write")
     settings = get_settings()
-    blocked = {
-        s.strip().lower()
-        for s in settings.admission_blocked_sources.split(",")
-        if s.strip()
-    }
     for item in req.memories:
-        decision = evaluate_admission(
-            item.content,
-            item.source,
+        decision = evaluate_memory_admission(
+            item,
             mode=settings.admission_mode,
-            blocked_sources=blocked,
+            blocked_sources=settings.admission_blocked_sources,
         )
         if decision.action == "reject":
             await record_rejection(db, auth.namespace, item.agent_id, decision)
@@ -182,14 +177,6 @@ async def batch_create_memories(
                 "risk_tags": decision.risk_tags,
                 "reasons": decision.reasons,
             })
-        if decision.risk_tags:
-            item.metadata = {
-                **(item.metadata or {}),
-                "_admission": {
-                    "action": "admit",
-                    "risk_tags": decision.risk_tags,
-                },
-            }
     return await batch_add_memories(
         db, auth.namespace, req.memories, barrier_override=auth.barrier_group
     )

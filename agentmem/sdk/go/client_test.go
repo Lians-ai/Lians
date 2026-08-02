@@ -36,7 +36,15 @@ func newServer(cap *capture) *httptest.Server {
 				`"valid_to":null,"importance":0.5,"metadata":{"ticker":"NVDA"}}`)
 		case r.URL.Path == "/v1/recall":
 			io.WriteString(w, `{"memories":[{"id":"m-1","content":"NVDA guidance $40B",`+
-				`"event_time":"2025-11-19T16:00:00Z"}],"as_of":null,"total_candidates":1}`)
+				`"event_time":"2025-11-19T16:00:00Z","score":0.875,`+
+				`"score_breakdown":{"importance_score":0.8,"confidence_score":0.7,`+
+				`"trust_score":0.5,"freshness_score":0.9,"relevance_score":1.0,`+
+				`"stability_score":0.8,"safety_score":1.0,"final_score":0.875,`+
+				`"eligible":true,"purpose":"recall","scoring_policy_version":"lians-memory-scoring-v2",`+
+				`"scoring_limits":{"text_sample_chars":8192,"token_cap":1024,"metadata_chars":4096,`+
+				`"metadata_items":64,"metadata_depth":4,"metadata_value_chars":512},`+
+				`"weights":{"relevance_score":0.35},"reasons":[],"ranking_stages":[]}}],`+
+				`"as_of":null,"total_candidates":1}`)
 		case r.URL.Path == "/v1/graph/path":
 			io.WriteString(w, `{"src":"Attorney","dst":"PartyY","connected":true,"hops":2,"path":[]}`)
 		case r.URL.Path == "/v1/admin/audit/verify":
@@ -95,6 +103,15 @@ func TestRecall(t *testing.T) {
 	}
 	if r.Memories[0].Content == nil || *r.Memories[0].Content != "NVDA guidance $40B" {
 		t.Fatalf("unexpected content: %+v", r.Memories[0])
+	}
+	if r.Memories[0].Score == nil || *r.Memories[0].Score != 0.875 ||
+		r.Memories[0].ScoreBreakdown == nil ||
+		r.Memories[0].ScoreBreakdown.FinalScore != *r.Memories[0].Score ||
+		r.Memories[0].ScoreBreakdown.ScoringPolicyVersion != "lians-memory-scoring-v2" ||
+		r.Memories[0].ScoreBreakdown.ScoringLimits == nil ||
+		r.Memories[0].ScoreBreakdown.ScoringLimits.TextSampleChars != 8192 ||
+		r.Memories[0].ScoreBreakdown.ScoringLimits.MetadataValueChars != 512 {
+		t.Fatalf("typed score fields were not parsed: %+v", r.Memories[0])
 	}
 }
 
