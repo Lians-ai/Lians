@@ -1,0 +1,38 @@
+name: Grafana plugin
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master", "main"]
+    paths:
+      - "integrations/grafana-lians-app/**"
+      - ".github/workflows/grafana-plugin.yml"
+  pull_request:
+    branches: ["master", "main"]
+    paths:
+      - "integrations/grafana-lians-app/**"
+      - ".github/workflows/grafana-plugin.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Grafana 12.4.6 compatibility
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/grafana-lians-app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integrations/grafana-lians-app/package-lock.json
+      - name: Install the locked dependency graph
+        run: npm ci
+      - name: Reject high or critical dependency findings
+        run: npm run audit:ci
+      - name: Typecheck and inspect the production bundle
+        run: npm run verify
