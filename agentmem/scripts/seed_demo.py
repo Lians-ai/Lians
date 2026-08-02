@@ -14,30 +14,38 @@ Usage:
 
     # Or point at a different host:
     python scripts/seed_demo.py --api-url https://agentmem.fly.dev --admin-secret <secret>
+
+    # Export a read key to a new owner-only file (never printed to stdout):
+    python scripts/seed_demo.py --read-key-output .demo-read-key
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-parser = argparse.ArgumentParser(description="Seed AgentMem demo data")
-parser.add_argument("--api-url", default="http://localhost:8000", help="Base URL of the AgentMem API")
-parser.add_argument("--admin-secret", default="demo-admin-secret", help="X-Admin-Secret header value")
-parser.add_argument("--namespace", default="demo", help="Namespace to seed")
-args = parser.parse_args()
 
-API = args.api_url.rstrip("/")
-ADMIN_SECRET = args.admin_secret
-NS = args.namespace
+# ── CLI ───────────────────────────────────────────────────────────────────────
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Seed AgentMem demo data")
+    parser.add_argument("--api-url", default="http://localhost:8000", help="Base URL of the AgentMem API")
+    parser.add_argument("--admin-secret", default="demo-admin-secret", help="X-Admin-Secret header value")
+    parser.add_argument("--namespace", default="demo", help="Namespace to seed")
+    parser.add_argument(
+        "--read-key-output",
+        type=Path,
+        help="Write a read bearer key to a new owner-only file (the key is never logged)",
+    )
+    return parser
 
 
 def _ts(year: int, month: int, day: int) -> str:
-    return datetime(year, month, day, 16, 0, 0, tzinfo=timezone.utc).isoformat()
+    return datetime(year, month, day, 16, 0, 0, tzinfo=UTC).isoformat()
 
 
 # ── Demo data ─────────────────────────────────────────────────────────────────
@@ -174,11 +182,16 @@ FED_RATES = [
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _wait_for_api(client: httpx.Client, retries: int = 30, delay: float = 2.0) -> None:
-    print(f"Waiting for API at {API} ...", end="", flush=True)
+def _wait_for_api(
+    client: httpx.Client,
+    api: str,
+    retries: int = 30,
+    delay: float = 2.0,
+) -> None:
+    print(f"Waiting for API at {api} ...", end="", flush=True)
     for _ in range(retries):
         try:
-            r = client.get(f"{API}/health", timeout=3)
+            r = client.get(f"{api}/health", timeout=3)
             if r.status_code == 200:
                 print(" ready.")
                 return
@@ -191,20 +204,34 @@ def _wait_for_api(client: httpx.Client, retries: int = 30, delay: float = 2.0) -
     sys.exit(1)
 
 
-def _provision_key(client: httpx.Client, label: str, scopes: list[str]) -> str:
+def _provision_key(
+    client: httpx.Client,
+    *,
+    api: str,
+    admin_secret: str,
+    namespace: str,
+    label: str,
+    scopes: list[str],
+) -> str:
     r = client.post(
-        f"{API}/v1/admin/api-keys",
-        json={"namespace": NS, "scopes": scopes, "label": label},
-        headers={"X-Admin-Secret": ADMIN_SECRET},
+        f"{api}/v1/admin/api-keys",
+        json={"namespace": namespace, "scopes": scopes, "label": label},
+        headers={"X-Admin-Secret": admin_secret},
     )
     r.raise_for_status()
     return r.json()["key"]
 
 
-def _ingest(client: httpx.Client, key: str, memories: list[dict]) -> None:
+def _ingest(
+    client: httpx.Client,
+    key: str,
+    memories: list[dict],
+    *,
+    api: str,
+) -> None:
     for mem in memories:
         r = client.post(
-            f"{API}/v1/memories",
+            f"{api}/v1/memories",
             json=mem,
             headers={"X-API-Key": key},
         )
@@ -219,50 +246,104 @@ def _ingest(client: httpx.Client, key: str, memories: list[dict]) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    with httpx.Client() as client:
-        _wait_for_api(client)
+def _write_read_key(path: Path, key: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as output:
+            descriptor = -1
+            output.write(f"{key}\n")
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
-        print(f"\nProvisioning API keys for namespace '{NS}' ...")
-        write_key = _provision_key(client, "seed-write", ["read", "write"])
-        read_key = _provision_key(client, "demo-readonly", ["read"])
-        print(f"  write key: {write_key[:24]}... (used for seeding, keep private)")
-        print(f"  read  key: {read_key[:24]}... (safe to share for demo)")
 
-        print("\n── NVDA FY2026 Revenue Guidance (5 revisions) ──────────────────")
-        _ingest(client, write_key, NVDA_GUIDANCE)
+def _demo_instructions(*, api: str, namespace: str, read_key_path: Path | None) -> str:
+    if read_key_path is None:
+        key_notice = (
+            "No read key was provisioned. Use --read-key-output PATH to create one "
+            "in a new owner-only file."
+        )
+    else:
+        key_notice = f"Read key written to {read_key_path} (contents never logged)."
 
-        print("\n── TSLA Quarterly Deliveries (4 quarters) ──────────────────────")
-        _ingest(client, write_key, TSLA_DELIVERIES)
+    return f"""{key_notice}
 
-        print("\n── Fed Funds Rate Decisions (6 FOMC meetings) ───────────────────")
-        _ingest(client, write_key, FED_RATES)
+Try it with curl:
 
-    print("\n" + "=" * 70)
-    print("Demo data loaded. Read-only API key for the demo page:")
-    print(f"\n  {read_key}\n")
-    print("Try it with curl:")
-    print(f"""
-  # Present-time recall — should return ONLY the latest NVDA guidance ($40B)
-  curl -s -X POST {API}/v1/recall \\
-    -H "X-API-Key: {read_key}" \\
+  # Present-time recall - should return ONLY the latest NVDA guidance ($40B)
+  curl -s -X POST {api}/v1/recall \\
+    -H "X-API-Key: <read-key>" \\
     -H "Content-Type: application/json" \\
     -d '{{"agent_id":"market-analyst","query":"NVDA FY2026 revenue guidance","k":5}}' \\
     | python -m json.tool
 
-  # Point-in-time — what did we know about NVDA guidance on 2025-03-01?
-  curl -s -X POST {API}/v1/recall \\
-    -H "X-API-Key: {read_key}" \\
+  # Point-in-time - what did we know about NVDA guidance on 2025-03-01?
+  curl -s -X POST {api}/v1/recall \\
+    -H "X-API-Key: <read-key>" \\
     -H "Content-Type: application/json" \\
     -d '{{"agent_id":"market-analyst","query":"NVDA FY2026 revenue guidance","k":5,"as_of":"2025-03-01T00:00:00Z"}}' \\
     | python -m json.tool
 
-  # Audit chain verification
-  curl -s "{API}/v1/admin/audit/verify?namespace={NS}" \\
-    -H "X-Admin-Secret: {ADMIN_SECRET}" \\
+  # Audit chain verification (substitute the admin secret without echoing it here)
+  curl -s "{api}/v1/admin/audit/verify?namespace={namespace}" \\
+    -H "X-Admin-Secret: <admin-secret>" \\
     | python -m json.tool
-""")
-    print(f"Open demo/index.html in a browser and paste the key above.")
+
+Open demo/index.html in a browser and paste the read key from the owner-only file.
+"""
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _build_parser().parse_args(argv)
+    api = args.api_url.rstrip("/")
+
+    with httpx.Client() as client:
+        _wait_for_api(client, api)
+
+        print(f"\nProvisioning API keys for namespace '{args.namespace}' ...")
+        write_key = _provision_key(
+            client,
+            api=api,
+            admin_secret=args.admin_secret,
+            namespace=args.namespace,
+            label="seed-write",
+            scopes=["read", "write"],
+        )
+        print("  write key: [redacted]")
+
+        if args.read_key_output is not None:
+            read_key = _provision_key(
+                client,
+                api=api,
+                admin_secret=args.admin_secret,
+                namespace=args.namespace,
+                label="demo-readonly",
+                scopes=["read"],
+            )
+            _write_read_key(args.read_key_output, read_key)
+            print(f"  read key written to {args.read_key_output} (contents not logged)")
+        else:
+            print("  read key: not provisioned (use --read-key-output PATH)")
+
+        print("\n── NVDA FY2026 Revenue Guidance (5 revisions) ──────────────────")
+        _ingest(client, write_key, NVDA_GUIDANCE, api=api)
+
+        print("\n── TSLA Quarterly Deliveries (4 quarters) ──────────────────────")
+        _ingest(client, write_key, TSLA_DELIVERIES, api=api)
+
+        print("\n── Fed Funds Rate Decisions (6 FOMC meetings) ───────────────────")
+        _ingest(client, write_key, FED_RATES, api=api)
+
+    print("\n" + "=" * 70)
+    print("Demo data loaded.")
+    print(
+        _demo_instructions(
+            api=api,
+            namespace=args.namespace,
+            read_key_path=args.read_key_output,
+        )
+    )
     print("=" * 70)
 
 
