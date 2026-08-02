@@ -1,0 +1,80 @@
+{
+  "evaluation": "lians-regulated-memory-five-invariant",
+  "executed_at": "2026-07-17T20:29:02.204939+00:00",
+  "report": {
+    "checks": [
+      {
+        "capability_absent": false,
+        "check": "stale_revision_suppression",
+        "detail": {
+          "current_retrieved": true,
+          "stale_excluded": true
+        },
+        "passed": true,
+        "status": "pass"
+      },
+      {
+        "capability_absent": false,
+        "check": "point_in_time_reconstruction",
+        "detail": {
+          "as_of_value_retrieved": true
+        },
+        "passed": true,
+        "status": "pass"
+      },
+      {
+        "capability_absent": false,
+        "check": "erasure_proof",
+        "detail": {
+          "content_unrecoverable": true,
+          "proof_artifact": true
+        },
+        "passed": true,
+        "status": "pass"
+      },
+      {
+        "capability_absent": false,
+        "check": "lookahead_contamination_detection",
+        "detail": {
+          "flags": 1,
+          "is_clean": false
+        },
+        "passed": true,
+        "status": "pass"
+      },
+      {
+        "capability_absent": false,
+        "check": "audit_state_reconstruction",
+        "detail": {
+          "total": 1
+        },
+        "passed": true,
+        "status": "pass"
+      }
+    ],
+    "note": "barrier_leakage verified separately on Postgres RLS (non-superuser role)",
+    "passed": 5,
+    "score": 1.0,
+    "total": 5
+  },
+  "run_id": "lians-local-2026-07-17",
+  "schema_version": "1.0",
+  "source": {
+    "git_commit": "b3fbbd29b798727e5dae37257c340047fcc80eb3",
+    "harness": "agentmem/benchmarks/regulated_eval.py",
+    "repository": "https://github.com/Lians-ai/Lians"
+  },
+  "system": {
+    "adapter": "LocalLiansClient",
+    "configuration": {
+      "embedding_provider": "local",
+      "ephemeral_test_encryption_key": true,
+      "external_api_key": false,
+      "storage": "temporary SQLite"
+    },
+    "execution_status": "executed_live",
+    "name": "Lians",
+    "package": "lians-sdk",
+    "package_version": "0.4.1"
+  }
+}
