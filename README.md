@@ -29,7 +29,7 @@
   <a href="https://www.npmjs.com/package/@lians-ai/lians">
     <img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?label=npm" alt="npm version">
   </a>
-  <a href="https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest">
+  <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians">
     <img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry">
   </a>
   <a href="LICENSE">
@@ -152,7 +152,7 @@ Procurement and technical review materials:
 
 ## MCP - Native tool in any AI client
 
-Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can use local persistent memory immediately or connect to a hosted Lians server. No SDK code, custom adapter, Docker service, URL, or API key is required for local mode.
+Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can use local persistent memory immediately or connect to a hosted Lians server. No SDK code, custom adapter, Docker service, URL, or API key is required for local mode.
 
 Your agents get eight tools automatically:
 

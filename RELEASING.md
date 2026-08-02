@@ -49,7 +49,7 @@ Pushing a `vX.Y.Z` tag triggers:
   mcp-publisher login github     # interactive device flow; token expires
   mcp-publisher publish
   # verify:
-  curl -s "https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest"
+  curl -fsS "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.ebeirne%2Flians&version=latest"
   ```
 
 - Verify: `pip install lians-sdk==X.Y.Z`, `npm view @lians-ai/lians`, `go get github.com/Lians-ai/Lians/agentmem/sdk/go@vX.Y.Z`, and the Maven Central listing.
