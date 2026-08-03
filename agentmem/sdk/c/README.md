@@ -6,10 +6,9 @@
 
 # Lians C SDK
 
-Financial-grade agent memory for native, low-latency, and embedded systems —
-bitemporal recall, SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information
-barriers, and a relationship graph (conflict-of-interest / related-party /
-care-network).
+Provider-neutral decision evidence and governed memory for native, low-latency,
+and embedded systems: bitemporal reconstruction, tamper-evident records,
+subject crypto-shredding, information barriers, and relationship-graph queries.
 
 A thin [libcurl](https://curl.se/libcurl/) client. Responses come back as raw
 JSON strings, so it drops into HFT gateways, market-data plants, trading systems,
@@ -44,11 +43,11 @@ int main(void) {
     lians_client_t *c = lians_client_new("https://api.lians.dev", getenv("LIANS_API_KEY"), NULL);
 
     /* Store a fact with its BUSINESS event-time (ISO-8601 UTC). */
-    lians_response_t r = lians_add(c, "equity-desk",
+    lians_response_t r = lians_add_idempotent(c, "equity-desk",
         "NVDA FY2026 revenue guidance raised to $40B",
         "2025-11-19T16:00:00Z",
         "{\"ticker\":\"NVDA\",\"metric\":\"revenue_guidance\"}",
-        "analyst", NULL, 0.6);
+        "analyst", NULL, 0.6, "guidance-import:nvda:2025-11-19:v1");
     printf("%ld %s\n", r.status, r.body);
     lians_response_free(&r);
 
@@ -78,13 +77,14 @@ See [`examples/example.c`](examples/example.c) for a complete program.
 
 | Function | Purpose |
 |----------|---------|
-| `lians_add` | Store a fact (with event-time, metadata, subject) |
+| `lians_add` | Store a fact once, without automatic retry |
+| `lians_add_idempotent` | Store a fact with a caller-stable replay key and bounded retry |
 | `lians_recall` | Recall current facts; pass `as_of` for point-in-time |
-| `lians_snapshot` | Exhaustive knowledge state at a date |
+| `lians_snapshot` | Bounded knowledge-state page with JSON completeness metadata |
 | `lians_backtest_check` | Lookahead-bias detection |
 | `lians_fact_history` | Time-series of a ticker+metric |
 | `lians_erase` | GDPR/HIPAA crypto-shred a subject |
-| `lians_verify_chain` | Verify the SEC 17a-4 audit chain (admin) |
+| `lians_verify_chain` | Verify the tamper-evident audit chain (admin) |
 | `lians_relate` / `lians_unrelate` | Assert / invalidate a graph edge |
 | `lians_neighbors` | N-hop neighbors of an entity |
 | `lians_path` | Connection between two entities (COI / related-party) |
@@ -96,15 +96,31 @@ Every call returns a `lians_response_t { long status; char *body; }`:
 ## Memory & threading
 
 - Free every response body with `lians_response_free()`.
-- A `lians_client_t` is immutable after creation and safe to share across threads;
-  each call uses its own libcurl easy handle. Call `lians_global_init()` once at
-  startup in multi-threaded programs.
+- A `lians_client_t` is safe to share across threads; each call uses its own
+  libcurl easy handle and runtime bounds are atomic. Do not free a client while a
+  request is active. Call `lians_global_init()` once before starting worker
+  threads and `lians_global_cleanup()` only after all clients and requests end.
+- Base URLs accept HTTP(S) only and reject user-info, query strings, fragments,
+  control characters, and backslashes. libcurl TLS verification remains enabled
+  and redirects remain disabled. Use HTTPS outside local development.
+- The 30-second default timeout is a total budget across retries and backoff.
+  Safe GETs and `lians_add_idempotent` retry transient failures up to twice;
+  recall, erasure, and graph mutations never retry automatically. Tune with
+  `lians_client_set_timeout_ms`, `lians_client_set_max_retries`, and
+  `lians_client_set_max_response_bytes`.
+- Response bodies are capped at 16 MiB by default. Server error bodies are still
+  returned to the caller as raw JSON and may contain sensitive details; avoid
+  logging them indiscriminately.
+- `metadata_json` and `filters_json` are caller-owned raw JSON object strings.
+  The SDK escapes ordinary string arguments but does not parse those two inputs.
 
 ## Why C + Lians
 
-mem0 ships Python/TypeScript only; Zep adds Go. Neither offers a C SDK — yet the
-lowest-latency and most regulated systems (HFT, exchange gateways, on-prem medical
-and legal devices) are native. This SDK brings the full compliance memory layer and
-the relationship graph to them. See the
-[mem0](../../../docs/compare-mem0.md) and [Zep/Graphiti](../../../docs/compare-zep.md)
-comparisons.
+Native services remain common in low-latency gateways, market-data plants, embedded
+systems, and tightly controlled on-premises environments. This SDK exposes Lians'
+bounded HTTP contracts without forcing those systems to embed a Python or JVM
+runtime. It returns raw JSON intentionally; callers remain responsible for schema
+validation, completeness fields, secret-safe logging, and the regulatory posture of
+their deployment. The version-pinned [mem0](../../../docs/compare-mem0.md) and
+[Zep/Graphiti](../../../docs/compare-zep.md) comparisons are evaluation snapshots,
+not current exclusivity claims.

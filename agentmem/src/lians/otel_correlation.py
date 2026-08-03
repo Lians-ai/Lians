@@ -7,10 +7,21 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from .audit_chain import chain_log
+from .decision_record_integrity import (
+    DECISION_RECORD_HASH_VERSION,
+    VERIFIED_INTEGRITY_STATUS,
+    assert_decision_record_integrity,
+    compute_decision_record_hash,
+    decision_record_binding_payload,
+)
+from .evidence_service import decision_artifact_specs, index_decision_evidence
+from .governance_service import reserve_namespace_usage
+from .metering import enqueue_authoritative_decision_usage_event
 from .models import DecisionRecord, LedgerEvent, Memory
 from .otel_contract import (
     CAPTURE_STATUS,
@@ -26,6 +37,7 @@ from .otel_contract import (
     WORKFLOW_ID,
     WORKSPACE_ID,
 )
+from .recorder_service import index_recorder_evidence_for_decision
 
 
 def _canonical(value: Any) -> str:
@@ -44,7 +56,9 @@ def _datetime(value: Any, fallback: datetime) -> datetime:
         return fallback
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except ValueError:
         return fallback
 
@@ -55,6 +69,13 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [item.strip() for item in value.split(",") if item.strip()]
     return []
+
+
+def _optional_string(value: Any, *, max_length: int | None = None) -> str | None:
+    if value is None:
+        return None
+    result = str(value)
+    return result[:max_length] if max_length is not None else result
 
 
 def _decision_uuid(namespace: str, trace_id: str, explicit: Any) -> uuid.UUID:
@@ -71,6 +92,12 @@ async def correlate_genai_trace(
     *,
     namespace: str,
     barrier_group: str | None,
+    recorded_by_principal_ref: str,
+    recorded_by_auth_method: str,
+    recorded_by_credential_ref: str,
+    recorded_by_principal_type: str,
+    recorded_by_role: str | None,
+    recorded_by_scopes: list[str],
     spans: Iterable[Any],
 ) -> tuple[list[uuid.UUID], int]:
     """Create one decision per GenAI trace, returning IDs and created count."""
@@ -89,8 +116,25 @@ async def correlate_genai_trace(
         attrs = dict(root.attributes or {})
         decision_id = _decision_uuid(namespace, trace_id, attrs.get(DECISION_ID))
         result.append(decision_id)
-        if await db.get(DecisionRecord, decision_id):
+        if db.get_bind().dialect.name == "postgresql":
+            # Deterministic trace IDs make retries idempotent only if concurrent
+            # first writers serialize before the existence check.
+            await db.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": f"lians:otel-decision:{namespace}:{decision_id}"},
+            )
+        existing_decision = await db.get(DecisionRecord, decision_id)
+        if existing_decision is not None:
+            await assert_decision_record_integrity(db, existing_decision)
             continue
+
+        # The OTLP request bytes are reserved once by the transport route; this
+        # derived decision consumes only the decision-record quota.
+        await reserve_namespace_usage(
+            db,
+            namespace=namespace,
+            decision_records=1,
+        )
 
         decided_at = _timestamp(root.end_time_unix_nano)
         knowledge_as_of = _datetime(attrs.get(KNOWLEDGE_AS_OF), decided_at)
@@ -99,7 +143,7 @@ async def correlate_genai_trace(
             or attrs.get("gen_ai.agent.name")
             or root.service_name
             or "otel-agent"
-        )
+        )[:255]
         raw_ids = _string_list(attrs.get(MEMORY_IDS)) + _string_list(attrs.get(EVIDENCE_IDS))
         candidate_ids: list[uuid.UUID] = []
         for value in raw_ids:
@@ -107,19 +151,35 @@ async def correlate_genai_trace(
                 candidate_ids.append(uuid.UUID(value))
             except ValueError:
                 continue
+        evidence_rows: list[Memory] = []
         existing_ids: list[str] = []
         if candidate_ids:
-            existing_ids = [
-                str(value)
-                for value in (
+            evidence_filters = [
+                Memory.namespace == namespace,
+                Memory.id.in_(candidate_ids),
+            ]
+            if barrier_group is not None:
+                evidence_filters.append(
+                    or_(Memory.barrier_group.is_(None), Memory.barrier_group == barrier_group)
+                )
+            evidence_rows = list(
+                (
                     await db.execute(
-                        select(Memory.id).where(
-                            Memory.namespace == namespace,
-                            Memory.id.in_(candidate_ids),
+                        select(Memory)
+                        .options(
+                            load_only(
+                                Memory.id,
+                                Memory.source,
+                                Memory.content_hash,
+                                Memory.metadata_,
+                                Memory.barrier_group,
+                            )
                         )
+                        .where(*evidence_filters)
                     )
                 ).scalars()
-            ]
+            )
+            existing_ids = sorted(str(row.id) for row in evidence_rows)
 
         capture_status = str(attrs.get(CAPTURE_STATUS) or "partial")
         if capture_status not in CAPTURE_STATUSES:
@@ -135,39 +195,39 @@ async def correlate_genai_trace(
             "grafana_trace_url": attrs.get(GRAFANA_TRACE_URL),
             "unresolved_evidence_ids": sorted(set(raw_ids) - set(existing_ids)),
         }
-        body = {
-            "id": str(decision_id),
-            "namespace": namespace,
-            "agent_id": agent_id,
-            "decision_type": str(
-                attrs.get(DECISION_TYPE) or attrs.get("gen_ai.operation.name") or root.name
-            )[:100],
-            "outcome": str(attrs.get(DECISION_OUTCOME) or "observed")[:500],
-            "decided_at": decided_at.isoformat(),
-            "knowledge_as_of": knowledge_as_of.isoformat(),
-            "evidence_memory_ids": existing_ids,
-            "metadata": metadata,
-        }
-        record_hash = hashlib.sha256(_canonical(body).encode()).hexdigest()
+        recorded_at = datetime.now(timezone.utc)
         decision = DecisionRecord(
             id=decision_id,
             namespace=namespace,
             agent_id=agent_id,
+            recorded_by_principal_ref=recorded_by_principal_ref,
+            recorded_by_auth_method=recorded_by_auth_method,
+            recorded_by_credential_ref=recorded_by_credential_ref,
+            recorded_by_principal_type=recorded_by_principal_type,
+            recorded_by_role=recorded_by_role,
+            recorded_by_scopes=recorded_by_scopes,
             barrier_group=barrier_group,
-            decision_type=body["decision_type"],
-            outcome=body["outcome"],
+            decision_type=str(
+                attrs.get(DECISION_TYPE) or attrs.get("gen_ai.operation.name") or root.name
+            )[:100],
+            outcome=str(attrs.get(DECISION_OUTCOME) or "observed")[:500],
             reason_codes=["otel_observed"],
-            session_id=attrs.get("gen_ai.conversation.id"),
-            model_id=root.model_id,
-            model_version=root.model_version,
-            policy_version=attrs.get(POLICY_VERSION),
+            session_id=_optional_string(attrs.get("gen_ai.conversation.id")),
+            model_id=_optional_string(root.model_id),
+            model_version=_optional_string(root.model_version),
+            policy_version=_optional_string(attrs.get(POLICY_VERSION)),
             decided_at=decided_at,
-            recorded_at=datetime.now(timezone.utc),
+            recorded_at=recorded_at,
             knowledge_as_of=knowledge_as_of,
+            knowledge_recorded_as_of=recorded_at,
             evidence_memory_ids=existing_ids,
             metadata_=metadata,
-            record_hash=record_hash,
+            record_hash_version=DECISION_RECORD_HASH_VERSION,
+            record_integrity_status=VERIFIED_INTEGRITY_STATUS,
+            record_hash="",
         )
+        decision.record_hash = compute_decision_record_hash(decision)
+        evidence_candidate_plan = decision_artifact_specs(decision, evidence_rows)
         db.add(decision)
         created += 1
         db.add(
@@ -192,12 +252,25 @@ async def correlate_genai_trace(
             )
         )
         await db.flush()
+        await index_decision_evidence(
+            db,
+            decision,
+            evidence_rows,
+            candidate_plan=evidence_candidate_plan,
+        )
+        await index_recorder_evidence_for_decision(db, decision)
         await chain_log(
             db,
             namespace,
-            agent_id,
-            "decision_recorded_from_otel",
-            content_hash=record_hash,
-            payload={"decision_id": str(decision_id), "trace_id": trace_id},
+            recorded_by_principal_ref,
+            "decision_recorded",
+            content_hash=decision.record_hash,
+            payload=decision_record_binding_payload(decision),
+        )
+        await enqueue_authoritative_decision_usage_event(
+            db,
+            namespace=namespace,
+            decision_id=decision.id,
+            occurred_at=decision.recorded_at,
         )
     return result, created

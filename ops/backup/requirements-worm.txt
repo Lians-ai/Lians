@@ -1,0 +1,10 @@
+# Runtime-only dependencies for Dockerfile.worm.  Provider imports are lazy, so
+# host installations may install jsonschema plus only the selected cloud SDK.
+jsonschema[format-nongpl]>=4.23.0,<5
+boto3>=1.35.20,<2
+google-auth>=2.35.0,<3
+google-cloud-storage>=3.4.0,<4
+google-crc32c>=1.6.0,<2
+azure-identity>=1.19.0,<2
+azure-mgmt-storage>=23.1.0,<25
+azure-storage-blob>=12.26.0,<13

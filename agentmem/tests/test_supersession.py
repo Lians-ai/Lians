@@ -3,9 +3,9 @@ Supersession engine correctness â€” Phase 1 cases (Stage 1+2 rules).
 These must all pass before Phase 2 LLM adjudication is added.
 """
 import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
-from src.lians.supersession import classify_relation, _metadata_overlap
+from lians.supersession import classify_relation, _metadata_overlap
 
 
 T0 = datetime(2026, 5, 1, tzinfo=timezone.utc)
@@ -102,16 +102,19 @@ class TestClassifyRelation:
             old_meta=META_AMD_GUIDANCE,
             new_meta=META_NVDA_GUIDANCE,
         )
-        # Different ticker â†’ different entity; this pair lacks full structured key match.
-        # classify_relation sees same metric "guidance" but we only call classify_relation
-        # after Stage 1 has already filtered candidates â€” so in practice they'd never be paired.
-        # Here we confirm that differing metric fields produce ADDS, not SUPERSEDES.
-        # (AMD/NVDA share "metric" but differ on "ticker"; Stage 1 would find overlap on
-        # "metric" only â†’ partial match needing cosine threshold, not full match.)
-        # classify_relation itself doesn't know about structured keys; it gets same metric â†’
-        # temporal ordering applies â†’ SUPERSEDES if new_is_later.
-        # The guard is in Stage 1 (find_supersession_candidates).  Document this here.
-        assert relation in ("SUPERSEDES", "ADDS")  # Stage 2 alone can't distinguish tickers
+        assert relation == "ADDS"
+
+    def test_different_reporting_periods_are_independent_facts(self):
+        relation, confidence = classify_relation(
+            old_content="TSLA Q2 2024 deliveries were 443,956",
+            new_content="TSLA Q3 2024 deliveries were 462,890",
+            old_event_time=T0,
+            new_event_time=T1,
+            old_meta={"ticker": "TSLA", "metric": "deliveries", "period": "Q2 2024"},
+            new_meta={"ticker": "TSLA", "metric": "deliveries", "period": "Q3 2024"},
+        )
+        assert relation == "ADDS"
+        assert confidence >= 0.9
 
     def test_same_metric_different_values_chain(self):
         """Three consecutive guidance updates â€” each supersedes the prior."""
@@ -137,13 +140,13 @@ class TestClassifyRelation:
 
     def test_no_metadata_produces_no_overlap(self):
         """Without structured keys, _metadata_overlap returns empty â€” no supersession candidate."""
-        from src.lians.supersession import _metadata_overlap
+        from lians.supersession import _metadata_overlap
         overlap = _metadata_overlap({}, {"note": "free text memory"})
         assert overlap == set()
 
     def test_cusip_isin_keys_recognized(self):
         """CUSIP and ISIN are recognized structured keys."""
-        from src.lians.supersession import _metadata_overlap
+        from lians.supersession import _metadata_overlap
         meta_a = {"cusip": "037833100", "metric": "price"}
         meta_b = {"cusip": "037833100", "metric": "price"}
         overlap = _metadata_overlap(meta_a, meta_b)
@@ -249,10 +252,10 @@ async def test_free_text_narrowing_refines_end_to_end(db):
     with no structured keys — but Stage 1 required structured-key overlap, so
     free-text supersession could never fire at all.
     """
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.supersession import run_supersession
-    from src.lians.embeddings import get_embedding_provider
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.supersession import run_supersession
+    from lians.embeddings import get_embedding_provider
 
     old = await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.lians.siem import stream_event
+from lians.siem import stream_event
 
 
 class _Collector(BaseHTTPRequestHandler):
@@ -39,8 +39,12 @@ def collector():
 async def test_stream_event_delivers(collector, monkeypatch):
     port = collector.server_address[1]
     monkeypatch.setattr(
-        "src.lians.siem.get_settings",
-        lambda: SimpleNamespace(siem_url=f"http://127.0.0.1:{port}/intake", siem_token="Bearer tok"),
+        "lians.siem.get_settings",
+        lambda: SimpleNamespace(
+            airgap_mode=False,
+            siem_url=f"http://127.0.0.1:{port}/intake",
+            siem_token="Bearer tok",
+        ),
     )
     ok = await stream_event({"op": "add", "id": "evt-1"})
     assert ok is True
@@ -52,8 +56,8 @@ async def test_stream_event_delivers(collector, monkeypatch):
 
 async def test_stream_event_disabled_returns_false(monkeypatch):
     monkeypatch.setattr(
-        "src.lians.siem.get_settings",
-        lambda: SimpleNamespace(siem_url="", siem_token=""),
+        "lians.siem.get_settings",
+        lambda: SimpleNamespace(airgap_mode=False, siem_url="", siem_token=""),
     )
     assert await stream_event({"op": "x"}) is False
 
@@ -61,7 +65,11 @@ async def test_stream_event_disabled_returns_false(monkeypatch):
 async def test_stream_event_swallows_errors(monkeypatch):
     # Unroutable URL — must return False, never raise.
     monkeypatch.setattr(
-        "src.lians.siem.get_settings",
-        lambda: SimpleNamespace(siem_url="http://127.0.0.1:1/down", siem_token=""),
+        "lians.siem.get_settings",
+        lambda: SimpleNamespace(
+            airgap_mode=False,
+            siem_url="http://127.0.0.1:1/down",
+            siem_token="",
+        ),
     )
     assert await stream_event({"op": "x"}) is False

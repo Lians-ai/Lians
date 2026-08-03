@@ -25,9 +25,9 @@ from datetime import datetime, timezone
 from httpx import AsyncClient, ASGITransport
 from uuid import uuid4
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
 
 # Same event_time â†’ CONTRADICTS_SAME_TIME; different event_time â†’ SUPERSEDES
 T_SAME = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
@@ -267,7 +267,6 @@ async def test_resolve_accept_a_memory_a_still_live(client):
     await _add(client, _mem("BAC EPS $0.90", T_SAME, source="rumor", ticker="BAC"))
 
     conflict = (await _conflicts(client)).json()["conflicts"][0]
-    mem_a_id = conflict["memory_a_id"]
     mem_b_id = conflict["memory_b_id"]
 
     await _resolve(client, conflict["id"], "accept_a")

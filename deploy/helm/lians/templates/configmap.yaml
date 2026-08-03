@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lians.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+data:
+  DEPLOYMENT_ENVIRONMENT: "production"
+  DEPLOYMENT_REGION: {{ .Values.config.deploymentRegion | quote }}
+  # The supported chart is exclusively the public/data-plane surface. A private
+  # admin process is a separate deployment and is never reachable by this Service.
+  API_SURFACE: "public"
+  CORS_ORIGINS: {{ join "," .Values.config.corsOrigins | quote }}
+  TRUSTED_PROXY_CIDRS: {{ join "," .Values.config.trustedProxyCidrs | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  LOG_JSON: {{ .Values.config.logJson | quote }}
+  DATABASE_POOL_SIZE: {{ .Values.config.database.poolSize | quote }}
+  DATABASE_MAX_OVERFLOW: {{ .Values.config.database.maxOverflow | quote }}
+  DATABASE_POOL_TIMEOUT_SECONDS: {{ .Values.config.database.poolTimeoutSeconds | quote }}
+  DATABASE_STATEMENT_TIMEOUT_MS: {{ .Values.config.database.statementTimeoutMs | quote }}
+  DATABASE_LOCK_TIMEOUT_MS: {{ .Values.config.database.lockTimeoutMs | quote }}
+  DATABASE_IDLE_TRANSACTION_TIMEOUT_MS: {{ .Values.config.database.idleTransactionTimeoutMs | quote }}
+  # This chart does not mount local PostgreSQL/Redis sockets. Network transports
+  # are required to pass the application's peer-verifying production checks.
+  PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS: "false"
+  EMBEDDING_PROVIDER: {{ .Values.config.embedding.provider | quote }}
+  EMBEDDING_DIM: {{ .Values.config.embedding.dimension | quote }}
+  SENTENCE_TRANSFORMER_MODEL: {{ .Values.config.embedding.sentenceTransformerModel | quote }}
+  EMBEDDING_PROVIDER_TIMEOUT_SECONDS: {{ .Values.config.embedding.providerTimeoutSeconds | quote }}
+  KMS_PROVIDER: {{ .Values.config.kms.provider | quote }}
+  MASTER_KEY_ID: {{ .Values.config.kms.envelopeKeyId | quote }}
+  MASTER_KEY_PREVIOUS_ID: {{ .Values.config.kms.previousEnvelopeKeyId | quote }}
+  {{- if eq .Values.config.kms.provider "aws" }}
+  KMS_AWS_REGION: {{ .Values.config.kms.aws.region | quote }}
+  KMS_AWS_KEY_ID: {{ .Values.config.kms.aws.keyId | quote }}
+  KMS_AWS_PREVIOUS_REGION: {{ .Values.config.kms.aws.previousRegion | quote }}
+  KMS_AWS_PREVIOUS_KEY_ID: {{ .Values.config.kms.aws.previousKeyId | quote }}
+  {{- else if eq .Values.config.kms.provider "azure" }}
+  KMS_AZURE_VAULT_URL: {{ .Values.config.kms.azure.vaultUrl | quote }}
+  KMS_AZURE_SECRET_NAME: {{ .Values.config.kms.azure.secretName | quote }}
+  KMS_AZURE_PREVIOUS_VAULT_URL: {{ .Values.config.kms.azure.previousVaultUrl | quote }}
+  KMS_AZURE_PREVIOUS_SECRET_NAME: {{ .Values.config.kms.azure.previousSecretName | quote }}
+  {{- else if eq .Values.config.kms.provider "vault" }}
+  KMS_VAULT_ADDR: {{ .Values.config.kms.vault.address | quote }}
+  KMS_VAULT_PATH: {{ .Values.config.kms.vault.path | quote }}
+  KMS_VAULT_MOUNT_POINT: {{ .Values.config.kms.vault.mountPoint | quote }}
+  KMS_VAULT_PREVIOUS_ADDR: {{ .Values.config.kms.vault.previousAddress | quote }}
+  KMS_VAULT_PREVIOUS_PATH: {{ .Values.config.kms.vault.previousPath | quote }}
+  KMS_VAULT_PREVIOUS_MOUNT_POINT: {{ .Values.config.kms.vault.previousMountPoint | quote }}
+  {{- end }}
+  RECEIPT_SIGNING_PROVIDER: {{ .Values.config.receipts.provider | quote }}
+  RECEIPT_SIGNING_KEY_ID: {{ .Values.config.receipts.signingKeyId | quote }}
+  {{- if eq .Values.config.receipts.provider "vault-transit" }}
+  RECEIPT_VAULT_ADDR: {{ .Values.config.receipts.vault.address | quote }}
+  RECEIPT_VAULT_NAMESPACE: {{ .Values.config.receipts.vault.namespace | quote }}
+  RECEIPT_VAULT_MOUNT_POINT: {{ .Values.config.receipts.vault.mountPoint | quote }}
+  RECEIPT_VAULT_KEY_NAME: {{ .Values.config.receipts.vault.keyName | quote }}
+  RECEIPT_VAULT_KEY_VERSION: {{ .Values.config.receipts.vault.keyVersion | quote }}
+  RECEIPT_VAULT_PUBLIC_KEY: {{ .Values.config.receipts.vault.publicKey | quote }}
+  RECEIPT_VAULT_TIMEOUT_SECONDS: {{ .Values.config.receipts.vault.timeoutSeconds | quote }}
+  {{- if .Values.existingSecrets.receipts.vaultTokenFileKey }}
+  RECEIPT_VAULT_TOKEN_FILE: "/run/secrets/lians/receipt-vault-token/token"
+  {{- end }}
+  {{- end }}
+  METRICS_ENABLED: {{ .Values.config.metrics.enabled | quote }}
+  STRIPE_METER_DECISION_EVENT: {{ .Values.config.metering.decisionEvent | quote }}
+  STRIPE_METER_PROTECTED_ACTION_EVENT: {{ .Values.config.metering.protectedActionEvent | quote }}
+  STRIPE_METER_WRITE_EVENT: {{ .Values.config.metering.writeEvent | quote }}
+  STRIPE_METER_RECALL_EVENT: {{ .Values.config.metering.recallEvent | quote }}
+  STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED: {{ .Values.config.metering.asyncErrorDestinationConfigured | quote }}
+  STRIPE_METER_WORKER_ENABLED: {{ (and .Values.config.metering.enabled .Values.config.metering.workerEnabled) | quote }}
+  STRIPE_METER_WORKER_POLL_SECONDS: {{ .Values.config.metering.pollSeconds | quote }}
+  STRIPE_METER_WORKER_BATCH_SIZE: {{ .Values.config.metering.batchSize | quote }}
+  STRIPE_METER_DELIVERY_CONCURRENCY: {{ .Values.config.metering.concurrency | quote }}
+  STRIPE_METER_LEASE_SECONDS: {{ .Values.config.metering.leaseSeconds | quote }}
+  STRIPE_METER_PROVIDER_TIMEOUT_SECONDS: {{ .Values.config.metering.providerTimeoutSeconds | quote }}
+  STRIPE_METER_RETRY_BASE_SECONDS: {{ .Values.config.metering.retryBaseSeconds | quote }}
+  STRIPE_METER_RETRY_MAX_SECONDS: {{ .Values.config.metering.retryMaxSeconds | quote }}
+  STRIPE_METER_MAX_ATTEMPTS: {{ .Values.config.metering.maxAttempts | quote }}
+  STRIPE_METER_IDEMPOTENCY_WINDOW_SECONDS: {{ .Values.config.metering.idempotencyWindowSeconds | quote }}
+  STRIPE_METER_MAX_EVENT_AGE_SECONDS: {{ .Values.config.metering.maxEventAgeSeconds | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.config.telemetry.serviceName | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.telemetry.exporterEndpoint | quote }}
+  RECORDER_ALLOW_FULL_CAPTURE: {{ .Values.config.governance.recorderAllowFullCapture | quote }}
+  OTLP_CAPTURE_MODE: {{ .Values.config.governance.otlpCaptureMode | quote }}
+  OTLP_MAX_SPANS_PER_REQUEST: {{ .Values.config.governance.otlpMaxSpansPerRequest | quote }}
+  OTLP_MAX_GENAI_TRACES_PER_REQUEST: {{ .Values.config.governance.otlpMaxGenaiTracesPerRequest | quote }}
+  DECISION_EVIDENCE_CANDIDATE_LIMIT: {{ .Values.config.governance.decisionEvidenceCandidateLimit | quote }}
+  DECISION_EVIDENCE_CANDIDATE_BYTES_LIMIT: {{ .Values.config.governance.decisionEvidenceCandidateBytesLimit | quote }}
+  RATE_LIMIT_PER_MINUTE: {{ .Values.config.rateLimit.perMinute | quote }}
+  RATE_LIMIT_NETWORK_MULTIPLIER: {{ .Values.config.rateLimit.networkMultiplier | quote }}
+  RATE_LIMIT_ADMIN_PER_MINUTE: {{ .Values.config.rateLimit.adminPerMinute | quote }}
+  RATE_LIMIT_BACKEND_FAILURE_MODE: {{ .Values.config.rateLimit.backendFailureMode | quote }}
+  CONTENT_EXPORT_PAGE_BYTES_LIMIT: {{ .Values.config.exports.contentPageBytes | quote }}
+  HASH_ONLY_EXPORT_PAGE_BYTES_LIMIT: {{ .Values.config.exports.hashOnlyPageBytes | quote }}
+  AUDIT_EXPORT_PAGE_BYTES_LIMIT: {{ .Values.config.exports.auditPageBytes | quote }}
+  LINEAGE_RESPONSE_BYTES_LIMIT: {{ .Values.config.exports.lineageResponseBytes | quote }}
+  RETENTION_PRUNE_INTERVAL_HOURS: {{ .Values.config.retentionPruneIntervalHours | quote }}
+  OBSERVABILITY_REFRESH_SECONDS: {{ .Values.config.observabilityRefreshSeconds | quote }}
+  IMPACT_ASSESSMENT_WORKER_ENABLED: {{ .Values.config.impactAssessmentWorker.enabled | quote }}
+  IMPACT_ASSESSMENT_WORKER_POLL_SECONDS: {{ .Values.config.impactAssessmentWorker.pollSeconds | quote }}
+  IMPACT_ASSESSMENT_WORKER_BATCH_SIZE: {{ .Values.config.impactAssessmentWorker.batchSize | quote }}
+  IMPACT_ASSESSMENT_WORKER_CONCURRENCY: {{ .Values.config.impactAssessmentWorker.concurrency | quote }}
+  IMPACT_ASSESSMENT_WORKER_LEASE_SECONDS: {{ .Values.config.impactAssessmentWorker.leaseSeconds | quote }}
+  IMPACT_ASSESSMENT_WORKER_PAGE_SIZE: {{ .Values.config.impactAssessmentWorker.pageSize | quote }}
+  IMPACT_ASSESSMENT_WORKER_MAX_PAGES_PER_CLAIM: {{ .Values.config.impactAssessmentWorker.maxPagesPerClaim | quote }}
+  IMPACT_ASSESSMENT_WORKER_RETRY_BASE_SECONDS: {{ .Values.config.impactAssessmentWorker.retryBaseSeconds | quote }}
+  IMPACT_ASSESSMENT_WORKER_RETRY_MAX_SECONDS: {{ .Values.config.impactAssessmentWorker.retryMaxSeconds | quote }}
+  IMPACT_ASSESSMENT_WORKER_MAX_ATTEMPTS: {{ .Values.config.impactAssessmentWorker.maxAttempts | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_ENABLED: {{ .Values.config.recorderEvidenceIndexWorker.enabled | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_POLL_SECONDS: {{ .Values.config.recorderEvidenceIndexWorker.pollSeconds | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_BATCH_SIZE: {{ .Values.config.recorderEvidenceIndexWorker.batchSize | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_CONCURRENCY: {{ .Values.config.recorderEvidenceIndexWorker.concurrency | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_LEASE_SECONDS: {{ .Values.config.recorderEvidenceIndexWorker.leaseSeconds | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_PAGE_SIZE: {{ .Values.config.recorderEvidenceIndexWorker.pageSize | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_MAX_PAGES_PER_CLAIM: {{ .Values.config.recorderEvidenceIndexWorker.maxPagesPerClaim | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_RETRY_BASE_SECONDS: {{ .Values.config.recorderEvidenceIndexWorker.retryBaseSeconds | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_RETRY_MAX_SECONDS: {{ .Values.config.recorderEvidenceIndexWorker.retryMaxSeconds | quote }}
+  RECORDER_EVIDENCE_INDEX_WORKER_MAX_ATTEMPTS: {{ .Values.config.recorderEvidenceIndexWorker.maxAttempts | quote }}
+  SUBJECT_ERASURE_WORKER_ENABLED: {{ .Values.config.subjectErasureWorker.enabled | quote }}
+  SUBJECT_ERASURE_WORKER_POLL_SECONDS: {{ .Values.config.subjectErasureWorker.pollSeconds | quote }}
+  SUBJECT_ERASURE_WORKER_BATCH_SIZE: {{ .Values.config.subjectErasureWorker.batchSize | quote }}
+  SUBJECT_ERASURE_WORKER_CONCURRENCY: {{ .Values.config.subjectErasureWorker.concurrency | quote }}
+  SUBJECT_ERASURE_WORKER_LEASE_SECONDS: {{ .Values.config.subjectErasureWorker.leaseSeconds | quote }}
+  SUBJECT_ERASURE_WORKER_PAGE_SIZE: {{ .Values.config.subjectErasureWorker.pageSize | quote }}
+  SUBJECT_ERASURE_WORKER_MAX_PAGES_PER_CLAIM: {{ .Values.config.subjectErasureWorker.maxPagesPerClaim | quote }}
+  SUBJECT_ERASURE_WORKER_RETRY_BASE_SECONDS: {{ .Values.config.subjectErasureWorker.retryBaseSeconds | quote }}
+  SUBJECT_ERASURE_WORKER_RETRY_MAX_SECONDS: {{ .Values.config.subjectErasureWorker.retryMaxSeconds | quote }}
+  SUBJECT_ERASURE_WORKER_MAX_ATTEMPTS: {{ .Values.config.subjectErasureWorker.maxAttempts | quote }}
+  SCIM_RECONCILIATION_WORKER_ENABLED: {{ .Values.config.scimReconciliationWorker.enabled | quote }}
+  SCIM_RECONCILIATION_WORKER_POLL_SECONDS: {{ .Values.config.scimReconciliationWorker.pollSeconds | quote }}
+  SCIM_RECONCILIATION_WORKER_BATCH_SIZE: {{ .Values.config.scimReconciliationWorker.batchSize | quote }}
+  SCIM_RECONCILIATION_WORKER_CONCURRENCY: {{ .Values.config.scimReconciliationWorker.concurrency | quote }}
+  SCIM_RECONCILIATION_WORKER_LEASE_SECONDS: {{ .Values.config.scimReconciliationWorker.leaseSeconds | quote }}
+  SCIM_RECONCILIATION_WORKER_PAGE_SIZE: {{ .Values.config.scimReconciliationWorker.pageSize | quote }}
+  SCIM_RECONCILIATION_WORKER_MAX_PAGES_PER_CLAIM: {{ .Values.config.scimReconciliationWorker.maxPagesPerClaim | quote }}
+  SCIM_RECONCILIATION_WORKER_RETRY_BASE_SECONDS: {{ .Values.config.scimReconciliationWorker.retryBaseSeconds | quote }}
+  SCIM_RECONCILIATION_WORKER_RETRY_MAX_SECONDS: {{ .Values.config.scimReconciliationWorker.retryMaxSeconds | quote }}
+  SCIM_RECONCILIATION_WORKER_MAX_ATTEMPTS: {{ .Values.config.scimReconciliationWorker.maxAttempts | quote }}
+  AIRGAP_MODE: {{ .Values.config.airgapMode | quote }}
+  INTEGRATION_WORKER_ENABLED: {{ .Values.config.integration.workerEnabled | quote }}
+  INTEGRATION_WORKER_POLL_SECONDS: {{ .Values.config.integration.pollSeconds | quote }}
+  INTEGRATION_WORKER_BATCH_SIZE: {{ .Values.config.integration.batchSize | quote }}
+  INTEGRATION_DELIVERY_CONCURRENCY: {{ .Values.config.integration.concurrency | quote }}
+  INTEGRATION_LEASE_SECONDS: {{ .Values.config.integration.leaseSeconds | quote }}
+  INTEGRATION_RETRY_BASE_SECONDS: {{ .Values.config.integration.retryBaseSeconds | quote }}
+  INTEGRATION_RETRY_MAX_SECONDS: {{ .Values.config.integration.retryMaxSeconds | quote }}
+  INTEGRATION_MAX_PAYLOAD_BYTES: {{ .Values.config.integration.maxPayloadBytes | quote }}
+  INTEGRATION_MAX_RESPONSE_DIGEST_BYTES: {{ .Values.config.integration.maxResponseDigestBytes | quote }}
+  INTEGRATION_ALLOW_PRIVATE_NETWORK: {{ .Values.config.integration.allowPrivateNetwork | quote }}
+  INTEGRATION_ALLOW_INSECURE_HTTP: "false"
+  INTEGRATION_INCLUDE_AUDIT_PAYLOAD: {{ .Values.config.integration.includeAuditPayload | quote }}
+  WORKLOAD_CREDENTIAL_MIN_TTL_SECONDS: {{ .Values.config.workloadCredentials.minTtlSeconds | quote }}
+  WORKLOAD_CREDENTIAL_MAX_TTL_SECONDS: {{ .Values.config.workloadCredentials.maxTtlSeconds | quote }}
+  WORKLOAD_CREDENTIAL_LAST_USED_WRITE_INTERVAL_SECONDS: {{ .Values.config.workloadCredentials.lastUsedWriteIntervalSeconds | quote }}

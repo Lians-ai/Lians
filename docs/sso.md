@@ -1,68 +1,90 @@
-# SSO Integration
+# Native OIDC identity federation
 
-Lians authenticates API calls with namespace-scoped API keys. For human access and
-enterprise identity, put SSO at the **gateway** in front of Lians — the standard,
-low-coupling pattern that works with any IdP (Okta, Entra ID, Auth0, Ping, Google)
-over OIDC or SAML, and keeps the memory layer focused on data, not identity.
+Lians verifies OIDC JWTs natively and resolves each verified issuer subject to
+an administrator-owned identity binding. The binding supplies namespace,
+principal type, role/scopes, optional authorized party, and information barrier;
+none of those authorization fields are trusted from request headers or bodies.
 
-## Pattern: forward-auth at the gateway
+The compatibility gateway-forward-auth pattern remains possible, but native
+OIDC bearer authentication is the preferred identity-aware path because Lians
+verifies issuer, audience, signature algorithm, signing key, token times, token
+age, and the exact subject binding itself.
 
-```
-User ─▶ Reverse proxy / API gateway ──(OIDC/SAML)──▶ IdP
-            │  (validates session, injects identity)
-            ▼
-        Lians API  ── X-API-Key (per team/role) ──▶ namespace + scopes
-```
+## Trust an issuer and bind a principal
 
-1. The gateway (NGINX `auth_request`, Envoy ext_authz, oauth2-proxy, Cloudflare
-   Access, AWS ALB OIDC, etc.) authenticates the user against your IdP.
-2. On success it forwards the request to Lians with a Lians **API key** chosen for
-   the user's team/role — or injects the identity headers your edge maps to one.
-3. Lians enforces namespace + scope/role from that key.
+Platform operators use the break-glass-protected identity administration API:
 
-This means **no IdP code in Lians**, SSO works with every provider, and revocation
-/ MFA / conditional access stay in your IdP where security teams expect them.
+1. `POST /v1/admin/identity/providers` registers an exact issuer, JWKS URI,
+   audiences, permitted algorithms, required claims, and token-age policy.
+2. `POST /v1/admin/identity/bindings` maps one verified issuer subject to a
+   tenant authorization context.
+3. `POST /v1/admin/identity/providers/{id}/probe` validates that the configured
+   JWKS endpoint yields usable signing keys.
+4. `GET /v1/identity/whoami` lets a bearer inspect the resulting context.
 
-## Mapping IdP groups → namespace, role, and barrier
+Provider and binding lifecycle mutations require the exact `expected_version`
+returned by the latest administrative read. A stale mutation returns `409`;
+re-read the authoritative object and decide again. Provider revocation and
+binding creation lock the same provider row, so a new binding cannot slip
+through a concurrent provider revocation. Revocation is
+immediate, and provider changes also clear the in-process JWKS cache.
 
-Each API key carries three things the gateway maps from the IdP group claim:
-`namespace` (tenant), `role` (scopes), and an optional **`barrier_group`** (the
-information-barrier wall). Provision one key per (namespace, role, barrier) and
-have the gateway select it from the authenticated group claim.
+Provider and binding revocations deliberately reject `Idempotency-Key`: their
+responses are not stored in the generic replay ledger. If the client loses the
+response, reconcile with the administrative GET/list surface before issuing a
+new request. Lians does not follow a token-supplied `jku` or `x5u`, and its JWKS
+fetcher applies network destination guards.
 
-| IdP group | namespace | role → scopes | barrier_group |
-|-----------|-----------|---------------|---------------|
-| `acme-equity-research` | `acme` | `analyst` → read, write | `research` |
-| `acme-equity-trading` | `acme` | `analyst` → read, write | `trading` |
-| `acme-compliance` | `acme` | `compliance` → read, admin | _(none — sees all)_ |
-| `acme-viewers` | `acme` | `readonly` → read | `research` |
+## Identity binding
 
-When a key has a `barrier_group`, **every read and write under it is scoped to
-that wall at the database layer** (PostgreSQL RLS, migration 0013): a write is
-tagged with the barrier and a read can only see that barrier's rows plus shared
-(NULL-barrier) rows. So `acme-equity-research` and `acme-equity-trading` cannot see
-each other's memories even though they share a namespace — the Chinese wall is
-enforced below the application, driven entirely by the IdP group. A key with no
-`barrier_group` (compliance) sees everything in its namespace.
+Each binding contains:
 
-This makes the **IdP group → namespace + role + barrier** chain end-to-end: the
-identity decision in your IdP determines tenancy, permission, *and* isolation,
-with no identity code in Lians. Rotate keys on role/desk changes; revoke on
-offboarding.
+| Field | Meaning |
+|---|---|
+| `namespace` | Tenant boundary enforced by application queries and PostgreSQL RLS |
+| `principal_type` | `human` or `workload` |
+| `role` / `scopes` | Effective tenant permissions |
+| `barrier_group` | Optional information-barrier wall |
+| `authorized_party` | Optional required OAuth `azp`/`client_id` |
 
-## Per-tenant isolation
+Named roles expand as follows: `owner` = read/write/admin, `analyst` =
+read/write, `compliance` = read/admin, and `readonly` = read. Information
+barriers remain restrictive even when identities share a namespace.
 
-Each team/tenant maps to a Lians **namespace** (its own API key). Namespace
-isolation is enforced at PostgreSQL RLS, so even a gateway misconfiguration cannot
-read another tenant's memories. Within a namespace, **information barriers**
-(barrier groups) wall off desks/care-teams/matters at the DB layer
-(see [security-whitepaper.md](security-whitepaper.md) §4).
+After JWT verification, PostgreSQL resolves only the exact `(provider UUID,
+external subject)` pair through a PUBLIC-revoked SECURITY DEFINER function that
+returns the active authorization fields but not the raw subject. Direct runtime
+access to `identity_bindings` is namespace/barrier RLS-constrained. The table
+deliberately omits FORCE only for that table-owner lookup; production readiness
+proves the API login is a non-owner without `BYPASSRLS` and verifies the
+function owner, fixed settings, and grants.
 
-## Why not build OIDC into Lians?
+## Workload authentication choices
 
-Embedding a full OIDC/SAML stack would duplicate the IdP, couple releases to
-identity changes, and expand the audit surface. Gateway forward-auth is the
-recommended enterprise pattern (it is how most data services integrate SSO) and
-keeps Lians' security boundary small and reviewable. A native OIDC mode may be
-added later for turnkey single-node deployments; the gateway pattern remains the
-recommendation for production.
+For workloads, prefer either:
+
+- a short-lived OIDC workload token whose binding has
+  `principal_type=workload` and, where available, an exact `authorized_party`;
+  or
+- an expiring, tenant-managed workload API credential created by a human OIDC
+  administrator through `/v1/identity/workload-credentials`.
+
+See [workload-credentials.md](workload-credentials.md) for issuance, rotation,
+revocation, expiry, least-privilege delegation, and the deliberate separation
+from the `/v1/admin/api-keys` break-glass surface.
+
+## SCIM provisioning
+
+SCIM 2.0 users and groups can drive deterministic identity bindings and tenant
+membership. SCIM bearer credentials are digest-only, independently rotatable,
+and administered through the dedicated SCIM administration surface. Keep SCIM
+provisioning credentials separate from OIDC signing trust and workload secrets.
+
+## Gateway/SAML compatibility
+
+An enterprise gateway may still terminate SAML or OIDC and call Lians with a
+pre-provisioned API key. In that mode, the key—not an injected identity header—
+is the authorization boundary. Never allow a proxy to select namespace, role,
+scope, or barrier from unsigned client-controlled headers. Native OIDC should be
+used whenever the application needs a verifiable human/workload principal in
+Decision Receipts, Gate approvals, reviews, or audit events.

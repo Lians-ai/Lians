@@ -11,10 +11,15 @@ from datetime import datetime, timezone, timedelta
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
+from lians.subject_erasure_service import (
+    claim_due_subject_erasure_jobs,
+    process_subject_erasure_job,
+)
 
 TEST_NS = "snapshot-test-ns"
 TEST_KEY = "snapshot-test-key-xyz"
@@ -137,7 +142,12 @@ async def test_snapshot_limit_respected(client):
     for i in range(5):
         await _add(client, f"Fact {i}", T0 + timedelta(days=i))
     r = await _snapshot(client, T3, limit=3)
-    assert r.json()["total"] == 3
+    body = r.json()
+    assert body["total"] == 5
+    assert body["returned"] == 3
+    assert len(body["items"]) == 3
+    assert body["has_more"] is True
+    assert body["complete"] is False
 
 
 @pytest.mark.asyncio
@@ -210,7 +220,7 @@ async def test_snapshot_diff_between_two_dates(client):
 
 
 @pytest.mark.asyncio
-async def test_snapshot_erased_memory_is_null_content_tombstone(client):
+async def test_snapshot_erased_memory_is_null_content_tombstone(client, db):
     """Crypto-shredded memories stay visible as tombstones: existence,
     timestamps, and hash survive; content comes back null. An examiner must
     be able to see that a fact existed even after a GDPR erasure."""
@@ -227,7 +237,29 @@ async def test_snapshot_erased_memory_is_null_content_tombstone(client):
     r = await client.post("/v1/erase", json={
         "subject_id": "subj-erase-me", "request_ref": "gdpr-1",
     }, headers=_h())
-    assert r.status_code == 200, r.text
+    assert r.status_code == 202, r.text
+    job_id = r.json()["job_id"]
+    worker_id = "snapshot-erasure-test"
+    claims = await claim_due_subject_erasure_jobs(
+        db,
+        worker_id=worker_id,
+        batch_size=1,
+        lease_seconds=60,
+    )
+    assert len(claims) == 1
+    session_factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    await process_subject_erasure_job(
+        session_factory,
+        claim=claims[0],
+        worker_id=worker_id,
+        page_size=100,
+        max_pages=20,
+        lease_seconds=60,
+    )
+    await db.run_sync(lambda session: session.expire_all())
+    status = await client.get(f"/v1/erase/jobs/{job_id}", headers=_h())
+    assert status.status_code == 200
+    assert status.json()["status"] == "completed"
 
     r = await _snapshot(client, T1)
     body = r.json()

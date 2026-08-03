@@ -1,0 +1,24 @@
+config:
+  kms:
+    provider: vault
+  receipts:
+    provider: vault-transit
+    vault:
+      address: https://vault.example.test:8200
+      namespace: test/receipts
+      mountPoint: lians-receipts
+      keyName: production-receipts
+      keyVersion: 3
+      publicKey: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+
+existingSecrets:
+  receipts:
+    localPrivateKeyKey: ""
+    vaultTokenKey: ""
+    vaultTokenFileKey: token
+
+networkPolicy:
+  vault:
+    enabled: true
+    cidrs:
+      - 10.40.0.10/32

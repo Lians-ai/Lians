@@ -15,9 +15,9 @@ import pytest
 from datetime import datetime, timezone
 from sqlalchemy import select, and_
 
-from src.lians.schemas import MemoryAdd
-from src.lians.memory_service import add_memory, get_pending_supersessions
-from src.lians.models import Memory, EventLog, LiveFact
+from lians.schemas import MemoryAdd
+from lians.memory_service import add_memory, get_pending_supersessions
+from lians.models import Memory, EventLog, LiveFact
 
 NS = "keyed-rel-ns"
 AGENT = "keyed-rel-agent"
@@ -113,3 +113,40 @@ async def test_same_time_different_value_flags_conflict_keeps_both(db):
     assert old.valid_to is None, "contradiction must not silently supersede"
     assert await _live_count(db, ns) == 2, "both contradictory facts stay live"
     assert (await _supersede_events(db, ns)) == []
+
+
+@pytest.mark.asyncio
+async def test_reporting_period_partitions_fact_identity_and_same_period_revises(db):
+    ns = NS + "-period-identity"
+    q2 = await add_memory(db, ns, MemoryAdd(
+        agent_id=AGENT,
+        content="TSLA Q2 2024 deliveries were 443,956 vehicles",
+        event_time=T0,
+        metadata={"ticker": "TSLA", "metric": "deliveries", "period": "Q2 2024"},
+    ))
+    q3 = await add_memory(db, ns, MemoryAdd(
+        agent_id=AGENT,
+        content="TSLA Q3 2024 deliveries were 462,890 vehicles",
+        event_time=T1,
+        metadata={"ticker": "TSLA", "metric": "deliveries", "period": "Q3 2024"},
+    ))
+
+    stored_q2 = await db.get(Memory, q2.id)
+    stored_q3 = await db.get(Memory, q3.id)
+    assert stored_q2.valid_to is None
+    assert stored_q3.valid_to is None
+    assert await _live_count(db, ns) == 2
+
+    q3_revision = await add_memory(db, ns, MemoryAdd(
+        agent_id=AGENT,
+        content="TSLA Q3 2024 deliveries revised to 463,000 vehicles",
+        event_time=datetime(2026, 5, 20, tzinfo=timezone.utc),
+        metadata={"ticker": "TSLA", "metric": "deliveries", "period": "Q3 2024"},
+    ))
+
+    await db.refresh(stored_q2)
+    await db.refresh(stored_q3)
+    assert stored_q2.valid_to is None, "a Q3 revision must not close the Q2 fact"
+    assert stored_q3.valid_to is not None, "the prior Q3 value must close"
+    assert stored_q3.superseded_by == q3_revision.id
+    assert await _live_count(db, ns) == 2

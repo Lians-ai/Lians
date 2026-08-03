@@ -7,10 +7,10 @@ other tenant's data and 500'd their next write. These tests pin the isolation.
 import pytest
 from datetime import datetime, timezone
 
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories, erase_subject
-from src.lians.pii import get_or_create_subject_key
-from src.lians import dek_cache
+from lians.schemas import MemoryAdd, RecallRequest
+from lians.memory_service import add_memory, recall_memories, erase_subject
+from lians.pii import get_or_create_subject_key
+from lians import dek_cache
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 SUBJECT = "customer-42"          # deliberately identical across the two tenants
@@ -42,8 +42,10 @@ async def test_erase_in_one_tenant_does_not_touch_the_other(db):
         event_time=T0, subject_id=SUBJECT, metadata={"ticker": "BBB", "metric": "y"}))
 
     # Tenant A erases the subject.
-    erased = await erase_subject(db, NS_A, SUBJECT, request_ref="gdpr-a")
-    assert erased == 1
+    job = await erase_subject(db, NS_A, SUBJECT, request_ref="gdpr-a")
+    assert job.status == "pending"
+    assert job.snapshot_memory_count == 1
+    assert job.key_destroyed_at is not None
 
     # Tenant A's content is gone…
     ra = await recall_memories(db, NS_A, RecallRequest(agent_id="agent-a", query="secret", k=5))

@@ -13,18 +13,39 @@ from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.config import get_settings
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
+from lians.version import EXPECTED_ALEMBIC_HEAD
+from sqlalchemy import text
 
 TEST_KEY = "middleware-test-key"
 TEST_NS = "mw-test-ns"
 
 
 @pytest_asyncio.fixture
-async def client(db):
+async def client(db, monkeypatch):
+    # These tests exercise dependency health and middleware, not process-level
+    # worker heartbeats.  Disable autonomous workers so an ASGI transport that
+    # intentionally does not run application lifespan is not reported stale.
+    for name in (
+        "INTEGRATION_WORKER_ENABLED",
+        "IMPACT_ASSESSMENT_WORKER_ENABLED",
+        "RECORDER_EVIDENCE_INDEX_WORKER_ENABLED",
+        "SUBJECT_ERASURE_WORKER_ENABLED",
+        "SCIM_RECONCILIATION_WORKER_ENABLED",
+    ):
+        monkeypatch.setenv(name, "false")
+    monkeypatch.setenv("RETENTION_PRUNE_INTERVAL_HOURS", "0")
+    get_settings.cache_clear()
     hashed = hashlib.sha256(TEST_KEY.encode()).hexdigest()
     db.add(ApiKey(hashed_key=hashed, namespace=TEST_NS, scopes=["read", "write"]))
+    await db.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(64))"))
+    await db.execute(
+        text("INSERT INTO alembic_version (version_num) VALUES (:version)"),
+        {"version": EXPECTED_ALEMBIC_HEAD},
+    )
     await db.commit()
 
     async def _override():
@@ -36,25 +57,30 @@ async def client(db):
             yield c
     finally:
         app.dependency_overrides.clear()
+        get_settings.cache_clear()
 
 
 # â”€â”€ Deep health check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestHealthEndpoint:
 
-    async def test_health_returns_200_when_db_ok(self, client):
+    async def test_health_returns_200_when_db_ok(self, client, monkeypatch):
         # DB is SQLite in-memory (always reachable); mock Redis ping to succeed
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        monkeypatch.setenv("RECALL_CACHE_ENABLED", "true")
+        get_settings.cache_clear()
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(return_value=True)
             resp = await client.get("/health")
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["status"] == "ok"
         assert body["checks"]["db"] == "ok"
         assert body["checks"]["redis"] == "ok"
 
-    async def test_health_returns_503_when_redis_down(self, client):
-        with patch("src.lians.cache._get_redis") as mock_redis:
+    async def test_health_returns_503_when_redis_down(self, client, monkeypatch):
+        monkeypatch.setenv("RECALL_CACHE_ENABLED", "true")
+        get_settings.cache_clear()
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(side_effect=ConnectionError("Redis down"))
             resp = await client.get("/health")
         assert resp.status_code == 503
@@ -65,7 +91,7 @@ class TestHealthEndpoint:
 
     async def test_health_returns_503_when_db_down(self, db):
         """Simulate DB failure by overriding get_db with a session that raises on execute."""
-        from src.lians.db import get_db
+        from lians.db import get_db
 
         bad_session = AsyncMock()
         bad_session.execute = AsyncMock(side_effect=Exception("DB unreachable"))
@@ -75,7 +101,7 @@ class TestHealthEndpoint:
 
         app.dependency_overrides[get_db] = _bad_db
         try:
-            with patch("src.lians.cache._get_redis") as mock_redis:
+            with patch("lians.cache._get_redis") as mock_redis:
                 mock_redis.return_value.ping = AsyncMock(return_value=True)
                 async with AsyncClient(
                     transport=ASGITransport(app=app), base_url="http://test"
@@ -91,14 +117,14 @@ class TestHealthEndpoint:
 
     async def test_health_no_auth_required(self, client):
         """Health endpoint must be reachable without an API key."""
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(return_value=True)
             resp = await client.get("/health")
         # 200 or 503 â€” either is fine, but NOT 401
         assert resp.status_code in (200, 503)
 
     async def test_health_includes_both_checks(self, client):
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(return_value=True)
             resp = await client.get("/health")
         body = resp.json()
@@ -111,7 +137,7 @@ class TestHealthEndpoint:
 class TestRequestIDMiddleware:
 
     async def test_request_id_generated_when_absent(self, client):
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(return_value=True)
             resp = await client.get("/health")
         assert "x-request-id" in resp.headers
@@ -120,13 +146,13 @@ class TestRequestIDMiddleware:
 
     async def test_request_id_propagated_from_caller(self, client):
         caller_id = "my-trace-abc-123"
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(return_value=True)
             resp = await client.get("/health", headers={"X-Request-ID": caller_id})
         assert resp.headers["x-request-id"] == caller_id
 
     async def test_each_request_gets_unique_id(self, client):
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             mock_redis.return_value.ping = AsyncMock(return_value=True)
             r1 = await client.get("/health")
             r2 = await client.get("/health")
@@ -138,7 +164,7 @@ class TestRequestIDMiddleware:
 class TestJSONFormatter:
 
     def test_formats_as_valid_json(self):
-        from src.lians.middleware import _JSONFormatter
+        from lians.middleware import _JSONFormatter
         formatter = _JSONFormatter()
         record = logging.LogRecord(
             name="agentmem.test", level=logging.INFO,
@@ -153,7 +179,7 @@ class TestJSONFormatter:
         assert "ts" in parsed
 
     def test_includes_extra_fields(self):
-        from src.lians.middleware import _JSONFormatter
+        from lians.middleware import _JSONFormatter
         formatter = _JSONFormatter()
         record = logging.LogRecord(
             name="agentmem.access", level=logging.INFO,
@@ -165,6 +191,7 @@ class TestJSONFormatter:
         record.status = 200
         record.duration_ms = 42.1
         record.request_id = "abc-123"
+        record.client_address = "198.51.100.7"
         output = formatter.format(record)
         parsed = json.loads(output)
         assert parsed["method"] == "POST"
@@ -172,9 +199,10 @@ class TestJSONFormatter:
         assert parsed["status"] == 200
         assert parsed["duration_ms"] == 42.1
         assert parsed["request_id"] == "abc-123"
+        assert "client_address" not in parsed
 
     def test_omits_empty_msg(self):
-        from src.lians.middleware import _JSONFormatter
+        from lians.middleware import _JSONFormatter
         formatter = _JSONFormatter()
         record = logging.LogRecord(
             name="n", level=logging.INFO,
@@ -185,7 +213,7 @@ class TestJSONFormatter:
         assert "msg" not in parsed
 
     def test_includes_exception_info(self):
-        from src.lians.middleware import _JSONFormatter
+        from lians.middleware import _JSONFormatter
         formatter = _JSONFormatter()
         try:
             raise ValueError("test error")
@@ -198,8 +226,10 @@ class TestJSONFormatter:
             args=(), exc_info=exc_info,
         )
         parsed = json.loads(formatter.format(record))
-        assert "exc" in parsed
-        assert "ValueError" in parsed["exc"]
+        assert parsed["error_type"] == "builtins.ValueError"
+        assert len(parsed["error_digest"]) == 16
+        assert "exc" not in parsed
+        assert "test error" not in json.dumps(parsed)
 
 
 # â”€â”€ Rate limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -208,7 +238,7 @@ class TestRateLimitMiddleware:
 
     async def test_under_limit_passes(self, client):
         """Requests within the limit return the normal response."""
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
             r.incr = AsyncMock(return_value=1)
             r.expire = AsyncMock()
@@ -220,14 +250,13 @@ class TestRateLimitMiddleware:
 
     async def test_over_limit_returns_429(self, client):
         """When Redis returns a count above the configured limit, respond with 429."""
-        from src.lians.config import get_settings
+        from lians.config import get_settings
 
         limit = get_settings().rate_limit_per_minute
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
             # One past the configured limit — independent of the ambient value.
-            r.incr = AsyncMock(return_value=limit + 1)
-            r.expire = AsyncMock()
+            r.eval = AsyncMock(return_value=limit + 1)
             mock_redis.return_value = r
 
             resp = await client.post(
@@ -243,13 +272,12 @@ class TestRateLimitMiddleware:
         assert resp.headers["Retry-After"] == "60"
 
     async def test_429_includes_ratelimit_headers(self, client):
-        from src.lians.config import get_settings
+        from lians.config import get_settings
 
         limit = get_settings().rate_limit_per_minute
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=limit + 699)
-            r.expire = AsyncMock()
+            r.eval = AsyncMock(return_value=limit + 699)
             mock_redis.return_value = r
 
             resp = await client.post(
@@ -266,8 +294,10 @@ class TestRateLimitMiddleware:
 
     async def test_redis_down_fails_open(self, client):
         """If Redis is unreachable, rate limiting must not block requests."""
-        with patch("src.lians.cache._get_redis") as mock_redis:
-            mock_redis.return_value.incr = AsyncMock(side_effect=ConnectionError("Redis down"))
+        with patch("lians.cache._get_redis") as mock_redis:
+            mock_redis.return_value.eval = AsyncMock(
+                side_effect=ConnectionError("Redis down")
+            )
             resp = await client.post(
                 "/v1/recall",
                 json={"agent_id": "a", "query": "test"},
@@ -278,38 +308,34 @@ class TestRateLimitMiddleware:
 
     async def test_health_exempt_from_rate_limit(self, client):
         """Health checks must never be rate-limited regardless of Redis state."""
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=9999)  # way over limit
-            r.expire = AsyncMock()
+            r.eval = AsyncMock(return_value=9999)  # way over limit
             r.ping = AsyncMock(return_value=True)
             mock_redis.return_value = r
             resp = await client.get("/health")
         assert resp.status_code != 429
 
-    async def test_no_api_key_skips_rate_limit(self, client):
-        """Unauthenticated requests are handled by auth, not rate limiting."""
-        with patch("src.lians.cache._get_redis") as mock_redis:
+    async def test_no_api_key_is_still_network_rate_limited(self, client):
+        """Anonymous credential guesses must consume the network abuse bucket."""
+        with patch("lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=9999)
-            r.expire = AsyncMock()
+            r.eval = AsyncMock(return_value=9999)
             mock_redis.return_value = r
             resp = await client.post(
                 "/v1/recall",
                 json={"agent_id": "a", "query": "test"},
             )
-        # Auth middleware should 401, not rate limiter 429
-        assert resp.status_code == 401
+        assert resp.status_code == 429
 
     async def test_admin_secret_guesses_are_rate_limited_by_client_ip(self, client):
         """Changing an admin-secret guess must not create a fresh rate bucket."""
-        from src.lians.config import get_settings
+        from lians.config import get_settings
 
         limit = get_settings().rate_limit_per_minute
-        with patch("src.lians.cache._get_redis") as mock_redis:
+        with patch("lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=limit + 1)
-            r.expire = AsyncMock()
+            r.eval = AsyncMock(return_value=limit + 1)
             mock_redis.return_value = r
 
             resp = await client.get(
@@ -318,8 +344,8 @@ class TestRateLimitMiddleware:
             )
 
         assert resp.status_code == 429
-        redis_key = r.incr.await_args.args[0]
-        assert redis_key.startswith("agentmem:rl:admin:")
+        redis_key = r.eval.await_args.args[2]
+        assert redis_key.startswith("agentmem:rl:network:")
         assert "a-different-wrong-guess" not in redis_key
 
     def test_configured_limit_is_wired_into_the_middleware(self):
@@ -329,9 +355,9 @@ class TestRateLimitMiddleware:
         middleware used its hardcoded 300 default and the documented, tunable
         RATE_LIMIT_PER_MINUTE setting had no effect in any deployment.
         """
-        from src.lians.main import app
-        from src.lians.middleware import RateLimitMiddleware
-        from src.lians.config import get_settings
+        from lians.main import app
+        from lians.middleware import RateLimitMiddleware
+        from lians.config import get_settings
 
         entry = next(m for m in app.user_middleware if m.cls is RateLimitMiddleware)
         wired = entry.kwargs.get("requests_per_minute")
@@ -341,12 +367,13 @@ class TestRateLimitMiddleware:
             "RateLimitMiddleware is not wired to the configured limit — "
             "RATE_LIMIT_PER_MINUTE is being ignored"
         )
+        assert entry.kwargs.get("trusted_proxy_cidrs") == get_settings().trusted_proxy_cidrs
 
 
 @pytest.mark.asyncio
 async def test_oversized_request_body_returns_413(client):
     """Reject oversized uploads before JSON parsing or route execution."""
-    from src.lians.config import get_settings
+    from lians.config import get_settings
 
     payload = b'{"agent_id":"a","content":"' + (
         b"x" * get_settings().max_request_body_bytes

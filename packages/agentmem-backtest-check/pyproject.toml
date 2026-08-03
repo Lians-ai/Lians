@@ -1,5 +1,5 @@
-﻿[build-system]
-requires = ["hatchling"]
+[build-system]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -27,8 +27,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ebeirne/Lians"
-"Bug Tracker" = "https://github.com/ebeirne/Lians/issues"
+Homepage = "https://github.com/Lians-ai/Lians"
+"Bug Tracker" = "https://github.com/Lians-ai/Lians/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lians_backtest_check"]

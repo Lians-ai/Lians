@@ -1,7 +1,7 @@
 """
 Passthrough adapter — domain-agnostic default for non-financial verticals.
 
-Use DOMAIN_ADAPTER=passthrough when deploying AgentMem for a domain where
+Use DOMAIN_ADAPTER=passthrough when deploying Lians for a domain where
 you haven't yet written a custom adapter.  structured_keys defaults to an
 empty set (no keyed supersession fast path), and normalize() returns the
 value unchanged.

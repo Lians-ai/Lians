@@ -262,7 +262,7 @@ def main() -> None:
     -H "X-Admin-Secret: {ADMIN_SECRET}" \\
     | python -m json.tool
 """)
-    print(f"Open demo/index.html in a browser and paste the key above.")
+    print("Open demo/index.html in a browser and paste the key above.")
     print("=" * 70)
 
 

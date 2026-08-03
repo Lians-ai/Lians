@@ -8,7 +8,7 @@ the deployment reference for turning them on and attesting the posture to an exa
 
 | Layer | What it is | Provided by |
 |-------|------------|-------------|
-| **Logical WORM** | An append-only, SHA-256 hash-chained audit log. Any edit, reorder, or deletion is detectable with `verify_chain`. | **Lians, always.** The app only ever INSERTs into `event_log`; it never UPDATEs or DELETEs it. |
+| **Logical WORM** | An append-only, SHA-256 hash-chained audit log. Any edit, reorder, or deletion is detectable with `verify_chain`. | **Lians on PostgreSQL.** A database-owned v3 append function computes and inserts events; triggers reject direct mutation. |
 | **Physical WORM** | The bytes cannot be rewritten or erased, even by a DBA or storage admin. | **The operator**, via object-locked storage + a restricted DB role. |
 
 Logical WORM proves tampering *happened*; physical WORM prevents it. 17a-4 wants
@@ -20,15 +20,18 @@ both. Query the combined posture at `GET /v1/compliance/worm` and set
 The app role must not be able to mutate the audit tables. As a superuser/owner:
 
 ```sql
--- Append-only audit: the app may INSERT and SELECT, never UPDATE/DELETE.
-REVOKE UPDATE, DELETE, TRUNCATE ON event_log     FROM lians_app;
+CREATE ROLE lians_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
+GRANT lians_runtime TO lians_app;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON event_log FROM lians_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON merkle_anchors FROM lians_app;
-GRANT  INSERT, SELECT             ON event_log     TO lians_app;
-GRANT  INSERT, SELECT             ON merkle_anchors TO lians_app;
+GRANT SELECT ON event_log, merkle_anchors TO lians_app;
 ```
 
-Run the app as `lians_app` (a **non-superuser, non-BYPASSRLS** role — the same role
-RLS isolation requires). Now even a compromised app cannot rewrite history.
+Run the app as `lians_app` (a non-owner, **non-superuser, non-BYPASSRLS** role).
+Migration 0039 grants only `lians_runtime` permission to execute the database
+append function and refuses an unsafe capability role. Production startup then
+checks the live ACL, ownership, function, trigger, and forced-RLS posture. See
+[audit-append-boundary.md](audit-append-boundary.md) for the full contract.
 
 ## 2. Object-locked backups & exports
 

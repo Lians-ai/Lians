@@ -7,7 +7,7 @@ production).
 
 Install::
 
-    pip install lians[openai-agents]
+    pip install lians-sdk[openai-agents]
     # or: pip install openai-agents
 
 Usage::
@@ -64,14 +64,14 @@ def build_openai_agent_tools(client: Any, agent_id: str) -> list:
     ------
     ImportError
         If ``openai-agents`` is not installed.
-        Install with: ``pip install lians[openai-agents]``
+        Install with: ``pip install lians-sdk[openai-agents]``
     """
     try:
         from agents import function_tool  # type: ignore[import]
     except ImportError:
         raise ImportError(
             "openai-agents is required for the OpenAI Agents SDK integration.\n"
-            "Install with: pip install lians[openai-agents]\n"
+            "Install with: pip install lians-sdk[openai-agents]\n"
             "or: pip install openai-agents"
         )
 

@@ -15,24 +15,27 @@ Covers:
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
-
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey, EventLog
-from src.lians.audit_chain import (
+from sqlalchemy.exc import IntegrityError
+from lians.audit_chain import (
+    GENESIS_HASH,
+    _fmt_dt,
     chain_log,
     compute_row_hash,
     get_chain_tip,
     verify_chain,
-    GENESIS_HASH,
-    _fmt_dt,
 )
+from lians.db import get_db
+from lians.main import app
+from lians.models import ApiKey, EventLog
 
 TEST_NS = "chain-test-ns"
 AGENT = "chain-agent"
@@ -64,6 +67,60 @@ def _mem(content: str) -> dict:
         "event_time": T0.isoformat(),
         "metadata": {},
     }
+
+
+@pytest.mark.asyncio
+async def test_optional_audit_sinks_fail_open_with_privacy_safe_observability(
+    db,
+    monkeypatch,
+    caplog,
+) -> None:
+    marker = "private-audit-payload-marker"
+    observations: list[str] = []
+
+    def fail_merkle_window(*_args, **_kwargs):
+        raise RuntimeError(marker)
+
+    monkeypatch.setattr(
+        "lians.config.get_settings",
+        lambda: SimpleNamespace(merkle_batch_enabled=True, merkle_batch_size=2),
+    )
+    monkeypatch.setattr("lians.merkle_audit.get_window", fail_merkle_window)
+    monkeypatch.setattr("lians.siem.siem_enabled", lambda: False)
+    monkeypatch.setattr(
+        "lians.metrics.record_best_effort_failure",
+        observations.append,
+    )
+    caplog.set_level(logging.WARNING, logger="lians.audit_chain")
+
+    merkle_row = await chain_log(
+        db,
+        namespace="optional-merkle-failure",
+        agent_id="agent",
+        op="add",
+        payload={"private": marker},
+        _merkle=True,
+    )
+
+    def fail_siem_enabled():
+        raise RuntimeError(marker)
+
+    monkeypatch.setattr("lians.siem.siem_enabled", fail_siem_enabled)
+    siem_row = await chain_log(
+        db,
+        namespace="optional-siem-failure",
+        agent_id="agent",
+        op="add",
+        payload={"private": marker},
+        _merkle=False,
+    )
+    await db.commit()
+
+    assert merkle_row.id is not None
+    assert siem_row.id is not None
+    assert observations == ["merkle_batch", "siem_schedule"]
+    assert "authoritative audit append retained" in caplog.text
+    assert marker not in caplog.text
 
 
 # â”€â”€ Unit tests: chain_log + verify_chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -239,6 +296,7 @@ class TestVerifyChain:
             created_at=datetime.now(timezone.utc),
             prev_hash=GENESIS_HASH,
             hash_version=1,
+            chain_position=1,
         )
         row.row_hash = compute_row_hash(row, GENESIS_HASH)
         db.add(row)
@@ -271,16 +329,19 @@ class TestVerifyChain:
         kinds = {v["kind"] for v in report["violations"]}
         assert "orphaned_parent" in kinds
 
-    async def test_null_hashes_are_skipped(self, db):
-        """Rows inserted before migration 0006 (NULL hashes) are not flagged."""
+    async def test_null_hashes_are_rejected_by_storage(self, db):
+        """Current storage cannot admit an audit event without both hashes."""
         ns = "verify-legacy"
         # Use the 32-char hex UUID format that SQLite stores (no dashes).
         # Must start with a hex letter to avoid SQLite treating it as a number.
-        await db.execute(text(
-            "INSERT INTO event_log (id, namespace, agent_id, op, payload, created_at) "
-            "VALUES ('aabbccdd0011223344556677aabbccdd', :ns, 'a', 'add', '{}', datetime('now'))"
-        ), {"ns": ns})
-        await db.commit()
+        with pytest.raises(IntegrityError):
+            await db.execute(text(
+                "INSERT INTO event_log (id, namespace, agent_id, op, payload, created_at) "
+                "VALUES ('aabbccdd0011223344556677aabbccdd', :ns, 'a', 'add', "
+                "'{}', datetime('now'))"
+            ), {"ns": ns})
+            await db.commit()
+        await db.rollback()
 
         report = await verify_chain(db, ns)
         assert report["status"] == "ok"
@@ -384,7 +445,7 @@ class TestVerifyEndpoint:
 class TestAuditExport:
 
     async def test_export_returns_all_events_in_namespace(self, db):
-        from src.lians.audit_chain import export_audit_log
+        from lians.audit_chain import export_audit_log
         ns = "export-ns-1"
         await chain_log(db, ns, "a", "add",    content_hash="h1")
         await chain_log(db, ns, "a", "recall", content_hash="h2")
@@ -401,7 +462,7 @@ class TestAuditExport:
         assert set(ops) == {"add", "recall", "erase"}
 
     async def test_export_events_have_hash_chain_fields(self, db):
-        from src.lians.audit_chain import export_audit_log
+        from lians.audit_chain import export_audit_log
         ns = "export-ns-2"
         await chain_log(db, ns, "a", "add", content_hash="h1")
         await db.commit()
@@ -415,8 +476,9 @@ class TestAuditExport:
 
     async def test_export_filters_by_from_dt(self, db):
         import asyncio
-        from src.lians.audit_chain import export_audit_log
         from datetime import timedelta
+
+        from lians.audit_chain import export_audit_log
         ns = "export-ns-3"
         r1 = await chain_log(db, ns, "a", "add", content_hash="h1")
         t1 = r1.created_at
@@ -431,7 +493,8 @@ class TestAuditExport:
 
     async def test_export_filters_by_to_dt(self, db):
         import asyncio
-        from src.lians.audit_chain import export_audit_log
+
+        from lians.audit_chain import export_audit_log
         ns = "export-ns-4"
         r1 = await chain_log(db, ns, "a", "add", content_hash="h1")
         t1 = r1.created_at
@@ -444,14 +507,14 @@ class TestAuditExport:
         assert result["events"][0]["op"] == "add"
 
     async def test_export_empty_namespace_returns_zero_rows(self, db):
-        from src.lians.audit_chain import export_audit_log
+        from lians.audit_chain import export_audit_log
         result = await export_audit_log(db, namespace="export-empty")
         assert result["total_rows"] == 0
         assert result["events"] == []
         assert result["chain_status"] is None
 
     async def test_export_with_verify_includes_chain_status(self, db):
-        from src.lians.audit_chain import export_audit_log
+        from lians.audit_chain import export_audit_log
         ns = "export-ns-5"
         await chain_log(db, ns, "a", "add", content_hash="h1")
         await db.commit()
@@ -461,7 +524,7 @@ class TestAuditExport:
         assert result["chain_violations"] == []
 
     async def test_export_excludes_other_namespaces(self, db):
-        from src.lians.audit_chain import export_audit_log
+        from lians.audit_chain import export_audit_log
         await chain_log(db, "export-ns-6a", "a", "add", content_hash="h1")
         await chain_log(db, "export-ns-6b", "b", "add", content_hash="h2")
         await db.commit()

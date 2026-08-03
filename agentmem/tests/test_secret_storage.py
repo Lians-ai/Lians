@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 import pytest
 from cryptography.exceptions import InvalidTag
 
-from src.lians.models import PendingAdmission, WebhookEndpoint
-from src.lians.secret_storage import (
+from lians.models import PendingAdmission, WebhookEndpoint
+from lians.secret_storage import (
     PENDING_CONTENT_PURPOSE,
     WEBHOOK_SIGNING_PURPOSE,
     protect_legacy_sensitive_rows,
@@ -61,7 +61,9 @@ async def test_legacy_plaintext_rows_are_encrypted_idempotently(db):
     db.add_all([pending, webhook])
     await db.commit()
 
-    assert await protect_legacy_sensitive_rows(db) == 2
+    # A page of one proves the compatibility pass commits and resumes instead
+    # of materializing both tables at once.
+    assert await protect_legacy_sensitive_rows(db, batch_size=1) == 2
     assert "legacy patient secret" not in pending.content
     assert "legacy signing secret" not in webhook.secret
     assert unseal_text(

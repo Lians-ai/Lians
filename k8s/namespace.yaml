@@ -6,3 +6,11 @@ metadata:
     app.kubernetes.io/name: agentmem
     # Required for NetworkPolicy ingress from ingress-nginx
     kubernetes.io/metadata.name: agentmem
+    # Pin the reviewed restricted policy version; advance it deliberately with
+    # cluster upgrades after rendering and admission tests pass.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.27
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.27
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.27

@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lians:ops:master-key-rotation-report:v1",
+  "title": "Lians master-key rotation report v1",
+  "type": "object",
+  "required": ["schema", "status"],
+  "properties": {
+    "schema": { "const": "urn:lians:ops:master-key-rotation-report:v1" },
+    "status": { "enum": ["verified", "failed"] },
+    "mode": {
+      "enum": [
+        "dry_run",
+        "apply",
+        "fence_prepare",
+        "fence_status",
+        "fence_assert_prepared",
+        "fence_assert_narrowed"
+      ]
+    },
+    "current_key_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "previous_key_configured": { "type": "boolean" },
+    "safe_to_remove_previous": { "type": "boolean" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "rewritten_values": { "type": "integer", "minimum": 0 },
+    "before_inventory_sha256": { "$ref": "#/$defs/sha256" },
+    "backup_manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "backup_id_sha256": { "$ref": "#/$defs/sha256" },
+    "write_fence": { "$ref": "#/$defs/writeFence" },
+    "inventory": { "$ref": "#/$defs/inventory" },
+    "after_inventory": { "$ref": "#/$defs/inventory" },
+    "error": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "message": { "type": "string", "minLength": 1, "maxLength": 1000 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "verified" } } },
+      "then": {
+        "required": [
+          "mode",
+          "current_key_id",
+          "previous_key_configured",
+          "safe_to_remove_previous"
+        ]
+      },
+      "else": { "required": ["error", "message"] }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "dry_run" } }, "required": ["mode"] },
+      "then": { "required": ["inventory"] }
+    },
+    {
+      "if": { "properties": { "mode": { "const": "apply" } }, "required": ["mode"] },
+      "then": {
+        "required": [
+          "run_id",
+          "rewritten_values",
+          "before_inventory_sha256",
+          "after_inventory",
+          "backup_manifest_sha256",
+          "backup_id_sha256",
+          "write_fence"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": { "mode": { "const": "fence_prepare" } },
+        "required": ["mode"]
+      },
+      "then": {
+        "required": [
+          "inventory",
+          "backup_manifest_sha256",
+          "backup_id_sha256",
+          "write_fence"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "enum": [
+              "fence_status",
+              "fence_assert_prepared",
+              "fence_assert_narrowed"
+            ]
+          }
+        },
+        "required": ["mode"]
+      },
+      "then": { "required": ["write_fence"] }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fieldCounts": {
+      "type": "object",
+      "required": [
+        "rows",
+        "values",
+        "null_values",
+        "current",
+        "previous",
+        "legacy",
+        "plaintext",
+        "unknown",
+        "destroyed",
+        "rewrap_required"
+      ],
+      "properties": {
+        "rows": { "type": "integer", "minimum": 0 },
+        "values": { "type": "integer", "minimum": 0 },
+        "null_values": { "type": "integer", "minimum": 0 },
+        "current": { "type": "integer", "minimum": 0 },
+        "previous": { "type": "integer", "minimum": 0 },
+        "legacy": { "type": "integer", "minimum": 0 },
+        "plaintext": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "destroyed": { "type": "integer", "minimum": 0 },
+        "rewrap_required": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "inventory": {
+      "type": "object",
+      "required": [
+        "fields",
+        "totals",
+        "verification_error_count",
+        "verification_errors",
+        "inventory_sha256"
+      ],
+      "properties": {
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/fieldCounts" }
+        },
+        "totals": { "$ref": "#/$defs/fieldCounts" },
+        "verification_error_count": { "type": "integer", "minimum": 0 },
+        "verification_errors": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[^:]+:[0-9a-f]{64}:[a-z_]+$" }
+        },
+        "inventory_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "writeFence": {
+      "type": "object",
+      "required": [
+        "active",
+        "phase",
+        "current_key_id",
+        "previous_key_id",
+        "generation"
+      ],
+      "properties": {
+        "active": { "type": "boolean" },
+        "phase": { "enum": ["inactive", "prepared", "narrowed"] },
+        "current_key_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            },
+            { "type": "null" }
+          ]
+        },
+        "previous_key_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            },
+            { "type": "null" }
+          ]
+        },
+        "generation": { "type": "integer", "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "phase": { "const": "inactive" } } },
+          "then": {
+            "properties": {
+              "active": { "const": false },
+              "current_key_id": { "type": "null" },
+              "previous_key_id": { "type": "null" },
+              "generation": { "const": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "phase": { "const": "prepared" } } },
+          "then": {
+            "properties": {
+              "active": { "const": true },
+              "current_key_id": { "type": "string" },
+              "previous_key_id": { "type": "string" },
+              "generation": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "phase": { "const": "narrowed" } } },
+          "then": {
+            "properties": {
+              "active": { "const": true },
+              "current_key_id": { "type": "string" },
+              "previous_key_id": { "type": "null" },
+              "generation": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

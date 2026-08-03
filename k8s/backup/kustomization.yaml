@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agentmem
+
+resources:
+  - backup-pvc.yaml
+  - backup-serviceaccount.yaml
+  - backup-cronjob.yaml
+  - backup-networkpolicy.yaml
+
+images:
+  - name: lians-backup-worm
+    newName: ghcr.io/lians-ai/lians-backup-worm
+    # Replace with the backup supply-chain workflow's verified digest.
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

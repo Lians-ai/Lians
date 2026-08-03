@@ -1,0 +1,150 @@
+{
+  "$schema": "https://lians.ai/specs/decision-receipt/v0.1/schema.json",
+  "receipt_version": "0.1",
+  "receipt_id": "urn:lians:decision-receipt:conformance-signed-001",
+  "issued_at": "2026-08-02T12:30:05Z",
+  "issuer": {
+    "name": "Lians Conformance Lab — TEST ONLY",
+    "category": "decision_evidence_infrastructure",
+    "key_id": "TEST-ONLY-rfc8032-vector-1"
+  },
+  "decision": {
+    "id": "conformance-signed-001",
+    "namespace": "fixture-tenant-tokyo",
+    "type": "payment_release",
+    "outcome": "manual_review",
+    "reason_codes": ["fixture-only"],
+    "regime": "synthetic-conformance",
+    "subject_id": "fixture-subject-002",
+    "decided_at": "2026-08-02T12:30:00Z",
+    "recorded_at": "2026-08-02T12:30:05Z",
+    "knowledge_as_of": "2026-08-02T12:29:00Z",
+    "knowledge_recorded_as_of": "2026-08-02T12:29:30Z",
+    "record_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "record_hash_version": 2,
+    "record_integrity_status": "verified",
+    "supersedes_id": null
+  },
+  "actor": {
+    "agent_id": "fixture-payment-agent",
+    "claimed_agent_id": "fixture-payment-agent",
+    "principal": {
+      "id": "lians:principal:v1:oidc:conformance.example:signed-producer",
+      "auth_method": "oidc",
+      "credential_ref": "lians:credential:v1:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "display_name": "Fixture 東京"
+    },
+    "recorded_by": {
+      "principal_ref": "lians:principal:v1:oidc:conformance.example:signed-producer",
+      "auth_method": "oidc",
+      "credential_ref": "lians:credential:v1:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "model": {
+    "provider": "fixture-provider",
+    "id": "fixture-model-signed",
+    "version": "2026-08-02",
+    "system_instruction_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "configuration_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "artifacts": {
+    "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "output_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "tools": [
+    {
+      "name": "fixture-payment-risk",
+      "definition_hash": "1212121212121212121212121212121212121212121212121212121212121212",
+      "result_hash": "3434343434343434343434343434343434343434343434343434343434343434",
+      "synthetic_note": "escaped quote: \"safe\"; backslash: \\"
+    }
+  ],
+  "sources": [
+    {
+      "memory_id": "fixture-memory-002",
+      "source": "synthetic://conformance/payment-policy",
+      "source_version": "révision-7",
+      "content": null,
+      "content_hash": "5656565656565656565656565656565656565656565656565656565656565656",
+      "valid_from": "2026-08-01T00:00:00Z",
+      "valid_to": null,
+      "recorded_at": "2026-08-01T00:01:00Z",
+      "erased_at": null
+    }
+  ],
+  "policy": {
+    "version": "fixture-policy-signed-7",
+    "evaluation": {
+      "decision": "review",
+      "rule_ids": ["release-東京-1"],
+      "threshold_basis_points": 500
+    }
+  },
+  "authorization": {
+    "decision": "allow",
+    "scopes": ["receipt:export", "payment:review"]
+  },
+  "human_review": {
+    "status": "pending",
+    "reviewer": null,
+    "reviewed_at": null
+  },
+  "correlation": {
+    "session_id": "fixture-session-002",
+    "trace_id": "abcdef0123456789abcdef0123456789",
+    "span_id": "abcdef0123456789"
+  },
+  "reconstruction": {
+    "knowledge_as_of": "2026-08-02T12:29:00Z",
+    "knowledge_recorded_as_of": "2026-08-02T12:29:30Z",
+    "snapshot_count": 1,
+    "cited_source_count": 1,
+    "snapshot_manifest": [
+      {
+        "memory_id": "fixture-memory-002",
+        "content_hash": "5656565656565656565656565656565656565656565656565656565656565656",
+        "valid_from": "2026-08-01T00:00:00Z",
+        "valid_to": null
+      }
+    ]
+  },
+  "audit_chain": {
+    "status": "ok",
+    "rows_checked": 4,
+    "violations": [],
+    "fixture_note": "public conformance material; no production evidence"
+  },
+  "completeness": {
+    "score": 100,
+    "grade": "A",
+    "status": "complete",
+    "checks": [
+      {
+        "id": "fixture.evidence-boundary",
+        "label": "Synthetic evidence boundary",
+        "weight": 95,
+        "status": "present",
+        "evidence": "all protected fixture sections"
+      },
+      {
+        "id": "integrity.signature",
+        "label": "Test-only signature",
+        "weight": 5,
+        "status": "present",
+        "evidence": "integrity.signature"
+      }
+    ],
+    "missing": []
+  },
+  "integrity": {
+    "hash_algorithm": "sha-256",
+    "canonicalization": "json-sort-keys-utf8-v1",
+    "receipt_hash": "4403480cd0931b251c444bc567976e019d2b040a0a91a16d2e2826147aca949f",
+    "signature": {
+      "algorithm": "ed25519",
+      "key_id": "TEST-ONLY-rfc8032-vector-1",
+      "public_key": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+      "value": "9/StZR1NF60bIukciSI9/Oyho/csxYSrmtuc6tnVxVLUk+5bRRVJLbsUMLM6ue2qPggqiyWYNSH/TPuhsRTXDQ=="
+    }
+  }
+}

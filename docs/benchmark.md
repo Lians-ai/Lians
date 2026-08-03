@@ -1,8 +1,10 @@
 # Lians Benchmark: Financial Memory Quality vs mem0, Zep, and Letta
 
-This document compares Lians against mem0 and Zep across four dimensions that
-matter most for financial AI agents: stale-fact contamination, supersession
-accuracy, point-in-time recall, and compliance auditability.
+This document records a version-pinned evaluation of Lians and representative
+baseline adapters across four dimensions that matter for financial AI agents:
+stale-fact contamination, supersession accuracy, point-in-time recall, and
+auditability. It is not a claim about every current competitor release; rerun
+the adapters and verify upstream capabilities before publishing comparisons.
 
 All Lians tests are reproducible with zero API calls:
 
@@ -27,12 +29,11 @@ quarter's guidance replaces this quarter's guidance, the agent must:
 3. Never lose the audit trail of who said what and when (FINRA 4511, SEC 17a-4)
 4. Erase a data subject's history without breaking the audit chain (GDPR Art. 17)
 
-mem0 was not designed with these constraints. Zep's **Graphiti** (released Jan 2025,
-20k+ GitHub stars as of June 2026) now implements a genuine bitemporal model and
-point-in-time queries for its knowledge graph - a meaningful capability advance.
-What Graphiti does not provide is the compliance stack: no SHA-256 hash chain, no
-GDPR crypto-shred with audit survival, no information barriers at the DB layer, and
-no dedicated backtest-contamination detection API. Lians was designed for all of it.
+The baseline systems expose different temporal and storage models. Lians is
+evaluated here against an explicit control contract: serialized audit append,
+crypto-shred boundaries, database-enforced information barriers, and recorded-data
+backtest checks. Competitor capabilities must be assessed against a pinned
+version and primary documentation rather than inferred from this benchmark.
 
 ---
 
@@ -267,18 +268,19 @@ EMBEDDING_PROVIDER=local MASTER_ENCRYPTION_KEY="" KMS_PROVIDER=env \
 
 **Embedding note:** All recall numbers above use the `local` provider - a
 deterministic hash-projection into 1024 dimensions. This provider is designed for
-test repeatability, not recall quality. Production deployments with `EMBEDDING_PROVIDER=voyage`
-(voyage-finance-2 model, finance-domain fine-tuned) will achieve higher MRR and
-P@k on real financial corpora. The supersession, point-in-time, and auditability
-benchmarks are embedding-independent and hold unchanged in production.
+test repeatability, not recall quality. A production embedding provider may
+improve semantic retrieval quality, but each deployment must measure MRR and
+P@k on its own representative corpus. The supersession, point-in-time, and
+auditability checks below do not depend on the embedding provider; production
+results still require deployment-specific validation.
 
 ---
 
 ## Benchmark 6: Recall Latency Architecture (Projected post-roadmap)
 
 The 10-item performance roadmap restructures the recall hot path without
-touching any compliance guarantees.  The table below compares the number of
-sequential I/O hops on the critical path:
+changing the documented integrity and isolation contracts. The table below
+compares the number of sequential I/O hops on the critical path:
 
 | Stage | Before roadmap | After roadmap (keyed) | After roadmap (semantic) |
 |-------|---------------|----------------------|--------------------------|
@@ -288,7 +290,7 @@ sequential I/O hops on the critical path:
 | ANN search | full ``memories`` table | **live_facts partition only** | live_facts partition |
 | DEK unwrap | 1 per subject per recall | **0 (in-process DEK cache)** | 0 |
 | Working-set cache | ✗ | **0 DB hops (in-memory)** | 0 DB hops |
-| Merkle audit write | serializes all writes | **batched, off write path** | batched |
+| Audit integrity write | serialized EventLog append | serialized EventLog append | serialized EventLog append |
 
 Keyed recalls (ticker+metric filter) go from ~5 ms (embed + ANN + decrypt)
 to sub-millisecond (B-tree index on live_facts).  This path covers the
@@ -336,10 +338,10 @@ differentiator is now inaccurate.
   `CONTRADICTS_SAME_TIME`), no temporal-ordering invariant test, no cross-attribute
   guard rail. Our deterministic keyed supersession (Change 3) is cheaper per write
   and formally testable.
-- **Compliance stack**: no SEC 17a-4 hash chain, no tamper-detection, no GDPR
-  crypto-shred (content destroyed, audit hash survives), no information barriers at
-  the DB layer, no dedicated backtest-contamination detection API. These are absent
-  from Graphiti's docs, GitHub, and all published literature as of June 2026.
+- **Control contract**: this evaluation checks whether the pinned adapter exposes
+  serialized audit verification, crypto-shred boundaries, database-enforced
+  information barriers, and recorded-data backtest checks. An absent adapter
+  capability is not proof that no newer upstream release implements it.
 - **Architecture**: Graphiti is a knowledge graph (Neo4j-style nodes and edges).
   Lians is a relational vector store. PostgreSQL RLS, `FORCE ROW LEVEL SECURITY`,
   and per-row hash chaining are natural in a relational model; they are
@@ -391,7 +393,7 @@ or regulatory compliance primitives.
 | Outbound webhooks (supersession/conflict/erasure) | **✓** | ✗ | ✗ | ✗ |
 | Compliance report (SEC/FINRA/CFTC ready) | **✓** | ✗ | ✗ | ✗ |
 | SEC 17a-4 hash-chain audit | **✓** | ✗ | ✗ | ✗ |
-| Merkle-batch audit (post-roadmap) | **✓** | ✗ | ✗ | ✗ |
+| Secondary Merkle anchors | Experimental; production startup rejects process-local windows | ✗ | ✗ | ✗ |
 | GDPR crypto-shred with audit survival | **✓** | ✗ | ✗ | ✗ |
 | Erasure certificate (cryptographic proof) | **✓** | ✗ | ✗ | ✗ |
 | Information barriers (Chinese walls) | **✓** | ✗ | ✗ | ✗ |
@@ -408,15 +410,14 @@ For financial institutions operating under SEC, FINRA, MiFID II, or CFTC
 oversight, the compliance column is not optional - it is the table stake that
 separates a production-grade memory layer from a developer tool.
 
-As of June 2026, Graphiti/Zep has closed the bitemporal and point-in-time gaps that
-existed at launch. The differentiator is no longer "the only temporal agent memory"
-- it is the compliance stack: hash chain, crypto-shred, information barriers, and
-backtest contamination detection. None of those exist in any competitor.
+Lians does not rely on an exclusivity claim about temporal memory. Its
+differentiation is the explicit, inspectable control surface: serialized audit
+append, crypto-shred boundaries, information barriers, capture-qualified
+receipts, and backtest contamination checks over recorded Lians data.
 
-The performance roadmap makes Lians competitive on latency *without*
-compromising any of those guarantees.  Immutability, crypto-shredding, and
-information barriers are the product; the roadmap reshapes how they are
-implemented so they no longer penalize the hot path.
+The performance roadmap targets competitive latency without weakening those
+documented invariants. Operator-controlled WORM storage, key custody, network
+policy, identity configuration, and deployment validation remain necessary.
 
 ---
 

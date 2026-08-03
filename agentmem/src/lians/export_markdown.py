@@ -1,9 +1,10 @@
 """
 Signed human-readable memory export.
 
-Renders an agent's complete point-in-time knowledge state (the same exhaustive
-set /v1/snapshot returns) as a Markdown document with YAML frontmatter — the
-transparency developers love about file-based memory systems, produced from a
+Renders one bounded point-in-time knowledge-state page (the same ordered
+selection used by `/v1/snapshot`) as a Markdown document with YAML frontmatter — the
+document declares the exact total and whether the page is complete. It preserves
+the transparency developers love about file-based memory systems while using a
 store that keeps encryption, barriers, and bitemporal correctness underneath.
 
 The document is anchored in the tamper-evident audit chain: its SHA-256 is
@@ -33,6 +34,24 @@ from .schemas import MarkdownExportResult, MemoryOut
 
 _FORMAT = "lians-memory-export/v1"
 _INTEGRITY_MARK = "<!-- lians:integrity"
+
+
+class ExportCapacityExceeded(RuntimeError):
+    """A deterministic export cannot fit its configured plaintext budget."""
+
+    def __init__(
+        self,
+        code: str,
+        public_message: str,
+        *,
+        estimated_bytes: int,
+        byte_limit: int,
+    ) -> None:
+        super().__init__(public_message)
+        self.code = code
+        self.public_message = public_message
+        self.estimated_bytes = estimated_bytes
+        self.byte_limit = byte_limit
 
 
 def _stamp(dt: Optional[datetime]) -> str:
@@ -81,15 +100,47 @@ async def export_memory_markdown(
     as_of: Optional[datetime] = None,
     limit: int = 1000,
     barrier_override: Optional[str] = None,
+    max_bytes: int | None = None,
 ) -> MarkdownExportResult:
     """Render, hash, chain-anchor, and return the memory statement."""
-    from .memory_service import get_knowledge_snapshot
+    from .memory_service import (
+        count_knowledge_snapshot,
+        get_knowledge_snapshot,
+        measure_knowledge_snapshot_bytes,
+    )
 
     generated_at = datetime.now(timezone.utc)
     effective_as_of = as_of or generated_at
+    snapshot_total = await count_knowledge_snapshot(
+        db,
+        namespace,
+        agent_id,
+        effective_as_of,
+        barrier_override=barrier_override,
+        recorded_as_of=generated_at,
+    )
+    if max_bytes is not None:
+        _page_rows, estimated_bytes = await measure_knowledge_snapshot_bytes(
+            db,
+            namespace,
+            agent_id,
+            effective_as_of,
+            include_content=True,
+            barrier_override=barrier_override,
+            recorded_as_of=generated_at,
+            limit=limit,
+        )
+        if estimated_bytes > max_bytes:
+            raise ExportCapacityExceeded(
+                "snapshot_markdown_byte_capacity_exceeded",
+                "The requested Markdown snapshot exceeds the export byte budget",
+                estimated_bytes=estimated_bytes,
+                byte_limit=max_bytes,
+            )
     items = await get_knowledge_snapshot(
         db, namespace, agent_id, effective_as_of, limit,
         barrier_override=barrier_override,
+        recorded_as_of=generated_at,
     )
 
     lines: list[str] = [
@@ -100,11 +151,13 @@ async def export_memory_markdown(
         f"as_of: {_stamp(effective_as_of)}",
         f"generated_at: {_stamp(generated_at)}",
         f"memory_count: {len(items)}",
+        f"snapshot_total: {snapshot_total}",
+        f"snapshot_complete: {str(len(items) == snapshot_total).lower()}",
         "---",
         "",
         f"# Memory statement — `{agent_id}` as of {_stamp(effective_as_of)}",
         "",
-        f"Every fact valid at the stated time, oldest first ({len(items)} total). "
+        f"Snapshot page, oldest first ({len(items)} of {snapshot_total} total facts). "
         "Erased facts appear as erasure markers — existence is preserved, content is unrecoverable.",
         "",
     ]
@@ -112,6 +165,16 @@ async def export_memory_markdown(
         lines.extend(_render_memory(m))
 
     body = "\n".join(lines)
+    # The footer has a fixed schema and bounded identifiers. Reserve 2 KiB for
+    # it and reject before writing its audit anchor.
+    rendered_upper_bound = len(body.encode("utf-8")) + 2_048
+    if max_bytes is not None and rendered_upper_bound > max_bytes:
+        raise ExportCapacityExceeded(
+            "snapshot_markdown_byte_capacity_exceeded",
+            "The rendered Markdown snapshot exceeds the export byte budget",
+            estimated_bytes=rendered_upper_bound,
+            byte_limit=max_bytes,
+        )
     document_sha256 = hashlib.sha256(body.encode("utf-8")).hexdigest()
 
     event = await chain_log(
@@ -122,6 +185,8 @@ async def export_memory_markdown(
             "format": _FORMAT,
             "as_of": _stamp(effective_as_of),
             "memory_count": len(items),
+            "snapshot_total": snapshot_total,
+            "snapshot_complete": len(items) == snapshot_total,
         },
     )
     await db.commit()
@@ -150,6 +215,8 @@ async def export_memory_markdown(
         as_of=effective_as_of,
         generated_at=generated_at,
         memory_count=len(items),
+        snapshot_total=snapshot_total,
+        snapshot_complete=len(items) == snapshot_total,
     )
 
 

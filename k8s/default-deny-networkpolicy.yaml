@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentmem-default-deny
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: agentmem
+    app.kubernetes.io/component: network-boundary
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

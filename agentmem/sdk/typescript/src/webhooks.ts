@@ -1,17 +1,18 @@
 ﻿/**
- * Webhook receiver utilities for AgentMem.
+ * Webhook receiver utilities for Lians.
  *
- * Every AgentMem webhook POST includes an `X-Lians-Signature` header of the
- * form `sha256=<hex>`.  Use `verifyWebhookSignature` to authenticate the
+ * Every Lians legacy webhook POST includes the compatibility
+ * `X-AgentMem-Signature` header in the form `sha256=<hex>`. Use
+ * `verifyWebhookSignature` to authenticate the
  * request before processing the payload.
  *
  * @example
  * // Express handler
- * import { verifyWebhookSignature, WebhookPayload } from "lians/webhooks";
+ * import { verifyWebhookSignature, WebhookPayload } from "@lians-ai/lians/webhooks";
  *
- * app.post("/webhooks/agentmem", express.raw({ type: "application/json" }), (req, res) => {
+ * app.post("/webhooks/lians", express.raw({ type: "application/json" }), (req, res) => {
  *   const sig = req.headers["x-agentmem-signature"] as string;
- *   if (!verifyWebhookSignature(req.body, sig, process.env.AGENTMEM_WEBHOOK_SECRET!)) {
+ *   if (!verifyWebhookSignature(req.body, sig, process.env.LIANS_WEBHOOK_SECRET!)) {
  *     return res.status(401).json({ error: "Invalid signature" });
  *   }
  *   const event: WebhookPayload = JSON.parse(req.body.toString());
@@ -29,7 +30,8 @@ export type { WebhookPayload, WebhookEventType };
  * Verify the HMAC-SHA256 signature on an incoming webhook.
  *
  * @param body    - Raw request body as a Buffer or UTF-8 string
- * @param header  - Value of the `X-Lians-Signature` header (e.g. `sha256=abc123…`)
+ * @param header  - Compatibility `X-AgentMem-Signature` value
+ *                  (e.g. `sha256=abc123…`)
  * @param secret  - The webhook secret returned when the endpoint was registered
  * @returns true if the signature is valid, false otherwise
  */
@@ -54,7 +56,7 @@ export function verifyWebhookSignature(
  * Throws if the signature is invalid or the body is not valid JSON.
  *
  * @param body    - Raw request body as a Buffer or UTF-8 string
- * @param header  - Value of the `X-Lians-Signature` header
+ * @param header  - Compatibility `X-AgentMem-Signature` value
  * @param secret  - Webhook secret
  */
 export function parseWebhookPayload<T = Record<string, unknown>>(
@@ -63,7 +65,7 @@ export function parseWebhookPayload<T = Record<string, unknown>>(
   secret: string,
 ): WebhookPayload<T> {
   if (!verifyWebhookSignature(body, header, secret)) {
-    throw new Error("AgentMem webhook signature verification failed");
+    throw new Error("Lians webhook signature verification failed");
   }
   const text = typeof body === "string" ? body : body.toString("utf8");
   return JSON.parse(text) as WebhookPayload<T>;

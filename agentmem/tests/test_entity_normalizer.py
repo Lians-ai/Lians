@@ -8,7 +8,7 @@ with the keyed supersession router.
 import pytest
 from datetime import datetime, timezone
 
-from src.lians.entity_normalizer import normalize_ticker, normalize_entity_value, cached_normalize
+from lians.entity_normalizer import normalize_ticker, normalize_entity_value, cached_normalize
 
 
 # â”€â”€ Unit tests: normalize_ticker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -148,8 +148,8 @@ T1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
 @pytest.mark.asyncio
 async def test_name_alias_triggers_supersession(db):
     """Memory stored with 'ticker=Apple' is superseded by 'ticker=AAPL' (newer)."""
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
 
     old = await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
@@ -166,7 +166,7 @@ async def test_name_alias_triggers_supersession(db):
     ))
 
     # Reload old â€” should be invalidated
-    from src.lians.models import Memory
+    from lians.models import Memory
     from sqlalchemy import select
     row = (await db.execute(select(Memory).where(Memory.id == old.id))).scalar_one()
     assert row.valid_to is not None, "Old memory with 'Apple' ticker must be superseded by 'AAPL' memory"
@@ -176,9 +176,9 @@ async def test_name_alias_triggers_supersession(db):
 @pytest.mark.asyncio
 async def test_isin_alias_triggers_supersession(db):
     """Memory stored with ISIN is superseded by matching ticker (newer)."""
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.models import Memory
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.models import Memory
     from sqlalchemy import select
 
     old = await add_memory(db, "test-ns", MemoryAdd(
@@ -203,9 +203,9 @@ async def test_isin_alias_triggers_supersession(db):
 @pytest.mark.asyncio
 async def test_cusip_alias_triggers_supersession(db):
     """Memory stored with CUSIP is superseded by canonical ticker."""
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.models import Memory
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.models import Memory
     from sqlalchemy import select
 
     old = await add_memory(db, "test-ns", MemoryAdd(
@@ -230,9 +230,9 @@ async def test_cusip_alias_triggers_supersession(db):
 @pytest.mark.asyncio
 async def test_different_entities_no_supersession(db):
     """Memories for different companies are never cross-superseded."""
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.models import Memory
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.models import Memory
     from sqlalchemy import select
 
     aapl = await add_memory(db, "test-ns", MemoryAdd(
@@ -257,9 +257,9 @@ async def test_different_entities_no_supersession(db):
 @pytest.mark.asyncio
 async def test_same_time_isin_vs_ticker_flags_conflict(db):
     """Same entity (ISIN vs ticker), same event_time, different value â†’ conflict flag."""
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.models import ConflictFlag
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.models import ConflictFlag
     from sqlalchemy import select
 
     await add_memory(db, "test-ns", MemoryAdd(

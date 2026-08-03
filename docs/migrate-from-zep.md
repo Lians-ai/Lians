@@ -128,6 +128,6 @@ Beyond what Zep CE offered, Lians adds:
 - **Bitemporal facts** — stale facts are suppressed at the database layer, not the application layer
 - **Point-in-time recall** — `mem.recall_at(agent_id, query, as_of=datetime(...))` answers "what did we know on date X?"
 - **Backtest check** — `mem.backtest_check(agent_id, simulation_as_of=...)` detects lookahead bias
-- **Audit chain** — every write is recorded in a SHA-256 Merkle chain; exportable for regulators
+- **Audit chain** — every write is recorded through the serialized SHA-256 append boundary; optional process-local Merkle windows remain non-production
 - **GDPR erasure** — `mem.erase(subject_id, request_ref)` crypto-shreds all content while the audit trail survives
 - **Information barriers** — `barrier_group` column with PostgreSQL RLS prevents one agent from seeing another's data, enforced at the database layer

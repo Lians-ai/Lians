@@ -3,7 +3,7 @@
 How Clerk plans map to lians features, how to provision API keys per tier, how to gate routes and UI, and how to handle upgrades and downgrades.
 
 > **Scope:** this document describes tiering for the **managed cloud offering
-> only**. The self-hosted product is Apache 2.0 and complete — every feature
+> only**. The self-hosted product is Apache 2.0; every feature
 > gated below (information barriers, crypto-shred erasure, backtest checks,
 > audit chain, air-gap mode) ships in the open-source repository with no
 > license key. Tiers here gate access to *our hosted instance*, not the software.
@@ -12,15 +12,21 @@ How Clerk plans map to lians features, how to provision API keys per tier, how t
 
 ## Tier Overview
 
-| Tier | Price | Monthly Writes | Monthly Recalls |
+| Tier | Price | Monthly Decisions | Monthly Protected Actions |
 |---|---|---|---|
 | Free | $0 | 10,000 | 10,000 |
 | Starter | $15/mo | 100,000 | 50,000 |
 | Growth | $69/mo | 500,000 | 250,000 |
 | Pro | $199/mo | 2,000,000 | 1,000,000 |
-| Enterprise | Custom | Unlimited | Unlimited |
+| Enterprise | Custom | Contracted volume | Contracted volume |
 
-Overage on paid tiers is billed via Stripe usage metering (writes + recalls) — the metering worker in `agentmem/src/lians/metering.py` already handles this.
+The canonical commercial units are authoritative decision creation and
+successful single-use Gate permit consumption. Overage on paid tiers is billed
+through those transactionally recorded protected units. Memory writes and
+successful recalls remain distinct compatibility meters for pre-existing
+memory-product contracts; do not use them as a proxy for decision protection.
+Deployment, reconciliation, and recovery requirements live in the
+[durable metering runbook](durable-metering.md).
 
 ---
 
@@ -32,13 +38,15 @@ When you provision an API key on signup, the `scopes` array you send to `POST /v
 |---|---|---|
 | Memory writes | `write` | All |
 | Memory recalls | `read` | All |
+| Authoritative decisions | `write` | All |
+| Protected Gate actions | `write` | All |
 | Semantic search | `read` | All |
 | Domain adapters | `adapters` | Starter+ |
 | Audit log | `audit` | Starter+ |
 | Conflict detection | `conflicts` | Growth+ |
 | Webhooks | `webhooks` | Growth+ |
 | Compliance reports | `compliance` | Growth+ |
-| Merkle audit chain | `compliance` | Growth+ |
+| Serialized hash-chain audit | `compliance` | Growth+ |
 | Information barriers | `barriers` | Pro+ |
 | HIPAA encryption | `hipaa` | Pro+ |
 | GDPR erasure certificates | `erasure` | Pro+ |
@@ -59,12 +67,15 @@ export const TIER_SCOPES: Record<string, string[]> = {
                "barriers", "hipaa", "erasure", "backtest", "metrics", "airgap", "kms"],
 }
 
-export const TIER_QUOTAS: Record<string, { writes: number; recalls: number }> = {
-  free:       { writes: 10_000,    recalls: 10_000 },
-  starter:    { writes: 100_000,   recalls: 50_000 },
-  growth:     { writes: 500_000,   recalls: 250_000 },
-  pro:        { writes: 2_000_000, recalls: 1_000_000 },
-  enterprise: { writes: Infinity,  recalls: Infinity },
+export const TIER_QUOTAS: Record<string, {
+  decisions: number
+  protectedActions: number
+}> = {
+  free:       { decisions: 10_000,    protectedActions: 10_000 },
+  starter:    { decisions: 100_000,   protectedActions: 50_000 },
+  growth:     { decisions: 500_000,   protectedActions: 250_000 },
+  pro:        { decisions: 2_000_000, protectedActions: 1_000_000 },
+  enterprise: { decisions: Infinity,  protectedActions: Infinity },
 }
 ```
 
@@ -114,23 +125,35 @@ export async function POST(req: Request) {
     })
 
     if (!keyRes.ok) throw new Error(`Key provision failed: ${await keyRes.text()}`)
-    const { key, id: keyId } = await keyRes.json()
+    const { key, id: keyId, version: keyVersion } = await keyRes.json()
 
     // 2. Store the plaintext key once in Clerk private metadata for one-time reveal
     //    Store the key ID in your own DB for rotate/revoke operations
     await clerkClient.users.updateUserMetadata(clerkUserId, {
-      privateMetadata: { pendingApiKey: key, liansKeyId: keyId, liansTier: tier },
+      privateMetadata: {
+        pendingApiKey: key,
+        liansKeyId: keyId,
+        liansKeyVersion: keyVersion,
+        liansTier: tier,
+      },
     })
 
     // 3. Wire Stripe customer ID for usage metering
     if (stripeCustomerId) {
+      const currentBilling = await fetch(
+        `${LIANS_API}/v1/admin/billing/${clerkUserId}`,
+        { headers: { "X-Admin-Secret": ADMIN_SECRET! } },
+      ).then(response => response.json())
       await fetch(`${LIANS_API}/v1/admin/billing/${clerkUserId}`, {
         method: "PUT",
         headers: {
           "X-Admin-Secret": ADMIN_SECRET!,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ stripe_customer_id: stripeCustomerId }),
+        body: JSON.stringify({
+          expected_updated_at: currentBilling.updated_at,
+          stripe_customer_id: stripeCustomerId,
+        }),
       })
     }
   }
@@ -219,23 +242,33 @@ export async function POST() {
 
   const user = await clerkClient.users.getUser(userId)
   const keyId = user.privateMetadata?.liansKeyId as string
+  const keyVersion = user.privateMetadata?.liansKeyVersion as number
 
-  const res = await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys/${keyId}/rotate`, {
+  const res = await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys/${keyId}/rotate?expected_version=${keyVersion}`, {
     method: "POST",
     headers: { "X-Admin-Secret": process.env.LIANS_ADMIN_SECRET! },
   })
 
-  if (!res.ok) return new Response("Rotate failed", { status: 500 })
-  const { key, id: newKeyId } = await res.json()
+  if (res.status === 409) return new Response("Key changed; refresh before rotating", { status: 409 })
+  if (!res.ok) return new Response("Rotate failed", { status: 502 })
+  const { key, id: newKeyId, version: newKeyVersion } = await res.json()
 
   await clerkClient.users.updateUserMetadata(userId, {
-    privateMetadata: { ...user.privateMetadata, liansKeyId: newKeyId },
+    privateMetadata: {
+      ...user.privateMetadata,
+      liansKeyId: newKeyId,
+      liansKeyVersion: newKeyVersion,
+    },
   })
 
   // Return directly — this response is the one-time reveal
   return Response.json({ key })
 }
 ```
+
+Key creation, rotation, and revocation return one-time or terminal results and
+reject `Idempotency-Key`. If the response is lost, list the namespace's keys and
+reconcile the current key ID/version before taking another action.
 
 ---
 
@@ -258,16 +291,17 @@ if (event.type === "user.updated") {
   if (currentTier === newTier) return new Response("OK")
 
   const keyId = user.privateMetadata?.liansKeyId as string
+  const keyVersion = user.privateMetadata?.liansKeyVersion as number
 
-  // Rotate the key — old key is revoked, new key carries updated scopes
-  // Note: rotation preserves namespace and label but we need to re-provision
-  // with the new scopes. Rotate then update scopes via a new key.
-  await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys/${keyId}/rotate`, {
-    method: "POST",
+  // Rotation preserves the old scopes. Revoke the old credential with an exact
+  // version precondition before provisioning the replacement scope set.
+  const revokeRes = await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys/${keyId}?expected_version=${keyVersion}`, {
+    method: "DELETE",
     headers: { "X-Admin-Secret": process.env.LIANS_ADMIN_SECRET! },
   })
+  if (revokeRes.status === 409) throw new Error("Key changed; reconcile before retrying")
+  if (!revokeRes.ok) throw new Error(`Key revoke failed: ${await revokeRes.text()}`)
 
-  // Rotation copies old scopes — re-provision a fresh key with correct scopes instead
   const keyRes = await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys`, {
     method: "POST",
     headers: {
@@ -281,13 +315,15 @@ if (event.type === "user.updated") {
     }),
   })
 
-  const { key, id: newKeyId } = await keyRes.json()
+  if (!keyRes.ok) throw new Error(`Key provision failed: ${await keyRes.text()}`)
+  const { key, id: newKeyId, version: newKeyVersion } = await keyRes.json()
 
   await clerkClient.users.updateUserMetadata(clerkUserId, {
     privateMetadata: {
       ...user.privateMetadata,
       pendingApiKey: key,
       liansKeyId: newKeyId,
+      liansKeyVersion: newKeyVersion,
       liansTier: newTier,
     },
   })
@@ -295,6 +331,9 @@ if (event.type === "user.updated") {
 ```
 
 The user will see the "copy your new key" banner next time they visit the dashboard — the same one-time reveal flow as signup.
+In production, persist this revoke/provision/metadata-update sequence as a
+durable state machine: a crash after provisioning but before saving the
+plaintext replacement cannot be repaired by blindly repeating the create call.
 
 ---
 
@@ -397,15 +436,31 @@ async def list_conflicts(auth: AuthContext = Depends(get_auth), ...):
 
 ---
 
-## Step 7 — Quota Enforcement (Future)
+## Step 7 — Map Plans to Enforced Namespace Quotas
 
-The metering worker reports usage to Stripe but does not currently block requests when a free-tier user hits their monthly limit. To enforce quotas you need to:
+Lians already enforces optional UTC-day quotas transactionally. Recorder events,
+decision records, memory writes, recalls, and estimated ingest bytes are reserved in
+the same database transaction as the protected operation. A request that would
+exceed an active limit is rejected with `429` and a bounded `Retry-After` value; a
+rolled-back operation does not consume capacity.
 
-1. Add a `tier` column to `NamespacePolicy` (new Alembic migration).
-2. Add a `writes_this_month` / `recalls_this_month` counter, reset on the 1st of each month by the scheduler (`agentmem/src/lians/scheduler.py`).
-3. In `memory_service.py`, before writing or recalling, check the counter against `TIER_QUOTAS[tier]` and return `HTTP 429` with a `Retry-After` header when exceeded.
+Your billing/provisioning control plane should completely replace the namespace
+policy through `PUT /v1/admin/governance/policies/{namespace}` and then activate it
+through `PUT /v1/admin/governance/policies/{namespace}/status`. Both mutations use
+`expected_version` compare-and-swap protection. Do not infer plan entitlements in
+the request path from mutable Clerk metadata.
 
-This is not implemented yet — the metering layer handles overage billing for paid tiers, so quota enforcement is only critical for the Free tier to prevent abuse.
+Use `GET /v1/governance/effective` and `GET /v1/governance/usage` for tenant-visible
+limits, UTC reset time, reserved usage, and remaining capacity. Immutable policy
+revisions are available to administrators at
+`GET /v1/admin/governance/policies/{namespace}/revisions`.
+
+Monthly contract limits, pooled organization entitlements, and grace-period policy
+remain responsibilities of the billing control plane. Translate those commercial
+rules into conservative daily Lians decision limits. Protected-action monthly
+entitlements remain a billing-control-plane responsibility until a first-class Gate
+quota is configured. Stripe metering is an independent usage record and must not be
+treated as the enforcement boundary.
 
 ---
 
@@ -414,6 +469,14 @@ This is not implemented yet — the metering layer handles overage billing for p
 ```bash
 # lians backend
 STRIPE_API_KEY=sk_live_...
+STRIPE_METER_DECISION_EVENT=lians_authoritative_decision
+STRIPE_METER_PROTECTED_ACTION_EVENT=lians_protected_action
+# Compatibility-only meters for existing memory-product contracts.
+STRIPE_METER_WRITE_EVENT=agentmem_memory_write
+STRIPE_METER_RECALL_EVENT=agentmem_memory_recall
+# Set true only after Stripe's asynchronous meter-error thin events are routed
+# to a durable, monitored destination (see docs/durable-metering.md).
+STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED=true
 ADMIN_SECRET=your-admin-secret
 
 # your website
@@ -434,4 +497,6 @@ CLERK_WEBHOOK_SECRET=whsec_...           # from Clerk dashboard → Webhooks
 - [ ] Website: `FeatureGate` component wraps tier-locked UI sections
 - [ ] lians: scope checks added to Growth+/Pro+/Enterprise routes
 - [ ] lians: `PUT /v1/admin/billing/{namespace}` called on signup to wire Stripe customer ID
-- [ ] Free tier quota enforcement (write `TIER_QUOTAS` check into `memory_service.py`)
+- [ ] lians: durable metering migration, worker alerts, and Stripe asynchronous-error destination verified per `docs/durable-metering.md`
+- [ ] Plan provisioning writes and activates versioned namespace quotas
+- [ ] Tenant UI reads effective limits and UTC reset time from the governance API

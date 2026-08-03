@@ -1,0 +1,252 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.networkPolicy.defaultDeny }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "lians.fullname" . }}-default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "lians.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "lians.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 14 }}
+          {{- with .Values.networkPolicy.ingressController.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - port: 8000
+          protocol: TCP
+    {{- if .Values.config.metrics.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.monitoring.namespaceSelector | nindent 14 }}
+          {{- with .Values.networkPolicy.monitoring.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - port: 8000
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.otelCollector.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "lians.otelSelectorLabels" . | nindent 14 }}
+      ports:
+        - port: 8000
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.gateMediator.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.gateMediator.podSelector | nindent 14 }}
+      ports:
+        {{- range .Values.networkPolicy.gateMediator.apiIngressPorts }}
+        - port: {{ . }}
+          protocol: TCP
+        {{- end }}
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        {{- range .Values.networkPolicy.postgresql.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+    - to:
+        {{- range .Values.networkPolicy.redis.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.redis.port }}
+          protocol: TCP
+    {{- with .Values.networkPolicy.externalHttpsCidrs }}
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: 443
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.externalOtlp.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.externalOtlp.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.externalOtlp.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.vault.enabled }}
+    - to:
+        {{- range .Values.networkPolicy.vault.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.vault.port }}
+          protocol: TCP
+    {{- end }}
+{{- if .Values.migrations.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "lians.fullname" . }}-migrate-hook
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lians.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: migrate
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        {{- range .Values.networkPolicy.postgresql.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+{{- end }}
+{{- if .Values.networkPolicy.gateMediator.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "lians.fullname" . }}-gate-mediator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gate-mediator
+spec:
+  podSelector:
+    matchLabels:
+      {{- toYaml .Values.networkPolicy.gateMediator.podSelector | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.gateMediator.evaluatorPodSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.gateMediator.ingressPort }}
+          protocol: TCP
+    {{- if .Values.networkPolicy.gateMediator.metricsIngressEnabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.gateMediator.metricsNamespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.gateMediator.metricsPodSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.gateMediator.ingressPort }}
+          protocol: TCP
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "lians.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.networkPolicy.gateMediator.gatePort }}
+          protocol: TCP
+    {{- with .Values.networkPolicy.gateMediator.providerCidrs }}
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: 443
+          protocol: TCP
+    {{- end }}
+{{- end }}
+{{- end }}

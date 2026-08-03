@@ -14,10 +14,10 @@ from datetime import datetime, timezone
 
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey, PendingAdmission
-from src.lians.admission import detect_risk_tags, evaluate
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey, PendingAdmission
+from lians.admission import detect_risk_tags, evaluate
 
 NS = "adm-ns"
 KEY = "adm-key"
@@ -50,7 +50,7 @@ def test_decision_modes():
 def test_vagueness_prefilter():
     """Too-vague candidates are tagged, and rejected in enforce mode
     (harvested from the Memory Governor's IGNORE action — governor-integration Phase 3)."""
-    from src.lians.admission import is_too_vague
+    from lians.admission import is_too_vague
     assert is_too_vague("ok")
     assert is_too_vague("yes boss")
     assert not is_too_vague("NVDA guidance $36B")
@@ -94,7 +94,7 @@ def _h():
 
 def _enforce(monkeypatch):
     monkeypatch.setattr(
-        "src.lians.api.routes_memory.get_settings",
+        "lians.api.routes_memory.get_settings",
         lambda: SimpleNamespace(admission_mode="enforce", admission_blocked_sources=""),
     )
 
@@ -143,7 +143,7 @@ async def test_enforce_holds_pii_then_approve_makes_it_recallable(
     stored = await db.get(PendingAdmission, uuid.UUID(pid))
     assert stored is not None
     assert "MRN-5567120" not in stored.content
-    assert stored.content.startswith("lians-sealed:v1:")
+    assert stored.content.startswith("lians-sealed:v2:")
 
     # It is NOT yet recallable.
     rec = await client.post("/v1/recall", headers=_h(),

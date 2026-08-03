@@ -8,21 +8,30 @@ import hashlib
 import hmac
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey, WebhookEndpoint, WebhookDelivery
-from src.lians.webhook_service import (
-    register_webhook, list_webhooks, delete_webhook, update_webhook,
-    dispatch_event, _sign, _http_post,
+from httpx import ASGITransport, AsyncClient
+from lians.config import get_settings
+from lians.db import get_db
+from lians.main import app
+from lians.models import ApiKey, WebhookDelivery, WebhookEndpoint
+from lians.webhook_service import (
+    MEMORY_CONFLICT,
+    MEMORY_ERASED,
+    MEMORY_SUPERSEDED,
+    WebhookConflictError,
+    WebhookCapacityError,
+    _http_post,
+    _sign,
     _validate_webhook_url,
-    MEMORY_SUPERSEDED, MEMORY_CONFLICT, MEMORY_ERASED,
+    delete_webhook,
+    dispatch_event,
+    list_webhooks,
+    register_webhook,
+    update_webhook,
 )
 
 TEST_NS = "webhook-test-ns"
@@ -33,6 +42,14 @@ T1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
 
 def _api_h():
     return {"X-API-Key": TEST_KEY}
+
+
+@pytest.fixture(autouse=True)
+def enable_legacy_webhooks_for_compatibility_tests(monkeypatch):
+    monkeypatch.setenv("LEGACY_WEBHOOKS_ENABLED", "true")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest_asyncio.fixture
@@ -96,7 +113,7 @@ async def test_register_webhook(db):
     assert ep.enabled is True
     assert MEMORY_SUPERSEDED in ep.events
     assert ep.secret != "my-secret"
-    assert ep.secret.startswith("lians-sealed:v1:")
+    assert ep.secret.startswith("lians-sealed:v2:")
 
 
 @pytest.mark.parametrize("url", [
@@ -120,7 +137,101 @@ async def test_http_post_blocks_private_destination_before_network():
         "sha256=test",
     )
     assert status == 0
-    assert "Blocked webhook destination" in error
+    assert error == "blocked_destination"
+
+
+@pytest.mark.asyncio
+async def test_http_post_does_not_persist_remote_response_body(monkeypatch):
+    async def fake_resolve(_url):
+        return "receiver.example", 443, ("203.0.113.10",)
+
+    class FakeResponse:
+        status_code = 403
+        is_success = False
+        text = "secret tenant response body"
+
+    class FakeAsyncClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def post(self, _url, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "lians.webhook_service._resolve_webhook_destination",
+        fake_resolve,
+    )
+    monkeypatch.setattr(
+        "lians.webhook_service._pinned_webhook_url",
+        lambda *_args: ("https://203.0.113.10/hook", "receiver.example"),
+    )
+    monkeypatch.setattr("httpx.AsyncClient", FakeAsyncClient)
+
+    status, error = await _http_post(
+        "https://receiver.example/hook",
+        b"{}",
+        "sha256=test",
+    )
+
+    assert status == 403
+    assert error == "http_status_403"
+    assert "secret" not in error
+
+
+@pytest.mark.asyncio
+async def test_http_post_emits_canonical_and_legacy_signature_headers(monkeypatch):
+    captured: dict = {}
+
+    async def fake_resolve(_url):
+        return "receiver.example", 443, ("203.0.113.10",)
+
+    class FakeResponse:
+        status_code = 204
+        is_success = True
+        text = ""
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def post(self, url, **kwargs):
+            captured["url"] = url
+            captured["request"] = kwargs
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "lians.webhook_service._resolve_webhook_destination",
+        fake_resolve,
+    )
+    monkeypatch.setattr(
+        "lians.webhook_service._pinned_webhook_url",
+        lambda *_args: ("https://203.0.113.10/hook", "receiver.example"),
+    )
+    monkeypatch.setattr("httpx.AsyncClient", FakeAsyncClient)
+
+    signature = "sha256=canonical-test"
+    status, error = await _http_post(
+        "https://receiver.example/hook",
+        b"{}",
+        signature,
+    )
+
+    assert status == 204
+    assert error == ""
+    assert captured["request"]["headers"]["X-Lians-Signature"] == signature
+    assert captured["request"]["headers"]["X-AgentMem-Signature"] == signature
 
 
 @pytest.mark.asyncio
@@ -146,7 +257,7 @@ async def test_list_webhooks_namespace_isolation(db):
 @pytest.mark.asyncio
 async def test_delete_webhook(db):
     ep = await register_webhook(db, TEST_NS, url="https://example.com", secret="s", events=[MEMORY_ERASED])
-    deleted = await delete_webhook(db, TEST_NS, ep.id)
+    deleted = await delete_webhook(db, TEST_NS, ep.id, ep.updated_at)
     assert deleted is True
     remaining = await list_webhooks(db, TEST_NS)
     assert len(remaining) == 0
@@ -155,14 +266,16 @@ async def test_delete_webhook(db):
 @pytest.mark.asyncio
 async def test_delete_webhook_wrong_namespace_returns_false(db):
     ep = await register_webhook(db, TEST_NS, url="https://example.com", secret="s", events=[MEMORY_ERASED])
-    deleted = await delete_webhook(db, "wrong-ns", ep.id)
+    deleted = await delete_webhook(db, "wrong-ns", ep.id, ep.updated_at)
     assert deleted is False
 
 
 @pytest.mark.asyncio
 async def test_update_webhook_disable(db):
     ep = await register_webhook(db, TEST_NS, url="https://example.com", secret="s", events=[MEMORY_SUPERSEDED])
-    updated = await update_webhook(db, TEST_NS, ep.id, enabled=False)
+    updated = await update_webhook(
+        db, TEST_NS, ep.id, expected_updated_at=ep.updated_at, enabled=False
+    )
     assert updated is not None
     assert updated.enabled is False
 
@@ -170,8 +283,77 @@ async def test_update_webhook_disable(db):
 @pytest.mark.asyncio
 async def test_update_webhook_events(db):
     ep = await register_webhook(db, TEST_NS, url="https://example.com", secret="s", events=[MEMORY_SUPERSEDED])
-    updated = await update_webhook(db, TEST_NS, ep.id, events=[MEMORY_CONFLICT, MEMORY_ERASED])
+    updated = await update_webhook(
+        db,
+        TEST_NS,
+        ep.id,
+        expected_updated_at=ep.updated_at,
+        events=[MEMORY_CONFLICT, MEMORY_ERASED],
+    )
     assert set(updated.events) == {MEMORY_CONFLICT, MEMORY_ERASED}
+
+
+@pytest.mark.asyncio
+async def test_update_webhook_rejects_a_stale_timestamp(db):
+    ep = await register_webhook(
+        db,
+        TEST_NS,
+        url="https://example.com",
+        secret="s",
+        events=[MEMORY_SUPERSEDED],
+    )
+
+    with pytest.raises(WebhookConflictError, match="Resource version conflict"):
+        await update_webhook(
+            db,
+            TEST_NS,
+            ep.id,
+            expected_updated_at=ep.updated_at - timedelta(microseconds=1),
+            enabled=False,
+        )
+
+
+@pytest.mark.asyncio
+async def test_register_webhook_enforces_namespace_capacity(db, monkeypatch):
+    monkeypatch.setenv("LEGACY_WEBHOOK_MAX_ENDPOINTS_PER_NAMESPACE", "1")
+    get_settings.cache_clear()
+    try:
+        await register_webhook(
+            db,
+            TEST_NS,
+            url="https://first.example.com/hook",
+            secret="first-secret",
+            events=[MEMORY_SUPERSEDED],
+        )
+        with pytest.raises(WebhookCapacityError):
+            await register_webhook(
+                db,
+                TEST_NS,
+                url="https://second.example.com/hook",
+                secret="second-secret",
+                events=[MEMORY_SUPERSEDED],
+            )
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_delete_webhook_rejects_a_stale_timestamp(db):
+    ep = await register_webhook(
+        db,
+        TEST_NS,
+        url="https://example.com",
+        secret="s",
+        events=[MEMORY_SUPERSEDED],
+    )
+
+    with pytest.raises(WebhookConflictError, match="Resource version conflict"):
+        await delete_webhook(
+            db,
+            TEST_NS,
+            ep.id,
+            ep.updated_at - timedelta(microseconds=1),
+        )
 
 
 # â”€â”€ Dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -188,7 +370,7 @@ async def test_dispatch_calls_http_for_matching_endpoint(db):
         captured.append((url, body, signature))
         return 200, ""
 
-    with patch("src.lians.webhook_service._http_post", side_effect=fake_http):
+    with patch("lians.webhook_service._http_post", side_effect=fake_http):
         # Flush so the endpoint is visible to the task
         await dispatch_event(db, TEST_NS, MEMORY_SUPERSEDED, {
             "superseded_memory_id": str(uuid.uuid4()),
@@ -218,7 +400,9 @@ async def test_dispatch_calls_http_for_matching_endpoint(db):
 async def test_dispatch_skips_disabled_endpoint(db):
     ep = await register_webhook(db, TEST_NS, url="https://recv.example.com", secret="s",
                                 events=[MEMORY_SUPERSEDED])
-    await update_webhook(db, TEST_NS, ep.id, enabled=False)
+    await update_webhook(
+        db, TEST_NS, ep.id, expected_updated_at=ep.updated_at, enabled=False
+    )
     await db.commit()
 
     captured = []
@@ -227,7 +411,7 @@ async def test_dispatch_skips_disabled_endpoint(db):
         captured.append(url)
         return 200, ""
 
-    with patch("src.lians.webhook_service._http_post", side_effect=fake_http):
+    with patch("lians.webhook_service._http_post", side_effect=fake_http):
         await dispatch_event(db, TEST_NS, MEMORY_SUPERSEDED, {"dummy": True})
         import asyncio
         await asyncio.sleep(0.1)
@@ -247,7 +431,7 @@ async def test_dispatch_skips_non_matching_event(db):
         captured.append(url)
         return 200, ""
 
-    with patch("src.lians.webhook_service._http_post", side_effect=fake_http):
+    with patch("lians.webhook_service._http_post", side_effect=fake_http):
         await dispatch_event(db, TEST_NS, MEMORY_SUPERSEDED, {"dummy": True})
         import asyncio
         await asyncio.sleep(0.1)
@@ -267,7 +451,7 @@ async def test_dispatch_namespace_isolation(db):
         captured.append(url)
         return 200, ""
 
-    with patch("src.lians.webhook_service._http_post", side_effect=fake_http):
+    with patch("lians.webhook_service._http_post", side_effect=fake_http):
         await dispatch_event(db, TEST_NS, MEMORY_CONFLICT, {"dummy": True})
         import asyncio
         await asyncio.sleep(0.1)
@@ -324,7 +508,12 @@ async def test_api_delete_webhook(client):
                           json={"url": "https://del.example.com", "events": [MEMORY_ERASED]},
                           headers=_api_h())
     ep_id = r.json()["endpoint"]["id"]
-    del_resp = await client.delete(f"/v1/webhooks/{ep_id}", headers=_api_h())
+    expected_updated_at = r.json()["endpoint"]["updated_at"]
+    del_resp = await client.delete(
+        f"/v1/webhooks/{ep_id}",
+        params={"expected_updated_at": expected_updated_at},
+        headers=_api_h(),
+    )
     assert del_resp.status_code == 204
     list_resp = await client.get("/v1/webhooks", headers=_api_h())
     assert len(list_resp.json()) == 0
@@ -336,9 +525,14 @@ async def test_api_patch_webhook(client):
                           json={"url": "https://patch.example.com", "events": [MEMORY_SUPERSEDED]},
                           headers=_api_h())
     ep_id = r.json()["endpoint"]["id"]
+    expected_updated_at = r.json()["endpoint"]["updated_at"]
     patch_resp = await client.patch(
         f"/v1/webhooks/{ep_id}",
-        json={"enabled": False, "description": "Disabled for maintenance"},
+        json={
+            "expected_updated_at": expected_updated_at,
+            "enabled": False,
+            "description": "Disabled for maintenance",
+        },
         headers=_api_h(),
     )
     assert patch_resp.status_code == 200
@@ -369,6 +563,8 @@ async def test_api_webhook_deliveries(client, db):
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] == 1
+    assert data["returned"] == 1
+    assert data["complete"] is True
     assert data["deliveries"][0]["event_type"] == MEMORY_SUPERSEDED
     assert data["deliveries"][0]["status_code"] == 200
 
@@ -391,7 +587,7 @@ async def test_supersession_dispatches_webhook(client, db):
         captured.append(json.loads(body))
         return 200, ""
 
-    with patch("src.lians.webhook_service._http_post", side_effect=fake_http):
+    with patch("lians.webhook_service._http_post", side_effect=fake_http):
         # Old memory
         await client.post("/v1/memories", json={
             "agent_id": "agent-wh",

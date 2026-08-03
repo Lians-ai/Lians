@@ -5,21 +5,33 @@ on:
     branches: ["master", "main"]
   pull_request:
     branches: ["master", "main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.11.29"
+  KUBECONFORM_VERSION: "0.7.0"
+  KUBECONFORM_LINUX_AMD64_SHA256: "c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3"
+  PROMETHEUS_TOOL_IMAGE: "docker.io/prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996"
 
 jobs:
-  # ── Python test suite ───────────────────────────────────────────────────────
-  pytest:
-    name: pytest (Python ${{ matrix.python-version }})
+  python:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
-
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
         env:
           POSTGRES_USER: agentmem
           POSTGRES_PASSWORD: agentmem
@@ -31,9 +43,8 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
       redis:
-        image: redis:7-alpine
+        image: redis:7.4.10-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
         ports:
           - 6379:6379
         options: >-
@@ -41,159 +52,704 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
     env:
       DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
       TEST_DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
       REDIS_URL: redis://localhost:6379/0
       EMBEDDING_PROVIDER: local
+      KMS_PROVIDER: env
       MASTER_ENCRYPTION_KEY: ""
       AGENTMEM_ALLOW_UNENCRYPTED: "true"
       ADMIN_SECRET: dev-admin-secret-change-in-prod
+      RLS_BARRIERS_ENABLED: "true"
       RECALL_CACHE_ENABLED: "true"
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-        working-directory: .
-
-      - name: Run Alembic migrations
-        run: alembic upgrade head
+      - name: Set up locked Python environment
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Synchronize exact dependencies
+        run: uv sync --locked --extra dev
+      - name: Lint Python
+        if: ${{ matrix.python-version == '3.12' }}
+        run: uv run --no-sync ruff check agentmem/src agentmem/tests sdk/python/src sdk/python/tests
+      - name: Assert one migration head
+        shell: bash
         working-directory: agentmem
+        run: |
+          heads="$(uv run --project .. --no-sync alembic heads | sed '/^[[:space:]]*$/d')"
+          test "$(printf '%s\n' "$heads" | wc -l)" -eq 1
+          printf '%s\n' "$heads"
+      - name: Bootstrap the test-only runtime capability role
+        shell: bash
         env:
-          DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
+          PGPASSWORD: agentmem
+        run: |
+          psql --host localhost --username agentmem --dbname agentmem \
+            --set ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lians_runtime') THEN
+              CREATE ROLE lians_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
+            END IF;
+          END
+          $$;
+          GRANT lians_runtime TO agentmem;
+          SQL
+      - name: Migrate an empty PostgreSQL database
+        working-directory: agentmem
+        run: uv run --project .. --no-sync alembic upgrade head
+      - name: Run Python tests
+        run: uv run --no-sync pytest agentmem/tests --verbose --tb=short
 
-      - name: Run pytest
-        run: python -m pytest agentmem/tests/ -v --tb=short
+  migration-upgrade:
+    name: Upgrade representative N-1 database
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
         env:
-          TEST_DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
+          POSTGRES_USER: agentmem
+          POSTGRES_PASSWORD: agentmem
+          POSTGRES_DB: agentmem
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentmem"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://agentmem:agentmem@localhost:5432/agentmem
+      EMBEDDING_PROVIDER: local
+      KMS_PROVIDER: env
+      MASTER_ENCRYPTION_KEY: ""
+      AGENTMEM_ALLOW_UNENCRYPTED: "true"
+      RECALL_CACHE_ENABLED: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up locked Python environment
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Synchronize exact dependencies
+        run: uv sync --locked --extra dev
+      - name: Provision the test-only runtime capability role
+        shell: bash
+        env:
+          PGPASSWORD: agentmem
+        run: |
+          psql --host localhost --username agentmem --dbname agentmem \
+            --set ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE lians_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
+          GRANT lians_runtime TO agentmem;
+          SQL
+      - name: Resolve and migrate to the immediate parent revision
+        id: parent
+        shell: bash
+        working-directory: agentmem
+        run: |
+          parent="$(uv run --project .. --no-sync python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
 
-  # ── TypeScript SDK tests ────────────────────────────────────────────────────
-  typescript:
+          scripts = ScriptDirectory.from_config(Config("alembic.ini"))
+          head = scripts.get_current_head()
+          revision = scripts.get_revision(head)
+          if revision is None or not isinstance(revision.down_revision, str):
+              raise SystemExit("N-1 migration check requires one linear parent")
+          print(revision.down_revision)
+          PY
+          )"
+          test -n "$parent"
+          uv run --project .. --no-sync alembic upgrade "$parent"
+          echo "revision=$parent" >> "$GITHUB_OUTPUT"
+      - name: Seed a representative tenant-scoped evidence fixture at N-1
+        shell: bash
+        working-directory: agentmem
+        run: |
+          uv run --project .. --no-sync python - <<'PY'
+          import asyncio
+
+          from sqlalchemy import text
+          from lians.db import AsyncSessionLocal
+          from lians.evidence_service import ArtifactSpec, ensure_artifact
+
+
+          async def main() -> None:
+              async with AsyncSessionLocal() as db:
+                  await db.execute(
+                      text("SELECT set_config('app.current_namespace', '__admin__', true)")
+                  )
+                  await db.execute(
+                      text("SELECT set_config('agentmem.barrier_group', '', true)")
+                  )
+                  artifact, created = await ensure_artifact(
+                      db,
+                      namespace="migration-fixture",
+                      barrier_group=None,
+                      spec=ArtifactSpec(
+                          kind="policy",
+                          identifier="Policy-\u00c9vidence-42",
+                          version=" V1 ",
+                          artifact_hash="A" * 64,
+                          hash_algorithm="SHA-256",
+                      ),
+                      created_by_agent_id="migration-ci",
+                  )
+                  assert created
+                  await db.commit()
+                  print(artifact.id)
+
+
+          asyncio.run(main())
+          PY
+      - name: Upgrade to the release head and prove data and metadata compatibility
+        shell: bash
+        working-directory: agentmem
+        run: |
+          uv run --project .. --no-sync alembic upgrade head
+          uv run --project .. --no-sync python -m lians.migration_contract
+          uv run --project .. --no-sync python - <<'PY'
+          import asyncio
+
+          from sqlalchemy import text
+          from lians.db import AsyncSessionLocal
+
+
+          async def main() -> None:
+              async with AsyncSessionLocal() as db:
+                  await db.execute(
+                      text("SELECT set_config('app.current_namespace', '__admin__', true)")
+                  )
+                  row = (
+                      await db.execute(
+                          text(
+                              """SELECT identifier, version, identity_hash
+                                 FROM evidence_artifacts
+                                 WHERE namespace = 'migration-fixture'"""
+                          )
+                      )
+                  ).mappings().one()
+                  assert row["identifier"] == "Policy-\u00c9vidence-42"
+                  assert row["version"] == "V1"
+                  assert len(row["identity_hash"]) == 64
+
+
+          asyncio.run(main())
+          PY
+          uv run --project .. --no-sync alembic check
+
+  schemas-and-manifests:
+    name: Schemas and deployment manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up locked Python environment
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra dev
+      - name: Enforce the canonical server package identity
+        run: uv run --no-sync python .github/scripts/check_canonical_server_imports.py
+      - name: Verify the lock-step release contract
+        run: uv run --no-sync python .github/scripts/check_release_versions.py
+      - name: Verify public and administrative OpenAPI contracts
+        run: |
+          uv run --no-sync python .github/scripts/openapi_contract.py \
+            --surface public --check specs/openapi/public-v0.5.0.json
+          uv run --no-sync python .github/scripts/openapi_contract.py \
+            --surface admin --check specs/openapi/admin-v0.5.0.json
+      - name: Reject mutable images in deployment manifests
+        run: uv run --no-sync python .github/scripts/check_immutable_manifest_images.py
+      - name: Enforce raw Kubernetes privilege boundaries
+        run: uv run --no-sync python .github/scripts/check_raw_k8s_secret_boundaries.py
+      - name: Validate JSON Schema documents
+        shell: bash
+        run: |
+          mapfile -d '' schemas < <(
+            find specs ops -type f \( -name 'schema.json' -o -name '*.schema.json' \) -print0
+          )
+          test "${#schemas[@]}" -gt 0
+          uv run --no-sync check-jsonschema --check-metaschema "${schemas[@]}"
+          uv run --no-sync check-jsonschema --check-metaschema \
+            deploy/helm/lians/values.schema.json
+      - name: Validate Decision Receipt v0.1 conformance package
+        shell: bash
+        run: |
+          conformance=specs/decision-receipt/v0.1/conformance
+          uv run --no-sync ruff check "$conformance/reference_runner.py"
+          uv run --no-sync python -m py_compile "$conformance/reference_runner.py"
+          uv run --no-sync check-jsonschema \
+            --schemafile "$conformance/manifest.schema.json" \
+            "$conformance/manifest.json"
+          uv run --no-sync check-jsonschema \
+            --schemafile "$conformance/mutation.schema.json" \
+            "$conformance"/mutations/*.json
+          uv run --no-sync check-jsonschema \
+            --schemafile specs/decision-receipt/v0.1/schema.json \
+            "$conformance"/fixtures/*.json
+          uv run --no-sync python "$conformance/reference_runner.py" --suite --json
+      - name: Parse non-template YAML
+        shell: bash
+        run: |
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          roots = [Path(".github/workflows"), Path("k8s"), Path("ops")]
+          files = sorted(
+              path
+              for root in roots
+              for pattern in ("*.yml", "*.yaml")
+              for path in root.rglob(pattern)
+          )
+          files.extend([Path("render.yaml")])
+          for path in files:
+              list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+          print(f"parsed {len(files)} YAML files")
+          PY
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5.1.0
+        with:
+          version: v1.36.3
+      - name: Install checksum-pinned kubeconform
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/kubeconform.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            --output "$archive" \
+            "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          printf '%s  %s\n' "$KUBECONFORM_LINUX_AMD64_SHA256" "$archive" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory "$RUNNER_TEMP" kubeconform
+          install -m 0755 "$RUNNER_TEMP/kubeconform" "$RUNNER_TEMP/kubeconform-bin"
+          printf '%s\n' "$RUNNER_TEMP" >>"$GITHUB_PATH"
+      - name: Lint and render Helm chart
+        shell: bash
+        run: |
+          chart=deploy/helm/lians
+          base="$chart/tests/values-base.yaml"
+          for posture in aws azure vault airgap; do
+            values="$chart/tests/values-${posture}.yaml"
+            helm lint "$chart" --strict --values "$base" --values "$values"
+            helm template lians "$chart" --namespace lians \
+              --values "$base" --values "$values" \
+              --set migrations.enabled=true >"/tmp/lians-${posture}.yaml"
+          done
+          helm lint "$chart" --strict --values "$base" \
+            --values "$chart/tests/values-aws.yaml" \
+            --values "$chart/tests/values-backup.yaml"
+          helm template lians "$chart" --namespace lians \
+            --values "$base" \
+            --values "$chart/tests/values-aws.yaml" \
+            --values "$chart/tests/values-backup.yaml" \
+            --set migrations.enabled=true > /tmp/lians-backup.yaml
+          helm lint "$chart" --strict --values "$base" \
+            --values "$chart/tests/values-aws.yaml" \
+            --values "$chart/tests/values-collector.yaml"
+          helm template lians "$chart" --namespace lians \
+            --values "$base" \
+            --values "$chart/tests/values-aws.yaml" \
+            --values "$chart/tests/values-collector.yaml" \
+            --set migrations.enabled=true > /tmp/lians-collector.yaml
+          for invalid in \
+            values-invalid-database-shared.yaml \
+            values-invalid-database-budget.yaml \
+            values-invalid-backup-empty.yaml \
+            values-invalid-backup-world-open.yaml \
+            values-invalid-collector-unencrypted.yaml \
+            values-invalid-vault-receipt-credentials.yaml; do
+            if helm template lians "$chart" --namespace lians \
+              --values "$base" --values "$chart/tests/$invalid" >/dev/null 2>&1; then
+              echo "$invalid unexpectedly rendered" >&2
+              exit 1
+            fi
+          done
+          if helm template lians "$chart" --namespace lians \
+            --values "$chart/production-values.example.yaml" >/dev/null 2>&1; then
+            echo "production-values.example.yaml unexpectedly rendered with placeholders" >&2
+            exit 1
+          fi
+          kubeconform-bin -strict -summary -kubernetes-version 1.32.0 \
+            /tmp/lians-aws.yaml /tmp/lians-azure.yaml \
+            /tmp/lians-vault.yaml /tmp/lians-airgap.yaml \
+            /tmp/lians-backup.yaml /tmp/lians-collector.yaml
+          uv run --no-sync python - <<'PY'
+          from pathlib import Path
+
+          import yaml
+
+          def objects(path: str):
+              return [
+                  value
+                  for value in yaml.safe_load_all(Path(path).read_text(encoding="utf-8"))
+                  if isinstance(value, dict)
+              ]
+
+          def component(values, kind: str, component: str):
+              return next(
+                  value
+                  for value in values
+                  if value.get("kind") == kind
+                  and value.get("metadata", {}).get("labels", {}).get(
+                      "app.kubernetes.io/component"
+                  ) == component
+              )
+
+          def database_secret_refs(pod_spec):
+              refs = []
+              for container in [
+                  *pod_spec.get("initContainers", []),
+                  *pod_spec.get("containers", []),
+              ]:
+                  for item in container.get("env", []):
+                      if item.get("name") == "DATABASE_URL":
+                          refs.append(
+                              item["valueFrom"]["secretKeyRef"]["name"]
+                          )
+              return refs
+
+          aws = objects("/tmp/lians-aws.yaml")
+          deployment = component(aws, "Deployment", "api")
+          runtime_refs = database_secret_refs(
+              deployment["spec"]["template"]["spec"]
+          )
+          assert runtime_refs == [
+              "lians-database-runtime",
+              "lians-database-runtime",
+          ], runtime_refs
+          api_container = next(
+              item
+              for item in deployment["spec"]["template"]["spec"]["containers"]
+              if item["name"] == "api"
+          )
+          api_env = {item["name"]: item for item in api_container["env"]}
+          assert api_env["SUBJECT_REFERENCE_KEY"]["valueFrom"]["secretKeyRef"] == {
+              "name": "lians-application",
+              "key": "SUBJECT_REFERENCE_KEY",
+          }
+          assert all(
+              "SUBJECT_REFERENCE_KEY" not in {
+                  item["name"] for item in container.get("env", [])
+              }
+              for container in deployment["spec"]["template"]["spec"].get(
+                  "initContainers", []
+              )
+          )
+          runtime_preflight = next(
+              item
+              for item in deployment["spec"]["template"]["spec"]["initContainers"]
+              if item["name"] == "schema-head-preflight"
+          )
+          assert "validate_production_data_transports" in runtime_preflight["command"][-1]
+          assert "parse_db_url" in runtime_preflight["command"][-1]
+          migration = component(aws, "Job", "migrate")
+          assert all(
+              "SUBJECT_REFERENCE_KEY" not in {
+                  item["name"] for item in container.get("env", [])
+              }
+              for container in [
+                  *migration["spec"]["template"]["spec"].get("initContainers", []),
+                  *migration["spec"]["template"]["spec"].get("containers", []),
+              ]
+          )
+          migration_refs = database_secret_refs(
+              migration["spec"]["template"]["spec"]
+          )
+          assert migration_refs == [
+              "lians-database-migration",
+              "lians-database-migration",
+          ], migration_refs
+          migration_preflight = next(
+              item
+              for item in migration["spec"]["template"]["spec"]["initContainers"]
+              if item["name"] == "packaged-schema-preflight"
+          )
+          assert "validate_production_data_transports" in migration_preflight["command"][-1]
+          assert "parse_db_url" in migration_preflight["command"][-1]
+          public_config = component(aws, "ConfigMap", "api")["data"]
+          assert "SUBJECT_REFERENCE_KEY" not in public_config
+          assert public_config["API_SURFACE"] == "public"
+          assert public_config["DATABASE_POOL_SIZE"] == "10"
+          assert public_config["DATABASE_MAX_OVERFLOW"] == "20"
+          assert public_config["DATABASE_POOL_TIMEOUT_SECONDS"] == "30"
+          assert public_config["PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS"] == "false"
+
+          vault = objects("/tmp/lians-vault.yaml")
+          vault_deployment = component(vault, "Deployment", "api")
+          vault_pod = vault_deployment["spec"]["template"]["spec"]
+          api = next(c for c in vault_pod["containers"] if c["name"] == "api")
+          env_names = {item["name"] for item in api.get("env", [])}
+          assert "RECEIPT_SIGNING_PRIVATE_KEY" not in env_names
+          assert "RECEIPT_VAULT_TOKEN" not in env_names
+          assert any(
+              mount["name"] == "receipt-vault-token" and mount["readOnly"] is True
+              for mount in api["volumeMounts"]
+          )
+          receipt_volume = next(
+              volume
+              for volume in vault_pod["volumes"]
+              if volume["name"] == "receipt-vault-token"
+          )
+          assert receipt_volume["secret"]["secretName"] == "lians-receipt-signing"
+          vault_config = component(vault, "ConfigMap", "api")["data"]
+          assert vault_config["RECEIPT_SIGNING_PROVIDER"] == "vault-transit"
+          assert vault_config["RECEIPT_VAULT_TOKEN_FILE"].startswith("/")
+
+          backup = objects("/tmp/lians-backup.yaml")
+          backup_policy = component(backup, "NetworkPolicy", "backup")
+          for rule in backup_policy["spec"]["egress"]:
+              assert rule.get("to"), rule
+          assert any(
+              destination.get("ipBlock", {}).get("cidr") == "10.50.0.0/24"
+              for rule in backup_policy["spec"]["egress"]
+              for destination in rule["to"]
+          )
+
+          collector = objects("/tmp/lians-collector.yaml")
+          stateful_set = component(collector, "StatefulSet", "recorder-gateway")
+          annotations = stateful_set["metadata"]["annotations"]
+          assert annotations["lians.ai/raw-pre-minimization-queue"] == "true"
+          assert annotations["lians.ai/encrypted-at-rest-acknowledged"] == "true"
+          assert annotations["lians.ai/raw-payload-custody-acknowledged"] == "true"
+          claim = stateful_set["spec"]["volumeClaimTemplates"][0]
+          assert claim["spec"]["storageClassName"] == "encrypted-rwo"
+          assert claim["metadata"]["annotations"][
+              "lians.ai/raw-payload-custody-acknowledged"
+          ] == "true"
+          assert claim["metadata"]["annotations"][
+              "lians.ai/queue-custody-policy-ref"
+          ] == "SEC-OTLP-QUEUE-001"
+          PY
+      - name: Validate Prometheus rules with digest-pinned promtool
+        shell: bash
+        run: |
+          chart=deploy/helm/lians
+          helm template lians "$chart" --namespace lians \
+            --values "$chart/tests/values-base.yaml" \
+            --values "$chart/tests/values-aws.yaml" \
+            --values "$chart/tests/values-collector.yaml" \
+            --set monitoring.serviceMonitor.enabled=true \
+            --set monitoring.serviceMonitor.existingSecret=lians-metrics \
+            --set monitoring.prometheusRule.enabled=true \
+            >"$RUNNER_TEMP/lians-monitoring-rendered.yaml"
+          uv run --no-sync python .github/scripts/extract_prometheus_rules.py \
+            "$RUNNER_TEMP/lians-monitoring-rendered.yaml" \
+            "$RUNNER_TEMP/lians-prometheus-rules.yaml"
+          docker run --rm --entrypoint /bin/promtool \
+            --volume "$RUNNER_TEMP/lians-prometheus-rules.yaml:/rules.yaml:ro" \
+            --volume "$GITHUB_WORKSPACE/ops/prometheus/lians-rules.yaml:/ops-rules.yaml:ro" \
+            "$PROMETHEUS_TOOL_IMAGE" check rules /rules.yaml /ops-rules.yaml
+      - name: Render Kustomize overlays
+        shell: bash
+        run: |
+          kubectl kustomize k8s >"$RUNNER_TEMP/lians-k8s.yaml"
+          kubectl kustomize k8s/monitoring >"$RUNNER_TEMP/lians-monitoring.yaml"
+          kubectl kustomize k8s/backup >"$RUNNER_TEMP/lians-backup.yaml"
+          kubeconform-bin -strict -summary -kubernetes-version 1.32.0 \
+            "$RUNNER_TEMP/lians-k8s.yaml" "$RUNNER_TEMP/lians-backup.yaml"
+          kubeconform-bin -strict -summary -ignore-missing-schemas \
+            -kubernetes-version 1.32.0 "$RUNNER_TEMP/lians-monitoring.yaml"
+
+  typescript-sdk:
     name: TypeScript SDK (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["18", "20", "22"]
-
+        node-version: ["22", "24"]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
-          cache-dependency-path: agentmem/sdk/typescript/package.json
-
-      - name: Install dependencies
-        run: npm install
+          cache-dependency-path: agentmem/sdk/typescript/package-lock.json
+      - run: npm ci
+        working-directory: agentmem/sdk/typescript
+      - run: npm run build
+        working-directory: agentmem/sdk/typescript
+      - run: npm test
         working-directory: agentmem/sdk/typescript
 
-      - name: Run Jest tests
-        run: npm test
-        working-directory: agentmem/sdk/typescript
+  python-sdks:
+    name: Python SDK distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra dev
+      - name: Build canonical SDK artifacts
+        run: >-
+          uv build agentmem/sdk/python
+          --build-constraint build-constraints.lock
+          --require-hashes
+          --out-dir dist/python-sdk
+      - name: Verify wheel contains the vendored local engine
+        shell: python
+        run: |
+          from pathlib import Path
+          from zipfile import ZipFile
 
-  # ── Java SDK tests ──────────────────────────────────────────────────────────
-  java:
+          wheel = next(Path("dist/python-sdk").glob("*.whl"))
+          with ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          required = {
+              "lians/__init__.py",
+              "lians/local_client.py",
+              "lians/recorder.py",
+              "lians/recorder_sink.py",
+              "lians/openai_agents_recorder.py",
+              "lians/langchain_recorder.py",
+              "lians/crewai_recorder.py",
+              "lians/py.typed",
+              "lians_engine/__init__.py",
+              "lians_engine/lians/main.py",
+          }
+          missing = sorted(required - names)
+          if missing:
+              raise SystemExit(f"canonical SDK wheel is missing: {missing}")
+      - name: Lint canonical Python SDK
+        run: >-
+          uv run --no-sync ruff check
+          agentmem/sdk/python/lians
+          agentmem/sdk/python/tests
+          agentmem/sdk/python/examples
+          --select E9,F,I
+      - name: Test canonical Python SDK in distribution isolation
+        env:
+          PYTHONPATH: ${{ github.workspace }}/agentmem/sdk/python
+        run: >-
+          uv run --no-sync pytest
+          -c agentmem/sdk/python/pyproject.toml
+          agentmem/sdk/python/tests
+          --verbose
+          --tb=short
+      - name: Test typed HTTP SDK
+        run: uv run --project sdk/python --locked --extra dev pytest sdk/python/tests --verbose
+
+  java-sdk:
     name: Java SDK (Temurin ${{ matrix.java-version }})
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        java-version: ["11", "17", "21"]
-
+        java-version: ["11", "17", "21", "25"]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: ${{ matrix.java-version }}
           cache: maven
-
-      - name: Build & test
-        run: mvn -B --no-transfer-progress verify
+      - run: mvn -B --no-transfer-progress verify
         working-directory: agentmem/sdk/java
 
-  # ── C SDK tests ─────────────────────────────────────────────────────────────
-  c:
-    name: C SDK (CMake)
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install libcurl dev headers
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
-
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-        working-directory: agentmem/sdk/c
-
-      - name: Build
-        run: cmake --build build
-        working-directory: agentmem/sdk/c
-
-      - name: Test (pure helpers)
-        run: ctest --test-dir build --output-on-failure
-        working-directory: agentmem/sdk/c
-
-  # ── Go SDK tests ────────────────────────────────────────────────────────────
-  go:
+  go-sdk:
     name: Go SDK (${{ matrix.go-version }})
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.21", "1.22", "1.23"]
-
+        go-version: ["1.21.x", "1.26.x"]
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go-version }}
-
-      - name: Vet
-        run: go vet ./...
+          cache: false
+      - run: go vet ./...
+        working-directory: agentmem/sdk/go
+      - run: go test -race ./...
         working-directory: agentmem/sdk/go
 
-      - name: Test
-        run: go test ./...
-        working-directory: agentmem/sdk/go
+  c-sdk:
+    name: C SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install libcurl headers
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        working-directory: agentmem/sdk/c
+      - run: cmake --build build --parallel
+        working-directory: agentmem/sdk/c
+      - run: ctest --test-dir build --output-on-failure
+        working-directory: agentmem/sdk/c
+
+  flagship-site:
+    name: Flagship site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/memory-checkup/package-lock.json
+      - run: npm ci
+        working-directory: apps/memory-checkup
+      - run: npm run lint
+        working-directory: apps/memory-checkup
+      - run: npm test
+        working-directory: apps/memory-checkup
 
   mcp-container:
-    name: Glama MCP container
+    name: MCP container contract
     runs-on: ubuntu-latest
-
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-
-      - name: Build Glama image
-        run: docker build --file Dockerfile.glama --tag lians-mcp-glama:test .
-
-      - name: Install MCP test client
-        run: pip install "mcp>=1,<2"
-
-      - name: Initialize server and list tools
-        run: python .github/scripts/smoke_mcp_container.py
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra mcp
+      - run: docker build --build-arg PREDOWNLOAD_MODEL= --file Dockerfile.glama --tag lians-mcp-glama:test .
+      - run: uv run --no-sync python .github/scripts/smoke_mcp_container.py

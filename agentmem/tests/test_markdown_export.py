@@ -13,16 +13,21 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.lians.models import EventLog
-from src.lians.schemas import MemoryAdd
-from src.lians.memory_service import add_memory, erase_subject
-from src.lians.export_markdown import (
+from lians.models import EventLog
+from lians.schemas import MemoryAdd
+from lians.memory_service import add_memory, erase_subject
+from lians.subject_erasure_service import (
+    claim_due_subject_erasure_jobs,
+    process_subject_erasure_job,
+)
+from lians.export_markdown import (
     export_memory_markdown,
     strip_integrity_footer,
     verify_export_document,
 )
-from src.lians.audit_chain import verify_chain
+from lians.audit_chain import verify_chain
 
 NS = "export-ns"
 AGENT = "export-agent"
@@ -105,7 +110,27 @@ async def test_export_is_anchored_in_the_audit_chain(db):
 @pytest.mark.asyncio
 async def test_erased_facts_render_as_erasure_markers(db):
     await _seed(db)
-    await erase_subject(db, NS, "client-42", request_ref="dsar-001")
+    job = await erase_subject(db, NS, "client-42", request_ref="dsar-001")
+    assert job.status == "pending"
+
+    worker_id = "markdown-export-erasure-test"
+    claims = await claim_due_subject_erasure_jobs(
+        db,
+        worker_id=worker_id,
+        batch_size=1,
+        lease_seconds=60,
+    )
+    claim = next(claim for claim in claims if claim.job_id == job.id)
+    session_factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    await process_subject_erasure_job(
+        session_factory,
+        claim=claim,
+        worker_id=worker_id,
+        page_size=100,
+        max_pages=20,
+        lease_seconds=60,
+    )
+    await db.run_sync(lambda session: session.expire_all())
 
     result = await export_memory_markdown(db, NS, AGENT)
 

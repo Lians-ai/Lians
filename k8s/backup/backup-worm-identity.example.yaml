@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lians-backup-worm-identity
+  namespace: agentmem
+data:
+  # Stable identity recorded as the verifier in every provider attestation.
+  LIANS_WORM_VERIFIER_IDENTITY: "k8s://CHANGE_ME-cluster/agentmem/lians-backup-worm"
+
+  # Configure only the ownership boundary for WORM_DESTINATION's provider.
+  LIANS_WORM_AWS_ACCOUNT_ID: "CHANGE_ME-12-digit-account"
+
+  LIANS_WORM_GCP_PROJECT_ID: "CHANGE_ME-project-id"
+  LIANS_WORM_GCP_PROJECT_NUMBER: "CHANGE_ME-project-number"
+
+  LIANS_WORM_AZURE_TENANT_ID: "CHANGE_ME-tenant-uuid"
+  LIANS_WORM_AZURE_SUBSCRIPTION_ID: "CHANGE_ME-subscription-uuid"
+  LIANS_WORM_AZURE_RESOURCE_GROUP: "CHANGE_ME-resource-group"
+  LIANS_WORM_AZURE_STORAGE_ACCOUNT: "CHANGE_ME-storage-account"

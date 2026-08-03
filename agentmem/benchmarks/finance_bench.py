@@ -6,14 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from src.lians.db import Base
-from src.lians.memory_service import add_memory, recall_memories
-from src.lians.schemas import MemoryAdd, RecallRequest
+from lians.db import Base
+from lians.memory_service import add_memory, recall_memories
+from lians.schemas import MemoryAdd, RecallRequest
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,8 @@ class Case:
 
 async def seed(db, ns: str, agent: str) -> None:
     """Load a realistic sequence of financial facts with supersessions."""
-    t = lambda y, m, d: datetime(y, m, d, tzinfo=timezone.utc)
+    def t(year: int, month: int, day: int) -> datetime:
+        return datetime(year, month, day, tzinfo=timezone.utc)
 
     facts = [
         # NVDA guidance: three revisions over the year
@@ -100,13 +101,17 @@ async def main() -> None:
         idx
         for table in Base.metadata.tables.values()
         for idx in table.indexes
-        if idx.dialect_kwargs.get("postgresql_using") is not None
+        if idx.dialect_kwargs.get("postgresql_using") not in (None, False)
     ]
     for idx in pg_indexes:
         idx.table.indexes.discard(idx)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    finally:
+        for idx in pg_indexes:
+            idx.table.indexes.add(idx)
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     ns, agent = "bench", "research"

@@ -7,8 +7,12 @@ imported from supersession.py and supersession.py imported from adapters.
 
 # Finance adapter: metadata keys that identify a structured financial fact.
 # These keys trigger the keyed supersession fast path and live_facts indexing.
+# A reporting period is part of fact identity: Q2 revenue and Q3 revenue are
+# independent observations, while two revisions of Q3 revenue are versions of
+# the same fact. ``quarter`` remains first-class because public payloads use it.
 _FINANCE_STRUCTURED_KEYS: frozenset[str] = frozenset({
     "ticker", "metric", "entity", "instrument", "cusip", "isin", "field",
+    "period", "quarter",
 })
 
 # Healthcare adapter: metadata keys that identify a structured clinical fact.

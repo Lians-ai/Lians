@@ -7,18 +7,44 @@ metadata:
     app.kubernetes.io/name: agentmem
 data:
   DEPLOYMENT_ENVIRONMENT: "production"
+  API_SURFACE: "public"
+  # Must match the region recorded in deployment inventory and tenant policy.
+  DEPLOYMENT_REGION: "configure-me"
   CORS_ORIGINS: "https://lians.ai,https://www.lians.ai"
+  # Replace with the exact ingress-controller/mesh source CIDRs that connect
+  # directly to the API. Never use 0.0.0.0/0, ::/0, or public client ranges.
+  # Empty is safe but ignores X-Forwarded-For and buckets by the socket peer.
+  TRUSTED_PROXY_CIDRS: "CHANGE_ME/32"
   # Embedding provider — set to "voyage" for production (requires VOYAGE_API_KEY in secret)
   # Options: voyage | openai | sentence-transformers | local
   EMBEDDING_PROVIDER: "voyage"
 
+  # Bounded per-replica database allocation. Size the replica ceiling against
+  # the database connection budget before changing these values.
+  DATABASE_POOL_SIZE: "10"
+  DATABASE_MAX_OVERFLOW: "20"
+  DATABASE_POOL_TIMEOUT_SECONDS: "30"
+  DATABASE_STATEMENT_TIMEOUT_MS: "30000"
+  DATABASE_LOCK_TIMEOUT_MS: "5000"
+  DATABASE_IDLE_TRANSACTION_TIMEOUT_MS: "60000"
+  PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS: "false"
+
   # KMS provider — set to "aws", "azure", or "vault" for production.
-  # "env" reads MASTER_ENCRYPTION_KEY from the secret (acceptable only for dev/staging).
-  KMS_PROVIDER: "env"
+  # "env" reads MASTER_ENCRYPTION_KEY from the secret and is rejected when
+  # DEPLOYMENT_ENVIRONMENT=production. Select and configure one external KMS.
+  KMS_PROVIDER: "aws"
+  # Non-secret envelope version. Production startup rejects a missing/unsafe ID.
+  MASTER_KEY_ID: ""
+  # Populate only during the bounded dual-key rotation window.
+  MASTER_KEY_PREVIOUS_ID: ""
+  # Stable public identifier for the deployment receipt key.
+  RECEIPT_SIGNING_KEY_ID: "configure-me"
+  RECEIPT_SIGNING_PROVIDER: "local"
 
   # Logging
   LOG_LEVEL: "INFO"
   LOG_JSON: "true"
+  METRICS_ENABLED: "true"
 
   # Recall hot cache
   RECALL_CACHE_ENABLED: "true"
@@ -30,13 +56,102 @@ data:
 
   # Rate limiting (requests per minute per API key)
   RATE_LIMIT_PER_MINUTE: "300"
+  RATE_LIMIT_NETWORK_MULTIPLIER: "20"
+  RATE_LIMIT_ADMIN_PER_MINUTE: "60"
+  RATE_LIMIT_BACKEND_FAILURE_MODE: "deny"
+
+  # Fail closed before ORM/plaintext materialization exceeds one response.
+  CONTENT_EXPORT_PAGE_BYTES_LIMIT: "33554432"
+  HASH_ONLY_EXPORT_PAGE_BYTES_LIMIT: "16777216"
+  AUDIT_EXPORT_PAGE_BYTES_LIMIT: "16777216"
+  LINEAGE_RESPONSE_BYTES_LIMIT: "16777216"
+
+  # Expiring tenant OIDC workload credentials
+  WORKLOAD_CREDENTIAL_MIN_TTL_SECONDS: "300"
+  WORKLOAD_CREDENTIAL_MAX_TTL_SECONDS: "2592000"
+  WORKLOAD_CREDENTIAL_LAST_USED_WRITE_INTERVAL_SECONDS: "900"
+
+  # Privacy-safe evidence capture. Full prompts and tool payloads remain off
+  # unless the deployment has an explicit encrypted-content policy.
+  RECORDER_ALLOW_FULL_CAPTURE: "false"
+  OTLP_CAPTURE_MODE: "hash_only"
+  OTLP_MAX_SPANS_PER_REQUEST: "2000"
+  OTLP_MAX_GENAI_TRACES_PER_REQUEST: "500"
+  DECISION_EVIDENCE_CANDIDATE_LIMIT: "5000"
+  DECISION_EVIDENCE_CANDIDATE_BYTES_LIMIT: "16777216"
 
   # Retention scheduler — set to "0" to disable
   RETENTION_PRUNE_INTERVAL_HOURS: "24"
+  OBSERVABILITY_REFRESH_SECONDS: "30"
+  IMPACT_ASSESSMENT_WORKER_ENABLED: "true"
+  IMPACT_ASSESSMENT_WORKER_POLL_SECONDS: "1"
+  IMPACT_ASSESSMENT_WORKER_BATCH_SIZE: "4"
+  IMPACT_ASSESSMENT_WORKER_CONCURRENCY: "2"
+  IMPACT_ASSESSMENT_WORKER_LEASE_SECONDS: "120"
+  IMPACT_ASSESSMENT_WORKER_PAGE_SIZE: "250"
+  IMPACT_ASSESSMENT_WORKER_MAX_PAGES_PER_CLAIM: "1"
+  IMPACT_ASSESSMENT_WORKER_RETRY_BASE_SECONDS: "2"
+  IMPACT_ASSESSMENT_WORKER_RETRY_MAX_SECONDS: "300"
+  IMPACT_ASSESSMENT_WORKER_MAX_ATTEMPTS: "8"
+  RECORDER_EVIDENCE_INDEX_WORKER_ENABLED: "true"
+  RECORDER_EVIDENCE_INDEX_WORKER_POLL_SECONDS: "1"
+  RECORDER_EVIDENCE_INDEX_WORKER_BATCH_SIZE: "4"
+  RECORDER_EVIDENCE_INDEX_WORKER_CONCURRENCY: "2"
+  RECORDER_EVIDENCE_INDEX_WORKER_LEASE_SECONDS: "120"
+  RECORDER_EVIDENCE_INDEX_WORKER_PAGE_SIZE: "100"
+  RECORDER_EVIDENCE_INDEX_WORKER_MAX_PAGES_PER_CLAIM: "2"
+  RECORDER_EVIDENCE_INDEX_WORKER_RETRY_BASE_SECONDS: "2"
+  RECORDER_EVIDENCE_INDEX_WORKER_RETRY_MAX_SECONDS: "300"
+  RECORDER_EVIDENCE_INDEX_WORKER_MAX_ATTEMPTS: "8"
+  SUBJECT_ERASURE_WORKER_ENABLED: "true"
+  SUBJECT_ERASURE_WORKER_POLL_SECONDS: "1"
+  SUBJECT_ERASURE_WORKER_BATCH_SIZE: "4"
+  SUBJECT_ERASURE_WORKER_CONCURRENCY: "2"
+  SUBJECT_ERASURE_WORKER_LEASE_SECONDS: "120"
+  SUBJECT_ERASURE_WORKER_PAGE_SIZE: "250"
+  SUBJECT_ERASURE_WORKER_MAX_PAGES_PER_CLAIM: "2"
+  SUBJECT_ERASURE_WORKER_RETRY_BASE_SECONDS: "2"
+  SUBJECT_ERASURE_WORKER_RETRY_MAX_SECONDS: "300"
+  SUBJECT_ERASURE_WORKER_MAX_ATTEMPTS: "8"
+  SCIM_RECONCILIATION_WORKER_ENABLED: "true"
+  SCIM_RECONCILIATION_WORKER_POLL_SECONDS: "1"
+  SCIM_RECONCILIATION_WORKER_BATCH_SIZE: "4"
+  SCIM_RECONCILIATION_WORKER_CONCURRENCY: "2"
+  SCIM_RECONCILIATION_WORKER_LEASE_SECONDS: "120"
+  SCIM_RECONCILIATION_WORKER_PAGE_SIZE: "100"
+  SCIM_RECONCILIATION_WORKER_MAX_PAGES_PER_CLAIM: "2"
+  SCIM_RECONCILIATION_WORKER_RETRY_BASE_SECONDS: "2"
+  SCIM_RECONCILIATION_WORKER_RETRY_MAX_SECONDS: "300"
+  SCIM_RECONCILIATION_WORKER_MAX_ATTEMPTS: "8"
+
+  # Durable Stripe usage outbox. STRIPE_API_KEY remains in agentmem-application;
+  # blank pauses delivery without deleting already committed usage facts.
+  STRIPE_METER_DECISION_EVENT: "lians_authoritative_decision"
+  STRIPE_METER_PROTECTED_ACTION_EVENT: "lians_protected_action"
+  STRIPE_METER_WRITE_EVENT: "agentmem_memory_write"
+  STRIPE_METER_RECALL_EVENT: "agentmem_memory_recall"
+  STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED: "false"
+  STRIPE_METER_WORKER_ENABLED: "true"
+  STRIPE_METER_WORKER_POLL_SECONDS: "1"
+  STRIPE_METER_WORKER_BATCH_SIZE: "64"
+  STRIPE_METER_DELIVERY_CONCURRENCY: "8"
+  STRIPE_METER_LEASE_SECONDS: "60"
+  STRIPE_METER_PROVIDER_TIMEOUT_SECONDS: "10"
+  STRIPE_METER_RETRY_BASE_SECONDS: "2"
+  STRIPE_METER_RETRY_MAX_SECONDS: "900"
+  STRIPE_METER_MAX_ATTEMPTS: "12"
+  STRIPE_METER_IDEMPOTENCY_WINDOW_SECONDS: "82800"
+  STRIPE_METER_MAX_EVENT_AGE_SECONDS: "2937600"
 
   # Air-gapped mode — set "true" for deployments where data must not leave the network
+  # For AIRGAP_MODE=true, clear OTEL_EXPORTER_OTLP_ENDPOINT below and disable
+  # integration delivery in the corresponding Deployment configuration.
   AIRGAP_MODE: "false"
 
   # OpenTelemetry
   OTEL_SERVICE_NAME: "agentmem"
-  OTEL_EXPORTER_OTLP_ENDPOINT: ""   # e.g. http://otel-collector:4317
+  # Keep application self-observability separate from the Recorder ingestion
+  # gateway. Point this at a TLS observability collector behind the reviewed
+  # fixed-address egress boundary; never loop API request spans back through
+  # the Recorder collector and into the same API.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel.example.invalid:4317"

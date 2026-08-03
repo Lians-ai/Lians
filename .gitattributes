@@ -1,0 +1,4 @@
+# Decision Receipt conformance hashes cover exact LF-terminated source bytes.
+specs/decision-receipt/v0.1/schema.json text eol=lf
+specs/decision-receipt/v0.1/conformance/** text eol=lf
+specs/decision-receipt/v0.1/mappings/** text eol=lf

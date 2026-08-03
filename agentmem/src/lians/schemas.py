@@ -1,8 +1,12 @@
 from __future__ import annotations
+
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from .barrier_policy import is_reserved_barrier_group
 
 
 class MemoryAdd(BaseModel):
@@ -70,6 +74,17 @@ class RecallResult(BaseModel):
     # the audit chain, so a decision made under degraded recall is
     # reconstructable as such.
     retrieval_degraded: bool = False
+    # False only when opt-in graph-proximity reranking exhausted a traversal
+    # budget; omitted distances are then unknown, not "unreachable".
+    graph_search_complete: bool = True
+    # Candidate discovery is deliberately bounded. ``False`` means the
+    # returned top-k came from a disclosed candidate window rather than an
+    # exhaustive agent scan; callers must not interpret absence as proof that
+    # no matching fact exists.
+    candidate_window_complete: bool = True
+    candidates_considered: int = 0
+    candidate_limit: int = 0
+    candidate_mode: str = "exact"
     # Rough size of the returned memory contents (~4 chars/token) so callers
     # can budget the prompt cost of injecting this recall into an LLM call.
     token_estimate: int = 0
@@ -85,10 +100,21 @@ class AuditReconstructResult(BaseModel):
     memories: list[MemoryOut]
     event_trail: list[dict[str, Any]]
     as_of: datetime
+    memory_total: int
+    memories_returned: int
+    memories_complete: bool
+    memories_mode: Literal["knowledge_snapshot", "ranked_query"]
+    event_total: int
+    events_returned: int
+    events_complete: bool
+    retrieval_degraded: bool = False
+    candidate_window_complete: bool = True
 
 
 class DecisionCreate(BaseModel):
-    agent_id: str
+    # Caller-supplied workload label. Authenticated recorder provenance is
+    # always derived from the request credential and cannot be asserted here.
+    agent_id: str = Field(min_length=1, max_length=255)
     decision_type: str = Field(min_length=1, max_length=100)
     outcome: str = Field(min_length=1, max_length=500)
     reason_codes: list[str] = Field(default_factory=list, max_length=100)
@@ -100,6 +126,10 @@ class DecisionCreate(BaseModel):
     policy_version: Optional[str] = None
     decided_at: datetime
     knowledge_as_of: Optional[datetime] = None
+    # System/recording-time cutoff for the evidence boundary. This is distinct
+    # from knowledge_as_of (business/event time) and prevents a later-ingested,
+    # backdated correction from rewriting an earlier receipt.
+    knowledge_recorded_as_of: Optional[datetime] = None
     evidence_memory_ids: list[UUID] = Field(default_factory=list, max_length=1000)
     input_hash: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
     output_hash: Optional[str] = Field(None, pattern=r"^[0-9a-fA-F]{64}$")
@@ -111,6 +141,12 @@ class DecisionOut(BaseModel):
     id: UUID
     namespace: str
     agent_id: str
+    recorded_by_principal_ref: str
+    recorded_by_auth_method: str
+    recorded_by_credential_ref: Optional[str]
+    recorded_by_principal_type: Optional[str]
+    recorded_by_role: Optional[str]
+    recorded_by_scopes: list[str]
     decision_type: str
     outcome: str
     reason_codes: list[str]
@@ -123,6 +159,7 @@ class DecisionOut(BaseModel):
     decided_at: datetime
     recorded_at: datetime
     knowledge_as_of: datetime
+    knowledge_recorded_as_of: datetime
     evidence_memory_ids: list[UUID]
     input_hash: Optional[str]
     output_hash: Optional[str]
@@ -131,13 +168,87 @@ class DecisionOut(BaseModel):
     human_reviewed_at: Optional[datetime]
     supersedes_id: Optional[UUID]
     metadata: dict[str, Any]
+    record_hash_version: int
+    record_integrity_status: Literal["verified", "legacy_unverified"]
     record_hash: str
 
 
 class DecisionReview(BaseModel):
     status: str = Field(pattern=r"^(requested|affirmed|overturned|withdrawn)$")
-    reviewer: str = Field(min_length=1)
-    note: Optional[str] = None
+    # Compatibility-only assertion.  Authenticated identity is authoritative;
+    # a mismatching legacy reviewer value is rejected by the route.
+    reviewer: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    note: Optional[str] = Field(default=None, max_length=50_000)
+
+
+class DecisionReviewEventOut(BaseModel):
+    id: UUID
+    namespace: str
+    barrier_group: Optional[str]
+    decision_id: UUID
+    sequence: int
+    status: str
+    reviewer_principal_id: str
+    reviewer_principal_type: Optional[str]
+    reviewer_role: Optional[str]
+    auth_method: str
+    credential_id: Optional[str]
+    note: Optional[str]
+    note_hash: Optional[str]
+    prior_event_hash: Optional[str]
+    event_hash: str
+    reviewed_at: datetime
+
+
+class DecisionReviewHistoryResult(BaseModel):
+    decision_id: UUID
+    total: int = Field(ge=0)
+    returned: int = Field(ge=0)
+    complete: bool
+    has_more: bool
+    next_sequence: Optional[int]
+    page_chain_verified: bool
+    chain_scope_complete: bool
+    events: list[DecisionReviewEventOut]
+
+
+class DecisionReceiptVerifyRequest(BaseModel):
+    receipt: dict[str, Any]
+    trusted_public_key: Optional[str] = None
+    require_signature: bool = False
+
+
+class DependencyChange(BaseModel):
+    dependency_kind: Literal["source", "policy", "model", "tool", "permission"]
+    dependency_value: str = Field(min_length=1, max_length=512)
+    change_type: Literal[
+        "changed", "corrected", "retired", "revoked", "recalled", "corrupted", "erased"
+    ] = "changed"
+    occurred_at: Optional[datetime] = None
+    note: Optional[str] = Field(None, max_length=2000)
+    agent_id: str = Field(default="lians-impact-monitor", min_length=1, max_length=255)
+    limit: int = Field(default=100, ge=1, le=1000)
+    record_event: bool = True
+
+
+class DecisionImpactItem(BaseModel):
+    decision: DecisionOut
+    match_basis: list[str]
+    impact_status: Literal["direct_reference", "reachable"]
+    risk_score: int = Field(ge=0, le=100)
+    priority: Literal["critical", "high", "medium", "low"]
+
+
+class DecisionImpactResult(BaseModel):
+    dependency: dict[str, str]
+    change_type: str
+    assessed_at: datetime
+    total: int
+    direct_count: int
+    reachable_count: int
+    search_truncated: bool
+    change_event_id: Optional[UUID]
+    items: list[DecisionImpactItem]
 
 
 class LedgerEventCreate(BaseModel):
@@ -171,20 +282,106 @@ class LedgerEventOut(BaseModel):
 
 
 class EraseRequest(BaseModel):
-    subject_id: str
-    request_ref: str
+    subject_id: str = Field(min_length=1, max_length=1024)
+    request_ref: str = Field(min_length=1, max_length=512)
+
+
+class SubjectErasureSnapshotOut(BaseModel):
+    memories: int = Field(ge=0)
+    live_facts: int = Field(ge=0)
+    relationships: int = Field(ge=0)
+    pending_admissions: int = Field(ge=0)
+    total_rows: int = Field(ge=0)
+
+
+class SubjectErasureProgressOut(BaseModel):
+    memories: int = Field(ge=0)
+    live_facts: int = Field(ge=0)
+    relationships: int = Field(ge=0)
+    pending_admissions: int = Field(ge=0)
+    rows_scrubbed: int = Field(ge=0)
+    pages_completed: int = Field(ge=0)
+    ratio: float = Field(ge=0.0, le=1.0)
 
 
 class EraseResult(BaseModel):
-    subject_id: str
-    memories_erased: int
+    """Durable erasure job; DEK destruction is complete before this is returned."""
+
+    job_id: UUID
+    namespace: str
+    subject_ref: str
     request_ref: str
+    status: Literal["pending", "running", "completed", "failed"]
+    phase: Literal[
+        "memories",
+        "live_facts",
+        "relationships",
+        "pending_admissions",
+        "finalizing",
+        "completed",
+    ]
+    key_destroyed_at: datetime
+    cache_fenced_at: datetime
+    snapshot: SubjectErasureSnapshotOut
+    progress: SubjectErasureProgressOut
+    processing_attempts: int = Field(ge=0)
+    next_attempt_at: datetime
+    last_error_code: Optional[str] = None
+    last_error_digest: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    failure_code: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+    replayed: bool = False
 
 
 class ApiKeyCreate(BaseModel):
-    namespace: str
-    scopes: list[str] = Field(default=["read", "write"])
-    label: Optional[str] = None
+    namespace: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$")
+    scopes: list[str] = Field(default_factory=list, max_length=50)
+    label: Optional[str] = Field(default=None, max_length=255)
+    role: Optional[Literal["owner", "analyst", "compliance", "readonly"]] = None
+    barrier_group: Optional[str] = Field(
+        default=None,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$",
+    )
+
+    @field_validator("barrier_group", mode="before")
+    @classmethod
+    def normalize_barrier_group(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        if is_reserved_barrier_group(normalized):
+            raise ValueError("This information-barrier name is reserved")
+        return normalized or None
+
+    @field_validator("scopes")
+    @classmethod
+    def validate_api_key_scopes(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(
+            not value
+            or len(value) > 100
+            or not all(ch.isalnum() or ch in "_.:-" for ch in value)
+            for value in normalized
+        ):
+            raise ValueError("scopes must contain valid 1-100 character scope names")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("scopes must not contain duplicates")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_api_key_authorization(self):
+        # Preserve the historical no-role default without accidentally granting
+        # write to a role such as compliance when scopes were omitted.
+        if "scopes" not in self.model_fields_set and self.role is None:
+            self.scopes = ["read", "write"]
+        if self.role is None and not self.scopes:
+            raise ValueError("an API key requires a named role, at least one scope, or both")
+        return self
 
 
 class ApiKeyOut(BaseModel):
@@ -192,9 +389,17 @@ class ApiKeyOut(BaseModel):
     namespace: str
     label: Optional[str]
     scopes: list[str]
+    role: Optional[Literal["owner", "analyst", "compliance", "readonly"]] = None
+    barrier_group: Optional[str] = None
     created_at: datetime
     rotated_at: Optional[datetime]
     revoked_at: Optional[datetime]
+    provisioning_source: Literal["breakglass_admin", "tenant_oidc"] = "breakglass_admin"
+    created_by: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    rotated_from_id: Optional[UUID] = None
+    version: int = 1
 
     model_config = {"from_attributes": True}
 
@@ -216,8 +421,12 @@ class SupersessionResult(BaseModel):
 
 
 class SupersessionAction(BaseModel):
-    action: str  # "confirm" | "reject"
-    reviewer_note: Optional[str] = None
+    action: Literal["confirm", "reject"]
+    expected_superseded_by: Optional[UUID] = Field(
+        ...,
+        description="superseded_by returned by the review item being resolved",
+    )
+    reviewer_note: Optional[str] = Field(default=None, max_length=10_000)
 
 
 class SupersessionActionResult(BaseModel):
@@ -227,8 +436,23 @@ class SupersessionActionResult(BaseModel):
 
 
 class BarrierGroupAssign(BaseModel):
-    agent_id: str
-    group_name: str
+    agent_id: str = Field(min_length=1, max_length=255)
+    group_name: str = Field(min_length=1, max_length=255)
+    expected_group_name: Optional[str] = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description=(
+            "Current assignment to replace, or null to assert that no assignment exists"
+        ),
+    )
+
+    @field_validator("group_name")
+    @classmethod
+    def reject_reserved_group(cls, value: str) -> str:
+        if is_reserved_barrier_group(value):
+            raise ValueError("This information-barrier name is reserved")
+        return value
 
 
 class BarrierGroupOut(BaseModel):
@@ -241,7 +465,7 @@ class BarrierGroupOut(BaseModel):
 
 
 class MemoryBatchAdd(BaseModel):
-    memories: list[MemoryAdd] = Field(max_length=100)
+    memories: list[MemoryAdd] = Field(min_length=1, max_length=100)
 
 
 class MemoryBatchResult(BaseModel):
@@ -264,10 +488,20 @@ class SupersessionReviewItem(BaseModel):
 class SupersessionReviewResult(BaseModel):
     items: list[SupersessionReviewItem]
     total: int
+    returned: int
+    complete: bool
+    has_more: bool
+    next_chain_position: Optional[int] = None
     confidence_threshold: float
 
 
 class RetentionPolicyIn(BaseModel):
+    expected_updated_at: Optional[datetime] = Field(
+        ...,
+        description=(
+            "Persisted updated_at returned by GET, or null to assert that no policy row exists"
+        ),
+    )
     content_ttl_days: Optional[int] = None   # None = retain forever
     audit_retention_days: int = 1825          # 5 years default (CFTC swap dealer minimum)
     legal_hold: bool = False
@@ -278,7 +512,7 @@ class RetentionPolicyOut(BaseModel):
     content_ttl_days: Optional[int]
     audit_retention_days: int
     legal_hold: bool
-    updated_at: datetime
+    updated_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
 
@@ -287,15 +521,35 @@ class RetentionPruneResult(BaseModel):
     namespace: str
     memories_pruned: int
     cutoff_date: datetime
+    remaining: int = 0
+    complete: bool = True
+    batch_limit: int = 500
 
 
 class NamespaceBillingIn(BaseModel):
-    stripe_customer_id: Optional[str] = None   # None clears the customer (stops billing)
+    expected_updated_at: Optional[datetime] = Field(
+        ...,
+        description=(
+            "Persisted updated_at returned by GET, or null to assert that no policy row exists"
+        ),
+    )
+    stripe_customer_id: Optional[str] = Field(default=None, max_length=255)
+
+    @field_validator("stripe_customer_id")
+    @classmethod
+    def validate_stripe_customer_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized or any(char.isspace() for char in normalized):
+            raise ValueError("stripe_customer_id must be non-empty and whitespace-free")
+        return normalized
 
 
 class NamespaceBillingOut(BaseModel):
     namespace: str
     stripe_customer_id: Optional[str]
+    updated_at: Optional[datetime]
 
     model_config = {"from_attributes": True}
 
@@ -325,12 +579,17 @@ class ConflictFlagOut(BaseModel):
 class ConflictListResult(BaseModel):
     conflicts: list[ConflictFlagOut]
     total: int
+    returned: int
+    complete: bool
+    has_more: bool
+    next_detected_at: Optional[datetime] = None
+    next_id: Optional[UUID] = None
     status_filter: Optional[str]
 
 
 class ConflictResolveRequest(BaseModel):
-    resolution: str            # accept_a | accept_b | dismiss
-    note: Optional[str] = None
+    resolution: Literal["accept_a", "accept_b", "dismiss"]
+    note: Optional[str] = Field(default=None, max_length=10_000)
 
 
 class ConflictResolveResult(BaseModel):
@@ -341,7 +600,7 @@ class ConflictResolveResult(BaseModel):
 
 
 class LineageNode(BaseModel):
-    """One version of a belief in the provenance chain."""
+    """One version of a belief in the provenance graph."""
     id: UUID
     content: Optional[str]              # None if erased
     content_hash: str
@@ -354,34 +613,56 @@ class LineageNode(BaseModel):
     supersession_confidence: Optional[float]
     erased_at: Optional[datetime]
     metadata: dict[str, Any]
-    is_current: bool                    # True for the live tip of the chain
+    is_current: bool                    # True for a live graph tip
 
 
 class LineageEdge(BaseModel):
-    """A supersession transition between two consecutive belief versions."""
+    """A supersession transition in the returned belief-provenance graph."""
     from_id: UUID                       # older belief being superseded
     to_id: UUID                         # newer belief
-    relation: str                       # SUPERSEDES | CONFIRMS | ADDS | CONTRADICTS_SAME_TIME
-    confidence: float
+    relation: str                       # SUPERSEDES | REFINES | CONFIRMS | ADDS | ...
+    confidence: float = Field(ge=0.0, le=1.0)
     rationale: Optional[str]            # LLM rationale when Stage 3 ran
-    adjudication_stage: int             # 1 | 2 | 3
+    adjudication_stage: int = Field(ge=1, le=3)
     superseded_at: datetime             # when the supersession was recorded
+    audit_event_id: Optional[UUID] = None
+    audit_chain_position: Optional[int] = Field(default=None, ge=1)
+    audit_binding_status: Literal[
+        "bound",
+        "missing",
+        "target_mismatch",
+        "malformed",
+    ] = "missing"
 
 
 class MemoryLineageResult(BaseModel):
     """
-    Full belief provenance chain for a given memory.
+    Bounded belief-provenance graph for a given memory.
 
-    ``nodes`` are ordered oldest-first (root → tip).
-    ``edges[i]`` connects ``nodes[i]`` to ``nodes[i+1]``.
-    The queried memory may be anywhere in the chain.
+    ``nodes`` are returned in deterministic topological order (roots before tips).
+    Supersession may converge, so callers must follow explicit edge IDs rather
+    than assuming adjacent nodes are connected. Singular root/tip fields are
+    compatibility aliases; their plural forms are authoritative.
     """
     agent_id: str
     namespace: str
     queried_id: UUID                    # the ID the caller passed in
-    root_id: UUID                       # oldest ancestor in the chain
-    tip_id: UUID                        # most recent descendant (current belief)
-    depth: int                          # number of nodes
+    root_id: UUID                       # canonical compatibility alias
+    tip_id: UUID                        # canonical compatibility alias
+    root_ids: list[UUID] = Field(default_factory=list)
+    tip_ids: list[UUID] = Field(default_factory=list)
+    shape: Literal["chain", "dag"] = "chain"
+    depth: int                          # compatibility alias for returned nodes
+    edge_count: int = Field(default=0, ge=0)
+    truncated: bool = False
+    has_more: bool = False
+    complete: bool = True
+    root_complete: bool = True
+    tip_complete: bool = True
+    reachable_nodes: int = Field(default=0, ge=0)
+    reachable_nodes_is_lower_bound: bool = False
+    audit_binding_complete: bool = True
+    max_nodes: int = 1000
     nodes: list[LineageNode]
     edges: list[LineageEdge]
 
@@ -391,34 +672,40 @@ class FactHistoryResult(BaseModel):
     All known versions of a structured fact, ordered oldest-first by event_time.
 
     Unlike lineage (which requires a memory_id), this query accepts a ticker
-    + metric pair and returns every recorded value across all temporal states
-    (including superseded ones).  Entity normalization is applied so 'Apple',
-    'AAPL', and 'US0378331005' all map to the same series.
+    + metric pair and scans a bounded deterministic window across temporal
+    states. ``total_is_lower_bound`` and ``scan_complete`` disclose whether the
+    normalized Python-side alias match inspected the entire candidate set.
     """
     ticker: str                          # canonical ticker (post-normalization)
     metric: str
     agent_id: str
     namespace: str
     total: int
+    total_is_lower_bound: bool = False
+    has_more: bool = False
+    scan_complete: bool = True
+    rows_scanned: int = 0
+    scan_limit: int = 0
     items: list[MemoryOut]
 
 
 class KnowledgeSnapshot(BaseModel):
     """
-    Complete knowledge state of an agent at a given point in time.
+    Exact-count, keyset-paginated knowledge state at a point in time.
 
-    Unlike recall (which does vector search + ranking), this is exhaustive —
-    every memory that was valid as of `as_of` is returned.  Use this for
-    audit reconstruction: "show me everything the agent knew on 2025-03-14."
-
-    This is the one-call compliance demo that closes deals with risk committees
-    and regulators: SEC examiners can verify the agent's complete knowledge state
-    at any past T without hunting through logs.
+    Unlike recall, this applies no relevance ranking. ``total`` is exact and
+    ``complete`` is true only when the response includes the entire snapshot.
     """
     agent_id: str
     namespace: str
     as_of: datetime
+    recorded_as_of: datetime
     total: int
+    returned: int
+    complete: bool
+    has_more: bool
+    next_event_time: Optional[datetime] = None
+    next_id: Optional[UUID] = None
     items: list[MemoryOut]
 
 
@@ -433,6 +720,8 @@ class MarkdownExportResult(BaseModel):
     as_of: datetime
     generated_at: datetime
     memory_count: int
+    snapshot_total: int
+    snapshot_complete: bool
 
 
 class ContaminationFlagOut(BaseModel):
@@ -451,40 +740,62 @@ class ContaminationReportOut(BaseModel):
     """
     Result of a backtest-contamination check.
 
-    is_clean=True is the proof a quant fund needs before trusting a backtest.
-    contamination_rate is flags / memories_checked (0.0 if no memories).
+    ``is_clean=True`` means no recorded, visible Lians memory violates the
+    cutoff inside the authenticated namespace/barrier. It does not prove that
+    an external backtest used no unrecorded future input.
+    contamination_rate is flags_total / memories_checked (0.0 if no memories).
     """
     agent_id: str
     namespace: str
     simulation_as_of: datetime
     memories_checked: int
+    flags_total: int
+    flags_returned: int
+    flags_complete: bool
+    has_more: bool
+    next_event_time: Optional[datetime] = None
+    next_id: Optional[UUID] = None
     flags: list[ContaminationFlagOut]
     contamination_rate: float
     is_clean: bool
 
 
+class ErasureMemoryHashOut(BaseModel):
+    memory_id: UUID
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ErasureCertificate(BaseModel):
     """
-    Cryptographic proof that a data subject's content was permanently destroyed.
+    Exact terminal proof plus one bounded memory-hash evidence page.
 
-    The certificate proves:
-      1. N memories had their encrypted content destroyed on `erased_at`.
-      2. The SHA-256 content_hashes are preserved — the erasure is auditable
-         but the content is unrecoverable.
-      3. The audit chain remains intact after the erasure (chain_status = "ok").
-      4. This certificate itself has a unique `certificate_id` for external
-         reference (e.g., filing with a supervisory authority).
-
-    Compliance officers buy proofs, not promises.  This is the proof.
+    The terminal audit row is committed with the final job transition. Full
+    chain verification is a separate bounded operator workflow, so this read
+    reports ``unchecked`` rather than conflating capacity exhaustion with trust.
     """
-    certificate_id: str             # stable UUID derived from subject + erased_at
-    subject_id: str
+    certificate_id: UUID
+    job_id: UUID
     namespace: str
-    request_ref: Optional[str]      # the erasure request reference from the caller
-    erased_at: datetime             # when the DEK was destroyed
-    memories_erased: int
-    content_hashes: list[str]       # SHA-256 of each erased memory's original content
-    chain_status: str               # "ok" | "tampered" | "unchecked"
+    subject_ref: str
+    request_ref: str
+    key_destroyed_at: datetime
+    completed_at: datetime
+    memories_erased: int = Field(ge=0)
+    live_facts_erased: int = Field(ge=0)
+    relationships_erased: int = Field(ge=0)
+    pending_admissions_erased: int = Field(ge=0)
+    manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    manifest_algorithm: Literal["lians-subject-erasure-memory-manifest-v1"]
+    evidence: list[ErasureMemoryHashOut] = Field(max_length=500)
+    content_hashes: list[str] = Field(max_length=500)
+    hashes_returned: int = Field(ge=0, le=500)
+    hashes_total: int = Field(ge=0)
+    hashes_complete: bool
+    has_more: bool
+    next_memory_id: Optional[UUID] = None
+    audit_event_id: UUID
+    audit_row_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    chain_status: Literal["unchecked"]
     generated_at: datetime
 
 
@@ -498,6 +809,8 @@ class AuditChainVerifyResult(BaseModel):
     namespace: str
     rows_checked: int
     status: str          # "ok" | "tampered"
+    truncated: bool
+    chain_tip: Optional[str]
     violations: list[AuditChainViolation]
 
 
@@ -513,6 +826,7 @@ class AuditExportRow(BaseModel):
     prev_hash: Optional[str]
     row_hash: Optional[str]
     hash_version: int = 1
+    chain_position: int
 
 
 class AuditExportResult(BaseModel):
@@ -520,8 +834,16 @@ class AuditExportResult(BaseModel):
     from_: Optional[datetime] = None
     to: Optional[datetime] = None
     total_rows: int
+    returned_rows: int
+    has_more: bool
+    complete: bool
+    next_chain_position: Optional[int] = None
+    snapshot_max_chain_position: int
     chain_status: Optional[str] = None   # "ok" | "tampered" | None (not verified)
     chain_violations: Optional[list[AuditChainViolation]] = None
+    chain_rows_checked: Optional[int] = None
+    chain_truncated: Optional[bool] = None
+    chain_tip: Optional[str] = None
     events: list[AuditExportRow]
 
 
@@ -582,15 +904,25 @@ class NeighborsResult(BaseModel):
     as_of: Optional[str]
     neighbors: list[NeighborOut]
     direct_edges: list[EdgeOut]
+    search_complete: bool
+    truncated: bool
+    nodes_examined: int
+    edges_examined: int
 
 
 class PathResult(BaseModel):
     src: str
     dst: str
-    connected: bool
+    # None means the bounded traversal exhausted its node/edge budget before a
+    # connection could be proved or disproved.
+    connected: Optional[bool]
     hops: int
     as_of: Optional[str]
     path: list[EdgeOut]
+    search_complete: bool
+    truncated: bool
+    nodes_examined: int
+    edges_examined: int
 
 
 # ── Context assembly ────────────────────────────────────────────────────────────
@@ -621,6 +953,10 @@ class ContextResult(BaseModel):
     token_estimate: int
     truncated: bool                       # True if the budget cut off some facts
     retrieval_degraded: bool = False      # recall ran lexical-only (see RecallResult)
+    graph_search_complete: bool = True
+    candidate_window_complete: bool = True
+    candidates_considered: int = 0
+    candidate_limit: int = 0
     # Open conflicts surfaced into the block (oldest first) + the total count
     # still open for this agent, so callers can alert when the backlog grows
     # beyond what the block shows.
@@ -676,9 +1012,14 @@ class PendingAdmissionOut(BaseModel):
 class AdmissionListResult(BaseModel):
     pending: list[PendingAdmissionOut]
     total: int
+    returned: int
+    complete: bool
+    has_more: bool
+    next_created_at: Optional[datetime] = None
+    next_id: Optional[UUID] = None
     status_filter: Optional[str]
 
 
 class AdmissionResolveRequest(BaseModel):
-    action: str                       # approve | reject
-    note: Optional[str] = None
+    action: Literal["approve", "admit", "reject"]
+    note: Optional[str] = Field(default=None, max_length=10_000)

@@ -5,16 +5,21 @@ Graph extraction: deterministic rule-based triplet extraction, and the
 from __future__ import annotations
 
 import hashlib
+import json as _json
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import pytest_asyncio
 from datetime import datetime, timezone
 
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
-from src.lians.graph_extract import extract_rule_based
+from lians.config import get_settings
+from lians.db import get_db
+from lians.graph_extract import extract_llm, extract_relationships, extract_rule_based
+from lians.llm_adjudication import _TRIPLET_CACHE, extract_triplets
+from lians.main import app
+from lians.models import ApiKey
 
 NS = "ext-ns"
 KEY = "ext-key"
@@ -93,14 +98,6 @@ async def test_extract_writes_edges_and_path_connects(client):
 
 
 # ── LLM extractor (extract_triplets) ────────────────────────────────────────────
-
-import json as _json
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from src.lians.config import get_settings
-from src.lians.llm_adjudication import extract_triplets, _TRIPLET_CACHE
-from src.lians.graph_extract import extract_llm, extract_relationships
-
 
 def _mock_triplet_response(triplets):
     block = MagicMock()

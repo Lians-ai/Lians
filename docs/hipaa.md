@@ -114,6 +114,7 @@ The hash chain provides **non-repudiation of memory state**: if a record is alte
 # Required for any PHI deployment
 DOMAIN_ADAPTER=healthcare
 MASTER_ENCRYPTION_KEY=<32-byte base64 key>    # mandatory; no AGENTMEM_ALLOW_UNENCRYPTED
+MASTER_KEY_ID=hipaa-prod-2026-01              # stable non-secret envelope version
 RLS_BARRIERS_ENABLED=true                      # DB-layer care team isolation
 AIRGAP_MODE=true                               # PHI must not leave network
 EMBEDDING_PROVIDER=sentence-transformers       # required by AIRGAP_MODE
@@ -145,6 +146,10 @@ KMS_VAULT_ADDR=https://vault.internal:8200
 KMS_VAULT_TOKEN=<token>
 KMS_VAULT_PATH=Lians/master-key
 ```
+
+Rotate master material only through the verified bounded-dual-key procedure in
+[the master-key rotation runbook](master-key-rotation.md); never replace a
+secret value/path in place while retained data or backups depend on it.
 
 ---
 

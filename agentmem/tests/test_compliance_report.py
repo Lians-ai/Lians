@@ -6,15 +6,14 @@ conflict counts, erasure events, retention policy snapshot,
 and verify=true chain status.
 """
 import hashlib
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey, NamespacePolicy
+from httpx import ASGITransport, AsyncClient
+from lians.db import get_db
+from lians.main import app
+from lians.models import ApiKey, NamespacePolicy
 
 TEST_NS = "compliance-test-ns"
 TEST_KEY = "compliance-test-key-xyz"
@@ -124,8 +123,8 @@ async def test_report_conflict_counts(client):
 
 @pytest.mark.asyncio
 async def test_report_erasure_section(client, db):
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory, erase_subject
+    from lians.memory_service import add_memory, erase_subject
+    from lians.schemas import MemoryAdd
 
     await add_memory(db, TEST_NS, MemoryAdd(
         agent_id="agent-1",
@@ -138,8 +137,48 @@ async def test_report_erasure_section(client, db):
     resp = await client.get("/v1/compliance/report", headers=_h())
     body = resp.json()
     assert body["erasures"]["total_requests"] == 1
-    assert "user-abc" in body["erasures"]["subject_ids"]
-    assert body["summary"]["erased_memories"] == 1
+    assert len(body["erasures"]["subject_ids"]) == 1
+    assert body["erasures"]["subject_ids"][0].startswith(
+        "lians:subject:v2:hmac-sha256:"
+    )
+    assert "user-abc" not in body["erasures"]["subject_ids"][0]
+    assert body["erasures"]["subject_ids_total"] == 1
+    assert body["erasures"]["subject_ids_complete"] is True
+    assert body["erasures"]["subject_ids_limit"] == 1000
+    assert body["summary"]["erased_memories"] == 0
+    assert body["erasures"]["total_records_erased"] == 0
+
+
+@pytest.mark.asyncio
+async def test_report_discloses_bounded_erasure_subject_inventory(client, db):
+    from lians.memory_service import add_memory, erase_subject
+    from lians.schemas import MemoryAdd
+
+    for subject_id in ("bounded-subject-a", "bounded-subject-b"):
+        await add_memory(
+            db,
+            TEST_NS,
+            MemoryAdd(
+                agent_id="agent-1",
+                content=f"PII for {subject_id}",
+                event_time=T0,
+                subject_id=subject_id,
+            ),
+        )
+        await erase_subject(db, TEST_NS, subject_id, f"erase-{subject_id}")
+
+    resp = await client.get(
+        "/v1/compliance/report",
+        params={"subject_id_limit": 1},
+        headers=_h(),
+    )
+    assert resp.status_code == 200
+    erasures = resp.json()["erasures"]
+    assert erasures["total_requests"] == 2
+    assert erasures["subject_ids_total"] == 2
+    assert erasures["subject_ids_limit"] == 1
+    assert erasures["subject_ids_complete"] is False
+    assert len(erasures["subject_ids"]) == 1
 
 
 @pytest.mark.asyncio

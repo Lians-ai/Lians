@@ -2,6 +2,127 @@
 
 All notable changes to Lians. Versions follow semver; SDKs are released in lock-step.
 
+## 0.5.0 — 2026-08-02
+
+The decision-evidence infrastructure release. Lians now records, verifies,
+controls, reconstructs, and remediates consequential AI actions across model
+providers and agent runtimes. This is a pre-1.0 minor release with additive API
+surfaces and deliberate response-contract improvements described below.
+
+### Added
+
+- **Open Decision Receipt v0.1.** JSON Schema, canonical SHA-256 document,
+  Ed25519 signing, offline verifier CLI, independent fixtures/conformance runner,
+  trust-key registry, immutable key rotation/revocation, and pinned OpenTelemetry
+  GenAI, MCP, and A2A mapping artifacts.
+- **Normalized evidence graph.** First-class source, policy, model, tool,
+  permission, instruction, input, and output artifacts; persisted per-kind
+  coverage; explicit legacy gaps; transaction-time-safe reconstruction; indexed
+  direct and reachable dependency impact.
+- **Exhaustive autonomous blast radius.** Frozen decision/link snapshots,
+  durable keyset cursors, idempotent match pages, multi-replica `SKIP LOCKED`
+  leasing, bounded retries, poison-job termination, caller-driven compatibility,
+  worker readiness, metrics, and alerts.
+- **Universal Recorder v0.1.** Provider-neutral native/OTLP/MCP/A2A envelopes,
+  authenticated producer attribution, immutable event hashes, privacy-safe
+  capture modes, automatic correlation, first-receipt readiness, and a bounded
+  retry-safe SDK sink with explicit loss disclosure.
+- **Native Recorder hooks.** Public lifecycle integrations for OpenAI Agents,
+  LangChain/LangGraph, CrewAI, Anthropic SDK middleware, Google ADK plugins, and
+  Vercel AI SDK callbacks, each with documented observable and unobservable
+  boundaries.
+- **Lians Gate.** Immutable versioned policies, trusted-receipt verification,
+  identity/scope/barrier checks, source and policy currency, injection signals,
+  role-bound encrypted approval attestations, short-lived single-use permits,
+  and a separately deployable enforcement mediator that binds the canonical
+  downstream request before side effects.
+- **Lians Investigator.** Prioritized decision queue, deterministic
+  reconstruction reports, evidence/control timelines, review-chain validation,
+  cases, owned remediation tasks, and encrypted human-attested closure. Report
+  v1.1 exposes exact per-collection coverage/truncation metadata so a bounded
+  packet cannot be mistaken for a complete history.
+- **Enterprise identity and governance.** OIDC/JWKS authentication, SCIM 2.0,
+  RBAC, information barriers, expiring workload credentials, immutable namespace
+  policy revisions, server-owned residency, capture policy, and atomic daily
+  quotas for Recorder events, decisions, protected actions, writes, recalls,
+  and estimated ingest bytes.
+- **Bounded provisioning and auth bootstrap.** SCIM reconciliation now enforces
+  complete 1,000-by-1,000 Group/User membership bounds plus a 50-scope effective
+  union in both service and serialized PostgreSQL boundaries. API-key and OIDC
+  binding bootstrap use exact PUBLIC-revoked SECURITY DEFINER lookups, while
+  direct auth-table access is namespace/barrier RLS-constrained.
+- **DecisionRecord authorization evidence.** Hash v3 binds the authenticated
+  principal type, optional role, and complete effective-scope snapshot to each
+  new decision. Database constraints require a verified credential and 1-50
+  unique valid scopes containing `write`; v1/v2 remain unchanged and explicitly
+  disclose that no historical authorization snapshot exists.
+- **Protected-unit economics.** One durable `lians_authoritative_decision` fact
+  per committed decision and one `lians_protected_action` fact per successfully
+  consumed Gate permit, transactionally bound to source mutation and audit
+  evidence. Replays, quota denials, mismatches, expiry, and rejections do not
+  bill.
+- **Production operations.** Exact migration/image readiness, transactional
+  idempotency, optimistic concurrency, remote receipt/KMS key isolation, online
+  key rotation fences, integration and metering outboxes, bounded-cardinality
+  durable metrics, SLO alerts, Grafana views, backup/WORM guidance, SBOM,
+  provenance, signing, and digest-pinned deployment examples.
+- **Versioned contracts and SDK parity.** Public/admin OpenAPI snapshots;
+  canonical Python and TypeScript decision/control clients; typed compatibility
+  Python models; one-time-secret redaction; bounded retry semantics; and explicit
+  stale-write preconditions.
+
+### Changed
+
+- The public category and primary product vocabulary are now **decision evidence
+  infrastructure**, **Decision Receipt**, **reconstruct**, and **protected
+  decision/action**. Bitemporal memory remains a core evidence primitive and a
+  backward-compatible product surface.
+- Investigator reports move to contract version 1.1 and add required coverage
+  disclosures. Consumers that deserialize reports into closed structs must add
+  the new fields before upgrading.
+- Production startup requires the autonomous impact worker and an exact database
+  schema match. Apply the single packaged Alembic head before rolling API pods.
+- The final auth-table contract is a fenced cutover: apply the exact lookup
+  expand and concurrent pending-admission index while old pods remain live,
+  then drain every old direct-table authentication caller before `0056b`.
+- The 0.4.2-to-0.5.0 database transition is now an explicit expand/backfill/
+  contract sequence. Large historical backfills use committed, resumable pages;
+  established-table indexes build concurrently with invalid-index recovery; and
+  data-bearing revisions refuse misleading offline SQL generation.
+- Mixed-version writes remain safe during the documented rolling window: legacy
+  audit inserts are database-canonicalized, legacy decision/Recorder provenance
+  stays explicitly unverified, and old/new idempotency paths coexist without
+  weakening replay conflict detection.
+- Production continuously verifies its PostgreSQL identity: the API login and
+  fixed `lians_runtime` capability must remain non-owner, least-privilege,
+  RLS-bound roles that cannot assume an application owner. Raw Kubernetes now
+  isolates runtime, migration, and break-glass Secrets as separate workloads.
+- ValidMind inventories, compliance reports, receipt trust lists, and remediation
+  queues now aggregate and page in SQL with deterministic bounds, exact
+  completeness disclosure, and dedicated scale indexes.
+- ValidMind model resources are now separated by an opaque information-barrier
+  scope (`metadata.lians_scope_id`), so a model's 0.5 resource ID can differ
+  from its namespace-wide 0.4.2 ID. A legacy ID remains readable and writable
+  only while it resolves to one scope; uniquely resolvable legacy/scoped link
+  rows are mirrored during the rolling window, while ambiguous old IDs return
+  `409` instead of guessing a protected scope.
+- Go, Java, and C transports now enforce validated base URLs, redirect blocking,
+  operation-wide deadlines, bounded responses, safe-only retries, stable
+  idempotency keys, and sanitized errors; SDK runtime versions are part of the
+  lock-step release contract.
+
+### Truth boundaries
+
+- A receipt proves the integrity and provenance of the **recorded** boundary; it
+  does not claim deterministic reproduction of nondeterministic model behavior,
+  hidden reasoning, unrecorded context, source correctness, or causal certainty.
+- Native framework hooks observe only public callbacks/middleware emitted by the
+  configured runtime. Every adapter documents gaps such as disabled tracing,
+  independently created runners, remote execution, and client-tool work outside
+  the observed boundary.
+- The SDK Recorder sink is bounded and retry-safe but in-memory. Deploy a durable
+  outbox/collector when process-crash loss is unacceptable.
+
 ## 0.4.0 — 2026-07-06
 
 The memory-lifecycle release: flush, resurface, decay, degrade, export.

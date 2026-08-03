@@ -1,0 +1,122 @@
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /ops/backup
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:30"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+    groups:
+      supply-chain-actions:
+        patterns:
+          - "actions/*"
+          - "astral-sh/*"
+          - "azure/*"
+          - "docker/*"
+          - "anchore/*"
+          - "github/codeql-action"
+          - "pypa/*"
+          - "sigstore/cosign-installer"
+          - "softprops/*"
+          - "superfly/*"
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: pip
+    directory: /agentmem/sdk/python
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:35"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip
+    directory: /sdk/python
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:40"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip
+    directory: /ops/backup
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:45"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /agentmem/sdk/typescript
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /apps/memory-checkup
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:30"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /integrations/grafana-lians-app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "10:45"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: gomod
+    directory: /agentmem/sdk/go
+    schedule:
+      interval: weekly
+      day: monday
+      time: "11:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: maven
+    directory: /agentmem/sdk/java
+    schedule:
+      interval: weekly
+      day: monday
+      time: "11:30"
+      timezone: America/New_York
+    open-pull-requests-limit: 5

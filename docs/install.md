@@ -1,8 +1,10 @@
 # Install Lians
 
-One memory API, five native SDKs, and a self-hostable server. Pick your language —
-every client speaks the same REST API (recall, point-in-time `recall_at`, snapshot,
-backtest, crypto-shred erasure, audit-chain verify, relationship graph).
+One core memory contract, five native SDKs, and a self-hostable server. Pick your
+language — every network client covers recall, point-in-time `recall_at`, snapshot,
+backtest, crypto-shred erasure, audit-chain verification, and the relationship
+graph. Python local mode implements the core memory workflows in-process rather
+than speaking REST.
 
 > **Just want to try it?** The fastest path is Python local mode — no server, no
 > Docker, no API key:
@@ -17,11 +19,12 @@ backtest, crypto-shred erasure, audit-chain verify, relationship graph).
 | **Python** | `pip install lians-sdk` | `from lians import LiansClient` |
 | **Python (local, no server)** | `pip install lians-sdk[local]` | `from lians import LocalLiansClient` |
 | **TypeScript / Node** | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` |
-| **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.0` | `lians.NewClient(url, key)` |
-| **Java** (JVM 11+) | Maven `ai.lians:lians-sdk:0.4.0` | `new LiansClient(opts)` |
+| **Go** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.5.0` | `lians.NewClient(url, key)` |
+| **Java** (JVM 11+) | Maven `ai.lians:lians-sdk:0.5.0` | `new LiansClient(opts)` |
 | **C** (C99 + libcurl) | `cmake -B build && cmake --build build` | `lians_client_new(...)` |
 
-All SDKs are released in lock-step at the **same version** (currently `0.4.0`).
+All SDK source packages are versioned in lock-step at `0.5.0`. Before installing,
+confirm that version has been published to the selected registry.
 
 ## Run the server
 
@@ -29,12 +32,13 @@ The SDKs (except Python local mode) talk to a Lians server. Self-host it:
 
 ```bash
 git clone https://github.com/Lians-ai/Lians
-cd Lians
+cd Lians/agentmem
 docker compose up --build        # Postgres + pgvector + API on :8000
 ```
 
-Health check: `curl localhost:8000/livez`. See [DEPLOY.md](../DEPLOY.md) for
-production (KMS, non-superuser DB role for RLS, air-gap mode, WORM storage).
+Health check: `curl localhost:8000/livez`. See
+[production deployment](deploy.md) for KMS, non-superuser RLS, air-gap, and WORM
+requirements.
 
 ## 30-second hello, by language
 
@@ -82,11 +86,14 @@ _, _ = c.AddMemory(ctx, lians.AddMemoryRequest{
 <dependency>
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.4.0</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 ```java
-var client = new LiansClient(LiansOptions.builder()
+import ai.lians.LiansClient;
+import ai.lians.LiansClientOptions;
+
+var client = new LiansClient(LiansClientOptions.builder()
         .baseUrl("http://localhost:8000").apiKey(System.getenv("LIANS_API_KEY")).build());
 ```
 
@@ -95,8 +102,11 @@ var client = new LiansClient(LiansOptions.builder()
 cd agentmem/sdk/c && cmake -B build && cmake --build build   # needs libcurl
 ```
 ```c
+#include <stdlib.h>
 #include "lians.h"
-lians_client *c = lians_client_new("http://localhost:8000", getenv("LIANS_API_KEY"));
+lians_client_t *c = lians_client_new(
+    "http://localhost:8000", getenv("LIANS_API_KEY"), NULL
+);
 ```
 
 ## MCP — use Lians as a native tool
@@ -116,9 +126,9 @@ pip install lians-sdk[all]          # everything
 ## Verify a release
 
 ```bash
-pip install lians-sdk==0.4.0
+pip install lians-sdk==0.5.0
 npm view @lians-ai/lians version
-go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.0
+go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.5.0
 ```
 
 Maintainers: see [RELEASING.md](../RELEASING.md) — one `vX.Y.Z` tag ships all five.

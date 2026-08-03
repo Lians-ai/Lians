@@ -1,0 +1,254 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "lians.fullname" . }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-10"
+    helm.sh/hook-delete-policy: before-hook-creation
+    lians.ai/alembic-target: head
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.migrations.ttlSecondsAfterFinished }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "lians.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      # The release ServiceAccount is a normal resource and does not exist yet
+      # during a pre-install hook. The namespace's default account is used with
+      # token automount disabled; this job requires no Kubernetes API access.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: packaged-schema-preflight
+          image: {{ include "lians.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /app/agentmem
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              python - <<'PY'
+              import asyncio
+              import os
+              from types import SimpleNamespace
+
+              from sqlalchemy import text
+              from sqlalchemy.ext.asyncio import create_async_engine
+              from lians.connection_security import validate_production_data_transports
+              from lians.db import parse_db_url
+
+              transport_posture = SimpleNamespace(
+                  database_url=os.environ["DATABASE_URL"],
+                  redis_url="rediss://transport-preflight.invalid:6379/0",
+                  production_allow_local_data_service_sockets=False,
+                  database_pool_size=int(os.environ["DATABASE_POOL_SIZE"]),
+                  database_max_overflow=int(os.environ["DATABASE_MAX_OVERFLOW"]),
+                  database_pool_timeout_seconds=float(
+                      os.environ["DATABASE_POOL_TIMEOUT_SECONDS"]
+                  ),
+              )
+              transport_failures = validate_production_data_transports(transport_posture)
+              if transport_failures:
+                  raise SystemExit(
+                      "Migration database transport refused: "
+                      + "; ".join(transport_failures)
+                  )
+
+              async def verify_role_separation() -> None:
+                  database_url, connect_args = parse_db_url(os.environ["DATABASE_URL"])
+                  engine = create_async_engine(database_url, connect_args=connect_args)
+                  try:
+                      async with engine.connect() as connection:
+                          row = (
+                              await connection.execute(
+                                  text(
+                                      """
+                                      SELECT
+                                          current_user AS migration_user,
+                                          migration.rolsuper AS migration_role_superuser,
+                                          migration.rolbypassrls AS migration_role_bypasses_rls,
+                                          COALESCE(
+                                              pg_has_role(current_user, runtime.rolname, 'MEMBER'),
+                                              false
+                                          ) AS migration_has_runtime_capability,
+                                          runtime.rolname IS NOT NULL AS runtime_role_exists,
+                                          COALESCE(runtime.rolcanlogin, true) AS runtime_role_can_login,
+                                          COALESCE(runtime.rolsuper, true) AS runtime_role_superuser,
+                                          COALESCE(runtime.rolbypassrls, true) AS runtime_role_bypasses_rls,
+                                          (
+                                              EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_database database
+                                                  WHERE database.datname = current_database()
+                                                    AND database.datdba = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_namespace namespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND namespace.nspowner = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_class relation
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = relation.relnamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND relation.relowner = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_proc procedure
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = procedure.pronamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND procedure.proowner = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_type data_type
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = data_type.typnamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND data_type.typowner = runtime.oid
+                                              )
+                                          ) AS runtime_role_owns_application_object
+                                      FROM pg_roles migration
+                                      LEFT JOIN pg_roles runtime
+                                        ON runtime.rolname = 'lians_runtime'
+                                      WHERE migration.rolname = current_user
+                                      """
+                                  )
+                              )
+                          ).mappings().one()
+                          if (
+                              not row["runtime_role_exists"]
+                              or row["runtime_role_can_login"]
+                              or row["runtime_role_superuser"]
+                              or row["runtime_role_bypasses_rls"]
+                              or row["runtime_role_owns_application_object"]
+                              or row["migration_role_superuser"]
+                              or row["migration_role_bypasses_rls"]
+                              or row["migration_has_runtime_capability"]
+                              or row["migration_user"] == "lians_runtime"
+                          ):
+                              raise SystemExit(
+                                  "Migration refused: pre-provision lians_runtime as "
+                                  "non-owner NOLOGIN NOSUPERUSER NOBYPASSRLS and use a distinct "
+                                  "NOSUPERUSER/NOBYPASSRLS migrator that does not inherit it"
+                              )
+                  finally:
+                      await engine.dispose()
+
+              asyncio.run(verify_role_separation())
+              PY
+              heads="$(alembic -c alembic.ini heads | awk 'NF {print $1}' | sort -u)"
+              head_count="$(printf '%s\n' "${heads}" | awk 'NF {count++} END {print count+0}')"
+              if [ "${head_count}" -ne 1 ]; then
+                echo "Migration refused: release image must package exactly one Alembic head." >&2
+                exit 1
+              fi
+              alembic -c alembic.ini current >/dev/null
+              printf '%s\n' "${heads}" > /work/expected-head
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.database.migration.name }}
+                  key: {{ .Values.existingSecrets.database.migration.key }}
+            - name: DATABASE_POOL_SIZE
+              value: {{ .Values.config.database.poolSize | quote }}
+            - name: DATABASE_MAX_OVERFLOW
+              value: {{ .Values.config.database.maxOverflow | quote }}
+            - name: DATABASE_POOL_TIMEOUT_SECONDS
+              value: {{ .Values.config.database.poolTimeoutSeconds | quote }}
+            - name: MIGRATION_STATEMENT_TIMEOUT_MS
+              value: {{ .Values.migrations.statementTimeoutMs | quote }}
+            - name: MIGRATION_LOCK_TIMEOUT_MS
+              value: {{ .Values.migrations.lockTimeoutMs | quote }}
+            - name: MIGRATION_IDLE_TRANSACTION_TIMEOUT_MS
+              value: {{ .Values.migrations.idleTransactionTimeoutMs | quote }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime-cache
+              mountPath: /var/cache/lians
+      containers:
+        - name: migrate
+          image: {{ include "lians.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /app/agentmem
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              expected="$(cat /work/expected-head)"
+              alembic -c alembic.ini upgrade head
+              current="$(alembic -c alembic.ini current | awk 'NF {print $1}' | sort -u)"
+              if [ -z "${current}" ] || [ "${current}" != "${expected}" ]; then
+                echo "Migration verification failed: database is not at the packaged head." >&2
+                exit 1
+              fi
+              echo "Database migration reached the single packaged Alembic head."
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.database.migration.name }}
+                  key: {{ .Values.existingSecrets.database.migration.key }}
+            - name: XDG_CACHE_HOME
+              value: /var/cache/lians
+            - name: MIGRATION_STATEMENT_TIMEOUT_MS
+              value: {{ .Values.migrations.statementTimeoutMs | quote }}
+            - name: MIGRATION_LOCK_TIMEOUT_MS
+              value: {{ .Values.migrations.lockTimeoutMs | quote }}
+            - name: MIGRATION_IDLE_TRANSACTION_TIMEOUT_MS
+              value: {{ .Values.migrations.idleTransactionTimeoutMs | quote }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime-cache
+              mountPath: /var/cache/lians
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: runtime-cache
+          emptyDir:
+            sizeLimit: 256Mi
+{{- end }}

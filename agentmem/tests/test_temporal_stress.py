@@ -22,8 +22,8 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories
+from lians.schemas import MemoryAdd, RecallRequest
+from lians.memory_service import add_memory, recall_memories
 
 NS    = "stress-ns"
 AGENT = "stress-agent"
@@ -266,14 +266,13 @@ class TestOutOfOrderIngestion:
             event_time=T_NEW, metadata=meta,
         ))
         # Ingest older event second (out-of-order arrival)
-        m_old = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=agent, content="TSLA Q1 deliveries 400k",
             event_time=T_OLD, metadata=meta,
         ))
 
         # The older ingested fact must not have closed the newer one
-        from src.lians.models import Memory as MemModel
-        from sqlalchemy import select
+        from lians.models import Memory as MemModel
         db_new = await db.get(MemModel, m_new.id)
         assert db_new.valid_to is None, (
             "Newer event must remain open even when an older event is ingested later; "
@@ -303,7 +302,7 @@ class TestOutOfOrderIngestion:
             agent_id=agent, content="NVDA guidance $40B",
             event_time=_t(month=7), metadata=meta,
         ))
-        m1 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=agent, content="NVDA guidance $36B",
             event_time=_t(month=4), metadata=meta,
         ))

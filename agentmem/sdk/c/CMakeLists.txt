@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(lians_c_sdk VERSION 0.4.0 LANGUAGES C)
+project(lians_c_sdk VERSION 0.5.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -32,3 +32,8 @@ enable_testing()
 add_executable(lians_test_json tests/test_json.c src/lians_json.c)
 target_include_directories(lians_test_json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_test(NAME json_unit COMMAND lians_test_json)
+
+# Header/API compile fixture. It is built but not executed and catches accidental
+# public ABI declaration drift for the hardened configuration/idempotency surface.
+add_library(lians_api_compile OBJECT tests/test_api_compile.c)
+target_include_directories(lians_api_compile PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -20,10 +20,15 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
+from lians.subject_erasure_service import (
+    claim_due_subject_erasure_jobs,
+    process_subject_erasure_job,
+)
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 T1 = datetime(2026, 4, 1, tzinfo=timezone.utc)
@@ -189,7 +194,7 @@ async def test_three_node_chain_queried_from_middle(client):
 @pytest.mark.asyncio
 async def test_three_node_chain_queried_from_tip(client):
     a = await _add(client, _mem("AAPL EPS $1.50", T0, ticker="AAPL"))
-    b = await _add(client, _mem("AAPL EPS $1.55", T1, ticker="AAPL"))
+    await _add(client, _mem("AAPL EPS $1.55", T1, ticker="AAPL"))
     c = await _add(client, _mem("AAPL EPS $1.62", T2, ticker="AAPL"))
 
     r = await _lineage(client, c["id"])
@@ -289,9 +294,9 @@ async def test_superseded_node_has_valid_to_set(client):
 # â”€â”€ Erased memory in chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
-async def test_erased_node_content_is_none(client):
+async def test_erased_node_content_is_none(client, db):
     """An erased memory in the chain returns content=None but stays in the chain."""
-    a = await _add(client, _mem("Client X portfolio $500k", T0), )
+    await _add(client, _mem("Client X portfolio $500k", T0))
     # Add with subject_id so we can erase it
     r = await client.post("/v1/memories", headers=_h(), json={
         **_mem("Client X portfolio $600k", T1),
@@ -304,7 +309,34 @@ async def test_erased_node_content_is_none(client):
         "subject_id": "client-x-erase",
         "request_ref": "GDPR-TEST",
     })
-    assert er.status_code == 200
+    assert er.status_code == 202
+    assert er.json()["status"] == "pending"
+
+    worker_id = "lineage-erasure-test"
+    claims = await claim_due_subject_erasure_jobs(
+        db,
+        worker_id=worker_id,
+        batch_size=1,
+        lease_seconds=60,
+    )
+    assert len(claims) == 1
+    session_factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    await process_subject_erasure_job(
+        session_factory,
+        claim=claims[0],
+        worker_id=worker_id,
+        page_size=100,
+        max_pages=20,
+        lease_seconds=60,
+    )
+    await db.run_sync(lambda session: session.expire_all())
+
+    status = await client.get(
+        f"/v1/erase/jobs/{er.json()['job_id']}",
+        headers=_h(),
+    )
+    assert status.status_code == 200
+    assert status.json()["status"] == "completed"
 
     # Chain for the erased memory should still be accessible,
     # but erased_at should be set and content should be None

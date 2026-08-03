@@ -1,0 +1,22 @@
+{
+  "$schema": "https://lians.ai/specs/decision-receipt/v0.1/mappings/manifest.schema.json",
+  "receipt_version": "0.1",
+  "contract": "supporting_evidence_requires_explicit_decision_binding",
+  "mappings": [
+    {
+      "standard": "opentelemetry_genai",
+      "path": "opentelemetry-genai.md",
+      "sha256": "5652b7a1cf639cfaa731388ee08cc390722d56ccea74501611e6a3c593638664"
+    },
+    {
+      "standard": "mcp",
+      "path": "mcp.md",
+      "sha256": "bdf0a59bda5b1a3896d0c1f85c713c5513271b6efe531638200d2ea7d763d0d1"
+    },
+    {
+      "standard": "a2a",
+      "path": "a2a.md",
+      "sha256": "7ee692fe44cfaa90176492de68d7515a4ab3575a02ceec05da57c33a98471e11"
+    }
+  ]
+}

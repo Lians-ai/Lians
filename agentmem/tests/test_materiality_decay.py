@@ -13,14 +13,14 @@ import math
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from src.lians.ranking import (
+from lians.ranking import (
     RECENCY_HALF_LIFE_DAYS,
     MATERIALITY_HALF_LIFE_DAYS,
     _materiality_half_life,
     _recency_decay,
 )
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories
+from lians.schemas import MemoryAdd, RecallRequest
+from lians.memory_service import add_memory, recall_memories
 
 NS = "materiality-ns"
 AGENT = "materiality-agent"

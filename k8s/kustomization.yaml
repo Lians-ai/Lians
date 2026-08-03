@@ -3,14 +3,20 @@
 #
 # Deployment order matters:
 # 1. kubectl apply -f k8s/namespace.yaml
-# 2. kubectl apply -f k8s/secret.yaml        # fill in values first
-# 3. kubectl apply -f k8s/configmap.yaml
-# 4. kubectl apply -f k8s/migrate-job.yaml   # run migrations
-# 5. kubectl wait --for=condition=complete job/agentmem-migrate -n agentmem --timeout=120s
-# 6. kubectl apply -k k8s/               # deploy everything else
+# 2. Materialize the least-privilege runtime Secrets through the approved
+#    external-secret controller. The checked-in Secret manifests are shapes
+#    only and contain deliberately non-runnable placeholders; then apply
+#    k8s/serviceaccounts.yaml so the tokenless migrator identity exists.
+# 3. Apply default-deny-networkpolicy.yaml plus a reviewed environment overlay
+#    of networkpolicy.yaml with the exact migration database destination.
+# 4. kubectl apply -f k8s/migration-secret.yaml  # distinct, short-lived owner URL
+# 5. kubectl apply -f k8s/migrate-job.yaml       # run migrations
+# 6. kubectl wait --for=condition=complete job/agentmem-migrate -n agentmem --timeout=1800s
+# 7. kubectl delete secret agentmem-migration-secret -n agentmem
+# 8. kubectl apply -k k8s/                # deploy everything else
 #
-# To update only the image tag:
-# kustomize edit set image agentmem=ghcr.io/your-org/agentmem:v0.3.0
+# To update the production image, pin the verified registry digest:
+# kustomize edit set image agentmem=ghcr.io/your-org/repository@sha256:<digest>
 # kubectl apply -k k8s/
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -21,23 +27,43 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - secret.yaml
+  - application-secret.yaml
+  - redis-secret.yaml
+  - receipt-secret.yaml
+  - kms-secret.yaml
+  - recorder-secret.yaml
+  - serviceaccounts.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
   - hpa.yaml
   - pdb.yaml
+  - default-deny-networkpolicy.yaml
   - networkpolicy.yaml
+  - otel-collector.yaml
+  # The migration Job and migration Secret remain deliberately outside this
+  # continuously reconciled application set. Apply them only for the reviewed
+  # migration window; never project the owner credential into an API pod.
+  # admin-secret.yaml is likewise reserved for a separately isolated admin
+  # surface and must never be mounted by this public Deployment.
   # migrate-job.yaml is intentionally excluded here — run it manually before
   # each deployment to avoid applying the job on every `kubectl apply -k`.
 
-# Image — override tag at deploy time:
-# kustomize edit set image agentmem=ghcr.io/your-org/agentmem:v0.2.0
+# Development placeholder only. Production overlays must replace this with the
+# verified digest emitted by supply-chain.yml (see docs/supply-chain-security.md).
 images:
   - name: agentmem
-    newName: agentmem      # CHANGE: ghcr.io/your-org/agentmem
-    newTag: latest         # CHANGE: v0.2.0 (pin to a specific tag in production)
+    newName: ghcr.io/lians-ai/lians
+    # Deliberately non-runnable. Replace this with the verified release subject
+    # digest before rendering; mutable tags are never a production default.
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-commonLabels:
-  app.kubernetes.io/name: agentmem
-  app.kubernetes.io/version: "0.2.0"
-  app.kubernetes.io/managed-by: kustomize
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: agentmem
+  - includeSelectors: false
+    includeTemplates: true
+    pairs:
+      app.kubernetes.io/version: "0.5.0"
+      app.kubernetes.io/managed-by: kustomize

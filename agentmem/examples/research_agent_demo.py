@@ -12,7 +12,7 @@ Run local mode immediately::
 
 Run against a live server::
 
-    uvicorn src.lians.main:app --reload
+    uvicorn --app-dir src lians.main:app --reload --no-proxy-headers
     python examples/research_agent_demo.py --mode http --api-key your-key
 """
 import sys
@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 # Allow running from any directory without installing the SDK
 _root = Path(__file__).resolve().parent.parent  # agentmem/
 sys.path.insert(0, str(_root / "sdk" / "python"))
-sys.path.insert(0, str(_root))  # makes src.lians importable in dev mode
+sys.path.insert(0, str(_root))  # exposes the SDK local-engine source checkout
 
 
 def run_demo(mem) -> None:

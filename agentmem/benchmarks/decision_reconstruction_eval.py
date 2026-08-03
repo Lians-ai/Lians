@@ -8,6 +8,7 @@ Run from the repository root:
 
     python agentmem/benchmarks/decision_reconstruction_eval.py
 """
+# ruff: noqa: E402
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +23,7 @@ from statistics import quantiles
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
 # Keep the benchmark deterministic and offline.
 os.environ.setdefault("EMBEDDING_PROVIDER", "local")
@@ -37,9 +38,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from src.lians.db import get_db
-from src.lians.main import app
-from src.lians.models import ApiKey, Base, EventLog
+from lians.db import get_db
+from lians.main import app
+from lians.models import ApiKey, Base, EventLog
 
 
 NAMESPACE = "riad-benchmark"
@@ -81,13 +82,17 @@ async def run_benchmark(repetitions: int = 10) -> dict[str, Any]:
         index
         for table in Base.metadata.tables.values()
         for index in list(table.indexes)
-        if index.dialect_kwargs.get("postgresql_using") is not None
+        if index.dialect_kwargs.get("postgresql_using") not in (None, False)
     ]
     for index in pg_indexes:
         index.table.indexes.discard(index)
 
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    finally:
+        for index in pg_indexes:
+            index.table.indexes.add(index)
 
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     async with sessions() as seed:

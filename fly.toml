@@ -1,32 +1,50 @@
 app            = 'agentmem-lotus'
+kill_signal    = 'SIGTERM'
+kill_timeout   = '60s'
 primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB chatter made writes ~2s
 
-[build]
-  dockerfile = "Dockerfile"
+# Intentionally no [build] section. Production deployment must supply the
+# already-built, signature/provenance-verified immutable digest with
+# `flyctl deploy --image ...`; an ad-hoc source build is not a release path.
 
 [processes]
   # One worker, not the image default of two: each worker loads its own copy of
   # the ~1.3GB sentence-transformers model, and 2×1.6GB OOM-loops a 2GB VM.
-  app = "uvicorn lians.main:app --host 0.0.0.0 --port 8000 --workers 1"
+  app = "uvicorn lians.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-proxy-headers"
+
+# Schema changes are a separately reviewed operation under a distinct migrator
+# credential. Production image deployment never runs Alembic with app secrets;
+# readiness remains closed until the external database is at the packaged head.
 
 [deploy]
-  release_command = "alembic upgrade head"
+  strategy = "rolling"
 
 [http_service]
   internal_port        = 8000
   force_https          = true
-  auto_stop_machines   = 'stop'
+  auto_stop_machines   = 'off'
   auto_start_machines  = true
-  min_machines_running = 1
+  min_machines_running = 2
   processes            = ['app']
 
   [http_service.concurrency]
-    type       = "connections"
+    type       = "requests"
     hard_limit = 200
     soft_limit = 150
 
+  [[http_service.checks]]
+    grace_period = "90s"
+    interval = "15s"
+    method = "GET"
+    path = "/readyz"
+    timeout = "5s"
+    [http_service.checks.headers]
+      X-Forwarded-Proto = "https"
+
 [env]
   DEPLOYMENT_ENVIRONMENT        = "production"
+  DEPLOYMENT_REGION             = "fly-sjc"
+  API_SURFACE                   = "public"
   # bge-large-en-v1.5 is baked into the image; "local" (hash projection) makes
   # semantic scores pure noise. Needs the 2GB VM below — the model is ~1.3GB.
   EMBEDDING_PROVIDER            = "sentence-transformers"
@@ -34,13 +52,85 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
   RECALL_CACHE_ENABLED          = "true"
   RECALL_CACHE_TTL_SECONDS      = "60"
   SUPERSESSION_REVIEW_THRESHOLD = "0.75"
-  OTEL_SERVICE_NAME             = "agentmem"
+  OTEL_SERVICE_NAME             = "lians"
+  RECEIPT_SIGNING_KEY_ID        = "lians-fly-sjc-receipt-v1"
   LOG_JSON                      = "true"
   LOG_LEVEL                     = "INFO"
   RATE_LIMIT_PER_MINUTE         = "300"
+  RATE_LIMIT_BACKEND_FAILURE_MODE = "deny"
+  CONTENT_EXPORT_PAGE_BYTES_LIMIT = "33554432"
+  HASH_ONLY_EXPORT_PAGE_BYTES_LIMIT = "16777216"
+  AUDIT_EXPORT_PAGE_BYTES_LIMIT = "16777216"
+  LINEAGE_RESPONSE_BYTES_LIMIT = "16777216"
+  DECISION_EVIDENCE_CANDIDATE_LIMIT = "5000"
+  DECISION_EVIDENCE_CANDIDATE_BYTES_LIMIT = "16777216"
+  DATABASE_POOL_SIZE            = "10"
+  DATABASE_MAX_OVERFLOW         = "20"
+  DATABASE_POOL_TIMEOUT_SECONDS = "30"
+  DATABASE_STATEMENT_TIMEOUT_MS = "30000"
+  DATABASE_LOCK_TIMEOUT_MS      = "5000"
+  DATABASE_IDLE_TRANSACTION_TIMEOUT_MS = "60000"
+  PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS = "false"
+  RECEIPT_SIGNING_PROVIDER = "local"
+  EMBEDDING_PROVIDER_TIMEOUT_SECONDS = "20"
+  LLM_PROVIDER_TIMEOUT_SECONDS  = "20"
+  # Safe default: forwarded addresses remain ignored until the exact current
+  # Fly proxy source CIDRs are reviewed and configured for this deployment.
+  TRUSTED_PROXY_CIDRS           = ""
+  WORKLOAD_CREDENTIAL_MIN_TTL_SECONDS = "300"
+  WORKLOAD_CREDENTIAL_MAX_TTL_SECONDS = "2592000"
+  WORKLOAD_CREDENTIAL_LAST_USED_WRITE_INTERVAL_SECONDS = "900"
   CORS_ORIGINS                  = "https://lians.ai,https://www.lians.ai"
   AIRGAP_MODE                   = "false"
   RETENTION_PRUNE_INTERVAL_HOURS = "24"
+  IMPACT_ASSESSMENT_WORKER_ENABLED = "true"
+  IMPACT_ASSESSMENT_WORKER_POLL_SECONDS = "1"
+  IMPACT_ASSESSMENT_WORKER_BATCH_SIZE = "4"
+  IMPACT_ASSESSMENT_WORKER_CONCURRENCY = "2"
+  IMPACT_ASSESSMENT_WORKER_LEASE_SECONDS = "120"
+  IMPACT_ASSESSMENT_WORKER_PAGE_SIZE = "250"
+  IMPACT_ASSESSMENT_WORKER_MAX_PAGES_PER_CLAIM = "1"
+  IMPACT_ASSESSMENT_WORKER_RETRY_BASE_SECONDS = "2"
+  IMPACT_ASSESSMENT_WORKER_RETRY_MAX_SECONDS = "300"
+  IMPACT_ASSESSMENT_WORKER_MAX_ATTEMPTS = "8"
+  RECORDER_EVIDENCE_INDEX_WORKER_ENABLED = "true"
+  RECORDER_EVIDENCE_INDEX_WORKER_POLL_SECONDS = "1"
+  RECORDER_EVIDENCE_INDEX_WORKER_BATCH_SIZE = "4"
+  RECORDER_EVIDENCE_INDEX_WORKER_CONCURRENCY = "2"
+  RECORDER_EVIDENCE_INDEX_WORKER_LEASE_SECONDS = "120"
+  RECORDER_EVIDENCE_INDEX_WORKER_PAGE_SIZE = "100"
+  RECORDER_EVIDENCE_INDEX_WORKER_MAX_PAGES_PER_CLAIM = "2"
+  RECORDER_EVIDENCE_INDEX_WORKER_RETRY_BASE_SECONDS = "2"
+  RECORDER_EVIDENCE_INDEX_WORKER_RETRY_MAX_SECONDS = "300"
+  RECORDER_EVIDENCE_INDEX_WORKER_MAX_ATTEMPTS = "8"
+  SUBJECT_ERASURE_WORKER_ENABLED = "true"
+  SUBJECT_ERASURE_WORKER_POLL_SECONDS = "1"
+  SUBJECT_ERASURE_WORKER_BATCH_SIZE = "4"
+  SUBJECT_ERASURE_WORKER_CONCURRENCY = "2"
+  SUBJECT_ERASURE_WORKER_LEASE_SECONDS = "120"
+  SUBJECT_ERASURE_WORKER_PAGE_SIZE = "250"
+  SUBJECT_ERASURE_WORKER_MAX_PAGES_PER_CLAIM = "2"
+  SUBJECT_ERASURE_WORKER_RETRY_BASE_SECONDS = "2"
+  SUBJECT_ERASURE_WORKER_RETRY_MAX_SECONDS = "300"
+  SUBJECT_ERASURE_WORKER_MAX_ATTEMPTS = "8"
+  SCIM_RECONCILIATION_WORKER_ENABLED = "true"
+  SCIM_RECONCILIATION_WORKER_POLL_SECONDS = "1"
+  SCIM_RECONCILIATION_WORKER_BATCH_SIZE = "4"
+  SCIM_RECONCILIATION_WORKER_CONCURRENCY = "2"
+  SCIM_RECONCILIATION_WORKER_LEASE_SECONDS = "120"
+  SCIM_RECONCILIATION_WORKER_PAGE_SIZE = "100"
+  SCIM_RECONCILIATION_WORKER_MAX_PAGES_PER_CLAIM = "2"
+  SCIM_RECONCILIATION_WORKER_RETRY_BASE_SECONDS = "2"
+  SCIM_RECONCILIATION_WORKER_RETRY_MAX_SECONDS = "300"
+  SCIM_RECONCILIATION_WORKER_MAX_ATTEMPTS = "8"
+  # Non-secret semantic meter names. Configure STRIPE_API_KEY through Fly
+  # secrets only after the asynchronous error destination is monitored.
+  STRIPE_METER_DECISION_EVENT = "lians_authoritative_decision"
+  STRIPE_METER_PROTECTED_ACTION_EVENT = "lians_protected_action"
+  STRIPE_METER_WRITE_EVENT = "agentmem_memory_write"
+  STRIPE_METER_RECALL_EVENT = "agentmem_memory_recall"
+  STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED = "false"
+  STRIPE_METER_WORKER_ENABLED = "true"
 
 [[vm]]
   cpu_kind  = 'shared'

@@ -1,5 +1,6 @@
 #include "lians_json.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,9 +8,11 @@
 int lians_sb_init(lians_sb *sb) {
     sb->cap = 64;
     sb->len = 0;
+    sb->failed = 0;
     sb->data = (char *)malloc(sb->cap);
     if (!sb->data) {
         sb->cap = 0;
+        sb->failed = 1;
         return -1;
     }
     sb->data[0] = '\0';
@@ -17,16 +20,27 @@ int lians_sb_init(lians_sb *sb) {
 }
 
 static int lians_sb_reserve(lians_sb *sb, size_t extra) {
+    if (!sb || sb->failed || sb->len == SIZE_MAX || extra > SIZE_MAX - sb->len - 1) {
+        if (sb) {
+            sb->failed = 1;
+        }
+        return -1;
+    }
     size_t need = sb->len + extra + 1; /* +1 for NUL */
     if (need <= sb->cap) {
         return 0;
     }
     size_t cap = sb->cap ? sb->cap : 64;
     while (cap < need) {
+        if (cap > SIZE_MAX / 2) {
+            cap = need;
+            break;
+        }
         cap *= 2;
     }
     char *p = (char *)realloc(sb->data, cap);
     if (!p) {
+        sb->failed = 1;
         return -1;
     }
     sb->data = p;
@@ -35,6 +49,12 @@ static int lians_sb_reserve(lians_sb *sb, size_t extra) {
 }
 
 int lians_sb_append_n(lians_sb *sb, const char *s, size_t n) {
+    if (!sb || (!s && n != 0)) {
+        if (sb) {
+            sb->failed = 1;
+        }
+        return -1;
+    }
     if (lians_sb_reserve(sb, n) != 0) {
         return -1;
     }
@@ -45,15 +65,22 @@ int lians_sb_append_n(lians_sb *sb, const char *s, size_t n) {
 }
 
 int lians_sb_append(lians_sb *sb, const char *s) {
+    if (!s) {
+        if (sb) {
+            sb->failed = 1;
+        }
+        return -1;
+    }
     return lians_sb_append_n(sb, s, strlen(s));
 }
 
 void lians_sb_free(lians_sb *sb) {
-    if (sb && sb->data) {
+    if (sb) {
         free(sb->data);
         sb->data = NULL;
         sb->cap = 0;
         sb->len = 0;
+        sb->failed = 0;
     }
 }
 

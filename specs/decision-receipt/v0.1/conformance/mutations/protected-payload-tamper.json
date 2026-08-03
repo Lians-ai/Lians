@@ -1,0 +1,11 @@
+{
+  "mutation_version": "1",
+  "description": "Replace a protected decision outcome while retaining the original digest and signature.",
+  "operations": [
+    {
+      "op": "replace",
+      "path": "/decision/outcome",
+      "value": "released-without-review"
+    }
+  ]
+}

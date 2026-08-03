@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import asyncio
 import hashlib
 import logging
-import numpy as np
 from abc import ABC, abstractmethod
 from typing import List
+
+import numpy as np
+
 from .config import get_settings
 
 
@@ -37,12 +40,18 @@ class VoyageProvider(EmbeddingProvider):
         import voyageai
         settings = get_settings()
         self._client = voyageai.AsyncClient(api_key=settings.voyage_api_key)
+        self._timeout_seconds = settings.embedding_provider_timeout_seconds
         # voyage-finance-2: domain-tuned for financial text, ~4pt MTEB gain over general models.
         # Verify the current model name and pricing at docs.voyageai.com before migration.
         self._model = "voyage-finance-2"
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
-        result = await self._client.embed(texts, model=self._model, input_type="document")
+        async with asyncio.timeout(self._timeout_seconds):
+            result = await self._client.embed(
+                texts,
+                model=self._model,
+                input_type="document",
+            )
         return result.embeddings
 
 
@@ -54,13 +63,15 @@ class OpenAIProvider(EmbeddingProvider):
         from openai import AsyncOpenAI
         settings = get_settings()
         self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self._timeout_seconds = settings.embedding_provider_timeout_seconds
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
-        resp = await self._client.embeddings.create(
-            input=texts,
-            model="text-embedding-3-small",
-            dimensions=1024,  # request truncated output directly
-        )
+        async with asyncio.timeout(self._timeout_seconds):
+            resp = await self._client.embeddings.create(
+                input=texts,
+                model="text-embedding-3-small",
+                dimensions=1024,  # request truncated output directly
+            )
         return [item.embedding for item in resp.data]
 
 
@@ -200,7 +211,7 @@ def get_provider() -> EmbeddingProvider:
             # LOCOMO it retrieves at 24% vs the real model's 82% — production
             # data behind it is silently getting test-grade recall, so say so
             # every time it is constructed.
-            logging.getLogger("agentmem.embeddings").warning(
+            logging.getLogger("lians.embeddings").warning(
                 "EMBEDDING_PROVIDER='local' is the deterministic TEST STUB — "
                 "semantic recall will be test-grade (24% vs 82% evidence "
                 "retrieval on LOCOMO). Install lians-sdk[local] and set "

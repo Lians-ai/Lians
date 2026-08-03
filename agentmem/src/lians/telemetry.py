@@ -1,11 +1,11 @@
 """
-OpenTelemetry instrumentation for AgentMem.
+OpenTelemetry instrumentation for Lians.
 
 Install the optional otel extras:
-    pip install 'agentmem[otel]'
+    pip install 'lians-platform[otel]'
 
 Then set in .env:
-    OTEL_SERVICE_NAME=agentmem
+    OTEL_SERVICE_NAME=lians
     OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4317
 
 If the otel packages are not installed or OTEL_EXPORTER_OTLP_ENDPOINT is
@@ -22,7 +22,7 @@ Usage in service functions:
 """
 from __future__ import annotations
 
-import os
+from .config import get_settings
 
 
 class _NoOpSpan:
@@ -40,24 +40,25 @@ class _NoOpTracer:
 
 
 def _build_tracer():
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-    if not endpoint:
+    settings = get_settings()
+    endpoint = settings.otel_exporter_otlp_endpoint.strip()
+    if settings.airgap_mode or not endpoint:
         return _NoOpTracer()
 
     try:
         from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-        service_name = os.environ.get("OTEL_SERVICE_NAME", "agentmem")
+        service_name = settings.otel_service_name.strip() or "lians"
         resource = Resource.create({"service.name": service_name})
         provider = TracerProvider(resource=resource)
         exporter = OTLPSpanExporter(endpoint=endpoint)
         provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
-        return trace.get_tracer("agentmem")
+        return trace.get_tracer("lians")
 
     except ImportError:
         return _NoOpTracer()
@@ -68,8 +69,8 @@ tracer = _build_tracer()
 
 def instrument_fastapi(app) -> None:
     """Auto-instrument FastAPI request spans if OTel is available."""
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-    if not endpoint:
+    settings = get_settings()
+    if settings.airgap_mode or not settings.otel_exporter_otlp_endpoint.strip():
         return
     try:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -80,8 +81,8 @@ def instrument_fastapi(app) -> None:
 
 def instrument_sqlalchemy(engine) -> None:
     """Auto-instrument SQLAlchemy query spans if OTel is available."""
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-    if not endpoint:
+    settings = get_settings()
+    if settings.airgap_mode or not settings.otel_exporter_otlp_endpoint.strip():
         return
     try:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor

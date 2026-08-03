@@ -36,7 +36,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 _REPO = Path(__file__).resolve().parent.parent
 _DATA = Path(__file__).resolve().parent / "data" / "lifecycle_scenarios.json"
@@ -197,7 +197,7 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="write full JSON report here")
     args = ap.parse_args()
 
-    # Environment must be pinned before src.lians imports read settings.
+    # Environment must be pinned before lians imports read settings.
     os.environ["EMBEDDING_PROVIDER"] = "sentence-transformers"
     os.environ["SENTENCE_TRANSFORMER_MODEL"] = args.model
     if args.mode == "raw":

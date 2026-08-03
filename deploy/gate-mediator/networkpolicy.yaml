@@ -1,0 +1,59 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lians-gate-mediator
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: lians-gate-mediator
+    app.kubernetes.io/component: gate-mediator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: lians-gate-mediator
+      app.kubernetes.io/component: gate-mediator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: evaluator
+      ports:
+        - port: 8080
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentmem
+              app.kubernetes.io/component: api
+      ports:
+        # Assumes an authenticated TLS sidecar/service-mesh listener. Do not
+        # replace this with clear-text permit transport.
+        - port: 8443
+          protocol: TCP
+    # Provider egress is intentionally absent. Add one exact public ipBlock or
+    # enforce the configured hostname through an authenticated egress gateway.

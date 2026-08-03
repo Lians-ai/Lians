@@ -14,8 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 
-from src.lians.models import Memory, NamespacePolicy, EventLog
-from src.lians.scheduler import _run_prune_cycle, run_retention_scheduler
+from lians.models import Memory, NamespacePolicy, EventLog
+from lians.scheduler import _run_prune_cycle, run_retention_scheduler
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +24,7 @@ from src.lians.scheduler import _run_prune_cycle, run_retention_scheduler
 
 @pytest_asyncio.fixture
 async def session_factory():
-    from src.lians.models import Base as AppBase
+    from lians.models import Base as AppBase
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -35,13 +35,17 @@ async def session_factory():
     pg_indexes = [
         idx for table in AppBase.metadata.tables.values()
         for idx in table.indexes
-        if idx.dialect_kwargs.get("postgresql_using") is not None
+        if idx.dialect_kwargs.get("postgresql_using") not in (None, False)
     ]
     for idx in pg_indexes:
         idx.table.indexes.discard(idx)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(AppBase.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(AppBase.metadata.create_all)
+    finally:
+        for idx in pg_indexes:
+            idx.table.indexes.add(idx)
 
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     yield factory
@@ -249,7 +253,7 @@ class TestSchedulerTask:
     @pytest.mark.asyncio
     async def test_scheduler_disabled_when_interval_zero(self):
         """Interval 0 means the task is never started â€” tested via config path."""
-        from src.lians.config import get_settings
+        from lians.config import get_settings
         settings = get_settings()
         # Verify the config field is present and 0 disables
         assert hasattr(settings, "retention_prune_interval_hours")

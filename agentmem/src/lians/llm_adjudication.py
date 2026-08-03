@@ -15,19 +15,21 @@ Key properties:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from typing import Any
 
 from .config import get_settings
 
-
 # In-process cache: (short_hash_old, short_hash_new) -> (relation, confidence, rationale)
 _CACHE: dict[tuple[str, str], tuple[str, float, str]] = {}
 
 
 def _pair_key(old: str, new: str) -> tuple[str, str]:
-    h = lambda s: hashlib.sha256(s.encode()).hexdigest()[:16]
+    def h(value: str) -> str:
+        return hashlib.sha256(value.encode()).hexdigest()[:16]
+
     return (h(old), h(new))
 
 
@@ -82,11 +84,12 @@ async def llm_adjudicate(
         client = anthropic.AsyncAnthropic(
             api_key=settings.anthropic_api_key or None,  # None → reads ANTHROPIC_API_KEY env var
         )
-        message = await client.messages.create(
-            model=settings.llm_adjudication_model,
-            max_tokens=128,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        async with asyncio.timeout(settings.llm_provider_timeout_seconds):
+            message = await client.messages.create(
+                model=settings.llm_adjudication_model,
+                max_tokens=128,
+                messages=[{"role": "user", "content": prompt}],
+            )
         raw = message.content[0].text.strip()
         parsed = json.loads(raw)
         relation = str(parsed["relation"])
@@ -155,11 +158,12 @@ async def extract_triplets(text: str) -> list[tuple[str, str, str]]:
     client = anthropic.AsyncAnthropic(
         api_key=settings.anthropic_api_key or None,  # None → reads ANTHROPIC_API_KEY env var
     )
-    message = await client.messages.create(
-        model=settings.llm_adjudication_model,
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    async with asyncio.timeout(settings.llm_provider_timeout_seconds):
+        message = await client.messages.create(
+            model=settings.llm_adjudication_model,
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
     raw = message.content[0].text.strip()
     # Tolerate a stray ```json fence even though we ask for none.
     if raw.startswith("```"):

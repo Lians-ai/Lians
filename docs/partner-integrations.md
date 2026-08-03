@@ -36,11 +36,31 @@ Lians implements ValidMind's custom-integration reference API under `/api/v1`:
 - `GET /schema`
 - `GET /resource-types`
 
-Model records are derived from model IDs observed in decision records and GenAI
-spans. Lians agents are exposed as `agent` resources. Memory conflicts are
-exposed as finding/ticket records. Every request uses the existing `X-API-Key`
-authentication system and requires an unbarriered key to prevent incomplete or
-cross-barrier synchronization.
+Model records come from an exact, transactionally maintained inventory of model
+IDs observed in decision records and GenAI spans; API reads never rescan source
+telemetry. One model ID may produce multiple records when it was observed behind
+different information barriers. Each record exposes a random opaque
+`metadata.lians_scope_id`; neither the resource ID nor metadata reveals the raw
+barrier name. Lians agents are exposed as `agent` resources. Memory conflicts
+are exposed as finding/ticket records. Every request uses the existing
+`X-API-Key` authentication system and requires an unbarriered key to prevent
+incomplete or cross-barrier synchronization.
+
+`GET /models` applies `resource_type`, deterministic
+`(resource_type, name, opaque scope)` ordering, `offset`, and `limit` (default
+100; maximum 250; maximum offset 50,000) in SQL before records are hydrated.
+Opaque single-ID reads and write-back existence checks use indexed inventory and
+alias predicates instead of enumerating the tenant catalog. Model version
+metadata is bounded to the first 100 lexical values and reports the exact
+`versions_total`, `versions_limit`, and `versions_complete`; decision and span
+counts are exact.
+
+The 0.5 model ID includes the opaque scope. A namespace-wide 0.4.2 model ID is
+accepted only when it resolves to one current scope; if the same legacy ID spans
+multiple barriers, lookup and write-back return `409` and the caller must use the
+scoped ID. During the 0.4.2/0.5 rolling window, uniquely resolvable legacy and
+scoped `vm_cuid` rows are synchronized in both directions. Agent IDs retain their
+0.4.2 form.
 
 This is a custom integration implementation, not a claim that ValidMind ships a
 built-in Lians connector.

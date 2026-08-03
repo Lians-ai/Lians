@@ -25,10 +25,9 @@ Comparison notes:
   AgentMem     â€” deterministic Stage 1+2 with no LLM call; Stage 3 is additive.
 """
 from __future__ import annotations
-import pytest
 from datetime import datetime, timezone, timedelta
 
-from src.lians.supersession import classify_relation, _metadata_overlap
+from lians.supersession import classify_relation, _metadata_overlap
 
 # ---------------------------------------------------------------------------
 # Labeled dataset
@@ -361,8 +360,11 @@ class TestMetadataOverlapCoverage:
     """Unit tests for the _metadata_overlap helper used in Stage 1 candidate filtering."""
 
     def test_all_structured_keys_recognized(self):
-        from src.lians.supersession import _STRUCTURED_KEYS
-        expected = {"ticker", "metric", "entity", "instrument", "cusip", "isin", "field"}
+        from lians.supersession import _STRUCTURED_KEYS
+        expected = {
+            "ticker", "metric", "entity", "instrument", "cusip", "isin", "field",
+            "period", "quarter",
+        }
         assert _STRUCTURED_KEYS == expected, (
             f"Structured key set changed: {_STRUCTURED_KEYS} vs {expected}"
         )
@@ -393,3 +395,17 @@ class TestMetadataOverlapCoverage:
         overlap = _metadata_overlap(m1, m2)
         assert "ticker" not in overlap
         assert "metric" in overlap
+
+    def test_reporting_period_is_part_of_fact_identity(self):
+        old = {"ticker": "TSLA", "metric": "deliveries", "period": "Q2 2024"}
+        new = {"ticker": "TSLA", "metric": "deliveries", "period": "Q3 2024"}
+        relation, confidence = classify_relation(
+            "TSLA Q2 deliveries 443,956",
+            "TSLA Q3 deliveries 462,890",
+            T1,
+            T2,
+            old,
+            new,
+        )
+        assert relation == "ADDS"
+        assert confidence >= 0.9

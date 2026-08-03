@@ -6,13 +6,13 @@ accumulate under an identity the controller already erased.
 """
 import pytest
 
-from test_api import _h, AGENT, T0, client  # noqa: F401 — client fixture
+from test_api import _h, AGENT, T0, client  # noqa: F401
 
 SUBJ = "shredded-subject-001"
 
 
 @pytest.mark.asyncio
-async def test_write_after_erase_is_410_gone(client):
+async def test_write_after_erase_is_410_gone(client):  # noqa: F811
     resp = await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT,
         "content": "Patient record before erasure",
@@ -25,7 +25,8 @@ async def test_write_after_erase_is_410_gone(client):
     resp = await client.post("/v1/erase", headers=_h(), json={
         "subject_id": SUBJ, "request_ref": "GDPR-req-410",
     })
-    assert resp.status_code == 200
+    assert resp.status_code == 202
+    assert resp.json()["key_destroyed_at"] is not None
 
     resp = await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT,
@@ -41,7 +42,7 @@ async def test_write_after_erase_is_410_gone(client):
 
 
 @pytest.mark.asyncio
-async def test_batch_write_after_erase_is_410_gone(client):
+async def test_batch_write_after_erase_is_410_gone(client):  # noqa: F811
     subj = SUBJ + "-batch"
     await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT, "content": "x", "event_time": T0.isoformat(),

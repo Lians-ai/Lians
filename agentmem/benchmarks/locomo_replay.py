@@ -16,7 +16,7 @@ Fidelity notes (why the replay is exact, not approximate):
     uniform default 0.5 — both are additive constants, invariant under both
     sorting and MMR's min-max normalization, so they are omitted;
   - BM25 and MMR are re-implemented bit-for-bit (tokenizer is imported from
-    ``src.lians.ranking``); ``--validate`` checks replayed hit/all flags
+    ``lians.ranking``); ``--validate`` checks replayed hit/all flags
     against the real runs' per-question detail.
 
 Usage (from the agentmem repo root):
@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import re
 import sqlite3
@@ -43,8 +42,9 @@ os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
 
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "src"))
 
-from src.lians.ranking import _bm25_tokens, _BM25_K1, _BM25_B, _BM25_AVG_DOC_LEN  # noqa: E402
+from lians.ranking import _bm25_tokens, _BM25_K1, _BM25_B, _BM25_AVG_DOC_LEN  # noqa: E402
 
 _DATA = _REPO / "benchmarks" / "data" / "locomo10.json"
 _DBS = _REPO / "results" / "locomo_dbs"

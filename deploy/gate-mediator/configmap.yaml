@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lians-gate-mediator-config
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: lians-gate-mediator
+    app.kubernetes.io/component: gate-mediator
+data:
+  mediator.json: |
+    REPLACE_WITH_REVIEWED_CONTENT_FROM_mediator-config.example.json

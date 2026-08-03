@@ -11,7 +11,9 @@ introspection pipeline.
 - Persistent volume: `/data`
 - API key: not required for local SQLite mode
 
-The image runs `lians-sdk[mcp]==0.4.1` as a non-root user. Its default database
+The image builds `lians-sdk[mcp]` 0.5.0 from the same reviewed source commit as
+the image, using locked runtime dependencies and a hash-verified build toolchain.
+It runs as a non-root user. Its default database
 path is `/data/mcp.db`.
 
 ## Local build

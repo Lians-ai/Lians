@@ -4,9 +4,10 @@
 > auditable, and crypto-shreddable, so teams in finance, healthcare, and the public
 > sector can give agents long-term memory without failing an audit.
 
-The site has **one job on the home page**: make a technical buyer believe Lians is the
-only memory layer they can put in front of a compliance officer. Everything below serves
-that. Core software is the hero — not the company, not the blog.
+The site has **one job on the home page**: give a technical buyer enough concrete
+evidence to evaluate Lians as a decision-evidence and AI-control layer for a
+regulated workflow. Everything below serves that. Core software is the hero —
+not an exclusivity claim, the company, or the blog.
 
 ---
 

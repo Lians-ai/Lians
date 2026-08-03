@@ -12,6 +12,7 @@ typedef struct {
     char  *data;
     size_t len;
     size_t cap;
+    int    failed;
 } lians_sb;
 
 /* Initialize an empty buffer. Returns 0 on success, -1 on allocation failure. */

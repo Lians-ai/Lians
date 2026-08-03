@@ -1,0 +1,84 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lians-api
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: lians-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [agentmem]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agentmem
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      authorization:
+        type: Bearer
+        credentials:
+          name: lians-metrics-credentials
+          key: token
+      relabelings:
+        - targetLabel: job
+          replacement: agentmem
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lians-otel-collector
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: lians-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [agentmem]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lians-otel-collector
+      app.kubernetes.io/component: recorder-gateway
+  endpoints:
+    - port: metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings:
+        - targetLabel: job
+          replacement: lians-otel-collector
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lians-gate-mediator
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: lians-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [agentmem]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lians-gate-mediator
+      app.kubernetes.io/component: gate-mediator
+  endpoints:
+    - port: https
+      path: /metrics
+      scheme: https
+      interval: 30s
+      scrapeTimeout: 10s
+      authorization:
+        type: Bearer
+        credentials:
+          name: lians-gate-mediator-metrics-credentials
+          key: token
+      tlsConfig:
+        serverName: lians-gate-mediator.agentmem.svc.cluster.local
+        ca:
+          secret:
+            name: lians-gate-mediator-metrics-ca
+            key: ca.crt
+      relabelings:
+        - targetLabel: job
+          replacement: lians-gate-mediator

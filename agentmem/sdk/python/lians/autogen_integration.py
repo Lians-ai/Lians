@@ -7,7 +7,7 @@ AssistantAgent + function_tool pattern.
 
 Install::
 
-    pip install lians[autogen]
+    pip install lians-sdk[autogen]
     # or: pip install autogen-agentchat autogen-core
 
 Usage — AssistantAgent with function tools (AutoGen v0.4 async)::
@@ -82,14 +82,14 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
     ------
     ImportError
         If ``autogen-core`` is not installed.
-        Install with: ``pip install lians[autogen]``
+        Install with: ``pip install lians-sdk[autogen]``
     """
     try:
         from autogen_core.tools import FunctionTool  # type: ignore[import]
     except ImportError:
         raise ImportError(
             "autogen-core is required for AutoGen integration.\n"
-            "Install with: pip install lians[autogen]\n"
+            "Install with: pip install lians-sdk[autogen]\n"
             "or: pip install autogen-core"
         )
 

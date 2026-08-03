@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lians:ops:backup-manifest:v1",
+  "title": "Lians PostgreSQL logical backup manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "backup_id",
+    "started_at",
+    "completed_at",
+    "backup_kind",
+    "pitr_capable",
+    "consistency",
+    "source",
+    "schema_inventory",
+    "archive",
+    "tools",
+    "worm_intent",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": { "const": "urn:lians:ops:backup-manifest:v1" },
+    "backup_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,79}$" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "backup_kind": { "const": "postgresql_logical" },
+    "pitr_capable": { "const": false },
+    "consistency": { "const": "pg_dump_consistent_snapshot" },
+    "source": {
+      "type": "object",
+      "required": [
+        "database_name",
+        "server_version",
+        "server_version_num",
+        "database_size_bytes",
+        "in_recovery",
+        "wal_lsn",
+        "captured_at",
+        "environment",
+        "database_id",
+        "endpoint_fingerprint_sha256",
+        "system_identifier"
+      ],
+      "properties": {
+        "database_name": { "type": "string", "minLength": 1 },
+        "server_version": { "type": "string", "minLength": 1 },
+        "server_version_num": { "type": "integer", "minimum": 160000 },
+        "database_size_bytes": { "type": "integer", "minimum": 0 },
+        "in_recovery": { "type": "boolean" },
+        "wal_lsn": { "type": ["string", "null"] },
+        "captured_at": { "type": "string", "format": "date-time" },
+        "environment": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$" },
+        "database_id": { "type": ["string", "null"], "maxLength": 512 },
+        "endpoint_fingerprint_sha256": { "$ref": "#/$defs/sha256" },
+        "system_identifier": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "schema_inventory": {
+      "type": "object",
+      "required": [
+        "alembic_revisions",
+        "tables",
+        "extensions",
+        "pre_dump_integrity_observation",
+        "audit_chain_pre_dump_observation"
+      ],
+      "properties": {
+        "alembic_revisions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["schema", "name", "rls_enabled", "rls_forced", "estimated_rows"],
+            "properties": {
+              "schema": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "rls_enabled": { "type": "boolean" },
+              "rls_forced": { "type": "boolean" },
+              "estimated_rows": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "extensions": { "type": "array", "items": { "type": "object" } },
+        "pre_dump_integrity_observation": { "type": "object" },
+        "audit_chain_pre_dump_observation": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "archive": {
+      "type": "object",
+      "required": [
+        "format",
+        "compression_level",
+        "toc_entries",
+        "ownership_and_acl_included",
+        "subscriptions_included"
+      ],
+      "properties": {
+        "format": { "const": "custom" },
+        "compression_level": { "type": "integer", "minimum": 0, "maximum": 9 },
+        "toc_entries": { "type": "integer", "minimum": 1 },
+        "ownership_and_acl_included": { "const": true },
+        "subscriptions_included": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "tools": { "type": "object" },
+    "worm_intent": {
+      "type": "object",
+      "required": ["retention_until", "legal_hold", "provider_immutability_verified", "status"],
+      "properties": {
+        "retention_until": { "type": ["string", "null"] },
+        "legal_hold": { "type": "boolean" },
+        "provider_immutability_verified": { "const": false },
+        "status": { "const": "pending_external_handoff" }
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "artifact": {
+      "type": "object",
+      "required": ["filename", "role", "media_type", "size_bytes", "sha256"],
+      "properties": {
+        "filename": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$" },
+        "role": { "enum": ["database_archive", "cluster_globals_reference"] },
+        "media_type": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "restore_automatically": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

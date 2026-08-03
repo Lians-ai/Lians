@@ -1,0 +1,51 @@
+Lians {{ .Chart.AppVersion }} has been rendered as release {{ .Release.Name }}.
+
+Security boundary
+  - Application image: {{ include "lians.image" . }}
+  - PostgreSQL runtime Secret: {{ .Values.existingSecrets.database.runtime.name }}
+  - PostgreSQL migration Secret: {{ .Values.existingSecrets.database.migration.name }}
+  - External Redis Secret: {{ .Values.existingSecrets.redis.name }}
+  - KMS provider: {{ .Values.config.kms.provider }}
+  - Processing region: {{ .Values.config.deploymentRegion }}
+  - NetworkPolicy default deny: enabled
+
+Schema state
+{{- if .Values.migrations.enabled }}
+  The opt-in pre-install/pre-upgrade migration hook was rendered. It validates
+  that the image has one Alembic head, upgrades the external database, and
+  verifies the database reached that exact head.
+{{- else }}
+  Migrations were NOT rendered. API pods will remain blocked in their schema
+  preflight init container until the external database matches this image.
+{{- end }}
+
+Identity and governance
+  OIDC providers and SCIM tenants are tenant-scoped, audited runtime records;
+  provision them with /v1/admin/identity/* and /v1/admin/enterprise/scim/*.
+  Namespace residency, capture, and quota policies are managed through
+  /v1/admin/governance/* after DEPLOYMENT_REGION has been independently checked.
+
+{{- if .Values.ingress.enabled }}
+API URL: https://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
+{{- else }}
+No Ingress was rendered. The ClusterIP Service is
+  {{ include "lians.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+{{- end }}
+
+{{- if .Values.otelCollector.enabled }}
+The OTLP gateway is available at:
+  gRPC: {{ include "lians.fullname" . }}-otel-collector.{{ .Release.Namespace }}.svc:4317
+  HTTP: {{ include "lians.fullname" . }}-otel-collector.{{ .Release.Namespace }}.svc:4318
+Each replica has its own persistent retry queue. Preserve its PVC during an
+incident; a StatefulSet does not make queued spans interchangeable.
+{{- end }}
+
+{{- if .Values.backup.enabled }}
+The logical-backup CronJob is installed with suspend={{ .Values.backup.suspend }}.
+Do not unsuspend it until a manual backup, WORM attestation, and isolated restore
+drill have all succeeded with the exact image and identity configured here.
+{{- end }}
+
+This chart does not install, operate, back up, or claim high availability for
+PostgreSQL or Redis. Their service, replication, failover, encryption, and
+recovery posture remain external operator responsibilities.

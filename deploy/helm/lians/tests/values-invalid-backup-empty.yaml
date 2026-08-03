@@ -1,0 +1,10 @@
+# Negative fixture: backup NetworkPolicy must never render an empty `to` rule.
+backup:
+  enabled: true
+  image:
+    repository: ghcr.io/example/lians-backup
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  existingSecret: lians-backup
+  existingIdentityConfigMap: lians-backup-identity
+  existingPvc: lians-backup
+  wormDestinationCidrs: []

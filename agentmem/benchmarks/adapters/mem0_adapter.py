@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import os
 
-from . import CapabilityAbsent, PASS, PARTIAL, ABSENT
+from . import CapabilityAbsent, PARTIAL, ABSENT
 
 NAME = "mem0"
 

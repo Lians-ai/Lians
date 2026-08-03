@@ -9,9 +9,9 @@ Run with no server needed:
     cd agentmem
     python examples/langchain_demo.py
 """
+# ruff: noqa: E402
 import sys
 from pathlib import Path
-from datetime import datetime, timezone
 
 _root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_root / "sdk" / "python"))
@@ -41,8 +41,8 @@ def demo_chat_history():
         role = "User" if msg.type == "human" else "AI  "
         print(f"  {role}: {msg.content}")
 
-    print(f"\n(Works with RunnableWithMessageHistory — pass a lambda that returns")
-    print(f" LiansChatHistory(client=client, session_id=session_id))\n")
+    print("\n(Works with RunnableWithMessageHistory — pass a lambda that returns")
+    print(" LiansChatHistory(client=client, session_id=session_id))\n")
     client.close()
 
 

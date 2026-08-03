@@ -2,10 +2,8 @@
 Erasure: crypto-shred renders content unreadable; audit trail (hashes) survive.
 """
 import pytest
-from src.lians.crypto import (
+from lians.crypto import (
     generate_subject_key,
-    wrap_subject_key,
-    unwrap_subject_key,
     encrypt_content,
     decrypt_content,
 )

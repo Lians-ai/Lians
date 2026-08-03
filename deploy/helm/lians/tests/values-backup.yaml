@@ -1,0 +1,13 @@
+# Synthetic positive fixture: an enabled but suspended backup with one reviewed
+# immutable-storage destination. Never use these values in a real cluster.
+backup:
+  enabled: true
+  suspend: true
+  image:
+    repository: ghcr.io/example/lians-backup
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  existingSecret: lians-backup
+  existingIdentityConfigMap: lians-backup-identity
+  existingPvc: lians-backup
+  wormDestinationCidrs:
+    - 10.50.0.0/24

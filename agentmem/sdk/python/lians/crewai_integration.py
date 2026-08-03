@@ -5,7 +5,7 @@ Provides BaseTool subclasses compatible with crewai >= 0.28.
 
 Install::
 
-    pip install lians[crewai]
+    pip install lians-sdk[crewai]
 
 Usage::
 
@@ -70,12 +70,12 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
     ------
     ImportError
         If ``crewai`` is not installed.  Install with
-        ``pip install lians[crewai]``.
+        ``pip install lians-sdk[crewai]``.
     """
     if not _CREWAI_AVAILABLE:
         raise ImportError(
             "crewai is required for CrewAI integration.\n"
-            "Install with: pip install lians[crewai]"
+            "Install with: pip install lians-sdk[crewai]"
         )
 
     # ── Shared helpers ────────────────────────────────────────────────────────

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.lians.interjection import extract_interjections
-from src.lians.ranking import _collapse_derived, _stale_clause_penalty, STALE_CLAUSE_PENALTY
+from lians.interjection import extract_interjections
+from lians.ranking import _collapse_derived, _stale_clause_penalty, STALE_CLAUSE_PENALTY
 
 
 # ── Layer 1: pure deterministic extractor ────────────────────────────────────

@@ -10,14 +10,19 @@ import pytest
 import pytest_asyncio
 from datetime import datetime, timezone, timedelta
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 # Use a far-future sentinel for audit trail queries so that event_log rows
 # (created_at â‰ˆ now) always satisfy `created_at <= AUDIT_AS_OF`.
 AUDIT_AS_OF = datetime(2099, 1, 1, tzinfo=timezone.utc)
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app  # noqa: E402
+from lians.db import get_db  # noqa: E402
+from lians.models import ApiKey  # noqa: E402
+from lians.subject_erasure_service import (  # noqa: E402
+    claim_due_subject_erasure_jobs,
+    process_subject_erasure_job,
+)
 
 
 TEST_KEY = "integration-test-key-secret"
@@ -62,17 +67,73 @@ def _mem(content: str, event_time: datetime = T0, meta: dict | None = None) -> d
     }
 
 
+async def _complete_erasure(client, db, subject_id: str, request_ref: str) -> dict:
+    response = await client.post("/v1/erase", headers=_h(), json={
+        "subject_id": subject_id,
+        "request_ref": request_ref,
+    })
+    assert response.status_code == 202, response.text
+    queued = response.json()
+    worker_id = f"api-erasure-test-{queued['job_id']}"
+    claims = await claim_due_subject_erasure_jobs(
+        db,
+        worker_id=worker_id,
+        batch_size=100,
+        lease_seconds=60,
+    )
+    claim = next(claim for claim in claims if str(claim.job_id) == queued["job_id"])
+    session_factory = async_sessionmaker(db.bind, expire_on_commit=False)
+    await process_subject_erasure_job(
+        session_factory,
+        claim=claim,
+        worker_id=worker_id,
+        page_size=100,
+        max_pages=20,
+        lease_seconds=60,
+    )
+    await db.run_sync(lambda session: session.expire_all())
+    status = await client.get(f"/v1/erase/jobs/{queued['job_id']}", headers=_h())
+    assert status.status_code == 200, status.text
+    assert status.json()["status"] == "completed"
+    return status.json()
+
+
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_health(client):
+async def test_health(client, db):
     from unittest.mock import AsyncMock, patch
-    with patch("src.lians.cache._get_redis") as mock_redis:
+    from lians.config import get_settings
+    from lians.version import EXPECTED_ALEMBIC_HEAD
+    from sqlalchemy import text
+
+    await db.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(64) NOT NULL)"))
+    await db.execute(
+        text("INSERT INTO alembic_version (version_num) VALUES (:head)"),
+        {"head": EXPECTED_ALEMBIC_HEAD},
+    )
+    await db.commit()
+
+    settings = get_settings().model_copy(update={
+        "recall_cache_enabled": True,
+        "integration_worker_enabled": False,
+        "impact_assessment_worker_enabled": False,
+        "recorder_evidence_index_worker_enabled": False,
+        "subject_erasure_worker_enabled": False,
+        "scim_reconciliation_worker_enabled": False,
+        "retention_prune_interval_hours": 0,
+        "metrics_enabled": False,
+        "supersession_llm_stage": False,
+    })
+    with (
+        patch("lians.main.get_settings", return_value=settings),
+        patch("lians.cache._get_redis") as mock_redis,
+    ):
         mock_redis.return_value.ping = AsyncMock(return_value=True)
         resp = await client.get("/health")
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["status"] == "ok"
     assert body["checks"]["db"] == "ok"
@@ -336,7 +397,7 @@ async def test_erase_requires_admin_scope(client):
 
 
 @pytest.mark.asyncio
-async def test_erase_subject_tombstones_memory(client):
+async def test_erase_subject_tombstones_memory(client, db):
     """After erasure, the memory row exists (tombstone) but content is gone."""
     await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT,
@@ -346,19 +407,19 @@ async def test_erase_subject_tombstones_memory(client):
         "metadata": {},
     })
 
-    resp = await client.post("/v1/erase", headers=_h(), json={
-        "subject_id": "jane-doe-002",
-        "request_ref": "GDPR-req-0042",
-    })
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["memories_erased"] == 1
-    assert body["request_ref"] == "GDPR-req-0042"
+    body = await _complete_erasure(client, db, "jane-doe-002", "GDPR-req-0042")
+    assert body["snapshot"]["memories"] == 1
+    assert body["progress"]["memories"] == 1
+    assert body["request_ref"].startswith("lians:erasure-request:v2:hmac-sha256:")
+    assert "GDPR-req-0042" not in body["request_ref"]
 
 
 @pytest.mark.asyncio
-async def test_erase_event_appears_in_audit_trail(client):
-    """After erase, the audit trail contains an 'erase' operation."""
+async def test_erase_event_appears_in_audit_trail(client, db):
+    """The durable request and terminal completion are both chain-anchored."""
+    from sqlalchemy import select
+    from lians.models import EventLog
+
     await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT,
         "content": "Client: Bob Smith, account $1M",
@@ -366,20 +427,25 @@ async def test_erase_event_appears_in_audit_trail(client):
         "subject_id": "bob-smith-003",
         "metadata": {},
     })
-    await client.post("/v1/erase", headers=_h(), json={
-        "subject_id": "bob-smith-003", "request_ref": "GDPR-req-0043",
-    })
-
-    resp = await client.get("/v1/audit/reconstruct", headers=_h(), params={
-        "agent_id": AGENT, "as_of": AUDIT_AS_OF.isoformat(),
-    })
-    assert resp.status_code == 200
-    ops = [e["op"] for e in resp.json()["event_trail"]]
-    assert "erase" in ops, "Erase operation must appear in the immutable audit trail"
+    await _complete_erasure(client, db, "bob-smith-003", "GDPR-req-0043")
+    ops = set(
+        (
+            await db.execute(
+                select(EventLog.op).where(
+                    EventLog.namespace == TEST_NS,
+                    EventLog.op.in_((
+                        "subject_erasure_requested",
+                        "subject_erasure_completed",
+                    )),
+                )
+            )
+        ).scalars()
+    )
+    assert ops == {"subject_erasure_requested", "subject_erasure_completed"}
 
 
 @pytest.mark.asyncio
-async def test_erased_memory_never_reaches_recall(client):
+async def test_erased_memory_never_reaches_recall(client, db):
     """
     Regression (found in live limit-testing 2026-07-02): erase nulled the
     ciphertext but left the live_facts read-model row, so present-time recall
@@ -395,10 +461,8 @@ async def test_erased_memory_never_reaches_recall(client):
     })
     mem_id = add.json()["id"]
 
-    resp = await client.post("/v1/erase", headers=_h(), json={
-        "subject_id": "ana-k-004", "request_ref": "GDPR-req-0044",
-    })
-    assert resp.status_code == 200 and resp.json()["memories_erased"] == 1
+    erased = await _complete_erasure(client, db, "ana-k-004", "GDPR-req-0044")
+    assert erased["progress"]["memories"] == 1
 
     # 1 · present-time recall returns no tombstone for the erased fact
     resp = await client.post("/v1/recall", headers=_h(), json={
@@ -415,7 +479,7 @@ async def test_erased_memory_never_reaches_recall(client):
 
 @pytest.mark.asyncio
 async def test_erase_shreds_embedding_and_metadata(db, client):
-    from src.lians.models import LiveFact, Memory
+    from lians.models import LiveFact, Memory
     from sqlalchemy import select
     from uuid import UUID
 
@@ -427,9 +491,7 @@ async def test_erase_shreds_embedding_and_metadata(db, client):
         "metadata": {"person": "Rex B", "field": "salary"},
     })
     mem_id = UUID(add.json()["id"])
-    await client.post("/v1/erase", headers=_h(), json={
-        "subject_id": "rex-b-005", "request_ref": "GDPR-req-0045",
-    })
+    await _complete_erasure(client, db, "rex-b-005", "GDPR-req-0045")
 
     mem = (await db.execute(select(Memory).where(Memory.id == mem_id))).scalar_one()
     assert mem.erased_at is not None

@@ -18,13 +18,17 @@ Optional environment variables
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Make sure agentmem src is importable whether or not the package is installed
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# Exercise the same top-level package identity exposed by the production wheel
+# while keeping the adjacent benchmark package importable from any cwd.
+_AGENTMEM_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_AGENTMEM_ROOT))
+sys.path.insert(0, str(_AGENTMEM_ROOT / "src"))
 
 os.environ.setdefault("EMBEDDING_PROVIDER", "local")
 os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
@@ -51,8 +55,24 @@ def _hdr(s):  return f"\n{_BOLD}{s}{_RESET}"
 async def _build_db():
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from sqlalchemy.pool import StaticPool
-    from agentmem.src.lians.models import Base
-    from agentmem.src.lians.kms import load_master_key
+
+    # Register every additive model family before creating the local schema.
+    # Importing only ``lians.models`` leaves governance, recorder, identity,
+    # evidence, and erasure tables absent even though the production app loads
+    # them through its router graph.
+    for module_name in (
+        "control_models",
+        "enterprise_models",
+        "evidence_models",
+        "governance_models",
+        "identity_models",
+        "integration_models",
+        "recorder_models",
+        "subject_erasure_models",
+    ):
+        importlib.import_module(f"lians.{module_name}")
+    from lians.models import Base
+    from lians.kms import load_master_key
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -60,13 +80,20 @@ async def _build_db():
         poolclass=StaticPool,
     )
     # Drop Postgres-only indexes so SQLite doesn't choke
-    for table in Base.metadata.tables.values():
-        for idx in list(table.indexes):
-            if idx.dialect_kwargs.get("postgresql_using"):
-                table.indexes.discard(idx)
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    pg_indexes = [
+        idx
+        for table in Base.metadata.tables.values()
+        for idx in table.indexes
+        if idx.dialect_kwargs.get("postgresql_using") not in (None, False)
+    ]
+    for idx in pg_indexes:
+        idx.table.indexes.discard(idx)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    finally:
+        for idx in pg_indexes:
+            idx.table.indexes.add(idx)
 
     await load_master_key()
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -80,8 +107,11 @@ def _ts(*args):
 # â”€â”€ Benchmark 1: stale-fact contamination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def bench_stale_fact(factory) -> dict:
-    from agentmem.src.lians.schemas import MemoryAdd, RecallRequest
-    from agentmem.src.lians.memory_service import add_memory, recall_memories
+    from sqlalchemy import select
+
+    from lians.models import Memory
+    from lians.schemas import MemoryAdd, RecallRequest
+    from lians.memory_service import add_memory, recall_memories
 
     NS = "bench"
     REVISIONS = [
@@ -112,15 +142,18 @@ async def bench_stale_fact(factory) -> dict:
     present_stale = sum(1 for m in result.memories if m.valid_to is not None)
     present_current = sum(1 for m in result.memories if m.valid_to is None)
 
-    # Far-future as_of (simulates mem0-style: no validity gate)
+    # Flat-store control: the same five persisted vectors without Lians'
+    # validity predicate expose all four superseded revisions to ranking.
     async with factory() as db:
-        result_raw = await recall_memories(db, NS, RecallRequest(
-            agent_id="analyst",
-            query="NVDA FY2026 revenue guidance",
-            k=10,
-            as_of=_ts(2099, 1, 1),
-        ))
-    raw_stale = sum(1 for m in result_raw.memories if m.valid_to is not None)
+        flat_rows = (
+            await db.execute(
+                select(Memory).where(
+                    Memory.namespace == NS,
+                    Memory.agent_id == "analyst",
+                )
+            )
+        ).scalars().all()
+    raw_stale = sum(1 for memory in flat_rows if memory.valid_to is not None)
 
     return {
         "agentmem_stale_in_top5": present_stale,
@@ -132,7 +165,7 @@ async def bench_stale_fact(factory) -> dict:
 # â”€â”€ Benchmark 2: supersession classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def bench_supersession() -> dict:
-    from agentmem.benchmarks.supersession_eval import CASES, REAL_WORLD_CASES, ALL_CASES, run_eval
+    from benchmarks.supersession_eval import ALL_CASES, CASES, REAL_WORLD_CASES, run_eval
     synthetic = run_eval(CASES)
     realworld = run_eval(REAL_WORLD_CASES)
     all_results = run_eval(ALL_CASES)
@@ -152,8 +185,8 @@ def bench_supersession() -> dict:
 # â”€â”€ Benchmark 3: point-in-time recall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def bench_point_in_time(factory) -> dict:
-    from agentmem.src.lians.schemas import MemoryAdd, RecallRequest
-    from agentmem.src.lians.memory_service import add_memory, recall_memories
+    from lians.schemas import MemoryAdd, RecallRequest
+    from lians.memory_service import add_memory, recall_memories
 
     NS = "bench_pit"
     QUARTERS = [
@@ -191,7 +224,8 @@ async def bench_point_in_time(factory) -> dict:
                 as_of=as_of,
             ))
         top_content = result.memories[0].content if result.memories else ""
-        if str(expected_value) in top_content:
+        normalized_digits = "".join(character for character in top_content if character.isdigit())
+        if str(expected_value) in normalized_digits:
             correct += 1
 
     return {"total": len(QUERIES), "correct": correct}
@@ -200,9 +234,9 @@ async def bench_point_in_time(factory) -> dict:
 # â”€â”€ Benchmark 4: compliance (audit chain) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async def bench_compliance(factory) -> dict:
-    from agentmem.src.lians.schemas import MemoryAdd
-    from agentmem.src.lians.memory_service import add_memory
-    from agentmem.src.lians.audit_chain import verify_chain
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.audit_chain import verify_chain
 
     NS = "bench_compliance"
     async with factory() as db:
@@ -241,6 +275,7 @@ async def main():
     # â”€â”€ B2: Supersession classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     total_pairs = 12 + 10  # synthetic + real-world
     print(_hdr(f"Benchmark 2 â€” Supersession classification ({total_pairs}-pair labeled set)"))
+    b2_pass = False
     try:
         b2 = bench_supersession()
         b2_pass = b2["correct"] == b2["total"]
@@ -270,7 +305,7 @@ async def main():
           if b4_pass else _fail(f"Hash chain: {b4['chain_status']} â€” {b4['violations']}"))
 
     # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    passed = sum([b1_pass, b2_pass if "b2" in dir() else True, b3_pass, b4_pass])
+    passed = sum([b1_pass, b2_pass, b3_pass, b4_pass])
     total  = 4
     print(f"\n{_BOLD}{'='*52}{_RESET}")
     print(f"{'All benchmarks passed' if passed == total else f'{passed}/{total} benchmarks passed'}")

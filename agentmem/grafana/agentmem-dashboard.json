@@ -3,7 +3,7 @@
     {
       "name": "DS_PROMETHEUS",
       "label": "Prometheus",
-      "description": "AgentMem Prometheus datasource",
+      "description": "Lians Prometheus datasource",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
@@ -18,7 +18,7 @@
     { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "AgentMem — financial-grade AI memory layer. Write path, recall path, conflict queue, and compliance erasure.",
+  "description": "Lians tenant-free operations: memory, recall, durable conflict inventory, and compliance erasure.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -50,7 +50,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_memory_writes_total{namespace=~\"$namespace\"}[$__rate_interval])) by (relation)",
+          "expr": "sum(rate(agentmem_memory_writes_total[$__rate_interval])) by (relation)",
           "legendFormat": "{{relation}}",
           "refId": "A"
         }
@@ -75,19 +75,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(agentmem_add_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(agentmem_add_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.90, sum(rate(agentmem_add_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(agentmem_add_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(agentmem_add_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(agentmem_add_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -120,7 +120,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(agentmem_add_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(agentmem_add_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "Write p99",
           "refId": "A"
         }
@@ -153,7 +153,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_memory_recalls_total{namespace=~\"$namespace\"}[$__rate_interval])) by (router)",
+          "expr": "sum(rate(agentmem_memory_recalls_total[$__rate_interval])) by (router)",
           "legendFormat": "{{router}}",
           "refId": "A"
         }
@@ -178,19 +178,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, sum(rate(agentmem_recall_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(agentmem_recall_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.90, sum(rate(agentmem_recall_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(agentmem_recall_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(agentmem_recall_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(agentmem_recall_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -219,7 +219,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_memory_recalls_total{namespace=~\"$namespace\"}[$__rate_interval])) by (router)",
+          "expr": "sum(rate(agentmem_memory_recalls_total[$__rate_interval])) by (router)",
           "legendFormat": "{{router}}",
           "refId": "A"
         }
@@ -253,7 +253,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_memory_recalls_total{namespace=~\"$namespace\", cache_hit=\"true\"}[$__rate_interval])) / sum(rate(agentmem_memory_recalls_total{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "sum(rate(agentmem_memory_recalls_total{cache_hit=\"true\"}[$__rate_interval])) / clamp_min(sum(rate(agentmem_memory_recalls_total[$__rate_interval])), 0.001)",
           "legendFormat": "Cache hit rate",
           "refId": "A"
         }
@@ -286,7 +286,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(agentmem_recall_duration_seconds_bucket{namespace=~\"$namespace\"}[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(agentmem_recall_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "Recall p99",
           "refId": "A"
         }
@@ -333,7 +333,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(agentmem_conflict_queue_depth{namespace=~\"$namespace\"}) or vector(0)",
+          "expr": "max(lians_conflicts{status=\"open\"}) or vector(0)",
           "legendFormat": "Open conflicts",
           "refId": "A"
         }
@@ -358,18 +358,18 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_conflicts_detected_total{namespace=~\"$namespace\"}[$__rate_interval]))",
-          "legendFormat": "Detected",
+          "expr": "max(lians_conflicts{status=\"open\"})",
+          "legendFormat": "Open",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_conflicts_resolved_total{namespace=~\"$namespace\"}[$__rate_interval])) by (resolution)",
-          "legendFormat": "Resolved ({{resolution}})",
+          "expr": "max by (status) (lians_conflicts{status!=\"open\"})",
+          "legendFormat": "Resolved ({{status}})",
           "refId": "B"
         }
       ],
-      "title": "Conflict detection & resolution rate (ops/s)",
+      "title": "Durable conflict inventory",
       "type": "timeseries"
     },
 
@@ -389,13 +389,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_memory_writes_total{namespace=~\"$namespace\", relation=\"CONTRADICTS_SAME_TIME\"}[$__rate_interval]))",
+          "expr": "sum(rate(agentmem_memory_writes_total{relation=\"CONTRADICTS_SAME_TIME\"}[$__rate_interval]))",
           "legendFormat": "Same-time contradictions ingested",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(rate(agentmem_memory_writes_total{namespace=~\"$namespace\", relation=\"SUPERSEDES\"}[$__rate_interval]))",
+          "expr": "sum(rate(agentmem_memory_writes_total{relation=\"SUPERSEDES\"}[$__rate_interval]))",
           "legendFormat": "Clean supersessions",
           "refId": "B"
         }
@@ -428,14 +428,14 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(agentmem_erasure_requests_total{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace)",
-          "legendFormat": "Erasure requests — {{namespace}}",
+          "expr": "sum(increase(agentmem_erasure_requests_total[$__rate_interval]))",
+          "legendFormat": "Erasure requests",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(agentmem_memories_erased_total{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace)",
-          "legendFormat": "Records crypto-shredded — {{namespace}}",
+          "expr": "sum(increase(agentmem_memories_erased_total[$__rate_interval]))",
+          "legendFormat": "Records crypto-shredded",
           "refId": "B"
         }
       ],
@@ -473,7 +473,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(agentmem_memories_erased_total{namespace=~\"$namespace\"}[$__range]))",
+          "expr": "sum(increase(agentmem_memories_erased_total[$__range]))",
           "legendFormat": "Total records erased",
           "refId": "A"
         }
@@ -512,7 +512,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "sum(increase(agentmem_erasure_requests_total{namespace=~\"$namespace\"}[$__range]))",
+          "expr": "sum(increase(agentmem_erasure_requests_total[$__range]))",
           "legendFormat": "Erasure requests",
           "refId": "A"
         }
@@ -525,34 +525,12 @@
 
   "refresh": "30s",
   "schemaVersion": 38,
-  "tags": ["agentmem", "financial", "ai-memory"],
-  "templating": {
-    "list": [
-      {
-        "current": {},
-        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-        "definition": "label_values(agentmem_memory_writes_total, namespace)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Namespace",
-        "multi": true,
-        "name": "namespace",
-        "options": [],
-        "query": {
-          "query": "label_values(agentmem_memory_writes_total, namespace)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 2,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
-      }
-    ]
-  },
+  "tags": ["lians", "ai-infrastructure", "decision-evidence"],
+  "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "AgentMem — Financial AI Memory",
+  "title": "Lians — AI Decision Infrastructure",
   "uid": "agentmem-financial-v1",
   "version": 1
 }

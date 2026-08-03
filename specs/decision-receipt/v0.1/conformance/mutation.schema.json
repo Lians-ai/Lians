@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/decision-receipt/v0.1/conformance/mutation.schema.json",
+  "title": "Decision Receipt v0.1 conformance mutation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mutation_version", "description", "operations"],
+  "properties": {
+    "mutation_version": {"const": "1"},
+    "description": {"type": "string", "minLength": 1},
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["op", "path", "value"],
+        "properties": {
+          "op": {"const": "replace"},
+          "path": {
+            "type": "string",
+            "pattern": "^/(?!integrity(?:/|$))(?:[^~/]|~0|~1)+(?:/(?:[^~/]|~0|~1)+)*$"
+          },
+          "value": true
+        }
+      }
+    }
+  }
+}

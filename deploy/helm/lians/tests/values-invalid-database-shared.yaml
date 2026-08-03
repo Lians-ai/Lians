@@ -1,0 +1,7 @@
+# Negative fixture: the runtime and DDL-capable migrator may never share a
+# Secret object, even when their key labels differ.
+existingSecrets:
+  database:
+    migration:
+      name: lians-database-runtime
+      key: MIGRATION_DATABASE_URL

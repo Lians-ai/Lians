@@ -1,0 +1,13 @@
+# Synthetic positive fixture. The acknowledgement proves only rendered control
+# intent; it is not evidence that this fake StorageClass encrypts anything.
+otelCollector:
+  enabled: true
+  image:
+    repository: ghcr.io/example/otel-collector
+    digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+  existingSecret: lians-collector-ingest
+  queue:
+    storageClassName: encrypted-rwo
+    encryptedAtRestAcknowledged: true
+    rawPayloadCustodyAcknowledged: true
+    custodyPolicyRef: SEC-OTLP-QUEUE-001

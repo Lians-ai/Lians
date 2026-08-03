@@ -1,0 +1,4 @@
+config:
+  database:
+    # Default HPA maximum is 20 and each replica can hold 10 + 20 connections.
+    connectionBudget: 599

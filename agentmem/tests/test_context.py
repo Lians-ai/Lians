@@ -14,9 +14,9 @@ from httpx import AsyncClient, ASGITransport
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
 
 NS = "ctx-ns"
 KEY = "ctx-key"
@@ -33,7 +33,7 @@ class _FakeMem:
 
 
 def test_mmr_promotes_diversity():
-    from src.lians.ranking import mmr_rerank
+    from lians.ranking import mmr_rerank
     a = _FakeMem([1.0, 0.0])   # a and b are near-duplicates
     b = _FakeMem([1.0, 0.0])
     c = _FakeMem([0.0, 1.0])   # c is orthogonal (diverse)
@@ -47,7 +47,7 @@ def test_mmr_promotes_diversity():
 
 
 def test_mmr_lambda_one_is_pure_relevance():
-    from src.lians.ranking import mmr_rerank
+    from lians.ranking import mmr_rerank
     a = _FakeMem([1.0, 0.0])
     b = _FakeMem([1.0, 0.0])
     c = _FakeMem([0.0, 1.0])

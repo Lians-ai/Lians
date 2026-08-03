@@ -28,10 +28,9 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories, erase_subject
-from src.lians.audit import reconstruct as audit_reconstruct
-from src.lians.schemas import AuditReconstructRequest
+from lians.schemas import MemoryAdd, RecallRequest
+from lians.memory_service import add_memory, recall_memories, erase_subject
+from lians.audit import reconstruct as audit_reconstruct
 
 NS    = "compliance-ns"
 AGENT = "compliance-agent"
@@ -217,8 +216,7 @@ class TestCryptoShred:
         The hash serves as proof-of-existence for regulators without exposing PII.
         SEC Rule 17a-4 requires the audit trail to be immutable.
         """
-        from src.lians.models import Memory as MemModel
-        from sqlalchemy import select
+        from lians.models import Memory as MemModel
 
         subject_id = f"subject-hash-{uuid4().hex[:8]}"
         m = await add_memory(db, NS, MemoryAdd(
@@ -267,9 +265,9 @@ class TestCryptoShred:
         assert m_b.id in ids, "Subject B memory must survive Subject A erasure"
 
     @pytest.mark.asyncio
-    async def test_erase_event_appears_in_audit_trail(self, db):
+    async def test_erasure_request_appears_in_audit_trail_without_raw_ids(self, db):
         """
-        An ERASE event must be recorded in the event_log.
+        A durable erasure-request event must be recorded in the event_log.
         This is the regulatorily required paper trail for GDPR Art. 17 compliance.
         """
         subject_id = f"subject-audit-{uuid4().hex[:8]}"
@@ -283,16 +281,19 @@ class TestCryptoShred:
         ref = f"gdpr-req-{uuid4().hex}"
         await erase_subject(db, NS, subject_id, request_ref=ref)
 
-        from src.lians.models import EventLog
+        from lians.models import EventLog
         from sqlalchemy import select
-        stmt = select(EventLog).where(EventLog.op == "erase")
+        stmt = select(EventLog).where(EventLog.op == "subject_erasure_requested")
         result_rows = await db.execute(stmt)
         erase_events = result_rows.scalars().all()
 
-        assert any(ref in (e.payload or {}).get("request_ref", "") for e in erase_events), (
-            f"No erase event with request_ref={ref!r} found in event_log â€” "
-            "audit trail is missing the erasure record"
+        assert erase_events, "audit trail is missing the durable erasure request"
+        payload = erase_events[-1].payload or {}
+        assert payload["request_ref"].startswith(
+            "lians:erasure-request:v2:hmac-sha256:"
         )
+        assert ref not in payload["request_ref"]
+        assert subject_id not in payload["subject_ref"]
 
 
 # ---------------------------------------------------------------------------
@@ -363,13 +364,13 @@ class TestAuditReconstructAccuracy:
         )
 
     @pytest.mark.asyncio
-    async def test_reconstruct_after_erasure_shows_erase_in_event_trail(self, db):
+    async def test_reconstruct_after_erasure_is_immediately_crypto_shredded(self, db):
         """
-        After GDPR erasure, the audit event trail must contain an 'erase' op.
-        The memory row persists in the DB with content_hash intact (proof-of-
-        existence) and erased_at set â€” verifiable without re-exposing PII.
+        The durable request destroys the DEK synchronously, before its worker
+        stamps derivative rows. Reconstruction must therefore return a
+        content-free tombstone immediately while retaining the content hash.
         """
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         agent = f"{AGENT}-tombstone"
         subject_id = f"subj-{uuid4().hex[:8]}"
@@ -386,18 +387,28 @@ class TestAuditReconstructAccuracy:
         ref = f"gdpr-{uuid4().hex}"
         await erase_subject(db, NS, subject_id, request_ref=ref)
 
-        # The DB row survives with erased_at set and content_hash intact
+        # Physical derivative scrubbing is asynchronous, but the row's
+        # ciphertext is already unreadable because its subject key is gone.
         db_mem = await db.get(MemModel, m.id)
-        assert db_mem.erased_at is not None, "erased_at must be stamped on the DB row"
+        assert db_mem.erased_at is None
         assert db_mem.content_hash == original_hash, "content_hash survives erasure"
 
         # Use a real future timestamp so event_log.created_at (real clock) passes the filter
         future = datetime.now(_UTC) + timedelta(hours=1)
         recon = await audit_reconstruct(db, NS, agent, as_of=future)
-        ops = {e.get("op") for e in recon.event_trail}
-        assert "erase" in ops, (
-            "erase op must appear in event_trail for regulatory audit"
+        tombstone = next(item for item in recon.memories if item.id == m.id)
+        assert tombstone.content is None
+
+        from lians.models import EventLog
+        from sqlalchemy import select
+
+        requested = await db.scalar(
+            select(EventLog).where(
+                EventLog.namespace == NS,
+                EventLog.op == "subject_erasure_requested",
+            )
         )
+        assert requested is not None
 
 
 # ---------------------------------------------------------------------------
@@ -420,13 +431,13 @@ class TestDuplicateDetection:
             agent_id=AGENT, content=content,
             event_time=T1, source="bloomberg", metadata=meta,
         ))
-        m2 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content=content,
             event_time=T1, source="reuters", metadata=meta,
         ))
 
         # m1 must remain valid â€” CONFIRMS should not close it
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
         db_m1 = await db.get(MemModel, m1.id)
         assert db_m1.valid_to is None, (
             "Exact duplicate (CONFIRMS relation) must not close the original memory"
@@ -449,7 +460,7 @@ class TestDuplicateDetection:
             event_time=T2, metadata=meta,
         ))
 
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
         db_old = await db.get(MemModel, m_old.id)
         assert db_old.valid_to is not None, (
             "Updated value (SUPERSEDES) must close the old memory"

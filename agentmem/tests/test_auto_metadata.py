@@ -11,17 +11,18 @@ Two layers under test:
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
-from src.lians.config import get_settings
-from src.lians.adapters.finance import extract_finance_keys
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
+from lians.config import get_settings
+from lians.adapters.finance import extract_finance_keys
 
 NS = "auto-meta-ns"
 KEY = "auto-meta-key"
@@ -151,3 +152,33 @@ async def test_caller_keys_are_authoritative(client, monkeypatch):
                      metadata={"ticker": "MSFT", "metric": "price_target"})
     assert mem["metadata"]["ticker"] == "MSFT"
     assert "_auto_meta" not in mem["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_auto_metadata_failure_is_observed_without_blocking_or_leaking(
+    client,
+    monkeypatch,
+    caplog,
+):
+    marker = "private-auto-metadata-content-marker"
+    monkeypatch.setenv("AUTO_METADATA_ENABLED", "true")
+    get_settings.cache_clear()
+    observations: list[str] = []
+
+    async def fail_enrichment(*_args, **_kwargs):
+        raise RuntimeError(marker)
+
+    monkeypatch.setattr("lians.auto_metadata.enrich_metadata", fail_enrichment)
+    monkeypatch.setattr(
+        "lians.memory_service.record_best_effort_failure",
+        observations.append,
+    )
+    caplog.set_level(logging.WARNING, logger="lians.memory_service")
+
+    memory = await _add(client, marker, _ts(2026, 3, 1))
+
+    assert memory["content"] == marker
+    assert memory["metadata"] == {}
+    assert observations == ["auto_metadata"]
+    assert "caller metadata retained" in caplog.text
+    assert marker not in caplog.text

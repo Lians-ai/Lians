@@ -76,7 +76,7 @@ MiFID II Article 16(7) requires investment firms to maintain records of all serv
 | Record all transactions and services | Every memory write and recall is an audit event |
 | Records must be stored in a medium that prevents alteration | Hash chain; each event commits to the hash of the prior event — altering any record breaks `chain_valid` |
 | Records must be accessible for supervisory authority review | `GET /v1/admin/audit/export?start=<ISO>&end=<ISO>` produces a complete, verifiable log |
-| Five-year retention minimum | Retention policy (PUT `/v1/admin/retention/<namespace>`, `keep_days=1825`) enforces this; content expires, audit row survives |
+| Five-year retention minimum | Configure `audit_retention_days=1825` with `PUT /v1/admin/retention/<namespace>` after reading the policy and supplying its `expected_updated_at` token; content TTL is configured separately and audit evidence survives content expiry |
 | Reconstruction of the order/decision process | `as_of` recall reconstructs agent knowledge at any past timestamp; decision chain is bitemporal (event time + system time both preserved) |
 
 ### SEC Rule 17a-4 (equivalent obligation for U.S. broker-dealers)
@@ -156,17 +156,20 @@ Each write and recall sets `SET LOCAL Lians.barrier_group = <group>` in the DB s
 
 ## 6. GDPR Crypto-Shred — Right to Erasure (Article 17)
 
-GDPR Article 17 (Right to Erasure / "Right to be Forgotten") requires the ability to irrecoverably delete personal data on request, including from backups and audit logs.
+GDPR Article 17 (Right to Erasure / "Right to be Forgotten") requires a controller to erase covered personal data subject to applicable exceptions and competing retention duties. Lians separates encrypted subject content from retained, pseudonymous integrity evidence; deployment counsel must define the lawful basis and duration for the latter.
 
 Crypto-shred satisfies Article 17 without requiring physical deletion of backup media:
 
 | GDPR Requirement | Lians Implementation |
 |-----------------|------------------------|
 | Erasure of personal data | `POST /v1/erase` destroys the per-subject DEK; all content encrypted under that key is immediately irrecoverable |
-| Backup/archive coverage | Future restores that decrypt content will fail — the key is gone. Audit rows survive (no personal data in audit schema; only hashes). |
+| Backup/archive coverage | Future restores cannot decrypt subject content after the DEK is destroyed. Audit rows survive with keyed references, hashes, and timing; these are pseudonymous evidence and must still be governed as potentially personal data. |
 | Verification of erasure | `GET /v1/erase/status?subject_id=<id>` confirms key destruction timestamp |
 | Audit survival | Hash chain rows are not encrypted with per-subject DEKs; audit trail is intact post-erasure |
-| Erasure scope | Subject ID maps to patient_id / client_id / user_id depending on adapter; all memories under that subject are covered |
+| Erasure scope | The explicit subject link covers memories, live facts, held admissions, and linked graph edges. New immutable Decision/Recorder/audit records use a tenant-scoped keyed reference rather than the raw identifier. Arbitrary PII in free-form fields and downstream systems requires separate controls. |
+
+The authoritative store-by-store lifecycle, residual-data limits, and legacy
+posture are documented in [Data retention and subject erasure](data-retention-and-subject-erasure.md).
 
 ---
 
@@ -183,4 +186,4 @@ Common questions from bank information security and vendor risk management teams
 | Can we do a penetration test? | Yes — self-hosted deployment is your environment; no approval needed. |
 | Can you sign an NDA before reviewing the system? | Yes — contact via GitHub (etanbuns). |
 | What is the exit strategy? | `GET /v1/snapshot` exports all memories + audit chain in portable NDJSON. Import into any Postgres instance using the migration scripts. No proprietary format lock-in. |
-| What is the data retention policy? | Configurable per namespace via `PUT /v1/admin/retention/<namespace>`. Default: no automatic deletion. |
+| What is the data retention policy? | Configurable per namespace via `PUT /v1/admin/retention/<namespace>`. Read the current policy first and submit its `expected_updated_at` token (or `null` only when creating the first policy). Default: no automatic content deletion. |

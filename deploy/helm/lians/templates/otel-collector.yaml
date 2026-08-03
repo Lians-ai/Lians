@@ -1,0 +1,338 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lians.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.otelLabels" . | nindent 4 }}
+data:
+  collector.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      file_storage:
+        directory: /var/lib/otelcol/storage
+        create_directory: true
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 384
+        spike_limit_mib: 96
+      batch:
+        timeout: 1s
+        send_batch_size: 512
+        send_batch_max_size: 1024
+
+    exporters:
+      otlphttp/lians:
+        endpoint: http://{{ include "lians.fullname" . }}
+        headers:
+          X-API-Key: ${env:LIANS_INGEST_API_KEY}
+        timeout: 15s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 0s
+        sending_queue:
+          enabled: true
+          num_consumers: 8
+          queue_size: 10000
+          storage: file_storage
+
+    service:
+      extensions: [health_check, file_storage]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/lians]
+      telemetry:
+        metrics:
+          level: detailed
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+                    without_type_suffix: true
+                    without_units: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lians.fullname" . }}-otel-collector-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.otelLabels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "lians.otelSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      appProtocol: grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lians.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.otelLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "lians.otelSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+      appProtocol: grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      appProtocol: http
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+      appProtocol: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "lians.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.otelLabels" . | nindent 4 }}
+  annotations:
+    lians.ai/raw-pre-minimization-queue: "true"
+    lians.ai/encrypted-at-rest-acknowledged: {{ .Values.otelCollector.queue.encryptedAtRestAcknowledged | quote }}
+    lians.ai/raw-payload-custody-acknowledged: {{ .Values.otelCollector.queue.rawPayloadCustodyAcknowledged | quote }}
+    lians.ai/queue-custody-policy-ref: {{ .Values.otelCollector.queue.custodyPolicyRef | quote }}
+spec:
+  serviceName: {{ include "lians.fullname" . }}-otel-collector-headless
+  replicas: {{ .Values.otelCollector.replicas }}
+  podManagementPolicy: Parallel
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "lians.otelSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lians.otelSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ toJson (dict "collector" .Values.otelCollector "service" (include "lians.fullname" .)) | sha256sum }}
+        checksum/external-secret-revision: {{ printf "%s:%s" .Values.otelCollector.existingSecret .Values.existingSecrets.rolloutRevision | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "lians.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "lians.otelSelectorLabels" . | nindent 14 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "lians.otelSelectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: collector
+          image: {{ include "lians.otelImage" . | quote }}
+          imagePullPolicy: {{ .Values.otelCollector.image.pullPolicy }}
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          env:
+            - name: LIANS_INGEST_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.otelCollector.existingSecret }}
+                  key: {{ .Values.otelCollector.ingestApiKeyKey }}
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /
+              port: health
+            failureThreshold: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+            - name: queue
+              mountPath: /var/lib/otelcol/storage
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "lians.fullname" . }}-otel-collector
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: queue
+        labels:
+          {{- include "lians.otelLabels" . | nindent 10 }}
+        annotations:
+          lians.ai/raw-pre-minimization-queue: "true"
+          lians.ai/encrypted-at-rest-acknowledged: {{ .Values.otelCollector.queue.encryptedAtRestAcknowledged | quote }}
+          lians.ai/raw-payload-custody-acknowledged: {{ .Values.otelCollector.queue.rawPayloadCustodyAcknowledged | quote }}
+          lians.ai/queue-custody-policy-ref: {{ .Values.otelCollector.queue.custodyPolicyRef | quote }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.otelCollector.queue.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.otelCollector.queue.size }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "lians.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.otelLabels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.otelCollector.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "lians.otelSelectorLabels" . | nindent 6 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "lians.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.otelLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "lians.otelSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.otelCollector.producerNamespaceSelector | nindent 14 }}
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+    {{- if .Values.monitoring.serviceMonitor.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.monitoring.namespaceSelector | nindent 14 }}
+          {{- with .Values.networkPolicy.monitoring.podSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+      ports:
+        - port: 8888
+          protocol: TCP
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "lians.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: 8000
+          protocol: TCP
+{{- end }}

@@ -1,0 +1,174 @@
+# Copy this file outside the chart, replace every CHANGE_ME, and keep it in a
+# protected deployment repository. It contains no credentials or secret data.
+image:
+  repository: CHANGE_ME
+  digest: CHANGE_ME
+
+imagePullSecrets:
+  - name: CHANGE_ME
+
+serviceAccount:
+  annotations:
+    CHANGE_ME: CHANGE_ME
+
+podLabels:
+  CHANGE_ME: CHANGE_ME
+
+existingSecrets:
+  application:
+    name: CHANGE_ME
+  database:
+    runtime:
+      name: CHANGE_ME
+      key: DATABASE_URL
+    migration:
+      name: CHANGE_ME
+      key: DATABASE_URL
+  redis:
+    name: CHANGE_ME
+    key: REDIS_URL
+  receipts:
+    name: CHANGE_ME
+    # Preferred production posture: leave both localPrivateKeyKey and
+    # vaultTokenKey empty and project a rotating Vault Agent token read-only.
+    localPrivateKeyKey: ""
+    vaultTokenKey: ""
+    vaultTokenFileKey: token
+  kms:
+    name: CHANGE_ME
+  rolloutRevision: CHANGE_ME
+
+config:
+  deploymentRegion: CHANGE_ME
+  corsOrigins:
+    - https://CHANGE_ME
+  # Replace with the source CIDRs of the ingress-controller/mesh peers that
+  # connect directly to the API pods, not public client address ranges.
+  trustedProxyCidrs:
+    - CHANGE_ME/32
+  database:
+    poolSize: 10
+    maxOverflow: 20
+    poolTimeoutSeconds: 30
+    # Set to the API allocation remaining after all non-API database clients
+    # and emergency/provider reserves. Must cover HPA maxReplicas * 30 here.
+    connectionBudget: 600
+  kms:
+    provider: CHANGE_ME
+    envelopeKeyId: CHANGE_ME
+    previousEnvelopeKeyId: ""
+    aws:
+      region: CHANGE_ME
+      keyId: CHANGE_ME
+      previousRegion: ""
+      previousKeyId: ""
+    azure:
+      vaultUrl: CHANGE_ME
+      secretName: CHANGE_ME
+      previousVaultUrl: ""
+      previousSecretName: ""
+    vault:
+      address: CHANGE_ME
+      path: CHANGE_ME
+      mountPoint: CHANGE_ME
+      previousAddress: ""
+      previousPath: ""
+      previousMountPoint: ""
+  receipts:
+    provider: vault-transit
+    signingKeyId: CHANGE_ME
+    vault:
+      address: https://CHANGE_ME
+      namespace: ""
+      mountPoint: CHANGE_ME
+      keyName: CHANGE_ME
+      keyVersion: 1
+      publicKey: CHANGE_ME
+      timeoutSeconds: 5
+  metering:
+    # The referenced application Secret must contain STRIPE_API_KEY. Include
+    # Stripe's reviewed HTTPS egress ranges in externalHttpsCidrs below.
+    enabled: true
+    decisionEvent: lians_authoritative_decision
+    protectedActionEvent: lians_protected_action
+    asyncErrorDestinationConfigured: true
+  telemetry:
+    exporterEndpoint: https://CHANGE_ME:4317
+
+ingress:
+  enabled: true
+  className: CHANGE_ME
+  host: CHANGE_ME
+  tls:
+    enabled: true
+    existingSecret: CHANGE_ME
+
+networkPolicy:
+  ingressController:
+    namespaceSelector:
+      kubernetes.io/metadata.name: CHANGE_ME
+  monitoring:
+    namespaceSelector:
+      kubernetes.io/metadata.name: CHANGE_ME
+  gateMediator:
+    enabled: true
+    metricsIngressEnabled: true
+    providerCidrs:
+      - CHANGE_ME/32
+  postgresql:
+    cidrs:
+      - CHANGE_ME/32
+  redis:
+    cidrs:
+      - CHANGE_ME/32
+  externalHttpsCidrs:
+    - CHANGE_ME/32
+  externalOtlp:
+    cidrs:
+      - CHANGE_ME/32
+  # Required by either KMS Vault or the Vault Transit receipt signer. Include
+  # every exact Vault endpoint CIDR when they use separate clusters.
+  vault:
+    enabled: true
+    cidrs:
+      - CHANGE_ME/32
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    namespace: CHANGE_ME
+    existingSecret: CHANGE_ME
+    additionalLabels:
+      release: CHANGE_ME
+  prometheusRule:
+    enabled: true
+    namespace: CHANGE_ME
+    additionalLabels:
+      release: CHANGE_ME
+
+otelCollector:
+  enabled: true
+  image:
+    repository: CHANGE_ME
+    digest: CHANGE_ME
+  existingSecret: CHANGE_ME
+  queue:
+    storageClassName: CHANGE_ME
+    encryptedAtRestAcknowledged: true
+    rawPayloadCustodyAcknowledged: true
+    custodyPolicyRef: CHANGE_ME
+
+backup:
+  enabled: true
+  suspend: true
+  image:
+    repository: CHANGE_ME
+    digest: CHANGE_ME
+  serviceAccount:
+    annotations:
+      CHANGE_ME: CHANGE_ME
+  existingSecret: CHANGE_ME
+  existingIdentityConfigMap: CHANGE_ME
+  existingPvc: CHANGE_ME
+  wormDestinationCidrs:
+    - CHANGE_ME/32

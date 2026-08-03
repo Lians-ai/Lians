@@ -3,122 +3,210 @@
     {
       "name": "DS_PROMETHEUS",
       "label": "Prometheus",
-      "description": "Datasource scraping the Lians /metrics endpoint",
+      "description": "Datasource scraping the authenticated Lians /metrics endpoint",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
     }
   ],
-  "title": "Lians Evidence Capture",
+  "title": "Lians Decision-Evidence Operations",
+  "description": "Tenant-free operational telemetry. Durable inventory uses max across API replicas; per-replica health remains separate.",
   "uid": "lians-operations",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 4,
   "refresh": "30s",
-  "tags": ["lians", "opentelemetry", "genai", "evidence"],
+  "tags": ["lians", "decision-evidence", "recorder", "control-plane"],
   "time": {"from": "now-6h", "to": "now"},
   "panels": [
     {
       "type": "stat",
-      "title": "OTLP spans accepted",
-      "description": "Unsampled spans accepted by the Lians evidence receiver.",
+      "title": "Recorder events accepted",
       "id": 1,
-      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 0},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "sum(increase(lians_otel_spans_accepted_total[$__range]))", "refId": "A"}],
+      "targets": [{"expr": "sum(increase(lians_recorder_events_total{outcome=\"accepted\"}[$__range]))", "refId": "A"}],
       "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
     },
     {
       "type": "stat",
-      "title": "Decisions correlated",
-      "description": "Decision records created automatically from GenAI traces.",
+      "title": "Recorder runs waiting",
+      "description": "Database-global inventory repeated by replicas; max prevents replica-count inflation.",
       "id": 2,
-      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 0},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "sum(increase(lians_otel_decisions_correlated_total[$__range]))", "refId": "A"}],
+      "targets": [{"expr": "max(lians_recorder_runs{readiness=\"waiting\"}) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 20}, {"color": "red", "value": 100}]}}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Integration actionable backlog",
+      "id": 3,
+      "gridPos": {"h": 5, "w": 4, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_integration_deliveries{status=\"pending\"}) + max(lians_integration_deliveries{status=\"retry\"}) + max(lians_integration_deliveries{status=\"leased\"})", "refId": "A"}],
       "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
     },
     {
       "type": "stat",
-      "title": "Open memory conflicts",
-      "id": 3,
-      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+      "title": "Active impact jobs",
+      "id": 4,
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 0},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "sum(agentmem_conflict_queue_depth)", "refId": "A"}],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}
-        },
-        "overrides": []
-      }
+      "targets": [{"expr": "max(lians_impact_jobs{status=\"pending\"}) + max(lians_impact_jobs{status=\"running\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
     },
     {
       "type": "stat",
-      "title": "Evidence stream status",
-      "id": 4,
-      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "sum(rate(lians_otel_spans_accepted_total[5m]))", "refId": "A"}],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {"type": "range", "options": {"from": 0.000001, "to": 1000000, "result": {"text": "Receiving", "color": "green"}}},
-            {"type": "special", "options": {"match": "null", "result": {"text": "No data", "color": "red"}}}
-          ]
-        },
-        "overrides": []
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Evidence ingestion rate",
+      "title": "Open conflicts",
       "id": 5,
-      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 6},
+      "gridPos": {"h": 5, "w": 4, "x": 16, "y": 0},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [
-        {"expr": "sum by (namespace) (rate(lians_otel_spans_accepted_total[5m]))", "legendFormat": "{{namespace}} spans/s", "refId": "A"},
-        {"expr": "sum by (namespace) (rate(lians_otel_decisions_correlated_total[5m]))", "legendFormat": "{{namespace}} decisions/s", "refId": "B"}
-      ]
+      "targets": [{"expr": "max(lians_conflicts{status=\"open\"}) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
     },
     {
-      "type": "timeseries",
-      "title": "Memory quality activity",
+      "type": "stat",
+      "title": "Audit boundary rejections",
       "id": 6,
-      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 6},
+      "gridPos": {"h": 5, "w": 4, "x": 20, "y": 0},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [
-        {"expr": "sum by (namespace) (rate(agentmem_conflicts_detected_total[5m]))", "legendFormat": "{{namespace}} detected", "refId": "A"},
-        {"expr": "sum by (namespace) (rate(agentmem_conflicts_resolved_total[5m]))", "legendFormat": "{{namespace}} resolved", "refId": "B"}
-      ]
+      "targets": [{"expr": "sum(increase(lians_audit_append_boundary_attempts_total{outcome=\"rejected\"}[$__range]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}
     },
     {
       "type": "timeseries",
-      "title": "Recall latency p95",
+      "title": "Recorder ingest outcomes",
       "id": 7,
-      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 15},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 5},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, sum by (le, namespace) (rate(agentmem_recall_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{namespace}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}
+      "targets": [{"expr": "sum by (outcome) (rate(lians_recorder_events_total[$__rate_interval]))", "legendFormat": "{{outcome}}", "refId": "A"}]
     },
     {
       "type": "timeseries",
-      "title": "Degraded recall rate",
+      "title": "Recorder capture inventory",
+      "description": "Capture mode is bounded; no namespace, run, producer, or payload identity is exported.",
       "id": 8,
-      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 15},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max by (capture_mode) (lians_recorder_captured_events)", "legendFormat": "{{capture_mode}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Integration durable delivery inventory",
+      "id": 9,
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max by (status) (lians_integration_deliveries)", "legendFormat": "{{status}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Impact job inventory and progress",
+      "id": 10,
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 13},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "targets": [
-        {
-          "expr": "sum by (namespace) (rate(agentmem_memory_recalls_total{router=\"semantic_degraded\"}[5m]))",
-          "legendFormat": "{{namespace}}",
-          "refId": "A"
-        }
+        {"expr": "max by (status) (lians_impact_jobs)", "legendFormat": "jobs {{status}}", "refId": "A"},
+        {"expr": "max(lians_impact_scan_progress_ratio)", "legendFormat": "active progress ratio", "refId": "B"},
+        {"expr": "min(lians_impact_worker_healthy)", "legendFormat": "least healthy worker", "refId": "C"},
+        {"expr": "time() - max(lians_impact_worker_last_heartbeat_unixtime_seconds)", "legendFormat": "worker heartbeat age (seconds)", "refId": "D"}
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Retention cycle outcomes",
+      "id": 11,
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "sum by (outcome) (rate(lians_retention_cycles_total[$__rate_interval]))", "legendFormat": "{{outcome}}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Inventory and worker health by replica",
+      "id": 12,
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "lians_durable_inventory_refresh_healthy", "legendFormat": "inventory {{instance}}", "refId": "A"},
+        {"expr": "lians_integration_worker_healthy", "legendFormat": "integration {{instance}}", "refId": "B"},
+        {"expr": "lians_retention_scheduler_healthy", "legendFormat": "retention {{instance}}", "refId": "C"}
+      ],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Protected decisions",
+      "description": "Authoritative database inventory; use max across replicas.",
+      "id": 13,
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_protected_decisions) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "type": "gauge",
+      "title": "Evidence-complete decisions",
+      "description": "Share with all eight persisted evidence-kind watermarks complete.",
+      "id": 14,
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_decision_evidence_complete_ratio) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "yellow", "value": 0.8}, {"color": "green", "value": 0.95}]}}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Protected actions",
+      "description": "Successfully mediated actions with a consumed single-use Gate permit.",
+      "id": 15,
+      "gridPos": {"h": 5, "w": 4, "x": 8, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_protected_actions) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Impact matches found",
+      "id": 16,
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_impact_matches) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Open investigation cases",
+      "id": 17,
+      "gridPos": {"h": 5, "w": 4, "x": 16, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "sum(max by (status) (lians_investigation_cases{status=~\"open|in_review|remediating|resolved\"})) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "type": "stat",
+      "title": "Overdue remediation",
+      "id": 18,
+      "gridPos": {"h": 5, "w": 4, "x": 20, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_remediation_overdue_tasks) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "type": "timeseries",
+      "title": "Investigation and remediation workflow",
+      "id": 19,
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 26},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "max by (status) (lians_investigation_cases)", "legendFormat": "case {{status}}", "refId": "A"},
+        {"expr": "max by (status) (lians_remediation_tasks)", "legendFormat": "task {{status}}", "refId": "B"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Attested closures",
+      "id": 20,
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 26},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"expr": "max(lians_closure_attestations) or vector(0)", "legendFormat": "closures", "refId": "A"}]
     }
   ]
 }

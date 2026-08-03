@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lians:ops:worm-provider-attestation-anchor:v1",
+  "title": "Lians immutable provider attestation anchor v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "created_at",
+    "status",
+    "backup_id",
+    "core_attestation",
+    "provider",
+    "immutable_anchor",
+    "cross_binding",
+    "verifier"
+  ],
+  "properties": {
+    "schema": { "const": "urn:lians:ops:worm-provider-attestation-anchor:v1" },
+    "created_at": { "$ref": "#/$defs/dateTime" },
+    "status": { "const": "provider_attestation_anchored_immutable" },
+    "backup_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,79}$" },
+    "core_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "local_filename", "size_bytes", "sha256", "handoff_sha256"],
+      "properties": {
+        "schema": { "const": "urn:lians:ops:worm-provider-attestation:v1" },
+        "local_filename": { "$ref": "#/$defs/safeFilename" },
+        "size_bytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "sha256": { "$ref": "#/$defs/sha256Hex" },
+        "handoff_sha256": { "$ref": "#/$defs/sha256Hex" }
+      }
+    },
+    "provider": { "$ref": "#/$defs/providerBoundary" },
+    "immutable_anchor": { "$ref": "#/$defs/objectAttestation" },
+    "cross_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "anchored_payload",
+        "core_attestation_sha256",
+        "provider_boundary_sha256",
+        "construction"
+      ],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "anchored_payload": { "const": "canonical_core_attestation_bytes" },
+        "core_attestation_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "provider_boundary_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "construction": {
+          "const": "core_digest_and_provider_boundary_only_no_anchor_record_self_hash"
+        }
+      }
+    },
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workload_identity", "provider_principal", "verified_at", "software"],
+      "properties": {
+        "workload_identity": { "type": "string", "minLength": 3, "maxLength": 512 },
+        "provider_principal": { "type": "string", "minLength": 3, "maxLength": 1024 },
+        "verified_at": { "$ref": "#/$defs/dateTime" },
+        "software": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.+-]+$" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256Hex": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "safeFilename": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$"
+    },
+    "providerBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "owning_identity",
+        "resource_id",
+        "location",
+        "immutable_capability",
+        "policy_revision_sha256"
+      ],
+      "properties": {
+        "kind": { "enum": ["aws_s3", "google_cloud_storage", "azure_blob_storage"] },
+        "owning_identity": { "type": "string", "minLength": 3, "maxLength": 512 },
+        "resource_id": { "type": "string", "minLength": 3, "maxLength": 1024 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "immutable_capability": {
+          "enum": ["s3_object_lock", "gcs_object_retention_lock", "azure_version_level_immutability"]
+        },
+        "policy_revision_sha256": { "$ref": "#/$defs/sha256Hex" }
+      }
+    },
+    "providerChecksumValue": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9+/]+={0,2}(-[1-9][0-9]{0,4})?$"
+    },
+    "providerChecksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value", "encoding", "checksum_type"],
+      "properties": {
+        "algorithm": { "enum": ["crc32", "crc32c", "crc64nvme", "md5", "sha1", "sha256"] },
+        "value": { "$ref": "#/$defs/providerChecksumValue" },
+        "encoding": { "const": "base64" },
+        "checksum_type": { "enum": ["full_object", "composite", "provider_unspecified"] }
+      }
+    },
+    "objectAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_filename",
+        "destination",
+        "size_bytes",
+        "sha256",
+        "provider_object_id",
+        "provider_etag",
+        "provider_checksums",
+        "content_verification",
+        "retention",
+        "disposition"
+      ],
+      "properties": {
+        "source_filename": {
+          "type": "string",
+          "pattern": "^lians-provider-attestation-[a-z0-9][a-z0-9-]{7,79}-[0-9a-f]{64}\\.json$"
+        },
+        "destination": { "type": "string", "pattern": "^(s3|gs|azure)://" },
+        "size_bytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "sha256": { "$ref": "#/$defs/sha256Hex" },
+        "provider_object_id": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "provider_etag": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "provider_checksums": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/providerChecksum" }
+        },
+        "content_verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "sha256", "verified_at"],
+          "properties": {
+            "method": { "enum": ["provider_sha256", "streamed_sha256"] },
+            "sha256": { "$ref": "#/$defs/sha256Hex" },
+            "verified_at": { "$ref": "#/$defs/dateTime" }
+          }
+        },
+        "retention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "retain_until", "legal_hold", "hold_type", "policy_scope", "locked"],
+          "properties": {
+            "mode": { "enum": ["COMPLIANCE", "Locked"] },
+            "retain_until": { "$ref": "#/$defs/dateTime" },
+            "legal_hold": { "type": "boolean" },
+            "hold_type": { "enum": ["none", "legal_hold", "temporary_hold", "event_based_hold"] },
+            "policy_scope": { "enum": ["object_version", "object_generation"] },
+            "locked": { "const": true }
+          }
+        },
+        "disposition": { "enum": ["created", "reused_verified"] }
+      }
+    }
+  }
+}

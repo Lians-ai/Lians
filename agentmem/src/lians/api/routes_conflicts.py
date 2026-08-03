@@ -22,16 +22,18 @@ resolution so the decision is tamper-evident.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..schemas import ConflictListResult, ConflictResolveRequest, ConflictResolveResult
 from ..memory_service import list_conflicts, resolve_conflict
-from .deps import get_auth, AuthContext
+from ..mutation_safety import reject_non_replayable_idempotency_key
+from ..schemas import ConflictListResult, ConflictResolveRequest, ConflictResolveResult
+from .deps import AuthContext, get_auth
 
 router = APIRouter(prefix="/v1", tags=["conflicts"])
 
@@ -43,6 +45,8 @@ async def get_conflicts(
         description="Filter by status: open | accept_a | accept_b | dismissed",
     ),
     limit: int = Query(default=50, ge=1, le=500),
+    after_detected_at: datetime | None = Query(default=None),
+    after_id: UUID | None = Query(default=None),
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -57,15 +61,26 @@ async def get_conflicts(
     so the reviewer can decide which source to trust.
     """
     auth.require("read")
+    if (after_detected_at is None) != (after_id is None):
+        raise HTTPException(
+            status_code=422,
+            detail="after_detected_at and after_id must be supplied together",
+        )
     # Empty string query param → no status filter (all conflicts)
     effective_status = status if status else None
     return await list_conflicts(
         db, auth.namespace, status=effective_status, limit=limit,
         barrier_override=auth.barrier_group,
+        after_detected_at=after_detected_at,
+        after_id=after_id,
     )
 
 
-@router.post("/conflicts/{conflict_id}/resolve", response_model=ConflictResolveResult)
+@router.post(
+    "/conflicts/{conflict_id}/resolve",
+    response_model=ConflictResolveResult,
+    dependencies=[Depends(reject_non_replayable_idempotency_key)],
+)
 async def resolve_conflict_endpoint(
     conflict_id: UUID,
     req: ConflictResolveRequest,

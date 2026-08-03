@@ -152,9 +152,8 @@ def _build_server() -> Any:
             Tool(
                 name="reconstruct",
                 description=(
-                    "Reconstruct the complete memory state and full audit event trail "
-                    "at a past point in time. Returns every memory that was valid at as_of "
-                    "plus the timestamped, hashed event log behind them. "
+                    "Reconstruct a bounded memory-state and audit-event page at a past "
+                    "point in time, with exact totals and completeness fields. "
                     "Use for regulatory audit submissions and trade reconstruction."
                 ),
                 inputSchema={
@@ -192,8 +191,8 @@ def _build_server() -> Any:
             Tool(
                 name="memory_lineage",
                 description=(
-                    "Return the full supersession history of a memory — every prior version "
-                    "of the same fact and the chain of updates that led to the current value. "
+                    "Return a bounded supersession graph for a memory, including "
+                    "cardinality, truncation, root/tip, and audit-binding fields. "
                     "Use when a trader asks 'how did this guidance number evolve over time?' "
                     "or when investigating why a memory was replaced."
                 ),
@@ -203,7 +202,7 @@ def _build_server() -> Any:
                     "properties": {
                         "memory_id": {
                             "type": "string",
-                            "description": "UUID of any memory in the lineage chain.",
+                            "description": "UUID of any memory in the lineage graph.",
                         },
                     },
                 },
@@ -211,10 +210,10 @@ def _build_server() -> Any:
             Tool(
                 name="fact_history",
                 description=(
-                    "Return every recorded version of a structured fact ordered by event_time. "
+                    "Return matches from a bounded, ordered structured-fact scan. "
                     "Query by ticker + metric instead of a memory_id — ideal for time-series views "
                     "like 'show me how AAPL EPS evolved over the last four quarters'. "
-                    "Superseded versions are included so you can see the full revision history. "
+                    "Superseded versions are included when found within the disclosed scan. "
                     "Entity normalization is automatic: 'Apple Inc.', ISIN 'US0378331005', and "
                     "'AAPL' all resolve to the same fact series."
                 ),
@@ -238,12 +237,12 @@ def _build_server() -> Any:
                 name="backtest_check",
                 description=(
                     "Detect lookahead bias in a backtest simulation. "
-                    "Scans the agent's memory store and flags every fact that the agent "
-                    "couldn't have known at the given simulation date. "
+                    "Counts every recorded contaminant in the authenticated scope and "
+                    "returns a bounded page of detailed flags. "
                     "Returns two contamination types: FUTURE_EVENT (event_time is after the "
                     "simulation checkpoint — clear lookahead) and LATE_REVISION (the event is "
                     "historical but the revised figure hadn't been published yet). "
-                    "A clean report (is_clean=true) is the proof a risk committee needs."
+                    "is_clean does not attest to unrecorded external inputs."
                 ),
                 inputSchema={
                     "type": "object",
@@ -253,6 +252,13 @@ def _build_server() -> Any:
                             "type": "string",
                             "description": "ISO-8601 UTC timestamp of the simulation checkpoint.",
                         },
+                        "flag_limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000,
+                        },
+                        "after_event_time_iso": {"type": "string"},
+                        "after_id": {"type": "string"},
                     },
                 },
             ),
@@ -339,11 +345,15 @@ def _build_server() -> Any:
                 result = await _api("GET", f"/v1/memories/{memory_id}/lineage")
                 nodes = result.get("nodes", [])
                 edges = result.get("edges", [])
-                root = result.get("root_id", "")
-                tip  = result.get("tip_id", "")
+                roots = result.get("root_ids") or [result.get("root_id", "")]
+                tips = result.get("tip_ids") or [result.get("tip_id", "")]
                 lines = [
-                    f"Lineage for {memory_id[:8]}…: {len(nodes)} versions, {len(edges)} edges",
-                    f"Root: {str(root)[:8]}  →  Tip (current): {str(tip)[:8]}",
+                    f"Lineage graph for {memory_id[:8]}…: {len(nodes)} versions, "
+                    f"{len(edges)} edges, shape={result.get('shape', 'unknown')}",
+                    f"Roots: {', '.join(str(value)[:8] for value in roots)}; "
+                    f"tips/boundaries: {', '.join(str(value)[:8] for value in tips)}",
+                    f"Complete: {result.get('complete', False)}; "
+                    f"audit bindings complete: {result.get('audit_binding_complete', False)}",
                 ]
                 for node in nodes:
                     status = "✓ CURRENT" if node.get("is_current") else "superseded"
@@ -378,18 +388,27 @@ def _build_server() -> Any:
                 result = await _api("POST", "/v1/backtest/check", {
                     "agent_id": AGENTMEM_AGENT_ID,
                     "simulation_as_of": arguments["simulation_as_of_iso"],
+                    "flag_limit": arguments.get("flag_limit", 1000),
+                    "after_event_time": arguments.get("after_event_time_iso"),
+                    "after_id": arguments.get("after_id"),
                 })
                 is_clean = result.get("is_clean", True)
                 flags = result.get("flags", [])
                 checked = result.get("memories_checked", 0)
+                flags_total = result.get("flags_total", len(flags))
+                flags_complete = result.get("flags_complete", True)
                 rate = result.get("contamination_rate", 0.0)
                 if is_clean:
                     return [TextContent(
                         type="text",
-                        text=f"✓ CLEAN — {checked} memories checked, no lookahead bias detected.",
+                        text=(
+                            f"CLEAN RECORDED SCOPE — {checked} visible memories checked; "
+                            "this does not attest to unrecorded external inputs."
+                        ),
                     )]
                 lines = [
-                    f" CONTAMINATED — {len(flags)} flag(s) out of {checked} memories "
+                    f"CONTAMINATED — showing {len(flags)} of {flags_total} flag(s) "
+                    f"out of {checked} memories "
                     f"({rate:.1%} contamination rate):",
                 ]
                 for flag in flags:
@@ -399,6 +418,11 @@ def _build_server() -> Any:
                     et = (flag.get("event_time") or "")[:10]
                     lines.append(
                         f"  [{ctype}] +{delta:.1f}d  event={et}  {preview!r}"
+                    )
+                if not flags_complete:
+                    lines.append(
+                        "  More flags exist; continue with next_event_time and next_id "
+                        f"({result.get('next_event_time')}, {result.get('next_id')})."
                     )
                 return [TextContent(type="text", text="\n".join(lines))]
 

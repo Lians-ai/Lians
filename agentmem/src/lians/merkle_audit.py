@@ -1,7 +1,9 @@
-"""
-Windowed Merkle batching for the audit chain — Change 8 of the performance roadmap.
+"""Experimental secondary Merkle anchors for the serial audit chain.
 
-Replaces the strict serial SHA-256 chain for write-heavy namespaces.
+This module does not replace the transactionally serialized EventLog chain.
+It groups already chained row hashes into a secondary process-local Merkle
+window for development and evaluation. Production startup rejects this mode
+until window registration and external anchor publication are durable.
 
 How it works
 ------------
@@ -11,32 +13,36 @@ is computed over the leaf hashes.  The root is written to ``merkle_anchors`` and
 an ``op="merkle_anchor"`` EventLog entry is appended to the serial chain,
 carrying the root + window size in its payload.
 
-Individual EventLog rows store their ``batch_id`` and ``leaf_index`` in payload
-so inclusion proofs can be regenerated on demand (O(log n) path length).
+The anchor EventLog payload stores the ordered event IDs committed into the
+root, allowing a verifier to retrieve the exact leaves without mutating the
+immutable source events.
 
 Guarantees preserved
 --------------------
 - **Tamper-evidence**: any leaf modification changes the root → anchor mismatch.
-- **Append-only immutability**: anchor rows are chained via the existing
-  prev_hash / row_hash serial chain.
+- **Append-only immutability**: each anchor's EventLog binding participates in
+  the existing ``prev_hash`` / ``row_hash`` serial chain.
 - **Deletion detection**: a missing leaf changes the root; a missing anchor
   breaks the serial chain's prev_hash references.
 
-Verification (``verify_merkle_batch``) recomputes each window's root from the
-EventLog rows that reference its anchor and compares against the stored root.
+Verification (``verify_merkle_batch``) resolves that bounded ordered ID list,
+recomputes the root, and compares it with both durable anchor representations.
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import uuid as _uuid
-from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import cast, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _WINDOW_SIZE = 64  # override via config.merkle_batch_size
+_MAX_WINDOW_SIZE = 4096
+_EVENT_QUERY_BATCH = 500
 
 
 def _sha256(s: str) -> str:
@@ -89,6 +95,10 @@ class MerkleWindow:
     """Accumulate audit event hashes for a single batch window."""
 
     def __init__(self, batch_size: int = _WINDOW_SIZE):
+        if not 2 <= batch_size <= _MAX_WINDOW_SIZE:
+            raise ValueError(
+                f"Merkle batch_size must be between 2 and {_MAX_WINDOW_SIZE}"
+            )
         self._batch_size = batch_size
         self._leaves: list[str] = []
         self._event_ids: list[str] = []
@@ -184,28 +194,91 @@ async def verify_merkle_batch(
 
     Returns ``{"status": "ok"|"tampered", "anchor_id": ..., ...}``.
     """
-    from sqlalchemy import select, and_
     from .models import MerkleAnchor, EventLog
 
     anchor = await db.get(MerkleAnchor, anchor_id)
-    if anchor is None:
+    if anchor is None or anchor.namespace != namespace:
         return {"status": "error", "detail": "anchor not found"}
 
-    # Retrieve all EventLog rows that belong to this anchor's window
-    stmt = (
-        select(EventLog)
-        .where(
-            and_(
-                EventLog.namespace == namespace,
-                EventLog.payload["anchor_id"].as_string() == str(anchor_id),
-            )
-        )
-        .order_by(EventLog.created_at.asc())
-    )
-    result = await db.execute(stmt)
-    rows = result.scalars().all()
+    def failure(detail: str, *, rows_found: int = 0) -> dict:
+        return {
+            "status": "tampered",
+            "anchor_id": str(anchor_id),
+            "detail": detail,
+            "stored_root": anchor.root_hash,
+            "recomputed_root": None,
+            "window_size": anchor.window_size,
+            "rows_found": rows_found,
+        }
 
-    leaves = [r.row_hash for r in rows if r.row_hash]
+    anchor_filters = [
+        EventLog.namespace == namespace,
+        EventLog.op == "merkle_anchor",
+    ]
+    if db.get_bind().dialect.name == "postgresql":
+        anchor_filters.append(
+            cast(EventLog.payload, JSONB).contains({"anchor_id": str(anchor_id)})
+        )
+    else:
+        anchor_filters.append(
+            EventLog.payload["anchor_id"].as_string() == str(anchor_id)
+        )
+    anchor_events = list(
+        (
+            await db.execute(
+                select(EventLog)
+                .where(*anchor_filters)
+                .order_by(EventLog.chain_position, EventLog.id)
+                .limit(2)
+            )
+        ).scalars().all()
+    )
+    if len(anchor_events) != 1:
+        return failure("anchor must have exactly one immutable EventLog binding")
+
+    payload = anchor_events[0].payload
+    event_ids = payload.get("event_ids") if isinstance(payload, dict) else None
+    if (
+        not isinstance(event_ids, list)
+        or not event_ids
+        or len(event_ids) != anchor.window_size
+        or len(event_ids) > _MAX_WINDOW_SIZE
+        or len({str(value) for value in event_ids}) != len(event_ids)
+        or payload.get("root_hash") != anchor.root_hash
+        or payload.get("window_size") != anchor.window_size
+    ):
+        return failure("anchor membership manifest is malformed or inconsistent")
+    try:
+        ordered_ids = [UUID(str(value)) for value in event_ids]
+    except (TypeError, ValueError):
+        return failure("anchor membership contains an invalid event identifier")
+
+    rows_by_id = {}
+    for offset in range(0, len(ordered_ids), _EVENT_QUERY_BATCH):
+        rows = list(
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.namespace == namespace,
+                        EventLog.id.in_(
+                            ordered_ids[offset : offset + _EVENT_QUERY_BATCH]
+                        ),
+                    )
+                )
+            ).scalars().all()
+        )
+        rows_by_id.update((str(row.id), row) for row in rows)
+
+    leaves: list[str] = []
+    for event_id in ordered_ids:
+        row = rows_by_id.get(str(event_id))
+        if row is None or not row.row_hash:
+            return failure(
+                "one or more committed Merkle leaves are missing",
+                rows_found=len(rows_by_id),
+            )
+        leaves.append(row.row_hash)
+
     recomputed = _merkle_root(leaves)
     ok = recomputed == anchor.root_hash
 
@@ -215,5 +288,5 @@ async def verify_merkle_batch(
         "stored_root": anchor.root_hash,
         "recomputed_root": recomputed,
         "window_size": anchor.window_size,
-        "rows_found": len(rows),
+        "rows_found": len(rows_by_id),
     }

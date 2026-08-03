@@ -1,0 +1,2 @@
+# Isolated Python package builds must use this exact, hash-verified toolchain.
+hatchling==1.31.0

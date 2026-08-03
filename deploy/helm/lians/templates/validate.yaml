@@ -1,0 +1,362 @@
+{{- /* Fail before rendering an unsafe production release. */ -}}
+{{- $change := "CHANGE_ME" -}}
+{{- if or (eq .Values.image.repository $change) (eq .Values.image.digest $change) -}}
+{{- fail "image.repository and image.digest must be replaced; tags are not accepted" -}}
+{{- end -}}
+{{- if or (contains "@" .Values.image.repository) (regexMatch ":[^/]+$" .Values.image.repository) -}}
+{{- fail "image.repository must not include a tag or digest; supply the immutable digest in image.digest" -}}
+{{- end -}}
+{{- if ge (int .Values.migrations.lockTimeoutMs) (int .Values.migrations.statementTimeoutMs) -}}
+{{- fail "migrations.lockTimeoutMs must be lower than migrations.statementTimeoutMs" -}}
+{{- end -}}
+{{- $migrationDeadlineBudgetMs := mul (sub (int .Values.migrations.activeDeadlineSeconds) 60) 1000 -}}
+{{- if gt (int .Values.migrations.statementTimeoutMs) (int $migrationDeadlineBudgetMs) -}}
+{{- fail "migrations.statementTimeoutMs must leave at least 60 seconds before migrations.activeDeadlineSeconds" -}}
+{{- end -}}
+{{- range $label, $name := dict "application" .Values.existingSecrets.application.name "database.runtime" .Values.existingSecrets.database.runtime.name "database.migration" .Values.existingSecrets.database.migration.name "receipts" .Values.existingSecrets.receipts.name "redis" .Values.existingSecrets.redis.name -}}
+{{- if or (empty $name) (eq $name $change) -}}
+{{- fail (printf "existingSecrets.%s.name must reference a pre-created Secret" $label) -}}
+{{- end -}}
+{{- end -}}
+{{- if and (eq .Values.existingSecrets.database.runtime.name .Values.existingSecrets.database.migration.name) (eq .Values.existingSecrets.database.runtime.key .Values.existingSecrets.database.migration.key) -}}
+{{- fail "runtime and migration database credential references must not be identical" -}}
+{{- end -}}
+{{- if eq .Values.existingSecrets.database.runtime.name .Values.existingSecrets.database.migration.name -}}
+{{- fail "existingSecrets.database.runtime.name and migration.name must reference different Secret objects and different PostgreSQL roles" -}}
+{{- end -}}
+{{- $coreSecretNames := list .Values.existingSecrets.application.name .Values.existingSecrets.database.runtime.name .Values.existingSecrets.database.migration.name .Values.existingSecrets.receipts.name .Values.existingSecrets.redis.name -}}
+{{- if ne (len $coreSecretNames) (len (uniq $coreSecretNames)) -}}
+{{- fail "application, runtime database, migration database, receipt-signing, and Redis credentials must use different Secret objects" -}}
+{{- end -}}
+{{- if and (has .Values.config.kms.provider (list "aws" "vault")) (has .Values.existingSecrets.kms.name $coreSecretNames) -}}
+{{- fail "the selected KMS credential Secret must be separate from application, database, receipt-signing, and Redis Secrets" -}}
+{{- end -}}
+{{- if eq .Values.existingSecrets.rolloutRevision $change -}}
+{{- fail "existingSecrets.rolloutRevision must be set to an opaque external-secret revision" -}}
+{{- end -}}
+{{- if eq .Values.config.deploymentRegion $change -}}
+{{- fail "config.deploymentRegion must identify the authoritative processing region" -}}
+{{- end -}}
+{{- if or (lt (int .Values.config.governance.decisionEvidenceCandidateLimit) 100) (gt (int .Values.config.governance.decisionEvidenceCandidateLimit) 10000) -}}
+{{- fail "config.governance.decisionEvidenceCandidateLimit must be between 100 and 10000" -}}
+{{- end -}}
+{{- if or (lt (int .Values.config.governance.decisionEvidenceCandidateBytesLimit) 1048576) (gt (int .Values.config.governance.decisionEvidenceCandidateBytesLimit) 134217728) -}}
+{{- fail "config.governance.decisionEvidenceCandidateBytesLimit must be between 1048576 and 134217728" -}}
+{{- end -}}
+{{- range .Values.config.corsOrigins -}}
+{{- if or (contains $change .) (eq . "*") -}}
+{{- fail "config.corsOrigins must contain only explicit production HTTPS origins" -}}
+{{- end -}}
+{{- end -}}
+{{- if or (eq (len .Values.config.trustedProxyCidrs) 0) (gt (len .Values.config.trustedProxyCidrs) 64) -}}
+{{- fail "config.trustedProxyCidrs must contain between 1 and 64 immediate-proxy CIDRs" -}}
+{{- end -}}
+{{- if ne (len .Values.config.trustedProxyCidrs) (len (uniq .Values.config.trustedProxyCidrs)) -}}
+{{- fail "config.trustedProxyCidrs must not contain duplicate CIDRs" -}}
+{{- end -}}
+{{- range .Values.config.trustedProxyCidrs -}}
+{{- $trustedProxyV4 := regexMatch "^([0-9]{1,3}[.]){3}[0-9]{1,3}/([1-9]|[12][0-9]|3[0-2])$" . -}}
+{{- $trustedProxyV6 := regexMatch "^[0-9A-Fa-f]*:[0-9A-Fa-f:]+/([1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$" . -}}
+{{- if or (contains $change .) (contains "*" .) (not (or $trustedProxyV4 $trustedProxyV6)) -}}
+{{- fail "config.trustedProxyCidrs must contain only explicit, non-world-open IPv4 or IPv6 CIDRs" -}}
+{{- end -}}
+{{- end -}}
+{{- if or (empty .Values.config.kms.envelopeKeyId) (contains $change .Values.config.kms.envelopeKeyId) -}}
+{{- fail "config.kms.envelopeKeyId must be a stable, non-placeholder envelope key version" -}}
+{{- end -}}
+{{- if and .Values.config.kms.previousEnvelopeKeyId (eq .Values.config.kms.previousEnvelopeKeyId .Values.config.kms.envelopeKeyId) -}}
+{{- fail "config.kms.previousEnvelopeKeyId must differ from config.kms.envelopeKeyId" -}}
+{{- end -}}
+{{- if or (empty .Values.config.receipts.signingKeyId) (contains $change .Values.config.receipts.signingKeyId) (eq .Values.config.receipts.signingKeyId "lians-receipt-key") -}}
+{{- fail "config.receipts.signingKeyId must identify this deployment's published receipt trust key" -}}
+{{- end -}}
+{{- if eq .Values.config.receipts.provider "local" -}}
+{{- if empty .Values.existingSecrets.receipts.localPrivateKeyKey -}}
+{{- fail "local receipt signing requires existingSecrets.receipts.localPrivateKeyKey" -}}
+{{- end -}}
+{{- if or (not (empty .Values.existingSecrets.receipts.vaultTokenKey)) (not (empty .Values.existingSecrets.receipts.vaultTokenFileKey)) -}}
+{{- fail "local receipt signing may not configure a Vault token source" -}}
+{{- end -}}
+{{- else if eq .Values.config.receipts.provider "vault-transit" -}}
+{{- if not (empty .Values.existingSecrets.receipts.localPrivateKeyKey) -}}
+{{- fail "Vault Transit receipt signing may not configure or inject a local private key" -}}
+{{- end -}}
+{{- $receiptVaultTokenEnv := not (empty .Values.existingSecrets.receipts.vaultTokenKey) -}}
+{{- $receiptVaultTokenFile := not (empty .Values.existingSecrets.receipts.vaultTokenFileKey) -}}
+{{- if eq $receiptVaultTokenEnv $receiptVaultTokenFile -}}
+{{- fail "Vault Transit receipt signing requires exactly one of vaultTokenKey or vaultTokenFileKey" -}}
+{{- end -}}
+{{- if or (empty .Values.config.receipts.vault.address) (contains $change .Values.config.receipts.vault.address) (not (regexMatch "^https://[^/?#[:space:]]+$" .Values.config.receipts.vault.address)) (contains "@" .Values.config.receipts.vault.address) -}}
+{{- fail "config.receipts.vault.address must be a credential-free HTTPS origin with no path, query, or fragment" -}}
+{{- end -}}
+{{- if or (empty .Values.config.receipts.vault.mountPoint) (empty .Values.config.receipts.vault.keyName) (contains $change .Values.config.receipts.vault.mountPoint) (contains $change .Values.config.receipts.vault.keyName) -}}
+{{- fail "config.receipts.vault.mountPoint and keyName must be explicit safe Vault path segments" -}}
+{{- end -}}
+{{- if lt (int .Values.config.receipts.vault.keyVersion) 1 -}}
+{{- fail "config.receipts.vault.keyVersion must pin a positive Vault Transit key version" -}}
+{{- end -}}
+{{- $receiptPublicKey := .Values.config.receipts.vault.publicKey -}}
+{{- if and (not (regexMatch "^[A-Fa-f0-9]{64}$" $receiptPublicKey)) (not (regexMatch "^[A-Za-z0-9+/]{43}=$" $receiptPublicKey)) -}}
+{{- fail "config.receipts.vault.publicKey must pin the raw 32-byte Ed25519 public key as hex or canonical base64" -}}
+{{- end -}}
+{{- end -}}
+{{- if eq .Values.config.kms.provider "aws" -}}
+{{- if or (empty .Values.config.kms.aws.region) (contains $change .Values.config.kms.aws.region) (contains $change .Values.config.kms.aws.keyId) -}}
+{{- fail "config.kms.aws must replace every CHANGE_ME value; keyId may be empty only when inferred from the encrypted data key" -}}
+{{- end -}}
+{{- if and (empty .Values.config.kms.previousEnvelopeKeyId) (or (not (empty .Values.config.kms.aws.previousRegion)) (not (empty .Values.config.kms.aws.previousKeyId))) -}}
+{{- fail "AWS previous-key configuration requires config.kms.previousEnvelopeKeyId" -}}
+{{- end -}}
+{{- else if eq .Values.config.kms.provider "azure" -}}
+{{- if or (contains $change .Values.config.kms.azure.vaultUrl) (contains $change .Values.config.kms.azure.secretName) -}}
+{{- fail "config.kms.azure vaultUrl and secretName must be configured" -}}
+{{- end -}}
+{{- if and .Values.config.kms.previousEnvelopeKeyId (empty .Values.config.kms.azure.previousSecretName) -}}
+{{- fail "Azure rotation requires config.kms.azure.previousSecretName" -}}
+{{- end -}}
+{{- if and (empty .Values.config.kms.previousEnvelopeKeyId) (or (not (empty .Values.config.kms.azure.previousVaultUrl)) (not (empty .Values.config.kms.azure.previousSecretName))) -}}
+{{- fail "Azure previous-key configuration requires config.kms.previousEnvelopeKeyId" -}}
+{{- end -}}
+{{- else if eq .Values.config.kms.provider "vault" -}}
+{{- if or (contains $change .Values.config.kms.vault.address) (contains $change .Values.config.kms.vault.path) (contains $change .Values.config.kms.vault.mountPoint) -}}
+{{- fail "config.kms.vault address, path, and mountPoint must be configured" -}}
+{{- end -}}
+{{- if and .Values.config.kms.previousEnvelopeKeyId (empty .Values.config.kms.vault.previousPath) -}}
+{{- fail "Vault rotation requires config.kms.vault.previousPath" -}}
+{{- end -}}
+{{- if and (empty .Values.config.kms.previousEnvelopeKeyId) (or (not (empty .Values.config.kms.vault.previousAddress)) (not (empty .Values.config.kms.vault.previousPath)) (not (empty .Values.config.kms.vault.previousMountPoint))) -}}
+{{- fail "Vault previous-key configuration requires config.kms.previousEnvelopeKeyId" -}}
+{{- end -}}
+{{- end -}}
+{{- $vaultEgressRequired := or (eq .Values.config.kms.provider "vault") (eq .Values.config.receipts.provider "vault-transit") -}}
+{{- if and $vaultEgressRequired (not .Values.networkPolicy.vault.enabled) -}}
+{{- fail "Vault KMS or Vault Transit receipt signing requires networkPolicy.vault.enabled=true" -}}
+{{- end -}}
+{{- if and $vaultEgressRequired (eq (len .Values.networkPolicy.vault.cidrs) 0) -}}
+{{- fail "Vault KMS or Vault Transit receipt signing requires at least one explicit networkPolicy.vault CIDR" -}}
+{{- end -}}
+{{- if and (not $vaultEgressRequired) .Values.networkPolicy.vault.enabled -}}
+{{- fail "networkPolicy.vault may be enabled only for Vault KMS or Vault Transit receipt signing" -}}
+{{- end -}}
+{{- if and (eq .Values.config.governance.otlpCaptureMode "full") (not .Values.config.governance.recorderAllowFullCapture) -}}
+{{- fail "full OTLP capture requires config.governance.recorderAllowFullCapture=true" -}}
+{{- end -}}
+{{- if and .Values.config.airgapMode (not (has .Values.config.embedding.provider (list "sentence-transformers"))) -}}
+{{- fail "air-gap mode requires the sentence-transformers embedding provider in this production chart" -}}
+{{- end -}}
+{{- if and .Values.config.airgapMode (not (empty .Values.config.telemetry.exporterEndpoint)) -}}
+{{- fail "air-gap mode requires config.telemetry.exporterEndpoint to be empty" -}}
+{{- end -}}
+{{- if and .Values.config.airgapMode .Values.config.integration.workerEnabled -}}
+{{- fail "air-gap mode requires config.integration.workerEnabled=false" -}}
+{{- end -}}
+{{- if and .Values.config.airgapMode .Values.config.metering.enabled -}}
+{{- fail "air-gap mode requires config.metering.enabled=false" -}}
+{{- end -}}
+{{- if and .Values.config.metering.enabled (not .Values.config.metering.workerEnabled) -}}
+{{- fail "config.metering.enabled requires config.metering.workerEnabled=true" -}}
+{{- end -}}
+{{- if and .Values.config.metering.enabled (not .Values.config.metering.asyncErrorDestinationConfigured) -}}
+{{- fail "config.metering.enabled requires an acknowledged durable Stripe asynchronous-error destination" -}}
+{{- end -}}
+{{- $meterNames := list .Values.config.metering.decisionEvent .Values.config.metering.protectedActionEvent .Values.config.metering.writeEvent .Values.config.metering.recallEvent -}}
+{{- if ne (len (uniq $meterNames)) (len $meterNames) -}}
+{{- fail "config.metering event names must be distinct across protected and compatibility usage dimensions" -}}
+{{- end -}}
+{{- $meteringLeaseFloor := add (int .Values.config.metering.providerTimeoutSeconds) 15 -}}
+{{- if lt (int .Values.config.metering.leaseSeconds) (int $meteringLeaseFloor) -}}
+{{- fail "config.metering.leaseSeconds must exceed providerTimeoutSeconds by at least 15 seconds" -}}
+{{- end -}}
+{{- if lt (int .Values.config.metering.retryMaxSeconds) (int .Values.config.metering.retryBaseSeconds) -}}
+{{- fail "config.metering.retryMaxSeconds must be at least retryBaseSeconds" -}}
+{{- end -}}
+{{- $meteringRetryHorizon := mul (sub (int .Values.config.metering.maxAttempts) 1) (int .Values.config.metering.retryMaxSeconds) -}}
+{{- if ge (int $meteringRetryHorizon) (int .Values.config.metering.idempotencyWindowSeconds) -}}
+{{- fail "config.metering retry horizon must remain inside idempotencyWindowSeconds" -}}
+{{- end -}}
+{{- if and .Values.config.airgapMode (gt (len .Values.networkPolicy.externalOtlp.cidrs) 0) -}}
+{{- fail "air-gap mode requires networkPolicy.externalOtlp.cidrs to be empty" -}}
+{{- end -}}
+{{- if and (not .Values.config.airgapMode) (eq (len .Values.networkPolicy.externalOtlp.cidrs) 0) -}}
+{{- fail "non-air-gap deployments require an explicit application OTLP destination CIDR" -}}
+{{- end -}}
+{{- if and .Values.monitoring.serviceMonitor.enabled (not .Values.config.metrics.enabled) -}}
+{{- fail "monitoring.serviceMonitor.enabled requires config.metrics.enabled=true" -}}
+{{- end -}}
+{{- if or (lt (int .Values.config.observabilityRefreshSeconds) 5) (gt (int .Values.config.observabilityRefreshSeconds) 300) -}}
+{{- fail "config.observabilityRefreshSeconds must be between 5 and 300" -}}
+{{- end -}}
+{{- if not .Values.config.impactAssessmentWorker.enabled -}}
+{{- fail "production requires config.impactAssessmentWorker.enabled=true" -}}
+{{- end -}}
+{{- $impactLeaseFloor := add (div (add (int .Values.config.database.statementTimeoutMs) 999) 1000) 15 -}}
+{{- if lt (int .Values.config.impactAssessmentWorker.leaseSeconds) (int $impactLeaseFloor) -}}
+{{- fail "config.impactAssessmentWorker.leaseSeconds must exceed database.statementTimeoutMs by at least 15 seconds" -}}
+{{- end -}}
+{{- if lt (int .Values.config.impactAssessmentWorker.retryMaxSeconds) (int .Values.config.impactAssessmentWorker.retryBaseSeconds) -}}
+{{- fail "config.impactAssessmentWorker.retryMaxSeconds must be at least retryBaseSeconds" -}}
+{{- end -}}
+{{- if not .Values.config.recorderEvidenceIndexWorker.enabled -}}
+{{- fail "production requires config.recorderEvidenceIndexWorker.enabled=true" -}}
+{{- end -}}
+{{- if lt (int .Values.config.recorderEvidenceIndexWorker.leaseSeconds) (int $impactLeaseFloor) -}}
+{{- fail "config.recorderEvidenceIndexWorker.leaseSeconds must exceed database.statementTimeoutMs by at least 15 seconds" -}}
+{{- end -}}
+{{- if lt (int .Values.config.recorderEvidenceIndexWorker.retryMaxSeconds) (int .Values.config.recorderEvidenceIndexWorker.retryBaseSeconds) -}}
+{{- fail "config.recorderEvidenceIndexWorker.retryMaxSeconds must be at least retryBaseSeconds" -}}
+{{- end -}}
+{{- if not .Values.config.subjectErasureWorker.enabled -}}
+{{- fail "production requires config.subjectErasureWorker.enabled=true" -}}
+{{- end -}}
+{{- if lt (int .Values.config.subjectErasureWorker.leaseSeconds) (int $impactLeaseFloor) -}}
+{{- fail "config.subjectErasureWorker.leaseSeconds must exceed database.statementTimeoutMs by at least 15 seconds" -}}
+{{- end -}}
+{{- if lt (int .Values.config.subjectErasureWorker.retryMaxSeconds) (int .Values.config.subjectErasureWorker.retryBaseSeconds) -}}
+{{- fail "config.subjectErasureWorker.retryMaxSeconds must be at least retryBaseSeconds" -}}
+{{- end -}}
+{{- if not .Values.config.scimReconciliationWorker.enabled -}}
+{{- fail "production requires config.scimReconciliationWorker.enabled=true" -}}
+{{- end -}}
+{{- if lt (int .Values.config.scimReconciliationWorker.leaseSeconds) (int $impactLeaseFloor) -}}
+{{- fail "config.scimReconciliationWorker.leaseSeconds must exceed database.statementTimeoutMs by at least 15 seconds" -}}
+{{- end -}}
+{{- if lt (int .Values.config.scimReconciliationWorker.retryMaxSeconds) (int .Values.config.scimReconciliationWorker.retryBaseSeconds) -}}
+{{- fail "config.scimReconciliationWorker.retryMaxSeconds must be at least retryBaseSeconds" -}}
+{{- end -}}
+{{- if and .Values.monitoring.serviceMonitor.enabled (or (empty .Values.monitoring.serviceMonitor.existingSecret) (eq .Values.monitoring.serviceMonitor.existingSecret $change)) -}}
+{{- fail "monitoring.serviceMonitor.existingSecret must exist in the ServiceMonitor namespace" -}}
+{{- end -}}
+{{- if and .Values.ingress.enabled (or (empty .Values.ingress.host) (eq .Values.ingress.host $change)) -}}
+{{- fail "ingress.host must be configured when ingress is enabled" -}}
+{{- end -}}
+{{- if and .Values.ingress.enabled (not .Values.ingress.tls.enabled) -}}
+{{- fail "ingress TLS cannot be disabled in the production chart" -}}
+{{- end -}}
+{{- if and .Values.ingress.enabled .Values.ingress.tls.enabled (or (empty .Values.ingress.tls.existingSecret) (eq .Values.ingress.tls.existingSecret $change)) -}}
+{{- fail "ingress.tls.existingSecret must reference a pre-created TLS Secret" -}}
+{{- end -}}
+{{- if and (has .Values.config.kms.provider (list "aws" "vault")) (or (empty .Values.existingSecrets.kms.name) (eq .Values.existingSecrets.kms.name $change)) -}}
+{{- fail "existingSecrets.kms.name is required for the selected KMS provider" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (or (eq .Values.otelCollector.image.digest $change) (eq .Values.otelCollector.existingSecret $change)) -}}
+{{- fail "otelCollector requires a digest-pinned image and pre-created ingest-key Secret" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (or (empty .Values.otelCollector.queue.storageClassName) (contains $change .Values.otelCollector.queue.storageClassName)) -}}
+{{- fail "otelCollector requires an explicit encrypted queue StorageClass; cluster-default storage is not accepted" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (not .Values.otelCollector.queue.encryptedAtRestAcknowledged) -}}
+{{- fail "otelCollector.queue.encryptedAtRestAcknowledged must attest that the selected CSI/StorageClass encrypts raw OTLP queue data" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (not .Values.otelCollector.queue.rawPayloadCustodyAcknowledged) -}}
+{{- fail "otelCollector.queue.rawPayloadCustodyAcknowledged must accept retention, access, deletion, and incident duties for raw pre-minimization OTLP" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (or (empty .Values.otelCollector.queue.custodyPolicyRef) (contains $change .Values.otelCollector.queue.custodyPolicyRef)) -}}
+{{- fail "otelCollector.queue.custodyPolicyRef must identify the approved raw-telemetry retention and PVC custody control" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (or (contains "@" .Values.otelCollector.image.repository) (regexMatch ":[^/]+$" .Values.otelCollector.image.repository)) -}}
+{{- fail "otelCollector.image.repository must not include a tag or digest" -}}
+{{- end -}}
+{{- if and (not .Values.config.airgapMode) (contains $change .Values.config.telemetry.exporterEndpoint) -}}
+{{- fail "config.telemetry.exporterEndpoint must reference a dedicated application observability collector" -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (or (eq .Values.backup.image.digest $change) (eq .Values.backup.existingSecret $change) (eq .Values.backup.existingIdentityConfigMap $change) (eq .Values.backup.existingPvc $change)) -}}
+{{- fail "backup references must be configured before the suspended CronJob is installed" -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (or (contains "@" .Values.backup.image.repository) (regexMatch ":[^/]+$" .Values.backup.image.repository)) -}}
+{{- fail "backup.image.repository must not include a tag or digest" -}}
+{{- end -}}
+{{- if and .Values.autoscaling.enabled (gt (int .Values.autoscaling.minReplicas) (int .Values.autoscaling.maxReplicas)) -}}
+{{- fail "autoscaling.minReplicas cannot exceed autoscaling.maxReplicas" -}}
+{{- end -}}
+{{- if and .Values.autoscaling.enabled (lt (int .Values.autoscaling.minReplicas) 2) -}}
+{{- fail "autoscaling.minReplicas must be at least 2" -}}
+{{- end -}}
+{{- $connectionsPerReplica := add (int .Values.config.database.poolSize) (int .Values.config.database.maxOverflow) -}}
+{{- $maximumApiReplicas := int .Values.replicaCount -}}
+{{- if .Values.autoscaling.enabled -}}
+{{- $maximumApiReplicas = int .Values.autoscaling.maxReplicas -}}
+{{- end -}}
+{{- $worstCaseApiConnections := mul $connectionsPerReplica $maximumApiReplicas -}}
+{{- if gt $worstCaseApiConnections (int .Values.config.database.connectionBudget) -}}
+{{- fail (printf "database pool ceiling (%d connections/replica x %d replicas = %d) exceeds config.database.connectionBudget=%d" $connectionsPerReplica $maximumApiReplicas $worstCaseApiConnections (int .Values.config.database.connectionBudget)) -}}
+{{- end -}}
+{{- $effectiveMinReplicas := int .Values.replicaCount -}}
+{{- if .Values.autoscaling.enabled -}}
+{{- $effectiveMinReplicas = int .Values.autoscaling.minReplicas -}}
+{{- end -}}
+{{- if and .Values.podDisruptionBudget.enabled (ge (int .Values.podDisruptionBudget.minAvailable) $effectiveMinReplicas) -}}
+{{- fail "podDisruptionBudget.minAvailable must leave at least one replica available for voluntary disruption" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (lt (int .Values.otelCollector.replicas) 2) -}}
+{{- fail "otelCollector.replicas must be at least 2" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (ge (int .Values.otelCollector.pdb.minAvailable) (int .Values.otelCollector.replicas)) -}}
+{{- fail "otelCollector.pdb.minAvailable must leave at least one replica available for voluntary disruption" -}}
+{{- end -}}
+{{- if or (not .Values.podSecurityContext.runAsNonRoot) (eq (int .Values.podSecurityContext.runAsUser) 0) (eq (int .Values.podSecurityContext.runAsGroup) 0) -}}
+{{- fail "podSecurityContext must require a non-root user and group" -}}
+{{- end -}}
+{{- if ne .Values.podSecurityContext.seccompProfile.type "RuntimeDefault" -}}
+{{- fail "podSecurityContext.seccompProfile.type must remain RuntimeDefault" -}}
+{{- end -}}
+{{- if or .Values.containerSecurityContext.allowPrivilegeEscalation (not .Values.containerSecurityContext.readOnlyRootFilesystem) -}}
+{{- fail "container security must disable privilege escalation and keep the root filesystem read-only" -}}
+{{- end -}}
+{{- if not (has "ALL" .Values.containerSecurityContext.capabilities.drop) -}}
+{{- fail "containerSecurityContext.capabilities.drop must contain ALL" -}}
+{{- end -}}
+{{- range $reserved := list "app.kubernetes.io/name" "app.kubernetes.io/instance" "app.kubernetes.io/component" -}}
+{{- if hasKey $.Values.podLabels $reserved -}}
+{{- fail (printf "podLabels may not override reserved selector label %s" $reserved) -}}
+{{- end -}}
+{{- end -}}
+{{- range $reserved := list "checksum/config" "checksum/external-secret-revision" "lians.ai/oidc-provisioning-expected" "lians.ai/scim-provisioning-expected" -}}
+{{- if hasKey $.Values.podAnnotations $reserved -}}
+{{- fail (printf "podAnnotations may not override reserved rollout/posture annotation %s" $reserved) -}}
+{{- end -}}
+{{- end -}}
+{{- if not .Values.networkPolicy.enabled -}}
+{{- fail "networkPolicy.enabled=false is not supported by the production chart" -}}
+{{- end -}}
+{{- if not .Values.networkPolicy.defaultDeny -}}
+{{- fail "networkPolicy.defaultDeny=false is not supported by the production chart" -}}
+{{- end -}}
+{{- if or (eq (len .Values.networkPolicy.dns.namespaceSelector) 0) (eq (len .Values.networkPolicy.dns.podSelector) 0) -}}
+{{- fail "networkPolicy.dns must select both the DNS namespace and DNS pods" -}}
+{{- end -}}
+{{- if eq (len .Values.networkPolicy.ingressController.namespaceSelector) 0 -}}
+{{- fail "networkPolicy.ingressController.namespaceSelector cannot select every namespace" -}}
+{{- end -}}
+{{- if and .Values.config.metrics.enabled (eq (len .Values.networkPolicy.monitoring.namespaceSelector) 0) -}}
+{{- fail "networkPolicy.monitoring.namespaceSelector cannot select every namespace" -}}
+{{- end -}}
+{{- if and .Values.otelCollector.enabled (eq (len .Values.otelCollector.producerNamespaceSelector) 0) -}}
+{{- fail "otelCollector.producerNamespaceSelector cannot select every namespace" -}}
+{{- end -}}
+{{- range concat .Values.networkPolicy.postgresql.cidrs .Values.networkPolicy.redis.cidrs .Values.networkPolicy.externalHttpsCidrs -}}
+{{- if or (contains $change .) (has . (list "0.0.0.0/0" "::/0")) -}}
+{{- fail "PostgreSQL, Redis, and HTTPS NetworkPolicy CIDRs must be explicit and may not be world-open" -}}
+{{- end -}}
+{{- end -}}
+{{- range .Values.networkPolicy.externalOtlp.cidrs -}}
+{{- if or (contains $change .) (has . (list "0.0.0.0/0" "::/0")) -}}
+{{- fail "external OTLP NetworkPolicy CIDRs must be explicit and may not be world-open" -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.networkPolicy.vault.enabled -}}
+{{- range .Values.networkPolicy.vault.cidrs -}}
+{{- if or (contains $change .) (has . (list "0.0.0.0/0" "::/0")) -}}
+{{- fail "Vault NetworkPolicy CIDRs must be explicit and may not be world-open" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.backup.enabled -}}
+{{- if eq (len .Values.backup.wormDestinationCidrs) 0 -}}
+{{- fail "backup.enabled requires at least one explicit backup.wormDestinationCidrs entry" -}}
+{{- end -}}
+{{- range .Values.backup.wormDestinationCidrs -}}
+{{- if or (contains $change .) (regexMatch "/0$" .) (has . (list "0.0.0.0/0" "::/0")) -}}
+{{- fail "backup.wormDestinationCidrs must contain explicit reviewed provider endpoint CIDRs" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

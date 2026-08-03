@@ -1,0 +1,210 @@
+{{- if .Values.backup.enabled }}
+{{- if eq (len .Values.backup.wormDestinationCidrs) 0 }}
+{{- fail "backup CronJob requires at least one explicit immutable-storage destination CIDR" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "lians.fullname" . }}-logical-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  timeZone: {{ .Values.backup.timeZone | quote }}
+  suspend: {{ .Values.backup.suspend }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 14400
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            {{- include "lians.labels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+          annotations:
+            checksum/external-secret-revision: {{ printf "%s:%s" .Values.backup.existingSecret .Values.existingSecrets.rolloutRevision | sha256sum }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "lians.backupServiceAccountName" . }}
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: logical-backup
+              image: {{ include "lians.backupImage" . | quote }}
+              imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  umask 077
+                  mkdir -p /backup/bundles /backup/handoffs /runtime-credentials/private
+                  chmod 0700 /backup/bundles /backup/handoffs /runtime-credentials/private
+                  cp /source-credentials/pgpass /runtime-credentials/private/pgpass
+                  chmod 0600 /runtime-credentials/private/pgpass
+                  export PGPASSFILE=/runtime-credentials/private/pgpass
+                  backup_id="lians-$(date -u +%Y%m%dt%H%M%Sz)-scheduled"
+                  retain_until="$(date -u -d "+${BACKUP_RETENTION_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+                  bundle="/backup/bundles/${backup_id}"
+                  python3 /opt/lians-backup/create_logical_backup.py \
+                    --output-dir /backup/bundles \
+                    --backup-id "${backup_id}" \
+                    --retention-until "${retain_until}" \
+                    --include-globals
+                  python3 /opt/lians-backup/verify_backup.py "${bundle}"
+                  python3 /opt/lians-backup/prepare_worm_handoff.py \
+                    "${bundle}" \
+                    --destination "${WORM_DESTINATION}" \
+                    --retention-until "${retain_until}" \
+                    --output "/backup/handoffs/${backup_id}.json"
+                  attestation="/backup/handoffs/${backup_id}.provider-attestation.json"
+                  /opt/lians-worm-venv/bin/python /opt/lians-backup/upload_worm_handoff.py \
+                    "/backup/handoffs/${backup_id}.json" \
+                    --bundle "${bundle}" \
+                    --output "${attestation}"
+                  test -s "${attestation}"
+                  test -s "${attestation}.sha256"
+                  (cd /backup/handoffs && sha256sum -c "${backup_id}.provider-attestation.json.sha256")
+                  echo "Backup bundle, checksum, and provider immutable-storage attestation verified."
+              envFrom:
+                - configMapRef:
+                    name: {{ .Values.backup.existingIdentityConfigMap }}
+              env:
+                - name: DEPLOYMENT_ENVIRONMENT
+                  value: production
+                - name: PGHOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret }}
+                      key: PGHOST
+                - name: PGPORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret }}
+                      key: PGPORT
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret }}
+                      key: PGDATABASE
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret }}
+                      key: PGUSER
+                - name: PGSSLMODE
+                  value: verify-full
+                - name: PGSSLROOTCERT
+                  value: /source-credentials/ca.crt
+                - name: LIANS_DATABASE_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret }}
+                      key: LIANS_DATABASE_ID
+                - name: WORM_DESTINATION
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret }}
+                      key: WORM_DESTINATION
+                - name: BACKUP_RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | quote }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: backups
+                  mountPath: /backup
+                - name: source-credentials
+                  mountPath: /source-credentials
+                  readOnly: true
+                - name: runtime-credentials
+                  mountPath: /runtime-credentials
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: {{ .Values.backup.existingPvc }}
+            - name: source-credentials
+              secret:
+                secretName: {{ .Values.backup.existingSecret }}
+                defaultMode: 0440
+            - name: runtime-credentials
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Mi
+            - name: tmp
+              emptyDir:
+                sizeLimit: 2Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "lians.fullname" . }}-backup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "lians.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: backup
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        {{- range .Values.networkPolicy.postgresql.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.postgresql.port }}
+          protocol: TCP
+    - to:
+        {{- range .Values.backup.wormDestinationCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: 443
+          protocol: TCP
+{{- end }}

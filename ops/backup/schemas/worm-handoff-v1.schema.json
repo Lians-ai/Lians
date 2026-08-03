@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:lians:ops:worm-handoff:v1",
+  "title": "Lians WORM handoff request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "created_at",
+    "backup_id",
+    "source_manifest_sha256",
+    "destination_prefix",
+    "required_retention",
+    "status",
+    "objects",
+    "required_provider_attestation"
+  ],
+  "properties": {
+    "schema": { "const": "urn:lians:ops:worm-handoff:v1" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "backup_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,79}$" },
+    "source_manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "destination_prefix": { "type": "string", "pattern": "^(s3|gs|azure)://" },
+    "required_retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "retain_until", "legal_hold"],
+      "properties": {
+        "mode": { "const": "compliance_or_provider_equivalent_locked_policy" },
+        "retain_until": { "type": "string", "format": "date-time" },
+        "legal_hold": { "type": "boolean" }
+      }
+    },
+    "status": { "const": "pending_provider_attestation" },
+    "objects": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_filename", "destination", "size_bytes", "sha256"],
+        "properties": {
+          "source_filename": { "type": "string" },
+          "destination": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "required_provider_attestation": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

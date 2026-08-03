@@ -23,10 +23,9 @@ import pytest
 import pytest_asyncio
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import StaticPool
 
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories, _write_lock_keys
+from lians.schemas import MemoryAdd
+from lians.memory_service import add_memory, _write_lock_keys
 
 NS    = "concurrency-ns"
 AGENT = "concurrency-agent"
@@ -37,13 +36,27 @@ AGENT = "concurrency-agent"
 # ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
-async def session_factory(test_settings):
+async def session_factory(test_settings, monkeypatch):
     """
     In-memory SQLite engine shared across sessions in a single test.
     Mirrors production: each add_memory call uses its own session,
     just as each HTTP request uses its own get_db() session.
     """
-    from src.lians.models import Base as AppBase
+    from lians.models import Base as AppBase
+    from lians import memory_service
+
+    async def _reserve_usage_for_supersession_test(*_args, **_kwargs):
+        return None
+
+    # This fixture validates supersession serialization. SQLite cannot model
+    # the independent PostgreSQL row-lock used by the namespace usage ledger;
+    # allowing that unrelated first-writer race makes SQLite fail with
+    # ``database table is locked`` before the memory lock is exercised.
+    monkeypatch.setattr(
+        memory_service,
+        "reserve_namespace_usage",
+        _reserve_usage_for_supersession_test,
+    )
 
     # Use SQLite shared-cache URI so each session gets its own connection
     # but all sessions share the same in-memory database â€” avoids StaticPool's
@@ -56,13 +69,17 @@ async def session_factory(test_settings):
     pg_indexes = [
         idx for table in AppBase.metadata.tables.values()
         for idx in table.indexes
-        if idx.dialect_kwargs.get("postgresql_using") is not None
+        if idx.dialect_kwargs.get("postgresql_using") not in (None, False)
     ]
     for idx in pg_indexes:
         idx.table.indexes.discard(idx)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(AppBase.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(AppBase.metadata.create_all)
+    finally:
+        for idx in pg_indexes:
+            idx.table.indexes.add(idx)
 
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     yield factory
@@ -130,11 +147,11 @@ class TestSequentialConsistency:
         """
         meta = {"ticker": "NVDA", "metric": "guidance"}
 
-        m0 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content="NVDA guidance $32B",
             event_time=_t(1), metadata=meta,
         ))
-        m1 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content="NVDA guidance $36B",
             event_time=_t(4), metadata=meta,
         ))
@@ -144,7 +161,7 @@ class TestSequentialConsistency:
         ))
 
         from sqlalchemy import select
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         open_mems = (await db.execute(
             select(MemModel).where(
@@ -166,7 +183,7 @@ class TestSequentialConsistency:
         Each memory in the chain points to its successor via superseded_by.
         The chain must be acyclic and terminate at the current memory.
         """
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         meta = {"ticker": "AAPL", "metric": "revenue"}
         mems = []
@@ -211,7 +228,7 @@ class TestConcurrentAsyncioWrites:
         (valid_to=None) memory â€” no ghost current facts.
         """
         from sqlalchemy import select
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         meta = {"ticker": "TSLA", "metric": "deliveries"}
 
@@ -254,7 +271,7 @@ class TestConcurrentAsyncioWrites:
         interfere â€” both end up as open memories.
         """
         from sqlalchemy import select
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         agent = f"{AGENT}-diff"
 
@@ -289,7 +306,7 @@ class TestConcurrentAsyncioWrites:
         Five concurrent adds for the same metric â€” exactly one must be open.
         """
         from sqlalchemy import select
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         meta  = {"ticker": "NVDA", "metric": "guidance"}
         agent = f"{AGENT}-five"
@@ -328,7 +345,7 @@ class TestConcurrentAsyncioWrites:
         This test validates the isolation invariant using separate sessions.
         """
         from sqlalchemy import select
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
 
         meta = {"ticker": "MSFT", "metric": "cloud_revenue"}
 

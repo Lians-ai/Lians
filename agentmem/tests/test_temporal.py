@@ -3,13 +3,11 @@ Bitemporal correctness tests â€” THE critical test suite.
 Property: recall(as_of=t) NEVER returns a fact outside its validity window.
 """
 import pytest
-import pytest_asyncio
-from datetime import datetime, timezone, timedelta
-from uuid import uuid4
+from datetime import datetime, timezone
 
-from src.lians.models import Memory
-from src.lians.ranking import hybrid_recall
-from src.lians.embeddings import get_embedding_provider
+from lians.models import Memory
+from lians.ranking import hybrid_recall
+from lians.embeddings import get_embedding_provider
 
 
 NS = "test-ns"
@@ -46,7 +44,7 @@ async def _add_raw_memory(db, content, event_time, valid_from, valid_to=None, me
     # Only live memories (valid_to is None) are projected into live_facts;
     # superseded ones are intentionally omitted.
     if valid_to is None:
-        from src.lians.current_facts import upsert_live_fact, compute_predicate_key
+        from lians.current_facts import upsert_live_fact, compute_predicate_key
         predicate_key = compute_predicate_key(meta or {})
         await upsert_live_fact(db, mem, predicate_key)
 
@@ -90,7 +88,7 @@ async def test_as_of_after_supersession(db):
 @pytest.mark.asyncio
 async def test_present_time_favors_valid_memories(db):
     """Without as_of, currently-valid memories rank above superseded ones."""
-    old = await _add_raw_memory(db, "NVDA guidance $32B", T0, valid_from=T0, valid_to=T2)
+    await _add_raw_memory(db, "NVDA guidance $32B", T0, valid_from=T0, valid_to=T2)
     new = await _add_raw_memory(db, "NVDA guidance $36B", T2, valid_from=T2)
 
     provider = get_embedding_provider()

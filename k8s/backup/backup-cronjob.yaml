@@ -1,0 +1,177 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lians-logical-backup
+  labels:
+    app.kubernetes.io/name: agentmem
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "17 2 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 7
+  startingDeadlineSeconds: 3600
+  # Fail-safe default: unsuspend only after the image, encrypted PVC, scoped
+  # database identity, WORM destination, and provider uploader are configured.
+  suspend: true
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 14400
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: agentmem
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: lians-backup-worm
+          # Provider workload-identity webhooks or metadata federation bind this
+          # dedicated KSA. A default Kubernetes API token is not mounted.
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: logical-backup
+              # Replace this development tag with the immutable digest built
+              # from ops/backup/Dockerfile.worm before unsuspending the job.
+              # Fail-closed placeholder. Supply the digest emitted by the
+              # backup supply-chain workflow before enabling the CronJob.
+              image: ghcr.io/lians-ai/lians-backup-worm@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  umask 077
+                  mkdir -p /backup/bundles /backup/handoffs /runtime-credentials/private
+                  chmod 0700 /backup/bundles /backup/handoffs /runtime-credentials/private
+                  cp /source-credentials/pgpass /runtime-credentials/private/pgpass
+                  chmod 0600 /runtime-credentials/private/pgpass
+                  export PGPASSFILE=/runtime-credentials/private/pgpass
+                  backup_id="lians-$(date -u +%Y%m%dt%H%M%Sz)-scheduled"
+                  retain_until="$(date -u -d "+${BACKUP_RETENTION_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)"
+                  bundle="/backup/bundles/${backup_id}"
+                  python3 /opt/lians-backup/create_logical_backup.py \
+                    --output-dir /backup/bundles \
+                    --backup-id "${backup_id}" \
+                    --retention-until "${retain_until}" \
+                    --include-globals
+                  python3 /opt/lians-backup/verify_backup.py "${bundle}"
+                  python3 /opt/lians-backup/prepare_worm_handoff.py \
+                    "${bundle}" \
+                    --destination "${WORM_DESTINATION}" \
+                    --retention-until "${retain_until}" \
+                    --output "/backup/handoffs/${backup_id}.json"
+                  attestation="/backup/handoffs/${backup_id}.provider-attestation.json"
+                  /opt/lians-worm-venv/bin/python /opt/lians-backup/upload_worm_handoff.py \
+                    "/backup/handoffs/${backup_id}.json" \
+                    --bundle "${bundle}" \
+                    --output "${attestation}"
+                  anchor="${attestation}.anchor.json"
+                  for artifact in \
+                    "${attestation}" \
+                    "${attestation}.sha256" \
+                    "${anchor}" \
+                    "${anchor}.sha256"; do
+                    test -s "${artifact}"
+                  done
+                  /opt/lians-worm-venv/bin/python /opt/lians-backup/verify_worm_attestation.py \
+                    "${attestation}"
+                  for artifact in \
+                    "${attestation}" \
+                    "${attestation}.sha256" \
+                    "${anchor}" \
+                    "${anchor}.sha256"; do
+                    test -s "${artifact}"
+                  done
+                  echo "Backup and provider-anchored immutable-storage attestation verified."
+              envFrom:
+                # Non-secret expected cloud ownership and verifier identity.
+                # Create from backup-worm-identity.example.yaml before enabling.
+                - configMapRef:
+                    name: lians-backup-worm-identity
+              env:
+                - name: DEPLOYMENT_ENVIRONMENT
+                  value: production
+                - name: PGHOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: lians-backup-credentials
+                      key: PGHOST
+                - name: PGPORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: lians-backup-credentials
+                      key: PGPORT
+                - name: PGDATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: lians-backup-credentials
+                      key: PGDATABASE
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: lians-backup-credentials
+                      key: PGUSER
+                - name: PGSSLMODE
+                  value: verify-full
+                - name: PGSSLROOTCERT
+                  value: /source-credentials/ca.crt
+                - name: LIANS_DATABASE_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: lians-backup-credentials
+                      key: LIANS_DATABASE_ID
+                - name: WORM_DESTINATION
+                  valueFrom:
+                    secretKeyRef:
+                      name: lians-backup-credentials
+                      key: WORM_DESTINATION
+                - name: BACKUP_RETENTION_DAYS
+                  value: "2555"
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "2"
+                  memory: "2Gi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: backups
+                  mountPath: /backup
+                - name: source-credentials
+                  mountPath: /source-credentials
+                  readOnly: true
+                - name: runtime-credentials
+                  mountPath: /runtime-credentials
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: lians-logical-backups
+            - name: source-credentials
+              secret:
+                secretName: lians-backup-credentials
+                defaultMode: 0440
+            - name: runtime-credentials
+              emptyDir:
+                medium: Memory
+                sizeLimit: 1Mi
+            - name: tmp
+              emptyDir:
+                sizeLimit: 2Gi

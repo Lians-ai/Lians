@@ -1,0 +1,13 @@
+# Negative fixture: a persistent raw OTLP queue cannot silently inherit an
+# unknown cluster-default StorageClass or omit custody acknowledgement.
+otelCollector:
+  enabled: true
+  image:
+    repository: ghcr.io/example/otel-collector
+    digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+  existingSecret: lians-collector-ingest
+  queue:
+    storageClassName: ""
+    encryptedAtRestAcknowledged: false
+    rawPayloadCustodyAcknowledged: false
+    custodyPolicyRef: CHANGE_ME

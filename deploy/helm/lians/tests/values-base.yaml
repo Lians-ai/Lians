@@ -1,0 +1,78 @@
+# Non-secret, synthetic values used only for deterministic chart rendering.
+image:
+  repository: ghcr.io/example/lians
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+existingSecrets:
+  application:
+    name: lians-application
+  database:
+    runtime:
+      name: lians-database-runtime
+      key: DATABASE_URL
+    migration:
+      name: lians-database-migration
+      key: DATABASE_URL
+  receipts:
+    name: lians-receipt-signing
+    localPrivateKeyKey: RECEIPT_SIGNING_PRIVATE_KEY
+    vaultTokenKey: ""
+    vaultTokenFileKey: ""
+  redis:
+    name: lians-redis
+  kms:
+    name: lians-kms
+  rolloutRevision: ci-r1
+
+config:
+  deploymentRegion: test-us-east-1
+  corsOrigins:
+    - https://app.example.test
+  trustedProxyCidrs:
+    - 10.1.0.0/24
+  kms:
+    envelopeKeyId: mk-test-current
+    previousEnvelopeKeyId: ""
+    aws:
+      region: us-east-1
+      keyId: ""
+      previousRegion: ""
+      previousKeyId: ""
+    azure:
+      vaultUrl: https://lians-test.vault.azure.net/
+      secretName: lians-master-key
+      previousVaultUrl: ""
+      previousSecretName: ""
+    vault:
+      address: https://vault.example.test:8200
+      path: lians/master-key
+      mountPoint: secret
+      previousAddress: ""
+      previousPath: ""
+      previousMountPoint: ""
+  receipts:
+    provider: local
+    signingKeyId: receipt-test-current
+    vault:
+      address: ""
+      namespace: ""
+      mountPoint: transit
+      keyName: ""
+      keyVersion: 0
+      publicKey: ""
+      timeoutSeconds: 5
+  telemetry:
+    exporterEndpoint: https://otel.example.test:4317
+
+networkPolicy:
+  postgresql:
+    cidrs:
+      - 10.10.0.10/32
+  redis:
+    cidrs:
+      - 10.11.0.10/32
+  externalHttpsCidrs:
+    - 10.20.0.0/24
+  externalOtlp:
+    cidrs:
+      - 10.30.0.10/32

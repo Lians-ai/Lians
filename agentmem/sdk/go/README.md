@@ -6,13 +6,13 @@
 
 # Lians Go SDK
 
-Financial-grade agent memory for Go — bitemporal recall, SEC 17a-4 audit chain,
-GDPR/HIPAA crypto-shred, information barriers, and a relationship graph for
-conflict-of-interest / related-party / care-network queries.
+Provider-neutral decision evidence and governed memory for Go: reconstruct
+historical context, preserve tamper-evident records, enforce information
+barriers, crypto-shred subject data, and query bitemporal relationship graphs.
 
 Standard library only (`net/http` + `encoding/json`), `context`-aware, and safe
-for concurrent use. This puts Lians on parity with Zep's Go SDK — while Lians also
-ships Java and C, which neither mem0 nor Zep offers.
+for concurrent use. It connects native services to the same cross-provider
+evidence and historical-truth boundary used by the rest of the Lians platform.
 
 ## Install
 
@@ -49,6 +49,8 @@ func main() {
 		Content:   "NVDA FY2026 revenue guidance raised to $40B",
 		EventTime: time.Date(2025, 11, 19, 16, 0, 0, 0, time.UTC),
 		Metadata:  map[string]any{"ticker": "NVDA", "metric": "revenue_guidance"},
+		// Optional: supply a business-stable key when replaying across processes.
+		IdempotencyKey: "guidance-import:nvda:2025-11-19:v1",
 	}); err != nil {
 		panic(err)
 	}
@@ -69,10 +71,10 @@ func main() {
 ## Compliance & graph
 
 ```go
-// Exhaustive knowledge state at a date (regulator demo)
+// Bounded knowledge-state page at a date; retain completeness metadata
 c.Snapshot(ctx, "equity-desk", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), 1000)
 
-// Lookahead-bias proof before trusting a backtest
+// Check recorded Lians data for lookahead contamination before trusting a backtest
 c.BacktestCheck(ctx, "equity-desk", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 
 // GDPR/HIPAA crypto-shred + verify the tamper-evident chain
@@ -94,8 +96,20 @@ c.RecallNear(ctx, "equity-desk", "earnings", "FundA", "ticker", 5)
 ## Notes
 
 - Timestamps are `time.Time` (serialized RFC3339 UTC).
+- `NewClientWithError` validates configuration eagerly. Base URLs must be
+  absolute HTTP(S) URLs and cannot contain user-info, query strings, or fragments.
+  Use HTTPS outside local development.
+- The 30-second default deadline covers all attempts. The client retries GETs and
+  `AddMemory` only; each memory write carries one `Idempotency-Key` reused across
+  its attempts. `Recall`, erasure, and graph mutations are never retried
+  automatically. Configure bounds with `WithTimeout`, `WithMaxRetries`,
+  `WithMaxRetryDelay`, and `WithMaxResponseBytes`.
+- Redirects are returned as errors instead of forwarding API credentials. A
+  custom `http.Client` is shallow-copied and its transport must not be mutated
+  concurrently after construction.
 - Errors from non-2xx responses are `*lians.APIError` (`errors.As` to inspect
-  `StatusCode` / `Body`).
+  `StatusCode`, bounded `Body`, and `RequestID`). Error strings omit the raw body;
+  treat the programmatic `Body` as potentially sensitive.
 - `AddMemory` / `Recall` return typed `*MemoryOut` / `*RecallResult`; richer
   responses (snapshot, graph, conflicts, audit) return `json.RawMessage` for you to
   unmarshal into your own shape.

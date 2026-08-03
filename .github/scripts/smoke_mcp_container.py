@@ -1,6 +1,7 @@
 """Perform a real MCP handshake against the Glama container image."""
 
 import asyncio
+import os
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -16,6 +17,7 @@ EXPECTED_TOOLS = {
     "fact_history",
     "backtest_check",
 }
+IMAGE = os.environ.get("LIANS_MCP_IMAGE", "lians-mcp-glama:test")
 
 
 async def main() -> None:
@@ -28,7 +30,7 @@ async def main() -> None:
             "--read-only",
             "--tmpfs",
             "/data:rw,noexec,nosuid,size=32m,mode=1777",
-            "lians-mcp-glama:test",
+            IMAGE,
         ],
     )
 

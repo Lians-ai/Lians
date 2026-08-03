@@ -1,5 +1,5 @@
 ﻿/**
- * AgentMem TypeScript SDK — unit tests
+ * Lians TypeScript SDK — unit tests
  *
  * All tests use a mock fetch so no real API is needed.  The mock validates that:
  *   1. The client sends the correct HTTP method, path, and body.
@@ -167,7 +167,42 @@ describe("recall()", () => {
 
 describe("eraseSubject()", () => {
   it("POST /v1/erase with subject_id and request_ref", async () => {
-    const eraseResponse = { subject_id: "sub-123", memories_erased: 5, request_ref: "DSAR-2026-001" };
+    const eraseResponse = {
+      job_id: "00000000-0000-0000-0000-000000000901",
+      namespace: "tenant-1",
+      subject_ref: "lians:subject:v2:hmac-sha256:key:opaque",
+      request_ref: "lians:erasure-request:v1:hmac-sha256:opaque",
+      status: "pending",
+      phase: "memories",
+      key_destroyed_at: "2026-08-02T12:00:00Z",
+      cache_fenced_at: "2026-08-02T12:00:00Z",
+      snapshot: {
+        memories: 5,
+        live_facts: 0,
+        relationships: 0,
+        pending_admissions: 0,
+        total_rows: 5,
+      },
+      progress: {
+        memories: 0,
+        live_facts: 0,
+        relationships: 0,
+        pending_admissions: 0,
+        rows_scrubbed: 0,
+        pages_completed: 0,
+        ratio: 0,
+      },
+      processing_attempts: 0,
+      next_attempt_at: "2026-08-02T12:00:00Z",
+      last_error_code: null,
+      last_error_digest: null,
+      failure_code: null,
+      created_at: "2026-08-02T12:00:00Z",
+      started_at: null,
+      updated_at: "2026-08-02T12:00:00Z",
+      completed_at: null,
+      replayed: false,
+    };
     const fetchMock = mockFetch({ ok: true, status: 200, body: eraseResponse });
 
     const result = await client.eraseSubject({
@@ -181,7 +216,9 @@ describe("eraseSubject()", () => {
     const body = JSON.parse(init.body as string);
     expect(body.subject_id).toBe("sub-123");
 
-    expect(result.memories_erased).toBe(5);
+    expect(result.snapshot.memories).toBe(5);
+    expect(result.status).toBe("pending");
+    expect(result).not.toHaveProperty("subject_id");
   });
 });
 
@@ -231,13 +268,17 @@ describe("confirmSupersession()", () => {
     const response = { memory_id: "mem-uuid-1", action: "confirm", applied_at: "2026-06-18T10:00:00Z" };
     const fetchMock = mockFetch({ ok: true, status: 200, body: response });
 
-    await client.confirmSupersession("mem-uuid-1", "Confirmed by compliance team");
+    await client.confirmSupersession("mem-uuid-1", {
+      expected_superseded_by: "mem-uuid-2",
+      reviewer_note: "Confirmed by compliance team",
+    });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://mem.example.com/v1/supersessions/mem-uuid-1");
     expect(init.method).toBe("PATCH");
     const body = JSON.parse(init.body as string);
     expect(body.action).toBe("confirm");
+    expect(body.expected_superseded_by).toBe("mem-uuid-2");
     expect(body.reviewer_note).toBe("Confirmed by compliance team");
   });
 });
@@ -249,12 +290,78 @@ describe("rejectSupersession()", () => {
     const response = { memory_id: "mem-uuid-1", action: "reject", applied_at: "2026-06-18T10:00:00Z" };
     const fetchMock = mockFetch({ ok: true, status: 200, body: response });
 
-    await client.rejectSupersession("mem-uuid-1");
+    await client.rejectSupersession("mem-uuid-1", {
+      expected_superseded_by: null,
+    });
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string);
     expect(body.action).toBe("reject");
+    expect(body.expected_superseded_by).toBeNull();
     expect(body.reviewer_note).toBeUndefined();
+  });
+});
+
+// ── optimistic mutation preconditions ───────────────────────────────────────
+
+describe("mutation preconditions", () => {
+  it("sends the case/task version fields required by the current API", async () => {
+    const response = { id: "case-1", updated_at: "2026-08-02T12:01:00Z" };
+    const fetchMock = mockFetch({ ok: true, status: 200, body: response });
+
+    await client.updateInvestigationCase("case-1", {
+      expected_updated_at: "2026-08-02T12:00:00Z",
+      status: "in_review",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      expected_updated_at: "2026-08-02T12:00:00Z",
+      status: "in_review",
+    });
+  });
+
+  it("sends expected_updated_at when deleting a webhook", async () => {
+    const fetchMock = mockFetch({ ok: true, status: 204, body: undefined });
+
+    await client.deleteWebhook("webhook-1", "2026-08-02T12:00:00Z");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://mem.example.com/v1/webhooks/webhook-1?expected_updated_at=2026-08-02T12%3A00%3A00Z",
+    );
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("makes decrypted closure-statement reads explicit", async () => {
+    const response = {
+      id: "attestation-1",
+      namespace: "test-ns",
+      barrier_group: null,
+      resource_type: "case",
+      resource_id: "case-1",
+      attested_by: "oidc:subject",
+      statement: "Verified remediation",
+      statement_hash: "a".repeat(64),
+      hash_version: 2,
+      evidence_refs: ["receipt:1"],
+      decision_id: null,
+      change_event_id: null,
+      attestation_hash: "b".repeat(64),
+      attested_at: "2026-08-02T12:30:00Z",
+    };
+    const fetchMock = mockFetch({ ok: true, status: 200, body: response });
+
+    const attestation = await client.closureAttestation("case", "case-1", {
+      includeStatement: true,
+    });
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://mem.example.com/v1/control/investigations/case/case-1/attestation?include_statement=true",
+    );
+    expect(attestation.hash_version).toBe(2);
+    expect(attestation.statement_hash).toBe("a".repeat(64));
   });
 });
 
@@ -278,7 +385,7 @@ describe("auditExport()", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("/v1/admin/audit/export");
     expect(url).toContain("namespace=test-ns");
-    expect(url).toContain("verify_chain=true");
+    expect(url).toContain("verify=true");
     expect((init.headers as Record<string, string>)["X-Admin-Secret"]).toBe("admin-secret");
   });
 });

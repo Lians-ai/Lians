@@ -1,0 +1,399 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/decision-receipt/v0.1/evidence-graph-manifest.schema.json",
+  "title": "Lians Decision Receipt Evidence Graph Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "decision_id",
+    "snapshot_max_link_sequence",
+    "entries",
+    "links_total",
+    "artifacts_total",
+    "direct_count",
+    "reachable_count",
+    "complete",
+    "normalization",
+    "manifest_hash"
+  ],
+  "properties": {
+    "schema": {
+      "const": "lians.evidence-graph-manifest.v1"
+    },
+    "decision_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "snapshot_max_link_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "links_total": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "artifacts_total": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "direct_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "reachable_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "complete": {
+      "const": true
+    },
+    "normalization": {
+      "$ref": "#/$defs/normalization"
+    },
+    "manifest_hash": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "link_id",
+        "relation",
+        "match_basis",
+        "artifact"
+      ],
+      "properties": {
+        "link_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "relation": {
+          "enum": [
+            "direct",
+            "reachable"
+          ]
+        },
+        "match_basis": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "identifier",
+        "version",
+        "hash_algorithm",
+        "artifact_hash",
+        "identity_hash",
+        "recorded_at",
+        "metadata"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "policy",
+            "model",
+            "tool",
+            "permission",
+            "instruction",
+            "input",
+            "output"
+          ]
+        },
+        "identifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "hash_algorithm": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "artifact_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "identity_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "memory_id": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "source": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "protocol": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "event_kind": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "hash_role": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "tool_name": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "tool_call_id": {
+              "$ref": "#/$defs/metadataValue"
+            },
+            "provider": {
+              "$ref": "#/$defs/metadataValue"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "hash_algorithm": {
+                "const": "sha256"
+              },
+              "artifact_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "hash_algorithm",
+              "artifact_hash"
+            ]
+          },
+          "then": {
+            "properties": {
+              "artifact_hash": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "metadataValue": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 2048
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer"
+        }
+      ]
+    },
+    "normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_id",
+        "namespace",
+        "coverage_sequence",
+        "overall_status",
+        "normalized_complete",
+        "kinds",
+        "disclosure"
+      ],
+      "properties": {
+        "decision_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "coverage_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overall_status": {
+          "enum": [
+            "unknown",
+            "partial",
+            "complete"
+          ]
+        },
+        "normalized_complete": {
+          "type": "boolean"
+        },
+        "kinds": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/kindCoverage"
+          }
+        },
+        "disclosure": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "overall_status": {
+                "const": "complete"
+              }
+            },
+            "required": [
+              "overall_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "normalized_complete": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "normalized_complete": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "kindCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "status",
+        "indexer_version",
+        "normalization_scope",
+        "source_watermark",
+        "gap_codes",
+        "indexed_artifact_count",
+        "assessed_at"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "source",
+            "policy",
+            "model",
+            "tool",
+            "permission",
+            "instruction",
+            "input",
+            "output"
+          ]
+        },
+        "status": {
+          "enum": [
+            "unknown",
+            "partial",
+            "complete"
+          ]
+        },
+        "indexer_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "normalization_scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "source_watermark": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "gap_codes": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        "indexed_artifact_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assessed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

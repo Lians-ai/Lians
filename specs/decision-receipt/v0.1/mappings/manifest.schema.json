@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/decision-receipt/v0.1/mappings/manifest.schema.json",
+  "title": "Lians Decision Receipt standards-mapping manifest v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "receipt_version", "contract", "mappings"],
+  "properties": {
+    "$schema": {
+      "const": "https://lians.ai/specs/decision-receipt/v0.1/mappings/manifest.schema.json"
+    },
+    "receipt_version": {"const": "0.1"},
+    "contract": {"const": "supporting_evidence_requires_explicit_decision_binding"},
+    "mappings": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["standard", "path", "sha256"],
+        "properties": {
+          "standard": {"enum": ["opentelemetry_genai", "mcp", "a2a"]},
+          "path": {"type": "string", "pattern": "^[a-z0-9-]+\\.md$"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    }
+  }
+}

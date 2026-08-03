@@ -62,15 +62,6 @@ def _has_pgvector() -> bool:
 
 def upgrade() -> None:
     # ── live_facts ─────────────────────────────────────────────────────────────
-    if _is_postgres():
-        embedding_col = sa.Column(
-            "embedding",
-            postgresql.ARRAY(sa.Float()),   # stored as vector on PG
-            nullable=True,
-        )
-    else:
-        embedding_col = sa.Column("embedding", sa.JSON(), nullable=True)
-
     op.create_table(
         "live_facts",
         sa.Column("id", postgresql.UUID(as_uuid=True) if _is_postgres() else sa.String(), primary_key=True),

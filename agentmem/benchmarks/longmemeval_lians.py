@@ -30,9 +30,10 @@ import numpy as np
 
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "src"))
 
 from benchmarks.locomo_replay import _bm25_tokens, _BM25_K1, _BM25_B, _BM25_AVG_DOC_LEN  # noqa: E402
-from src.lians.ranking import query_time_windows  # noqa: E402
+from lians.ranking import query_time_windows  # noqa: E402
 
 _DATASET = _REPO.parent / "memory-benchmarks" / "datasets" / "longmemeval" / "longmemeval_s_cleaned.json"
 _CACHE = _REPO / "results" / "longmemeval_cache"

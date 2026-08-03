@@ -17,11 +17,10 @@ All tests run with LocalProvider (zero API calls).
 from __future__ import annotations
 import math
 import pytest
-import pytest_asyncio
 from datetime import datetime, timedelta, timezone
 
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories
+from lians.schemas import MemoryAdd, RecallRequest
+from lians.memory_service import add_memory, recall_memories
 
 # ---------------------------------------------------------------------------
 # Metric helpers
@@ -59,8 +58,8 @@ async def _pure_cosine_ranking(db, namespace: str, agent_id: str, query: str) ->
     Returns list of (memory, cosine_score, content).
     """
     from sqlalchemy import select, and_
-    from src.lians.models import Memory
-    from src.lians.embeddings import get_embedding_provider
+    from lians.models import Memory
+    from lians.embeddings import get_embedding_provider
 
     provider = get_embedding_provider()
     q_emb = await provider.embed_one(query)
@@ -133,7 +132,7 @@ class TestHybridVsPureSemantic:
         ))
         # Older event_time â†’ classify_relation returns ADDS (not supersedes)
         # so both remain valid (valid_to=None)
-        m_old = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT,
             content=content,
             event_time=T_OLD,
@@ -181,7 +180,7 @@ class TestHybridVsPureSemantic:
         ))
 
         # The new memory should have superseded the old one
-        from src.lians.models import Memory as MemModel
+        from lians.models import Memory as MemModel
         old_db = await db.execute(
             __import__("sqlalchemy", fromlist=["select"]).select(MemModel).where(
                 MemModel.agent_id == AGENT,

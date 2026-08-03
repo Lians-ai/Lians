@@ -12,31 +12,61 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     defaults:
       run:
         working-directory: integrations/grafana-lians-app
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Authorize protected publication source
+        working-directory: ${{ github.workspace }}
+        env:
+          LIANS_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          LIANS_REF_PROTECTED: ${{ github.ref_protected }}
+        run: python .github/scripts/check_publish_source.py
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: integrations/grafana-lians-app/package-lock.json
       - run: npm ci
+      - name: Require the tag to match plugin metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          expected="${GITHUB_REF_NAME#grafana-v}"
+          actual="$(node -p 'require("./package.json").version')"
+          plugin="$(node -p 'require("./src/plugin.json").info.version')"
+          test "$expected" = "$actual"
+          test "$expected" = "$plugin"
       - run: npm run typecheck
       - run: npm run build
       - name: Package plugin
         run: |
           mkdir -p package/lians-lians-app
           cp -R dist/. package/lians-lians-app/
+          epoch="$(git -C ../.. show -s --format=%ct HEAD)"
+          find package -exec touch -d "@${epoch}" {} +
           cd package
-          zip -r ../lians-lians-app.zip lians-lians-app
-      - uses: actions/upload-artifact@v4
+          zip -X -r ../lians-lians-app.zip lians-lians-app
+      - name: Attest plugin archive provenance
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: integrations/grafana-lians-app/lians-lians-app.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: lians-lians-app
           path: integrations/grafana-lians-app/lians-lians-app.zip
       - name: Attach to tagged release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: integrations/grafana-lians-app/lians-lians-app.zip

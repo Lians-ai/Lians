@@ -1,17 +1,18 @@
 /*
- * Lians C SDK — financial-grade agent memory over the REST API.
+ * Lians C SDK — provider-neutral decision evidence and governed memory.
  *
- * A thin libcurl-based client for the Lians memory layer: bitemporal recall,
- * SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information barriers, and a
- * relationship graph (conflict-of-interest / related-party / care-network).
+ * A thin libcurl-based client for bitemporal reconstruction, tamper-evident
+ * records, subject crypto-shredding, information barriers, and relationship
+ * graph queries over the Lians REST API.
  *
  * Built for the native, low-latency, and embedded world — HFT, market-data
  * gateways, and on-prem systems in finance, healthcare, and legal — where Python
  * and JVM SDKs don't reach. Responses are returned as raw JSON strings; pair with
  * your JSON parser of choice.
  *
- * Thread-safety: a lians_client_t is immutable after creation and may be shared
- * across threads; each call uses its own libcurl easy handle.
+ * Thread-safety: a lians_client_t may be shared across threads; each call uses
+ * its own libcurl easy handle and configuration reads/writes are atomic. The
+ * caller must still ensure no requests are active while freeing the client.
  *
  * Memory: every call returns a lians_response_t whose `body` you must release
  * with lians_response_free().
@@ -20,6 +21,9 @@
 #define LIANS_H
 
 #include <stddef.h>
+
+#define LIANS_SDK_VERSION "0.5.0"
+#define LIANS_SDK_USER_AGENT "lians-c-sdk/" LIANS_SDK_VERSION
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,12 +47,23 @@ int  lians_global_init(void);
 void lians_global_cleanup(void);
 
 /* Create a client. base_url and api_key are required; admin_secret may be NULL
- * (needed only for /v1/admin/* audit endpoints). Returns NULL on failure. */
+ * (needed only for endpoints under /v1/admin/). Returns NULL on failure. */
 lians_client_t *lians_client_new(const char *base_url, const char *api_key,
                                  const char *admin_secret);
 
-/* Set the per-request timeout in milliseconds (default 30000). */
+/* Set the total operation timeout in milliseconds (default 30000, max 600000).
+ * The budget includes all retry attempts and SDK backoff. Invalid values are
+ * ignored. This setter is safe while other requests are running. */
 void lians_client_set_timeout_ms(lians_client_t *client, long timeout_ms);
+
+/* Set retries after the first attempt (default 2, max 5). Only GET requests and
+ * writes carrying an Idempotency-Key are retried. Unsafe/one-time mutations are
+ * never retried automatically. Invalid values are ignored. */
+void lians_client_set_max_retries(lians_client_t *client, long max_retries);
+
+/* Set the maximum response body retained in memory (default 16 MiB; accepted
+ * range 1 KiB..256 MiB). Invalid values are ignored. */
+void lians_client_set_max_response_bytes(lians_client_t *client, long max_bytes);
 
 /* Free a client. */
 void lians_client_free(lians_client_t *client);
@@ -66,6 +81,16 @@ lians_response_t lians_add(lians_client_t *client, const char *agent_id,
                            const char *metadata_json, const char *source,
                            const char *subject_id, double importance);
 
+/* Replay-safe form of lians_add. Reuse the same non-empty idempotency_key (max
+ * 255 visible-ASCII bytes, without whitespace) only when retrying the same
+ * business write. This form is eligible for the client's bounded automatic
+ * retry policy. */
+lians_response_t lians_add_idempotent(lians_client_t *client, const char *agent_id,
+                                      const char *content, const char *event_time,
+                                      const char *metadata_json, const char *source,
+                                      const char *subject_id, double importance,
+                                      const char *idempotency_key);
+
 /* ── Read ──────────────────────────────────────────────────────────────────── */
 
 /* Recall current (non-stale) facts. as_of/filters_json may be NULL. Pass as_of
@@ -74,11 +99,11 @@ lians_response_t lians_recall(lians_client_t *client, const char *agent_id,
                               const char *query, int k, const char *as_of,
                               const char *filters_json);
 
-/* Exhaustive knowledge-state reconstruction at as_of (ISO-8601 UTC). */
+/* Bounded knowledge-state page at as_of; inspect JSON completeness fields. */
 lians_response_t lians_snapshot(lians_client_t *client, const char *agent_id,
                                 const char *as_of, int limit);
 
-/* Detect lookahead bias relative to simulation_as_of (ISO-8601 UTC). */
+/* Check visible recorded Lians data relative to simulation_as_of (ISO-8601 UTC). */
 lians_response_t lians_backtest_check(lians_client_t *client, const char *agent_id,
                                       const char *simulation_as_of);
 

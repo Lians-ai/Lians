@@ -16,11 +16,15 @@ Exit codes:
     0 â€” all checks passed
     1 â€” one or more checks failed
 """
-import asyncio
 import argparse
+import asyncio
 import math
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+# Exercise the same top-level package identity exposed by the production wheel.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
 CHECKS: list[tuple[str, bool]] = []
@@ -115,12 +119,11 @@ async def run(url: str) -> bool:
 
         # â”€â”€ 6. Vector INSERT + SELECT round-trip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
-            original = _vec(1024)
             session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
             async with session_factory() as db:
-                from src.lians.memory_service import add_memory
-                from src.lians.schemas import MemoryAdd
+                from lians.memory_service import add_memory
+                from lians.schemas import MemoryAdd
                 result = await add_memory(db, "_verify_ns_", MemoryAdd(
                     agent_id="_verify_agent_",
                     content="pgvector verification ping",
@@ -186,11 +189,6 @@ def main() -> None:
         help="SQLAlchemy async database URL",
     )
     args = parser.parse_args()
-
-    # Ensure src.lians is importable
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
     ok = asyncio.run(run(args.url))
     sys.exit(0 if ok else 1)

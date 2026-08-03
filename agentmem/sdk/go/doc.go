@@ -1,12 +1,11 @@
-// Package lians is the Go SDK for Lians, a financial-grade memory layer for AI agents.
+// Package lians is the Go SDK for Lians, provider-neutral decision evidence
+// infrastructure for consequential AI systems.
 //
-// Lians is built for regulated environments (financial institutions, healthcare,
-// legal). Unlike a plain vector store it uses a bitemporal model — superseded
-// facts are excluded at the database layer, every write lands in a tamper-evident
-// SHA-256 audit chain (SEC 17a-4), per-subject keys give GDPR/HIPAA crypto-shred,
-// and information barriers are enforced at PostgreSQL row-level security. It also
-// exposes a bitemporal relationship graph for conflict-of-interest / related-party
-// / care-network reachability queries.
+// Lians records and reconstructs consequential AI evidence across providers. Its
+// bitemporal model excludes superseded facts from present recall while preserving
+// historical state; tamper-evident records, per-subject crypto-shredding,
+// PostgreSQL row-level security, and relationship reachability provide the
+// governed memory substrate beneath the decision-evidence control plane.
 //
 // The client uses only the standard library (net/http, encoding/json) and is safe
 // for concurrent use. Every method takes a context.Context.

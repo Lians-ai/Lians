@@ -1,83 +1,136 @@
+"""Generation-fenced, process-local cache for an agent's live working set.
+
+The cache is only usable when the caller supplies the generation read from the
+shared Redis coherence key while holding the agent's PostgreSQL shared advisory
+lock.  A local entry from another generation is a miss, which prevents one API
+replica from serving facts superseded by a write on another replica.
+
+TTL and capacity are read from ``Settings`` at operation time so configuration
+and test overrides are honored.  Scoring packs inherit the generation and
+lifetime of their working-set entry.
 """
-In-process working-set cache for live facts per agent — Change 7 of the
-performance roadmap.
 
-After a session is bound (first recall per agent per process), the agent's
-entire live working set is prefetched from ``live_facts`` and held here.
-Subsequent recalls for the same agent are served from memory — no Postgres
-or vector-index round-trip — until an explicit invalidation.
-
-Invalidation triggers (call ``invalidate_working_set``):
-  - Any ``add_memory`` or ``batch_add_memories`` for the agent.
-  - Any supersession that touches the agent's memories.
-  - Any crypto-shred of a subject whose data belongs to the agent.
-
-Bounds:
-  - At most ``_MAX_ENTRIES`` (agent, namespace) slots.  Overflow evicts the
-    oldest entry by fetch timestamp (simple LRU approximation).
-  - Entries older than ``_TTL_SECONDS`` are treated as stale on read and
-    re-fetched transparently.
-
-Thread safety: asyncio is cooperative, so dict mutations are safe without locks.
-"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
-
-_cache: dict[tuple[str, str], tuple[datetime, list]] = {}  # (ns, agent) -> (fetched_at, facts)
-# Derived scoring artifacts (embedding matrix, BM25 stats, decrypted contents)
-# built by ranking._scoring_pack — same lifecycle as the working set.
-_packs: dict[tuple[str, str], object] = {}
-_MAX_ENTRIES = 512
-_TTL_SECONDS = 300  # 5 min max staleness — write invalidation handles most cases
+import time
+from dataclasses import dataclass
+from typing import Any
 
 
-def get_working_set(namespace: str, agent_id: str) -> Optional[list]:
-    """Return cached live facts or None on miss / expiry."""
-    entry = _cache.get((namespace, agent_id))
+@dataclass
+class _WorkingSetEntry:
+    fetched_at: float
+    generation: str
+    facts: list[Any]
+
+
+@dataclass
+class _ScoringPackEntry:
+    generation: str
+    pack: object
+
+
+_cache: dict[tuple[str, str], _WorkingSetEntry] = {}
+_packs: dict[tuple[str, str], _ScoringPackEntry] = {}
+
+
+def _limits() -> tuple[float, int]:
+    from .config import get_settings
+
+    settings = get_settings()
+    return float(settings.session_cache_ttl_seconds), settings.session_cache_max_entries
+
+
+def _discard(key: tuple[str, str]) -> None:
+    _cache.pop(key, None)
+    _packs.pop(key, None)
+
+
+def _fresh_entry(key: tuple[str, str], generation: str) -> _WorkingSetEntry | None:
+    entry = _cache.get(key)
     if entry is None:
         return None
-    fetched_at, facts = entry
-    if (datetime.now(timezone.utc) - fetched_at).total_seconds() > _TTL_SECONDS:
-        _cache.pop((namespace, agent_id), None)
+    ttl, _ = _limits()
+    if entry.generation != generation or time.monotonic() - entry.fetched_at >= ttl:
+        _discard(key)
         return None
-    return facts
+    return entry
 
 
-def set_working_set(namespace: str, agent_id: str, facts: list) -> None:
-    """Cache the live working set for the agent."""
-    if len(_cache) >= _MAX_ENTRIES:
-        oldest = min(_cache, key=lambda k: _cache[k][0])
-        _cache.pop(oldest, None)
-    _cache[(namespace, agent_id)] = (datetime.now(timezone.utc), list(facts))
+def get_working_set(
+    namespace: str,
+    agent_id: str,
+    generation: str | None = None,
+) -> list[Any] | None:
+    """Return a fresh working set for ``generation``, otherwise a cache miss.
+
+    Omitting the shared generation disables the cache.  This makes legacy or
+    non-PostgreSQL callers safe by default instead of trusting process-local
+    invalidation in a potentially multi-replica deployment.
+    """
+    if generation is None:
+        return None
+    entry = _fresh_entry((namespace, agent_id), generation)
+    return entry.facts if entry is not None else None
+
+
+def set_working_set(
+    namespace: str,
+    agent_id: str,
+    facts: list[Any],
+    generation: str | None = None,
+) -> None:
+    """Cache a working set only when it has a shared coherence generation."""
+    if generation is None:
+        return
+
+    key = (namespace, agent_id)
+    _, max_entries = _limits()
+    while key not in _cache and len(_cache) >= max_entries:
+        oldest = min(_cache, key=lambda candidate: _cache[candidate].fetched_at)
+        _discard(oldest)
+
+    _cache[key] = _WorkingSetEntry(
+        fetched_at=time.monotonic(),
+        generation=generation,
+        facts=list(facts),
+    )
+    # A replacement working set invalidates even a same-generation scoring
+    # pack; the list may have been refreshed for reasons other than a write.
+    _packs.pop(key, None)
 
 
 def invalidate_working_set(namespace: str, agent_id: str) -> None:
-    """Drop cached facts — called on any write or erasure for this agent."""
-    _cache.pop((namespace, agent_id), None)
-    _packs.pop((namespace, agent_id), None)
+    """Drop this process's working set and derived scoring pack."""
+    _discard((namespace, agent_id))
 
 
-def get_scoring_pack(namespace: str, agent_id: str):
-    return _packs.get((namespace, agent_id))
+def get_scoring_pack(namespace: str, agent_id: str) -> object | None:
+    key = (namespace, agent_id)
+    working = _cache.get(key)
+    if working is None or _fresh_entry(key, working.generation) is None:
+        return None
+    entry = _packs.get(key)
+    if entry is None or entry.generation != working.generation:
+        _packs.pop(key, None)
+        return None
+    return entry.pack
 
 
-def set_scoring_pack(namespace: str, agent_id: str, pack) -> None:
-    if len(_packs) >= _MAX_ENTRIES:
+def set_scoring_pack(namespace: str, agent_id: str, pack: object) -> None:
+    key = (namespace, agent_id)
+    working = _cache.get(key)
+    if working is None or _fresh_entry(key, working.generation) is None:
+        return
+
+    _, max_entries = _limits()
+    while key not in _packs and len(_packs) >= max_entries:
         _packs.pop(next(iter(_packs)), None)
-    _packs[(namespace, agent_id)] = pack
+    _packs[key] = _ScoringPackEntry(generation=working.generation, pack=pack)
 
 
 def clear_all() -> None:
-    """Drop every cached working set and scoring pack.
-
-    Needed when a process hosts more than one storage engine (tests,
-    notebooks with several LocalLiansClients): the caches are keyed by
-    (namespace, agent), so a second client reusing an agent name would
-    otherwise be served rows that belong to the first client's database.
-    Server deployments have one engine per process and never call this.
-    """
+    """Drop every cached working set and scoring pack."""
     _cache.clear()
     _packs.clear()
 

@@ -5,10 +5,13 @@ Uses httpx.AsyncClient with dependency_overrides to inject an in-memory
 SQLite session, so no real database or network is needed.
 """
 from __future__ import annotations
+
+import hashlib
+
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 ADMIN_SECRET = "test-admin-secret-xyz"
@@ -27,15 +30,15 @@ async def app_client(monkeypatch):
     """
     monkeypatch.setenv("ADMIN_SECRET", ADMIN_SECRET)
 
-    from src.lians.config import get_settings
+    from lians.config import get_settings
     get_settings.cache_clear()
     monkeypatch.setenv("ADMIN_SECRET", ADMIN_SECRET)
     # Re-clear after setting env var (lru_cache reads env at call time)
     get_settings.cache_clear()
 
-    from src.lians.models import Base as AppBase
-    from src.lians.main import app
-    from src.lians.db import get_db
+    from lians.db import get_db
+    from lians.main import app
+    from lians.models import Base as AppBase
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -47,13 +50,17 @@ async def app_client(monkeypatch):
     pg_indexes = [
         idx for table in AppBase.metadata.tables.values()
         for idx in table.indexes
-        if idx.dialect_kwargs.get("postgresql_using") is not None
+        if idx.dialect_kwargs.get("postgresql_using") not in (None, False)
     ]
     for idx in pg_indexes:
         idx.table.indexes.discard(idx)
 
-    async with engine.begin() as conn:
-        await conn.run_sync(AppBase.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(AppBase.metadata.create_all)
+    finally:
+        for idx in pg_indexes:
+            idx.table.indexes.add(idx)
 
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -164,7 +171,11 @@ class TestBarrierTenantIsolation:
             response = await app_client.post(
                 "/v1/admin/barriers",
                 params={"namespace": namespace},
-                json={"agent_id": "default", "group_name": group},
+                json={
+                    "agent_id": "default",
+                    "group_name": group,
+                    "expected_group_name": None,
+                },
                 headers={"X-Admin-Secret": ADMIN_SECRET},
             )
             assert response.status_code == 201, response.text
@@ -218,6 +229,7 @@ class TestList:
 
         await app_client.delete(
             f"/v1/admin/api-keys/{key_id}",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -240,6 +252,7 @@ class TestList:
 
         await app_client.delete(
             f"/v1/admin/api-keys/{key_id}",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -291,6 +304,7 @@ class TestRevoke:
 
         del_resp = await app_client.delete(
             f"/v1/admin/api-keys/{key_id}",
+            params={"expected_version": data["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         assert del_resp.status_code == 204
@@ -306,6 +320,7 @@ class TestRevoke:
     async def test_revoke_nonexistent_key_returns_404(self, app_client):
         resp = await app_client.delete(
             "/v1/admin/api-keys/00000000-0000-0000-0000-000000000000",
+            params={"expected_version": 1},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         assert resp.status_code == 404
@@ -321,10 +336,12 @@ class TestRevoke:
 
         await app_client.delete(
             f"/v1/admin/api-keys/{key_id}",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         second = await app_client.delete(
             f"/v1/admin/api-keys/{key_id}",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         assert second.status_code == 409
@@ -337,7 +354,9 @@ class TestRevoke:
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         key_id = r.json()["id"]
-        resp = await app_client.delete(f"/v1/admin/api-keys/{key_id}")
+        resp = await app_client.delete(
+            f"/v1/admin/api-keys/{key_id}", params={"expected_version": r.json()["version"]}
+        )
         assert resp.status_code == 401
 
 
@@ -359,6 +378,7 @@ class TestRotate:
 
         rot = await app_client.post(
             f"/v1/admin/api-keys/{old_id}/rotate",
+            params={"expected_version": old_data["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         assert rot.status_code == 201
@@ -382,6 +402,7 @@ class TestRotate:
 
         await app_client.post(
             f"/v1/admin/api-keys/{old_id}/rotate",
+            params={"expected_version": old_data["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -403,6 +424,7 @@ class TestRotate:
 
         rot = await app_client.post(
             f"/v1/admin/api-keys/{old_id}/rotate",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         new_key = rot.json()["key"]
@@ -418,6 +440,7 @@ class TestRotate:
     async def test_rotate_nonexistent_key_returns_404(self, app_client):
         resp = await app_client.post(
             "/v1/admin/api-keys/00000000-0000-0000-0000-000000000000/rotate",
+            params={"expected_version": 1},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         assert resp.status_code == 404
@@ -433,11 +456,13 @@ class TestRotate:
 
         await app_client.delete(
             f"/v1/admin/api-keys/{old_id}",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
         resp = await app_client.post(
             f"/v1/admin/api-keys/{old_id}/rotate",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         assert resp.status_code == 409
@@ -450,7 +475,10 @@ class TestRotate:
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         old_id = r.json()["id"]
-        resp = await app_client.post(f"/v1/admin/api-keys/{old_id}/rotate")
+        resp = await app_client.post(
+            f"/v1/admin/api-keys/{old_id}/rotate",
+            params={"expected_version": r.json()["version"]},
+        )
         assert resp.status_code == 401
 
 
@@ -487,7 +515,7 @@ class TestAdminAuditTrail:
         prov = next(e for e in events if e["op"] == "admin.key_provision")
         assert prov["agent_id"] == "__admin__"
         assert prov["payload"]["key_id"] == key_id
-        assert prov["payload"]["label"] == "svc"
+        assert prov["payload"]["label_hash"] == hashlib.sha256(b"svc").hexdigest()
 
     @pytest.mark.asyncio
     async def test_revoke_writes_audit_row(self, app_client):
@@ -500,6 +528,7 @@ class TestAdminAuditTrail:
 
         await app_client.delete(
             f"/v1/admin/api-keys/{key_id}",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -520,6 +549,7 @@ class TestAdminAuditTrail:
 
         rot = await app_client.post(
             f"/v1/admin/api-keys/{old_id}/rotate",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         new_id = rot.json()["id"]
@@ -536,7 +566,11 @@ class TestAdminAuditTrail:
         await app_client.post(
             "/v1/admin/barriers",
             params={"namespace": "audit-bar"},
-            json={"agent_id": "agent-eq", "group_name": "equity_desk"},
+            json={
+                "agent_id": "agent-eq",
+                "group_name": "equity_desk",
+                "expected_group_name": None,
+            },
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -552,12 +586,19 @@ class TestAdminAuditTrail:
         await app_client.post(
             "/v1/admin/barriers",
             params={"namespace": "audit-bar2"},
-            json={"agent_id": "agent-fi", "group_name": "fixed_income"},
+            json={
+                "agent_id": "agent-fi",
+                "group_name": "fixed_income",
+                "expected_group_name": None,
+            },
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         await app_client.delete(
             "/v1/admin/barriers/agent-fi",
-            params={"namespace": "audit-bar2"},
+            params={
+                "namespace": "audit-bar2",
+                "expected_group_name": "fixed_income",
+            },
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -571,7 +612,12 @@ class TestAdminAuditTrail:
     async def test_retention_set_writes_audit_row(self, app_client):
         await app_client.put(
             "/v1/admin/retention/audit-ret",
-            json={"content_ttl_days": 365, "audit_retention_days": 1825, "legal_hold": False},
+            json={
+                "expected_updated_at": None,
+                "content_ttl_days": 365,
+                "audit_retention_days": 1825,
+                "legal_hold": False,
+            },
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 
@@ -594,11 +640,17 @@ class TestAdminAuditTrail:
 
         await app_client.post(
             f"/v1/admin/api-keys/{key_id}/rotate",
+            params={"expected_version": r.json()["version"]},
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
         await app_client.put(
             "/v1/admin/retention/audit-chain",
-            json={"content_ttl_days": 90, "audit_retention_days": 1825, "legal_hold": False},
+            json={
+                "expected_updated_at": None,
+                "content_ttl_days": 90,
+                "audit_retention_days": 1825,
+                "legal_hold": False,
+            },
             headers={"X-Admin-Secret": ADMIN_SECRET},
         )
 

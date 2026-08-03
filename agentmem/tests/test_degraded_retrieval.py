@@ -14,9 +14,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from src.lians.models import EventLog
-from src.lians.schemas import MemoryAdd, RecallRequest, ContextRequest
-from src.lians.memory_service import add_memory, recall_memories, assemble_context
+from lians.models import EventLog
+from lians.schemas import MemoryAdd, RecallRequest, ContextRequest
+from lians.memory_service import add_memory, recall_memories, assemble_context
 
 NS = "degraded-ns"
 AGENT = "degraded-agent"
@@ -36,7 +36,7 @@ class _BrokenProvider:
 def break_embeddings(monkeypatch):
     """Returns a callable that breaks the provider — call it AFTER seeding."""
     def _break():
-        import src.lians.memory_service as ms
+        import lians.memory_service as ms
         monkeypatch.setattr(ms, "get_embedding_provider", lambda: _BrokenProvider())
     return _break
 

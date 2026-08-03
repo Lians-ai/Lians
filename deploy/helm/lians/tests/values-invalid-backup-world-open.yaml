@@ -1,0 +1,12 @@
+# Negative fixture: a reachable object store is not permission to allow all
+# Internet egress from the backup pod.
+backup:
+  enabled: true
+  image:
+    repository: ghcr.io/example/lians-backup
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  existingSecret: lians-backup
+  existingIdentityConfigMap: lians-backup-identity
+  existingPvc: lians-backup
+  wormDestinationCidrs:
+    - 0.0.0.0/0

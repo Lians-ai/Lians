@@ -4,16 +4,27 @@ import hashlib
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from lians.db import get_db
+from lians.main import app
+from lians.metering_models import MeteringEvent
+from lians.models import ApiKey, DecisionRecord, LedgerEvent, NamespacePolicy, OTelSpan
+from lians.otel_contract import CAPTURE_STATUSES
+from lians.otlp import decode_trace_request
 from sqlalchemy import func, select
-
-from src.lians.db import get_db
-from src.lians.main import app
-from src.lians.models import ApiKey, DecisionRecord, LedgerEvent, OTelSpan
-from src.lians.otlp import decode_trace_request
-
 
 KEY = "partner-integration-key"
 NAMESPACE = "partner-test"
+
+
+def test_capture_status_contract_matches_product_ontology():
+    assert CAPTURE_STATUSES == {
+        "complete",
+        "complete_with_exclusions",
+        "partial",
+        "delayed",
+        "failed",
+        "unverifiable",
+    }
 
 
 @pytest_asyncio.fixture
@@ -117,6 +128,13 @@ def test_otlp_protobuf_decoding():
 @pytest.mark.asyncio
 async def test_otlp_json_ingestion_is_authenticated_and_idempotent(partner_client):
     client, db = partner_client
+    db.add(
+        NamespacePolicy(
+            namespace=NAMESPACE,
+            stripe_customer_id="cus_otel_contract",
+        )
+    )
+    await db.commit()
     missing = await client.post("/v1/traces", json=_otlp_payload())
     assert missing.status_code == 401
 
@@ -131,6 +149,18 @@ async def test_otlp_json_ingestion_is_authenticated_and_idempotent(partner_clien
     assert (await db.scalar(select(func.count()).select_from(OTelSpan))) == 1
     assert (await db.scalar(select(func.count()).select_from(DecisionRecord))) == 1
     assert (await db.scalar(select(func.count()).select_from(LedgerEvent))) == 1
+    decision_meter_events = list(
+        (
+            await db.execute(
+                select(MeteringEvent).where(
+                    MeteringEvent.namespace == NAMESPACE,
+                    MeteringEvent.event_name == "lians_authoritative_decision",
+                )
+            )
+        ).scalars()
+    )
+    assert len(decision_meter_events) == 1
+    assert decision_meter_events[0].quantity == 1
     row = (await db.execute(select(OTelSpan))).scalar_one()
     assert row.is_genai is True
     assert row.model_id == "gpt-5"
@@ -139,6 +169,15 @@ async def test_otlp_json_ingestion_is_authenticated_and_idempotent(partner_clien
     assert decision.metadata_["trace_id"] == row.trace_id
     assert decision.metadata_["capture_status"] == "partial"
     assert decision.model_id == "gpt-5"
+    assert decision.recorded_by_principal_ref.startswith(
+        "lians:principal:v1:api-key:"
+    )
+    assert decision.recorded_by_auth_method == "api_key"
+    assert decision.recorded_by_credential_ref.startswith(
+        "lians:credential:v1:sha256:"
+    )
+    assert decision.record_hash_version == 3
+    assert decision.record_integrity_status == "verified"
 
 
 @pytest.mark.asyncio
@@ -162,7 +201,7 @@ async def test_validmind_contract_exposes_model_and_accepts_link(partner_client)
     linked = await client.put(
         f"/api/v1/models/{model['id']}",
         headers=_headers(),
-        json={"vm_cuid": "mdl_validmind_123"},
+        json={"expected_updated_at": None, "vm_cuid": "mdl_validmind_123"},
     )
     assert linked.status_code == 200
     assert linked.json()["metadata"]["vm_cuid"] == "mdl_validmind_123"

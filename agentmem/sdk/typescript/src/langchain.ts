@@ -1,12 +1,12 @@
 ﻿/**
- * LangChain.js integration for AgentMem.
+ * LangChain.js integration for Lians.
  *
  * Install the optional peer dep first:
  *   npm install @langchain/core
  *
  * @example
  * import { LiansClient } from "@lians-ai/lians";
- * import { createRecallTool, createRememberTool } from "lians/langchain";
+ * import { createRecallTool, createRememberTool } from "@lians-ai/lians/langchain";
  *
  * const client = new LiansClient({ baseUrl: "...", apiKey: "..." });
  * const tools  = [createRecallTool(client, "equity-desk"), createRememberTool(client, "equity-desk")];

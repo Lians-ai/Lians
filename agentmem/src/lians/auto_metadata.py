@@ -21,11 +21,12 @@ fire on a plain-text write.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Optional
 
-logger = logging.getLogger("agentmem.auto_metadata")
+logger = logging.getLogger("lians.auto_metadata")
 
 
 def _structured_present(meta: dict[str, Any], adapter) -> bool:
@@ -65,8 +66,10 @@ async def enrich_metadata(
     if callable(extractor):
         try:
             derived = extractor(content) or {}
-        except Exception as exc:  # fail-open
-            logger.warning("rule-based auto-metadata extraction failed: %s", exc)
+        except Exception:  # fail-open
+            # Adapter exceptions can embed the candidate content. Keep logs
+            # diagnostic but content-free; callers observe provenance absence.
+            logger.warning("rule-based auto-metadata extraction failed")
             derived = {}
 
     if not derived and getattr(settings, "auto_metadata_llm", False):
@@ -123,11 +126,12 @@ async def _llm_extract(content: str, adapter, settings) -> dict[str, Any]:
         client = anthropic.AsyncAnthropic(
             api_key=settings.anthropic_api_key or None,  # None → ANTHROPIC_API_KEY env var
         )
-        message = await client.messages.create(
-            model=settings.auto_metadata_model,
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        async with asyncio.timeout(settings.llm_provider_timeout_seconds):
+            message = await client.messages.create(
+                model=settings.auto_metadata_model,
+                max_tokens=200,
+                messages=[{"role": "user", "content": prompt}],
+            )
         raw = message.content[0].text.strip()
         data = json.loads(raw)
         if isinstance(data, dict):
@@ -136,6 +140,7 @@ async def _llm_extract(content: str, adapter, settings) -> dict[str, Any]:
                 k: v for k, v in data.items()
                 if k in allowed and isinstance(v, (str, int, float))
             }
-    except Exception as exc:  # fail-open
-        logger.warning("LLM auto-metadata extraction failed: %s", exc)
+    except Exception:  # fail-open
+        # Provider exception strings can contain request or response excerpts.
+        logger.warning("LLM auto-metadata extraction failed")
     return {}

@@ -13,7 +13,7 @@ import (
 )
 
 type capture struct {
-	method, path, query, body, apiKey, adminSecret string
+	method, path, query, body, apiKey, adminSecret, idempotencyKey, userAgent string
 }
 
 func newServer(cap *capture) *httptest.Server {
@@ -25,6 +25,8 @@ func newServer(cap *capture) *httptest.Server {
 		cap.body = string(b)
 		cap.apiKey = r.Header.Get("X-API-Key")
 		cap.adminSecret = r.Header.Get("X-Admin-Secret")
+		cap.idempotencyKey = r.Header.Get("Idempotency-Key")
+		cap.userAgent = r.Header.Get("User-Agent")
 
 		switch {
 		case r.URL.Path == "/v1/memories" && strings.Contains(cap.body, `"BOOM"`):
@@ -71,6 +73,9 @@ func TestAddMemory(t *testing.T) {
 	if cap.apiKey != "test-key" {
 		t.Fatalf("missing api key, got %q", cap.apiKey)
 	}
+	if cap.idempotencyKey == "" || cap.userAgent != UserAgent {
+		t.Fatalf("missing SDK identity headers: idempotency=%q user-agent=%q", cap.idempotencyKey, cap.userAgent)
+	}
 	if !strings.Contains(cap.body, `"agent_id":"desk"`) ||
 		!strings.Contains(cap.body, `"event_time":"2025-11-19T16:00:00Z"`) ||
 		!strings.Contains(cap.body, `"ticker":"NVDA"`) {
@@ -78,6 +83,36 @@ func TestAddMemory(t *testing.T) {
 	}
 	if m.ID != "m-1" || m.Content == nil || *m.Content != "NVDA guidance $40B" {
 		t.Fatalf("unexpected result: %+v", m)
+	}
+}
+
+func TestClientConfigurationAndErrorRedaction(t *testing.T) {
+	if _, err := NewClientWithError("https://user:secret@example.com", "key"); err == nil {
+		t.Fatal("expected embedded URL credentials to be rejected")
+	}
+	if _, err := NewClientWithError("https://example.com", "key\r\ninjected"); err == nil {
+		t.Fatal("expected header control characters to be rejected")
+	}
+	apiErr := &APIError{StatusCode: 422, Body: `{"detail":"sensitive"}`}
+	if strings.Contains(apiErr.Error(), "sensitive") {
+		t.Fatalf("APIError string leaked body: %q", apiErr.Error())
+	}
+}
+
+func TestCallerIdempotencyKeyIsPreserved(t *testing.T) {
+	cap := &capture{}
+	srv := newServer(cap)
+	defer srv.Close()
+
+	_, err := newClient(srv).AddMemory(context.Background(), AddMemoryRequest{
+		AgentID: "desk", Content: "stable", EventTime: time.Unix(0, 0),
+		IdempotencyKey: "import:stable:v1",
+	})
+	if err != nil {
+		t.Fatalf("AddMemory: %v", err)
+	}
+	if cap.idempotencyKey != "import:stable:v1" {
+		t.Fatalf("idempotency key changed: %q", cap.idempotencyKey)
 	}
 }
 

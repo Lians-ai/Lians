@@ -63,12 +63,22 @@ The architecture that resolves this — inherited from disk-encryption practice
 2. Encrypt the subject's memory **content** with their DEK before it touches
    the database. Embeddings for that content are stored alongside, tied to the
    same subject.
-3. Wrap DEKs with a master key (env, AWS KMS, Azure Key Vault, or HashiCorp
+3. Replace the external identifier at persistence boundaries with a
+   tenant-scoped keyed subject reference. Wrap DEKs with a master key (env,
+   AWS KMS, Azure Key Vault, or HashiCorp
    Vault — `KMS_PROVIDER`).
-4. **To erase:** destroy the DEK, null the subject's embeddings and derived
-   values, tombstone the rows, and write an **erasure event into the audit
-   chain**. Content in every copy of the database — including every backup —
-   is now ciphertext with no key in existence.
+4. **To erase:** a short transaction fences subject writes and the namespace
+   cache generation, destroys the DEK, installs the tombstone, and freezes exact
+   derivative-store counts. Durable workers then null embeddings and derived
+   values, tombstone rows, and append a terminal **erasure event into the audit
+   chain** in bounded restart-safe pages. Content in every copy of the database
+   — including every backup — is ciphertext with no key in existence as soon
+   as the request transaction commits.
+
+Master-key replacement is separate from subject erasure. Lians uses versioned
+wrappers and the [bounded dual-key rotation workflow](master-key-rotation.md) to
+rewrap live DEKs transactionally; provider key material needed by retained
+backups must remain recoverable even after it leaves the live keyring.
 
 The proof changes shape. Instead of "we looked everywhere," it's: *the key no
 longer exists; here is the erasure certificate; decrypting the remaining bytes
@@ -81,14 +91,15 @@ Art. 17 erasure and record-retention duties (SEC 17a-4, FINRA 4511, HIPAA §164.
 tax law) coexist only if the *fact that data existed and was erased* is
 separable from the *content*. In Lians:
 
-- The audit chain stores **content hashes and event metadata**, not plaintext,
+- The audit chain stores **content hashes, keyed subject/request references,
+  and event metadata**, not subject plaintext,
   so the hash-chain (tamper evidence) remains verifiable after the shred —
   including over erased entries.
 - Erased memories become **tombstones**: `erased_at` set, content
   unrecoverable, lineage intact. Point-in-time reconstructions (`/v1/snapshot`,
   `/v1/audit/reconstruct`) return the tombstone, never a ghost of the content.
-- The erasure itself emits a **signed erasure certificate** (request reference,
-  subject, counts, timestamp) — the artifact you hand the data subject or the
+- The erasure itself emits a **signed erasure certificate** (keyed request and
+  subject references, counts, timestamp) — the artifact you hand the data subject or the
   supervisory authority.
 
 ### What about the model/LLM itself?
@@ -130,13 +141,15 @@ with LocalLiansClient() as mem:
             content="Patient reports penicillin allergy",
             event_time=datetime(2026, 3, 1, tzinfo=timezone.utc))
 
-    cert = mem.erase(subject_id="MRN-0042", request_ref="dsr-2026-118")
-    # -> {"subject_id": "MRN-0042", "memories_erased": 1, "request_ref": "dsr-2026-118"}
+    job = mem.erase(subject_id="MRN-0042", request_ref="dsr-2026-118")
+    # -> {"job_id": "...", "subject_ref": "lians:subject:...",
+    #     "status": "pending", "key_destroyed_at": "...", "snapshot": {...}}
 
     mem.audit_export(verify=True)   # hash chain still verifies, tombstone present
 ```
 
 Full erasure design: [compliance.md](compliance.md) ·
+[data-retention-and-subject-erasure.md](data-retention-and-subject-erasure.md) ·
 [security-whitepaper.md](security-whitepaper.md) · [hipaa.md](hipaa.md)
 
 ## Related

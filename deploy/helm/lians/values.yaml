@@ -1,0 +1,479 @@
+# This chart intentionally has no runnable development defaults. Replace every
+# CHANGE_ME value and pin every workload image by immutable sha256 digest.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: CHANGE_ME
+  digest: CHANGE_ME
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 3
+revisionHistoryLimit: 5
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+existingSecrets:
+  # Must contain SUBJECT_REFERENCE_KEY, METRICS_BEARER_TOKEN when metrics are
+  # enabled, STRIPE_API_KEY when metering is enabled, plus selected model-provider keys. This public surface receives no
+  # ADMIN_SECRET, and receipt-signing material belongs in the separate Secret below.
+  application:
+    name: CHANGE_ME
+  # The runtime and migration identities must be different PostgreSQL roles in
+  # different Secret objects. The API/init preflight sees only runtime; the
+  # opt-in migration hook sees only migration.
+  database:
+    runtime:
+      name: CHANGE_ME
+      key: DATABASE_URL
+    migration:
+      name: CHANGE_ME
+      key: DATABASE_URL
+  # Redis URL under the configured key.
+  redis:
+    name: CHANGE_ME
+    key: REDIS_URL
+  # Exactly one provider-specific key is configured. Local uses a hex- or
+  # base64-encoded raw 32-byte Ed25519 private key. Vault Transit uses either a
+  # read-only token-file Secret projection, never both.
+  receipts:
+    name: CHANGE_ME
+    localPrivateKeyKey: RECEIPT_SIGNING_PRIVATE_KEY
+    vaultTokenKey: ""
+    vaultTokenFileKey: ""
+  # Required for aws and vault; ignored for azure workload identity. Expected
+  # provider keys are documented in README.md.
+  kms:
+    name: CHANGE_ME
+  # Increment or replace this opaque value whenever an external Secret changes.
+  # Helm cannot hash content it does not own.
+  rolloutRevision: CHANGE_ME
+
+config:
+  deploymentRegion: CHANGE_ME
+  corsOrigins:
+    - https://CHANGE_ME
+  # Exact source CIDRs of the reverse-proxy or service-mesh peers that connect
+  # directly to Uvicorn. These are not end-user/client networks.
+  trustedProxyCidrs:
+    - CHANGE_ME/32
+  logLevel: INFO
+  logJson: true
+  database:
+    # Per-replica SQLAlchemy pool. The chart rejects an HPA ceiling whose
+    # worst-case pool_size + max_overflow exceeds connectionBudget.
+    poolSize: 10
+    maxOverflow: 20
+    poolTimeoutSeconds: 30
+    statementTimeoutMs: 30000
+    lockTimeoutMs: 5000
+    idleTransactionTimeoutMs: 60000
+    # API allocation only, after reserving database connections for the
+    # migrator, backup/restore, observability, break-glass, and provider duties.
+    connectionBudget: 600
+  embedding:
+    provider: sentence-transformers
+    dimension: 1024
+    sentenceTransformerModel: Snowflake/snowflake-arctic-embed-l-v2.0
+    providerTimeoutSeconds: 20
+  kms:
+    provider: aws
+    # Stable, non-secret envelope identifier. Change only through the bounded
+    # rotation runbook; this is not a provider ARN or secret version.
+    envelopeKeyId: CHANGE_ME
+    previousEnvelopeKeyId: ""
+    aws:
+      region: CHANGE_ME
+      keyId: CHANGE_ME
+      previousRegion: ""
+      previousKeyId: ""
+    azure:
+      vaultUrl: CHANGE_ME
+      secretName: lians-master-key
+      previousVaultUrl: ""
+      previousSecretName: ""
+    vault:
+      address: CHANGE_ME
+      path: lians/master-key
+      mountPoint: secret
+      previousAddress: ""
+      previousPath: ""
+      previousMountPoint: ""
+  receipts:
+    provider: local
+    # Stable issuer key ID published with the trusted public key. Do not reuse
+    # a generic value across environments or tenants with different trust roots.
+    signingKeyId: CHANGE_ME
+    vault:
+      address: ""
+      namespace: ""
+      mountPoint: transit
+      keyName: ""
+      # A positive, explicitly pinned version is mandatory for Vault Transit.
+      keyVersion: 0
+      # Raw 32-byte Ed25519 public key as canonical base64 or hex.
+      publicKey: ""
+      timeoutSeconds: 5
+  metrics:
+    enabled: true
+  # Usage facts commit to PostgreSQL with their billable source, then every API
+  # replica may lease delivery safely. The API key stays in application Secret.
+  metering:
+    enabled: false
+    decisionEvent: lians_authoritative_decision
+    protectedActionEvent: lians_protected_action
+    # Compatibility units for legacy memory-product contracts.
+    writeEvent: agentmem_memory_write
+    recallEvent: agentmem_memory_recall
+    asyncErrorDestinationConfigured: false
+    workerEnabled: true
+    pollSeconds: 1
+    batchSize: 64
+    concurrency: 8
+    leaseSeconds: 60
+    providerTimeoutSeconds: 10
+    retryBaseSeconds: 2
+    retryMaxSeconds: 900
+    maxAttempts: 12
+    idempotencyWindowSeconds: 82800
+    maxEventAgeSeconds: 2937600
+  telemetry:
+    serviceName: lians
+    # Application observability exporter. Keep this distinct from the optional
+    # inbound Recorder gateway, which forwards received evidence to /v1/traces.
+    exporterEndpoint: https://CHANGE_ME:4317
+  governance:
+    recorderAllowFullCapture: false
+    otlpCaptureMode: hash_only
+    otlpMaxSpansPerRequest: 2000
+    otlpMaxGenaiTracesPerRequest: 500
+    decisionEvidenceCandidateLimit: 5000
+    decisionEvidenceCandidateBytesLimit: 16777216
+  rateLimit:
+    perMinute: 300
+    networkMultiplier: 20
+    adminPerMinute: 60
+    backendFailureMode: deny
+  exports:
+    contentPageBytes: 33554432
+    hashOnlyPageBytes: 16777216
+    auditPageBytes: 16777216
+    lineageResponseBytes: 16777216
+  retentionPruneIntervalHours: 24
+  observabilityRefreshSeconds: 30
+  # Exhaustive blast-radius jobs are autonomous. Every replica claims bounded
+  # pages from PostgreSQL; no separate queue service or singleton is required.
+  impactAssessmentWorker:
+    enabled: true
+    pollSeconds: 1
+    batchSize: 4
+    concurrency: 2
+    leaseSeconds: 120
+    pageSize: 250
+    maxPagesPerClaim: 1
+    retryBaseSeconds: 2
+    retryMaxSeconds: 300
+    maxAttempts: 8
+  # Back-links frozen snapshots of prior Recorder events without rejecting the
+  # authoritative decision or ever treating a partial prefix as complete.
+  recorderEvidenceIndexWorker:
+    enabled: true
+    pollSeconds: 1
+    batchSize: 4
+    concurrency: 2
+    leaseSeconds: 120
+    pageSize: 100
+    maxPagesPerClaim: 2
+    retryBaseSeconds: 2
+    retryMaxSeconds: 300
+    maxAttempts: 8
+  # The request transaction destroys the subject DEK synchronously; this
+  # worker completes bounded derivative-store scrubbing and certificates.
+  subjectErasureWorker:
+    enabled: true
+    pollSeconds: 1
+    batchSize: 4
+    concurrency: 2
+    leaseSeconds: 120
+    pageSize: 250
+    maxPagesPerClaim: 2
+    retryBaseSeconds: 2
+    retryMaxSeconds: 300
+    maxAttempts: 8
+  # Tenant enable/disable/revoke reconciles one fixed SCIM User snapshot through
+  # crash-resumable pages; production readiness requires every replica's loop.
+  scimReconciliationWorker:
+    enabled: true
+    pollSeconds: 1
+    batchSize: 4
+    concurrency: 2
+    leaseSeconds: 120
+    pageSize: 100
+    maxPagesPerClaim: 2
+    retryBaseSeconds: 2
+    retryMaxSeconds: 300
+    maxAttempts: 8
+  # When true, set telemetry.exporterEndpoint to "" and
+  # integration.workerEnabled to false. The chart rejects mixed postures.
+  airgapMode: false
+  integration:
+    workerEnabled: true
+    pollSeconds: 1
+    batchSize: 64
+    concurrency: 8
+    leaseSeconds: 180
+    retryBaseSeconds: 2
+    retryMaxSeconds: 900
+    maxPayloadBytes: 262144
+    maxResponseDigestBytes: 65536
+    allowPrivateNetwork: false
+    includeAuditPayload: false
+  workloadCredentials:
+    minTtlSeconds: 300
+    maxTtlSeconds: 2592000
+    lastUsedWriteIntervalSeconds: 900
+
+# OIDC providers and SCIM tenants are audited, tenant-scoped database records
+# managed after install through the enterprise APIs. These flags make the
+# expected production posture visible in NOTES; they do not inject IdP secrets.
+identity:
+  expectOidcProvisioning: true
+  expectScimProvisioning: true
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+terminationGracePeriodSeconds: 60
+probes:
+  startup:
+    failureThreshold: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+  readiness:
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  liveness:
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+topologySpreadConstraints:
+  enabled: true
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: DoNotSchedule
+podAntiAffinity:
+  enabled: true
+  topologyKey: kubernetes.io/hostname
+  type: preferred
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  host: CHANGE_ME
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: true
+    existingSecret: CHANGE_ME
+
+migrations:
+  # Deliberately opt-in. The application init container remains fail-closed
+  # until the external database exactly matches the image's single Alembic head.
+  enabled: false
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 1800
+  activeDeadlineSeconds: 1800
+  statementTimeoutMs: 1500000
+  lockTimeoutMs: 5000
+  idleTransactionTimeoutMs: 300000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 80
+  scaleDownStabilizationSeconds: 300
+  scaleUpStabilizationSeconds: 30
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  defaultDeny: true
+  dns:
+    namespaceSelector:
+      kubernetes.io/metadata.name: kube-system
+    podSelector:
+      k8s-app: kube-dns
+  ingressController:
+    namespaceSelector:
+      kubernetes.io/metadata.name: ingress-nginx
+    podSelector: {}
+  monitoring:
+    namespaceSelector:
+      kubernetes.io/metadata.name: monitoring
+    podSelector: {}
+  # The chart does not deploy a mediator. Enabling this creates bounded API
+  # ingress and mediator ingress/egress policies for a separately deployed pod
+  # with the exact selector below. Provider CIDRs empty means fail closed.
+  gateMediator:
+    enabled: false
+    podSelector:
+      app.kubernetes.io/name: lians-gate-mediator
+      app.kubernetes.io/component: gate-mediator
+    evaluatorPodSelector:
+      app.kubernetes.io/component: evaluator
+    ingressPort: 8080
+    metricsIngressEnabled: false
+    metricsNamespaceSelector:
+      kubernetes.io/metadata.name: monitoring
+    metricsPodSelector:
+      app.kubernetes.io/name: prometheus
+    gatePort: 8443
+    apiIngressPorts:
+      - 8443
+    providerCidrs: []
+  postgresql:
+    port: 5432
+    cidrs:
+      - CHANGE_ME/32
+  redis:
+    port: 6379
+    cidrs:
+      - CHANGE_ME/32
+  # Explicit destination ranges for external KMS, IdP JWKS, model APIs, SIEM,
+  # and webhook/ticketing endpoints. Core NetworkPolicy cannot select FQDNs.
+  externalHttpsCidrs:
+    - CHANGE_ME/32
+  # Destination used by the application's own observability exporter. It must
+  # not point back to the bundled inbound Recorder gateway. Set cidrs: [] in
+  # air-gap mode; the chart omits this egress rule entirely.
+  externalOtlp:
+    port: 4317
+    cidrs:
+      - CHANGE_ME/32
+  vault:
+    enabled: false
+    port: 8200
+    cidrs: []
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    existingSecret: CHANGE_ME
+    tokenKey: token
+    additionalLabels: {}
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    additionalLabels: {}
+
+otelCollector:
+  enabled: false
+  image:
+    repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib
+    digest: CHANGE_ME
+    pullPolicy: IfNotPresent
+  replicas: 2
+  existingSecret: CHANGE_ME
+  ingestApiKeyKey: LIANS_INGEST_API_KEY
+  queue:
+    # file_storage persists producer-supplied OTLP before Lians applies its
+    # capture minimization. Enabling the collector requires an explicitly
+    # encrypted StorageClass and acknowledged raw-payload custody policy.
+    storageClassName: ""
+    size: 20Gi
+    encryptedAtRestAcknowledged: false
+    rawPayloadCustodyAcknowledged: false
+    custodyPolicyRef: CHANGE_ME
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  pdb:
+    minAvailable: 1
+  producerNamespaceSelector:
+    lians.ai/telemetry-access: "true"
+
+backup:
+  enabled: false
+  # Remains suspended until restore drills and immutable-storage verification
+  # have passed. No cloud credentials are accepted in values.
+  suspend: true
+  schedule: "17 2 * * *"
+  timeZone: Etc/UTC
+  image:
+    repository: CHANGE_ME
+    digest: CHANGE_ME
+    pullPolicy: IfNotPresent
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  existingSecret: CHANGE_ME
+  existingIdentityConfigMap: CHANGE_ME
+  existingPvc: CHANGE_ME
+  retentionDays: 2555
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  wormDestinationCidrs:
+    - CHANGE_ME/32

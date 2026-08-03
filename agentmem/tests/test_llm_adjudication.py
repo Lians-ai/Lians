@@ -10,7 +10,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.lians.llm_adjudication import llm_adjudicate, _CACHE, _pair_key
+from lians.llm_adjudication import llm_adjudicate, _CACHE
 
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -159,13 +159,13 @@ async def test_llm_invalid_json_falls_back():
 @pytest.mark.asyncio
 async def test_stage3_disabled_by_default_llm_never_called(db):
     """supersession_llm_stage defaults to False â€” llm_adjudicate is never invoked."""
-    from src.lians.supersession import run_supersession
-    from src.lians.embeddings import get_embedding_provider
+    from lians.supersession import run_supersession
+    from lians.embeddings import get_embedding_provider
 
     provider = get_embedding_provider()
     emb = await provider.embed_one("NVDA Q3 guidance raised to $36B")
 
-    with patch("src.lians.supersession.llm_adjudicate") as mock_llm:
+    with patch("lians.supersession.llm_adjudicate") as mock_llm:
         await run_supersession(
             db=db,
             namespace="test-ns",
@@ -184,11 +184,11 @@ async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
     """Change 3: keyed facts (full structured-key match) supersede deterministically
     by event_time. Stage 3 LLM is never called, even when supersession_llm_stage=True.
     """
-    from src.lians.supersession import run_supersession
-    from src.lians.embeddings import get_embedding_provider
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.config import get_settings
+    from lians.supersession import run_supersession
+    from lians.embeddings import get_embedding_provider
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.config import get_settings
 
     await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
@@ -203,7 +203,7 @@ async def test_keyed_facts_bypass_llm_stage3(db, monkeypatch):
     provider = get_embedding_provider()
     emb = await provider.embed_one("Nvidia raised Q3 outlook to thirty-six billion")
 
-    with patch("src.lians.supersession.llm_adjudicate") as mock_llm:
+    with patch("lians.supersession.llm_adjudicate") as mock_llm:
         result = await run_supersession(
             db=db,
             namespace="test-ns",
@@ -231,10 +231,10 @@ async def test_keyed_facts_same_time_flags_conflict(db, monkeypatch):
     flag is raised so a human can decide which source to trust.  This is the
     correct behavior for same-time disagreement between data sources.
     """
-    from src.lians.supersession import run_supersession
-    from src.lians.embeddings import get_embedding_provider
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
+    from lians.supersession import run_supersession
+    from lians.embeddings import get_embedding_provider
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
 
     mem = await add_memory(db, "test-ns", MemoryAdd(
         agent_id="agent-1",
@@ -265,10 +265,10 @@ async def test_keyed_facts_same_time_flags_conflict(db, monkeypatch):
 @pytest.mark.asyncio
 async def test_stage3_event_log_records_stage_number(db, monkeypatch):
     """Keyed supersession records adjudication_stage=2 (deterministic) in the event log."""
-    from src.lians.schemas import MemoryAdd
-    from src.lians.memory_service import add_memory
-    from src.lians.models import EventLog
-    from src.lians.config import get_settings
+    from lians.schemas import MemoryAdd
+    from lians.memory_service import add_memory
+    from lians.models import EventLog
+    from lians.config import get_settings
     from sqlalchemy import select
 
     monkeypatch.setenv("SUPERSESSION_LLM_STAGE", "true")
@@ -282,7 +282,7 @@ async def test_stage3_event_log_records_stage_number(db, monkeypatch):
     ))
 
     # Keyed fast path: llm_adjudicate is NOT called regardless of the patch
-    with patch("src.lians.supersession.llm_adjudicate", new=AsyncMock(
+    with patch("lians.supersession.llm_adjudicate", new=AsyncMock(
         return_value=("SUPERSEDES", 0.97, "Value changed from $32B to $36B")
     )):
         await add_memory(db, "test-ns", MemoryAdd(

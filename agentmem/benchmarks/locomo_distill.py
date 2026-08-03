@@ -40,6 +40,9 @@ CONCURRENCY = 8
 
 
 async def distill_all(dataset: list[dict]) -> None:
+    # This benchmark intentionally exercises the source checkout through the
+    # public SDK's local-engine compatibility bridge. The SDK and deployable
+    # server distributions are isolated and both own the top-level name.
     from src.lians.enrichment import distill_batch
 
     _FACTS.mkdir(parents=True, exist_ok=True)

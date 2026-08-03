@@ -47,15 +47,13 @@ Usage — agent tools::
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Optional, Sequence
+from datetime import datetime, timedelta, timezone
+from typing import Any, Sequence
 
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import BaseMessage, message_to_dict, messages_from_dict
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
-from datetime import timedelta
-
 
 # ---------------------------------------------------------------------------
 # LiansChatHistory

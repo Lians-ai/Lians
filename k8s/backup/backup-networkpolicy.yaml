@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lians-logical-backup
+  labels:
+    app.kubernetes.io/name: agentmem
+    app.kubernetes.io/component: backup
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agentmem
+      app.kubernetes.io/component: backup
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            # TEST-NET-1 is deliberately non-runnable. Replace in an overlay
+            # with the exact reviewed database private endpoint CIDR.
+            cidr: 192.0.2.10/32
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Provider immutable-object APIs must traverse a fixed authenticated egress
+    # gateway or private endpoint. Never widen this to a world-open HTTPS rule.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.20/32
+      ports:
+        - port: 443
+          protocol: TCP

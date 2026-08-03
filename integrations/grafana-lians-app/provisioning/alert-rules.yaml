@@ -44,7 +44,7 @@ groups:
         noDataState: OK
         execErrState: Error
         annotations:
-          summary: The Lians memory-conflict review queue is growing.
+          summary: Lians has durable unresolved memory conflicts awaiting review.
         labels:
           severity: warning
           service: lians
@@ -53,7 +53,193 @@ groups:
             relativeTimeRange: {from: 900, to: 0}
             datasourceUid: ${DS_PROMETHEUS}
             model:
-              expr: sum(agentmem_conflict_queue_depth)
+              expr: max(lians_conflicts{status="open"})
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-impact-worker-unhealthy
+        title: Lians autonomous impact worker unhealthy
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Error
+        annotations:
+          summary: An autonomous impact-assessment worker is unhealthy.
+          description: Restore safe queue polling; durable leases make interrupted pages recoverable without replacing frozen jobs.
+        labels:
+          severity: critical
+          service: lians-impact-assessment
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: max(lians_impact_worker_enabled{job="agentmem"}) == 1 and min(lians_impact_worker_healthy{job="agentmem"}) < 1
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-impact-worker-heartbeat-stale
+        title: Lians autonomous impact worker heartbeat stale
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Error
+        annotations:
+          summary: An autonomous impact-assessment worker heartbeat is stale.
+          description: Check database reachability and bounded page processing before intervening in durable leases.
+        labels:
+          severity: critical
+          service: lians-impact-assessment
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: lians_impact_worker_enabled{job="agentmem"} == 1 and time() - lians_impact_worker_last_heartbeat_unixtime_seconds{job="agentmem"} > 300
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-decision-evidence-completeness
+        title: Lians decision evidence completeness below target
+        condition: C
+        for: 30m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: Fewer than 95% of protected decisions have complete evidence coverage.
+          description: Use tenant-authorized Recorder readiness and Investigator workflows; aggregate metrics intentionally omit tenant identity.
+        labels:
+          severity: warning
+          service: lians-decision-evidence
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: max(lians_protected_decisions{job="agentmem"}) >= 20 and max(lians_decision_evidence_complete_ratio{job="agentmem"}) < 0.95
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-subject-erasure-worker-unhealthy
+        title: Lians subject-erasure worker unhealthy
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Error
+        annotations:
+          summary: A required durable subject-erasure worker is unhealthy.
+          description: DEKs are destroyed on request commit, but derivative-store scrubbing and certificates require the bounded worker to recover.
+        labels:
+          severity: critical
+          service: lians-subject-erasure
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: max(lians_subject_erasure_worker_enabled{job="agentmem"}) == 1 and min(lians_subject_erasure_worker_healthy{job="agentmem"}) < 1
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-subject-erasure-failed
+        title: Lians subject-erasure job failed
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: At least one durable subject-erasure job needs operator remediation.
+          description: Inspect the tenant-authorized job failure code, remedy the stable cause, and invoke the explicit retry endpoint.
+        labels:
+          severity: critical
+          service: lians-subject-erasure
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: max(lians_subject_erasure_jobs{job="agentmem",status="failed"}) > 0
+              refId: A
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              expression: A
+              type: threshold
+              conditions:
+                - evaluator: {params: [0], type: gt}
+                  operator: {type: and}
+                  query: {params: [C]}
+                  reducer: {params: [], type: last}
+                  type: query
+      - uid: lians-remediation-overdue
+        title: Lians remediation tasks overdue
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: One or more Lians remediation tasks are overdue.
+          description: Use the tenant-authorized Investigator queue to identify owners and advance or explicitly re-plan each task.
+        labels:
+          severity: warning
+          service: lians-investigator
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: max(lians_remediation_overdue_tasks{job="agentmem"}) > 0
               refId: A
           - refId: C
             relativeTimeRange: {from: 0, to: 0}

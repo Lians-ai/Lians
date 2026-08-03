@@ -58,3 +58,19 @@ agentmem/sdk/typescript/live_smoke.mjs
 # Benchmark artifacts (regenerable; checkpoint DBs run to GBs)
 agentmem/results/
 agentmem/benchmarks/data/*.sqlite
+
+# Workspace-local validation output and separately versioned projects
+/tmp/
+/apps/
+/memory-benchmarks/
+
+# Local deployment/build artifacts (source lives beside these outputs)
+/flydeploy.log
+/integrations/grafana-lians-app/catalog-package/
+/integrations/grafana-lians-app/catalog-package-v2/
+/integrations/grafana-lians-app/*.zip
+
+# Root-level image-generation working files; canonical assets live in docs/images
+/banner.png
+/banner1.png
+/logo.png

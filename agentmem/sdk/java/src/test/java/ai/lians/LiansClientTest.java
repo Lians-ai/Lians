@@ -34,6 +34,8 @@ class LiansClientTest {
     volatile String lastBody;
     volatile String lastApiKey;
     volatile String lastAdminSecret;
+    volatile String lastIdempotencyKey;
+    volatile String lastUserAgent;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -44,6 +46,8 @@ class LiansClientTest {
             lastQuery = exchange.getRequestURI().getQuery();
             lastApiKey = exchange.getRequestHeaders().getFirst("X-API-Key");
             lastAdminSecret = exchange.getRequestHeaders().getFirst("X-Admin-Secret");
+            lastIdempotencyKey = exchange.getRequestHeaders().getFirst("Idempotency-Key");
+            lastUserAgent = exchange.getRequestHeaders().getFirst("User-Agent");
             lastBody = readAll(exchange.getRequestBody());
 
             String path = lastPath;
@@ -100,6 +104,8 @@ class LiansClientTest {
         assertEquals("POST", lastMethod);
         assertEquals("/v1/memories", lastPath);
         assertEquals("test-key", lastApiKey);
+        assertNotNull(lastIdempotencyKey);
+        assertEquals(LiansClient.USER_AGENT, lastUserAgent);
         assertTrue(lastBody.contains("\"agent_id\":\"desk\""));
         assertTrue(lastBody.contains("\"event_time\":\"2025-11-19T16:00:00Z\""));
         assertTrue(lastBody.contains("\"ticker\":\"NVDA\""));
@@ -151,11 +157,47 @@ class LiansClientTest {
     }
 
     @Test
+    void auditExportUsesCanonicalQueryNames() {
+        client.auditExport(
+                "ns",
+                Instant.parse("2026-08-01T00:00:00Z"),
+                Instant.parse("2026-08-02T00:00:00Z"),
+                250,
+                true);
+
+        assertEquals("/v1/admin/audit/export", lastPath);
+        assertEquals("admin-secret", lastAdminSecret);
+        assertTrue(lastQuery.contains("from=2026-08-01T00:00:00Z"));
+        assertTrue(lastQuery.contains("to=2026-08-02T00:00:00Z"));
+        assertTrue(lastQuery.contains("verify=true"));
+        assertFalse(lastQuery.contains("from_="));
+        assertFalse(lastQuery.contains("verify_chain="));
+    }
+
+    @Test
     void nonSuccessThrowsLiansException() {
         LiansException ex = assertThrows(LiansException.class, () ->
                 client.addMemory("desk", "BOOM", Instant.parse("2026-01-01T00:00:00Z"), Map.of()));
         assertEquals(422, ex.status());
         assertTrue(ex.body().contains("boom"));
+        assertFalse(ex.getMessage().contains("boom"));
+    }
+
+    @Test
+    void preservesCallerIdempotencyKeyAndRejectsUnsafeConfiguration() {
+        client.addMemory("desk", "stable", Instant.EPOCH, Map.of(), "import:stable:v1");
+        assertEquals("import:stable:v1", lastIdempotencyKey);
+
+        assertThrows(IllegalArgumentException.class, () -> new LiansClient(
+                LiansClientOptions.builder()
+                        .baseUrl("https://user:secret@example.com")
+                        .apiKey("key")
+                        .build()));
+        assertThrows(IllegalArgumentException.class, () -> new LiansClient(
+                LiansClientOptions.builder()
+                        .baseUrl("https://example.com")
+                        .apiKey("key\r\ninjected")
+                        .build()));
     }
 
     private static String readAll(InputStream in) {

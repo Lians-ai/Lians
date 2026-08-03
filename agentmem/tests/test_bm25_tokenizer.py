@@ -9,7 +9,7 @@ languages. These tests pin the fixed behavior.
 """
 from __future__ import annotations
 
-from src.lians.ranking import _bm25_score, _bm25_tokens
+from lians.ranking import _bm25_score, _bm25_tokens
 
 
 # ── Tokenization ──────────────────────────────────────────────────────────────

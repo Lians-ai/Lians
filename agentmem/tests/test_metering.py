@@ -1,554 +1,1018 @@
-﻿"""
-Tests for Stripe usage metering.
+﻿"""Behavioral contracts for the transactional Stripe metering ledger.
 
-stripe SDK is not installed in CI â€” all tests inject a lightweight mock via
-sys.modules, matching the pattern used in test_kms.py for boto3/hvac.
+These tests deliberately inject a provider double. They must never contact
+Stripe and do not depend on process-local queues, caches, or worker globals for
+delivery correctness.
 """
+
 from __future__ import annotations
 
-import asyncio
-import sys
-import types
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from typing import ClassVar
+from unittest.mock import AsyncMock
+from uuid import UUID, uuid4
+
 import pytest
 import pytest_asyncio
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from lians import metering as metering_mod
+from lians.config import get_settings
+from lians.metering_models import MeteringAttemptRecord, MeteringEvent
+from lians.models import Base as AppBase
+from lians.models import NamespacePolicy
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-
-import src.lians.metering as metering_mod
-
-
-# ---------------------------------------------------------------------------
-# Stripe mock
-# ---------------------------------------------------------------------------
-
-def _make_stripe_mock(create_async_raises: Exception | None = None):
-    """Return a minimal stripe module mock with billing.MeterEvent.create_async."""
-    stripe_mock = types.ModuleType("stripe")
-    billing_mock = types.ModuleType("stripe.billing")
-    meter_event_mock = MagicMock()
-
-    if create_async_raises:
-        meter_event_mock.create_async = AsyncMock(side_effect=create_async_raises)
-    else:
-        meter_event_mock.create_async = AsyncMock(return_value=MagicMock())
-
-    billing_mock.MeterEvent = meter_event_mock
-    stripe_mock.billing = billing_mock
-    stripe_mock.api_key = None
-    return stripe_mock
 
 
 @pytest.fixture(autouse=True)
-def reset_metering(monkeypatch):
-    """Reset the metering module queue and cache between tests."""
-    monkeypatch.setattr(metering_mod, "_queue", asyncio.Queue(maxsize=10_000))
-    monkeypatch.setattr(metering_mod, "_customer_cache", {})
+def deterministic_metering_settings(monkeypatch: pytest.MonkeyPatch):
+    """Keep every test independent of developer-machine environment values."""
+
+    values = {
+        "AIRGAP_MODE": "false",
+        "DEPLOYMENT_ENVIRONMENT": "development",
+        "STRIPE_API_KEY": "",
+        "STRIPE_METER_DECISION_EVENT": "lians_authoritative_decision",
+        "STRIPE_METER_PROTECTED_ACTION_EVENT": "lians_protected_action",
+        "STRIPE_METER_WRITE_EVENT": "agentmem_memory_write",
+        "STRIPE_METER_RECALL_EVENT": "agentmem_memory_recall",
+        "STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED": "false",
+        "STRIPE_METER_WORKER_ENABLED": "true",
+        "STRIPE_METER_WORKER_POLL_SECONDS": "0.01",
+        "STRIPE_METER_WORKER_BATCH_SIZE": "8",
+        "STRIPE_METER_DELIVERY_CONCURRENCY": "2",
+        "STRIPE_METER_LEASE_SECONDS": "60",
+        "STRIPE_METER_PROVIDER_TIMEOUT_SECONDS": "10",
+        "STRIPE_METER_RETRY_BASE_SECONDS": "1",
+        "STRIPE_METER_RETRY_MAX_SECONDS": "10",
+        "STRIPE_METER_MAX_ATTEMPTS": "3",
+        "STRIPE_METER_IDEMPOTENCY_WINDOW_SECONDS": "3600",
+        "STRIPE_METER_MAX_EVENT_AGE_SECONDS": "86400",
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    monkeypatch.setattr(metering_mod, "_worker_last_poll_at", None)
+    monkeypatch.setattr(metering_mod, "_worker_last_heartbeat_at", None)
+    monkeypatch.setattr(metering_mod, "_worker_last_delivery_at", None)
+    monkeypatch.setattr(metering_mod, "_worker_last_error_at", None)
+    monkeypatch.setattr(metering_mod, "_worker_last_error_digest", None)
+    monkeypatch.setattr(metering_mod, "_worker_terminal_error", None)
+    monkeypatch.setattr(metering_mod, "_worker_last_iteration_healthy", False)
+    monkeypatch.setattr(metering_mod, "_worker_backlog", {})
+    monkeypatch.setattr(metering_mod, "_worker_oldest_due_at", None)
     yield
+    get_settings.cache_clear()
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
-async def db():
-    from src.lians.models import Base as AppBase
-
+async def session_factory() -> async_sessionmaker[AsyncSession]:
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    # PostgreSQL-only indexes elsewhere in the shared application metadata are
+    # intentionally omitted by SQLite contract tests.
     pg_indexes = [
-        idx for table in AppBase.metadata.tables.values()
-        for idx in table.indexes
-        if idx.dialect_kwargs.get("postgresql_using") is not None
+        index
+        for table in AppBase.metadata.tables.values()
+        for index in table.indexes
+        if index.dialect_kwargs.get("postgresql_using") not in (None, False)
     ]
-    for idx in pg_indexes:
-        idx.table.indexes.discard(idx)
-
-    async with engine.begin() as conn:
-        await conn.run_sync(AppBase.metadata.create_all)
-
+    for index in pg_indexes:
+        index.table.indexes.discard(index)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(AppBase.metadata.create_all)
+    finally:
+        for index in pg_indexes:
+            index.table.indexes.add(index)
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-    async with factory() as session:
-        yield session
-
+    yield factory
     await engine.dispose()
 
 
-@pytest_asyncio.fixture
-async def app_client(monkeypatch):
-    """Full FastAPI test client with Stripe key set in env."""
-    monkeypatch.setenv("ADMIN_SECRET", "metering-admin-secret")
-    monkeypatch.setenv("STRIPE_API_KEY", "sk_test_metering")
+async def _configure_customer(
+    factory: async_sessionmaker[AsyncSession],
+    namespace: str,
+    customer_id: str = "cus_contract123",
+) -> None:
+    async with factory() as db:
+        db.add(NamespacePolicy(namespace=namespace, stripe_customer_id=customer_id))
+        await db.commit()
 
-    from src.lians.config import get_settings
-    get_settings.cache_clear()
-    monkeypatch.setenv("ADMIN_SECRET", "metering-admin-secret")
-    monkeypatch.setenv("STRIPE_API_KEY", "sk_test_metering")
-    get_settings.cache_clear()
 
-    from src.lians.models import Base as AppBase
-    from src.lians.main import app
-    from src.lians.db import get_db
+async def _stage_event(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    namespace: str,
+    source_identifier: str | None = None,
+    occurred_at: datetime | None = None,
+) -> UUID:
+    await _configure_customer(factory, namespace)
+    async with factory() as db:
+        row = await metering_mod.enqueue_usage_event(
+            db,
+            namespace=namespace,
+            event_name="agentmem_memory_write",
+            quantity=1,
+            source_identifier=source_identifier or f"w:{uuid4()}",
+            occurred_at=occurred_at or datetime.now(UTC),
+        )
+        assert row is not None
+        await db.commit()
+        return row.id
 
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+
+async def _claim_and_prepare(
+    factory: async_sessionmaker[AsyncSession],
+    event_id: UUID,
+    worker_id: str = "worker-a",
+) -> metering_mod._ProviderEvent:
+    async with factory() as db:
+        claimed = await metering_mod.claim_due_metering_events(
+            db,
+            worker_id=worker_id,
+            batch_size=1,
+            lease_seconds=60,
+        )
+    assert claimed == [event_id]
+    provider_event = await metering_mod._prepare_provider_attempt(
+        factory,
+        event_id=event_id,
+        worker_id=worker_id,
     )
-    pg_indexes = [
-        idx for table in AppBase.metadata.tables.values()
-        for idx in table.indexes
-        if idx.dialect_kwargs.get("postgresql_using") is not None
-    ]
-    for idx in pg_indexes:
-        idx.table.indexes.discard(idx)
+    assert provider_event is not None
+    return provider_event
 
-    async with engine.begin() as conn:
-        await conn.run_sync(AppBase.metadata.create_all)
 
-    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+class TestTransactionalEnqueue:
+    @pytest.mark.asyncio
+    async def test_product_native_units_have_stable_distinct_source_identities(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        await _configure_customer(session_factory, "protected-units")
+        decision_id = uuid4()
+        permit_id = uuid4()
+        occurred_at = datetime.now(UTC).replace(microsecond=123456)
 
-    async def _override():
-        async with factory() as session:
-            yield session
+        async with session_factory() as db:
+            decision = await metering_mod.enqueue_authoritative_decision_usage_event(
+                db,
+                namespace="protected-units",
+                decision_id=decision_id,
+                occurred_at=occurred_at,
+            )
+            decision_replay = (
+                await metering_mod.enqueue_authoritative_decision_usage_event(
+                    db,
+                    namespace="protected-units",
+                    decision_id=decision_id,
+                    occurred_at=occurred_at,
+                )
+            )
+            action = await metering_mod.enqueue_protected_action_usage_event(
+                db,
+                namespace="protected-units",
+                permit_id=permit_id,
+                occurred_at=occurred_at,
+            )
+            action_replay = await metering_mod.enqueue_protected_action_usage_event(
+                db,
+                namespace="protected-units",
+                permit_id=permit_id,
+                occurred_at=occurred_at,
+            )
+            assert decision is not None and decision_replay is not None
+            assert action is not None and action_replay is not None
+            assert decision.id == decision_replay.id
+            assert action.id == action_replay.id
+            assert decision.provider_identifier != action.provider_identifier
+            await db.commit()
 
-    app.dependency_overrides[get_db] = _override
+        async with session_factory() as db:
+            rows = list(
+                (
+                    await db.execute(
+                        select(MeteringEvent).where(
+                            MeteringEvent.namespace == "protected-units"
+                        )
+                    )
+                ).scalars()
+            )
+            assert {row.event_name for row in rows} == {
+                "lians_authoritative_decision",
+                "lians_protected_action",
+            }
+            assert all(row.quantity == 1 for row in rows)
 
-    from httpx import AsyncClient, ASGITransport
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    @pytest.mark.asyncio
+    async def test_caller_controls_commit_and_empty_key_does_not_drop_usage(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        await _configure_customer(session_factory, "atomic")
+        occurred_at = datetime.now(UTC)
+
+        async with session_factory() as db:
+            row = await metering_mod.enqueue_usage_event(
+                db,
+                namespace="atomic",
+                event_name="agentmem_memory_write",
+                quantity=1,
+                source_identifier="w:rolled-back",
+                occurred_at=occurred_at,
+            )
+            assert row is not None
+            await db.rollback()
+
+        async with session_factory() as db:
+            count = await db.scalar(select(func.count()).select_from(MeteringEvent))
+            assert count == 0
+            row = await metering_mod.enqueue_usage_event(
+                db,
+                namespace="atomic",
+                event_name="agentmem_memory_write",
+                quantity=1,
+                source_identifier="w:committed",
+                occurred_at=occurred_at - timedelta(minutes=5),
+            )
+            assert row is not None
+            assert row.created_at > row.occurred_at
+            await db.commit()
+
+        async with session_factory() as db:
+            count = await db.scalar(select(func.count()).select_from(MeteringEvent))
+            assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_missing_customer_and_airgap_stage_nothing(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async with session_factory() as db:
+            assert (
+                await metering_mod.enqueue_usage_event(
+                    db,
+                    namespace="unbilled",
+                    event_name="agentmem_memory_write",
+                    quantity=1,
+                    source_identifier="w:none",
+                )
+                is None
+            )
+
+        await _configure_customer(session_factory, "airgap")
+        monkeypatch.setenv("AIRGAP_MODE", "true")
+        get_settings.cache_clear()
+        async with session_factory() as db:
+            assert (
+                await metering_mod.enqueue_usage_event(
+                    db,
+                    namespace="airgap",
+                    event_name="agentmem_memory_write",
+                    quantity=1,
+                    source_identifier="w:airgap",
+                )
+                is None
+            )
+        async with session_factory() as db:
+            assert await db.scalar(select(func.count()).select_from(MeteringEvent)) == 0
+
+    @pytest.mark.asyncio
+    async def test_invalid_semantic_meter_fails_before_unbilled_short_circuit(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        async with session_factory() as db:
+            with pytest.raises(metering_mod.MeteringConfigurationError):
+                await metering_mod.enqueue_usage_event(
+                    db,
+                    namespace="unbilled-invalid-config",
+                    event_name="invalid protected unit",
+                    quantity=1,
+                    source_identifier="decision:invalid-config",
+                )
+            await db.rollback()
+
+        async with session_factory() as db:
+            assert await db.scalar(select(func.count()).select_from(MeteringEvent)) == 0
+
+    @pytest.mark.asyncio
+    async def test_customer_is_snapshotted_without_a_process_cache(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        await _configure_customer(session_factory, "snapshot", "cus_original")
+        async with session_factory() as db:
+            row = await metering_mod.enqueue_usage_event(
+                db,
+                namespace="snapshot",
+                event_name="agentmem_memory_write",
+                quantity=1,
+                source_identifier="w:snapshot",
+            )
+            assert row is not None
+            await db.commit()
+            policy = await db.get(NamespacePolicy, "snapshot")
+            assert policy is not None
+            policy.stripe_customer_id = "cus_rotated"
+            await db.commit()
+            assert await metering_mod.get_customer_id(db, "snapshot") == "cus_rotated"
+
+        async with session_factory() as db:
+            event = (await db.execute(select(MeteringEvent))).scalar_one()
+            assert event.customer_id == "cus_original"
+
+    @pytest.mark.asyncio
+    async def test_source_identity_is_idempotent_but_billing_facts_are_immutable(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        await _configure_customer(session_factory, "idempotent")
+        occurred_at = datetime.now(UTC).replace(microsecond=123456)
+        async with session_factory() as db:
+            first = await metering_mod.enqueue_usage_event(
+                db,
+                namespace="idempotent",
+                event_name="agentmem_memory_write",
+                quantity=1,
+                source_identifier="w:stable",
+                occurred_at=occurred_at,
+            )
+            second = await metering_mod.enqueue_usage_event(
+                db,
+                namespace="idempotent",
+                event_name="agentmem_memory_write",
+                quantity=1,
+                source_identifier="w:stable",
+                occurred_at=occurred_at,
+            )
+            assert first is second
+            with pytest.raises(metering_mod.MeteringConflictError):
+                await metering_mod.enqueue_usage_event(
+                    db,
+                    namespace="idempotent",
+                    event_name="agentmem_memory_write",
+                    quantity=2,
+                    source_identifier="w:stable",
+                    occurred_at=occurred_at,
+                )
+            with pytest.raises(metering_mod.MeteringConflictError):
+                await metering_mod.enqueue_usage_event(
+                    db,
+                    namespace="idempotent",
+                    event_name="agentmem_memory_write",
+                    quantity=1,
+                    source_identifier="w:stable",
+                    occurred_at=occurred_at + timedelta(seconds=1),
+                )
+
+    @pytest.mark.asyncio
+    async def test_invalid_quantity_name_source_and_future_time_fail_closed(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        await _configure_customer(session_factory, "validation")
+        async with session_factory() as db:
+            for kwargs in (
+                {"quantity": 0},
+                {"quantity": True},
+                {"event_name": "not allowed!"},
+                {"source_identifier": ""},
+                {"occurred_at": datetime.now(UTC) + timedelta(minutes=6)},
+            ):
+                values = {
+                    "namespace": "validation",
+                    "event_name": "agentmem_memory_write",
+                    "quantity": 1,
+                    "source_identifier": f"w:{uuid4()}",
+                }
+                values.update(kwargs)
+                with pytest.raises(metering_mod.MeteringConfigurationError):
+                    await metering_mod.enqueue_usage_event(db, **values)
+
+    def test_retired_process_queue_fails_loudly_except_in_airgap(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        with pytest.raises(metering_mod.MeteringConfigurationError):
+            metering_mod.queue_usage_event("write", "cus_123", 1, "w:old")
+        monkeypatch.setenv("AIRGAP_MODE", "true")
+        get_settings.cache_clear()
+        metering_mod.queue_usage_event("write", "cus_123", 1, "w:airgap")
+
+
+class TestLeaseAndDelivery:
+    @pytest.mark.asyncio
+    async def test_claims_do_not_overlap_and_expired_lease_is_recovered(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        first_id = await _stage_event(session_factory, namespace="claim-a")
+        second_id = await _stage_event(session_factory, namespace="claim-b")
+        async with session_factory() as db:
+            first_claim = await metering_mod.claim_due_metering_events(
+                db,
+                worker_id="worker-a",
+                batch_size=1,
+                lease_seconds=60,
+            )
+            second_claim = await metering_mod.claim_due_metering_events(
+                db,
+                worker_id="worker-b",
+                batch_size=1,
+                lease_seconds=60,
+            )
+            assert len(first_claim) == len(second_claim) == 1
+            assert set(first_claim).isdisjoint(second_claim)
+
+            expired_id = first_claim[0]
+            expired = await db.get(MeteringEvent, expired_id)
+            assert expired is not None
+            expired.lease_expires_at = datetime.now(UTC) - timedelta(minutes=1)
+            await db.commit()
+            recovered = await metering_mod.claim_due_metering_events(
+                db,
+                worker_id="worker-c",
+                batch_size=1,
+                lease_seconds=60,
+            )
+            assert recovered == [expired_id]
+            refreshed = await db.get(MeteringEvent, expired_id)
+            assert refreshed is not None and refreshed.lease_owner == "worker-c"
+        assert {first_id, second_id} == set(first_claim + second_claim)
+
+    @pytest.mark.asyncio
+    async def test_prepare_renews_lease_and_appends_started_record(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        event_id = await _stage_event(session_factory, namespace="renew")
+        async with session_factory() as db:
+            assert await metering_mod.claim_due_metering_events(
+                db,
+                worker_id="worker-a",
+                batch_size=1,
+                lease_seconds=60,
+            ) == [event_id]
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            row.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            await db.commit()
+
+        provider_event = await metering_mod._prepare_provider_attempt(
+            session_factory,
+            event_id=event_id,
+            worker_id="worker-a",
+        )
+        assert provider_event is not None and provider_event.attempt_number == 1
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None and row.lease_expires_at is not None
+            assert metering_mod._utc(row.lease_expires_at) > datetime.now(UTC)
+            records = (
+                await db.execute(
+                    select(MeteringAttemptRecord).where(
+                        MeteringAttemptRecord.event_id == event_id
+                    )
+                )
+            ).scalars().all()
+            assert [(record.record_type, record.outcome) for record in records] == [
+                ("started", "started")
+            ]
+
+    @pytest.mark.asyncio
+    async def test_provider_receives_stable_identifier_timestamp_and_idempotency_key(
+        self,
+    ) -> None:
+        response = SimpleNamespace(
+            id="mtr_test",
+            last_response=SimpleNamespace(code=200, request_id="req_test"),
+        )
+        create = AsyncMock(return_value=response)
+        stripe_module = SimpleNamespace(
+            billing=SimpleNamespace(MeterEvent=SimpleNamespace(create_async=create))
+        )
+        occurred_at = datetime.now(UTC) - timedelta(minutes=1)
+        event = metering_mod._ProviderEvent(
+            id=uuid4(),
+            event_name="agentmem_memory_write",
+            customer_id="cus_provider",
+            quantity=7,
+            provider_identifier="lians_" + "a" * 64,
+            occurred_at=occurred_at,
+            attempt_number=1,
+        )
+        result = await metering_mod._send_to_stripe(
+            stripe_module,
+            api_key="sk_test_injected",
+            event=event,
+        )
+        assert result.delivered is True
+        kwargs = create.await_args.kwargs
+        assert kwargs["identifier"] == event.provider_identifier
+        assert kwargs["idempotency_key"] == event.provider_identifier
+        assert kwargs["timestamp"] == int(occurred_at.timestamp())
+        assert kwargs["payload"] == {"stripe_customer_id": "cus_provider", "value": "7"}
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("status_code", "expected_retryable"),
+        ((429, True), (503, True), (400, False)),
+    )
+    async def test_provider_failures_are_safely_classified(
+        self,
+        status_code: int,
+        expected_retryable: bool,
+    ) -> None:
+        class ProviderError(Exception):
+            code = "provider_contract"
+            headers: ClassVar[dict[str, str]] = {"Retry-After": "2"}
+
+            def __init__(self, code: int) -> None:
+                super().__init__("intentionally not persisted")
+                self.http_status = code
+
+        create = AsyncMock(side_effect=ProviderError(status_code))
+        stripe_module = SimpleNamespace(
+            billing=SimpleNamespace(MeterEvent=SimpleNamespace(create_async=create))
+        )
+        event = metering_mod._ProviderEvent(
+            id=uuid4(),
+            event_name="agentmem_memory_write",
+            customer_id="cus_provider",
+            quantity=1,
+            provider_identifier="lians_" + "f" * 64,
+            occurred_at=datetime.now(UTC),
+            attempt_number=1,
+        )
+        result = await metering_mod._send_to_stripe(
+            stripe_module,
+            api_key="sk_test_injected",
+            event=event,
+        )
+        assert result.delivered is False
+        assert result.retryable is expected_retryable
+        assert result.status_code == status_code
+        assert result.error_code == f"stripe_{status_code}_provider_contract"
+        assert result.error_digest is not None and len(result.error_digest) == 64
+        assert result.retry_after_seconds == 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("delivered", "retryable", "expected_status", "expected_outcome"),
+        (
+            (True, False, "delivered", "delivered"),
+            (False, True, "retry", "retry"),
+            (False, False, "dead_letter", "dead_letter"),
+        ),
+    )
+    async def test_provider_results_are_projected_and_appended(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        delivered: bool,
+        retryable: bool,
+        expected_status: str,
+        expected_outcome: str,
+    ) -> None:
+        namespace = f"result-{expected_status}"
+        event_id = await _stage_event(session_factory, namespace=namespace)
+        event = await _claim_and_prepare(session_factory, event_id)
+        result = metering_mod._StripeResult(
+            delivered=delivered,
+            retryable=retryable,
+            status_code=200 if delivered else (503 if retryable else 400),
+            error_code=None if delivered else "stripe_contract_error",
+            error_digest=None if delivered else "a" * 64,
+            response_digest="b" * 64 if delivered else None,
+            retry_after_seconds=1 if retryable else None,
+            duration_ms=12,
+        )
+        await metering_mod._record_provider_result(
+            session_factory,
+            event=event,
+            worker_id="worker-a",
+            result=result,
+        )
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None and row.status == expected_status
+            records = (
+                await db.execute(
+                    select(MeteringAttemptRecord)
+                    .where(MeteringAttemptRecord.event_id == event_id)
+                    .order_by(MeteringAttemptRecord.record_type)
+                )
+            ).scalars().all()
+            assert {record.outcome for record in records} == {"started", expected_outcome}
+
+    @pytest.mark.asyncio
+    async def test_lost_lease_records_result_without_overwriting_new_owner(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        event_id = await _stage_event(session_factory, namespace="lease-lost")
+        event = await _claim_and_prepare(session_factory, event_id)
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            row.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            await db.commit()
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            row.lease_owner = "worker-b"
+            row.lease_expires_at = datetime.now(UTC) + timedelta(seconds=60)
+            await db.commit()
+        result = metering_mod._StripeResult(
+            delivered=True,
+            retryable=False,
+            status_code=200,
+            error_code=None,
+            error_digest=None,
+            response_digest="c" * 64,
+            retry_after_seconds=None,
+            duration_ms=8,
+        )
+        await metering_mod._record_provider_result(
+            session_factory,
+            event=event,
+            worker_id="worker-a",
+            result=result,
+        )
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            assert row.status == "leased" and row.lease_owner == "worker-b"
+            finish = (
+                await db.execute(
+                    select(MeteringAttemptRecord).where(
+                        MeteringAttemptRecord.event_id == event_id,
+                        MeteringAttemptRecord.record_type == "finished",
+                    )
+                )
+            ).scalar_one()
+            assert finish.outcome == "lease_lost"
+            assert finish.status_code == 200
+            assert finish.response_digest == "c" * 64
+
+    @pytest.mark.asyncio
+    async def test_provider_age_budget_dead_letters_before_any_attempt(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        event_id = await _stage_event(
+            session_factory,
+            namespace="too-old",
+            occurred_at=datetime.now(UTC) - timedelta(days=2),
+        )
+        async with session_factory() as db:
+            assert await metering_mod.claim_due_metering_events(
+                db,
+                worker_id="worker-a",
+                batch_size=1,
+                lease_seconds=60,
+            ) == [event_id]
+        assert (
+            await metering_mod._prepare_provider_attempt(
+                session_factory,
+                event_id=event_id,
+                worker_id="worker-a",
+            )
+            is None
+        )
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            assert row.status == "dead_letter"
+            assert row.last_error_code == "provider_event_age_exceeded"
+            assert row.attempt_count == 0
+
+    @pytest.mark.asyncio
+    async def test_idempotency_window_stops_automatic_retry(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        event_id = await _stage_event(session_factory, namespace="window")
+        event = await _claim_and_prepare(session_factory, event_id)
+        await metering_mod._record_provider_result(
+            session_factory,
+            event=event,
+            worker_id="worker-a",
+            result=metering_mod._StripeResult(
+                delivered=False,
+                retryable=True,
+                status_code=503,
+                error_code="stripe_503_provider_error",
+                error_digest="1" * 64,
+                response_digest=None,
+                retry_after_seconds=1,
+                duration_ms=10,
+            ),
+        )
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None and row.first_attempt_at is not None
+            after_window = metering_mod._utc(row.first_attempt_at) + timedelta(seconds=3601)
+            row.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+            await db.commit()
+
+        async def advanced_database_clock(_db: AsyncSession) -> datetime:
+            return after_window
+
+        monkeypatch.setattr(metering_mod, "_database_now", advanced_database_clock)
+        async with session_factory() as db:
+            assert await metering_mod.claim_due_metering_events(
+                db,
+                worker_id="worker-b",
+                batch_size=1,
+                lease_seconds=60,
+            ) == [event_id]
+        assert (
+            await metering_mod._prepare_provider_attempt(
+                session_factory,
+                event_id=event_id,
+                worker_id="worker-b",
+            )
+            is None
+        )
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            assert row.status == "dead_letter"
+            assert row.last_error_code == "idempotency_window_expired"
+            assert row.attempt_count == 1
+
+
+class TestDeadLetterReconciliation:
+    @pytest.mark.asyncio
+    async def test_replay_requires_assertion_resets_safety_epoch_and_preserves_ledger(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        event_id = await _stage_event(session_factory, namespace="replay")
+        event = await _claim_and_prepare(session_factory, event_id)
+        result = metering_mod._StripeResult(
+            delivered=False,
+            retryable=False,
+            status_code=400,
+            error_code="stripe_invalid",
+            error_digest="d" * 64,
+            response_digest=None,
+            retry_after_seconds=None,
+            duration_ms=5,
+        )
+        await metering_mod._record_provider_result(
+            session_factory,
+            event=event,
+            worker_id="worker-a",
+            result=result,
+        )
+
+        async with session_factory() as db:
+            row = await db.get(MeteringEvent, event_id)
+            assert row is not None
+            original_identifier = row.provider_identifier
+            original_limit = row.attempt_limit
+            with pytest.raises(metering_mod.MeteringConflictError):
+                await metering_mod.replay_dead_letter_event(
+                    db,
+                    event_id,
+                    reconciliation="ambiguous",  # type: ignore[arg-type]
+                )
+            replayed = await metering_mod.replay_dead_letter_event(
+                db,
+                event_id,
+                reconciliation="provider_confirmed_not_accepted",
+            )
+            assert replayed.status == "retry"
+            assert replayed.provider_identifier == original_identifier
+            assert replayed.attempt_limit == original_limit + 3
+            assert replayed.replay_count == 1
+            assert replayed.first_attempt_at is None
+            assert replayed.last_attempt_at is None
+            assert replayed.dead_lettered_at is None
+            await db.commit()
+
+        async with session_factory() as db:
+            records = await db.scalar(
+                select(func.count())
+                .select_from(MeteringAttemptRecord)
+                .where(MeteringAttemptRecord.event_id == event_id)
+            )
+            assert records == 2
+
+    def test_production_configuration_requires_live_key_and_async_error_destination(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("STRIPE_API_KEY", "sk_test_not_production")
+        monkeypatch.setenv("STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED", "false")
+        get_settings.cache_clear()
+        errors = metering_mod.validate_metering_configuration(
+            get_settings(),
+            production=True,
+        )
+        assert any("live secret or restricted key" in error for error in errors)
+        assert any("ASYNC_ERROR_DESTINATION" in error for error in errors)
+
+        monkeypatch.setenv("STRIPE_API_KEY", "rk_live_contract")
+        monkeypatch.setenv("STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED", "true")
+        get_settings.cache_clear()
+        monkeypatch.setattr(metering_mod.importlib.util, "find_spec", lambda _name: object())
+        assert (
+            metering_mod.validate_metering_configuration(
+                get_settings(),
+                production=True,
+            )
+            == []
+        )
+
+    @pytest.mark.parametrize(
+        ("name", "value", "error_fragment"),
+        (
+            (
+                "STRIPE_METER_DECISION_EVENT",
+                "invalid protected unit",
+                "STRIPE_METER_DECISION_EVENT",
+            ),
+            (
+                "STRIPE_METER_PROTECTED_ACTION_EVENT",
+                "",
+                "STRIPE_METER_PROTECTED_ACTION_EVENT",
+            ),
+            (
+                "STRIPE_METER_PROTECTED_ACTION_EVENT",
+                "lians_authoritative_decision",
+                "must be distinct",
+            ),
+        ),
+    )
+    def test_protected_unit_meter_names_fail_closed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        name: str,
+        value: str,
+        error_fragment: str,
+    ) -> None:
+        monkeypatch.setenv(name, value)
+        get_settings.cache_clear()
+        errors = metering_mod.validate_metering_configuration(
+            get_settings(),
+            production=False,
+        )
+        assert any(error_fragment in error for error in errors)
+
+
+class TestMeteringObservability:
+    def test_scrape_refreshes_bounded_worker_and_backlog_metrics(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from lians import metrics
+
+        if not metrics._PROM_AVAILABLE:
+            pytest.skip("prometheus-client is not installed")
+        monkeypatch.setenv("STRIPE_API_KEY", "rk_live_metrics")
+        get_settings.cache_clear()
+        now = datetime.now(UTC)
+        monkeypatch.setattr(metering_mod, "_worker_last_poll_at", now)
+        monkeypatch.setattr(metering_mod, "_worker_last_heartbeat_at", now)
+        monkeypatch.setattr(metering_mod, "_worker_backlog", {"pending": 2})
+        monkeypatch.setattr(
+            metering_mod,
+            "_worker_oldest_due_at",
+            now - timedelta(seconds=10),
+        )
+        body, _content_type = metrics.generate_metrics()
+        rendered = body.decode("utf-8")
+        assert "lians_metering_delivery_enabled 1.0" in rendered
+        assert "lians_metering_worker_healthy 1.0" in rendered
+        assert 'lians_metering_events{status="pending"} 2.0' in rendered
+        assert "lians_metering_oldest_due_age_seconds" in rendered
+
+
+@pytest_asyncio.fixture
+async def admin_client(
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_SECRET", "metering-admin-secret")
+    get_settings.cache_clear()
+    from httpx import ASGITransport, AsyncClient
+    from lians.db import get_db
+    from lians.main import app
+
+    async def override_db():
+        async with session_factory() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = override_db
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         yield client
-
     app.dependency_overrides.clear()
-    await engine.dispose()
-    get_settings.cache_clear()
 
 
-# ---------------------------------------------------------------------------
-# queue_usage_event
-# ---------------------------------------------------------------------------
-
-class TestQueueUsageEvent:
-
-    def test_noop_when_no_api_key(self, monkeypatch):
-        monkeypatch.setenv("STRIPE_API_KEY", "")
-        from src.lians.config import get_settings
-        get_settings.cache_clear()
-
-        q = asyncio.Queue(maxsize=10_000)
-        monkeypatch.setattr(metering_mod, "_queue", q)
-
-        metering_mod.queue_usage_event("agentmem_memory_write", "cus_123", 1, "w:abc")
-        assert q.qsize() == 0
-
-        get_settings.cache_clear()
-
-    def test_queues_event_when_api_key_set(self, monkeypatch):
-        monkeypatch.setenv("STRIPE_API_KEY", "sk_test_x")
-        from src.lians.config import get_settings
-        get_settings.cache_clear()
-
-        q = asyncio.Queue(maxsize=10_000)
-        monkeypatch.setattr(metering_mod, "_queue", q)
-
-        metering_mod.queue_usage_event("agentmem_memory_write", "cus_123", 1, "w:abc")
-        assert q.qsize() == 1
-        event = q.get_nowait()
-        assert event["event_name"] == "agentmem_memory_write"
-        assert event["customer_id"] == "cus_123"
-        assert event["quantity"] == 1
-        assert event["identifier"] == "w:abc"
-
-        get_settings.cache_clear()
-
-    def test_identifier_truncated_to_100_chars(self, monkeypatch):
-        monkeypatch.setenv("STRIPE_API_KEY", "sk_test_x")
-        from src.lians.config import get_settings
-        get_settings.cache_clear()
-
-        q = asyncio.Queue(maxsize=10_000)
-        monkeypatch.setattr(metering_mod, "_queue", q)
-
-        long_id = "x" * 200
-        metering_mod.queue_usage_event("ev", "cus_1", 1, long_id)
-        event = q.get_nowait()
-        assert len(event["identifier"]) == 100
-
-        get_settings.cache_clear()
-
-    def test_drops_when_queue_full(self, monkeypatch):
-        monkeypatch.setenv("STRIPE_API_KEY", "sk_test_x")
-        from src.lians.config import get_settings
-        get_settings.cache_clear()
-
-        q: asyncio.Queue = asyncio.Queue(maxsize=1)
-        q.put_nowait({"placeholder": True})   # fill the queue
-        monkeypatch.setattr(metering_mod, "_queue", q)
-
-        # Should not raise
-        metering_mod.queue_usage_event("ev", "cus_1", 1, "id")
-        assert q.qsize() == 1  # still 1, event was dropped
-
-        get_settings.cache_clear()
-
-
-# ---------------------------------------------------------------------------
-# get_customer_id (cache behaviour)
-# ---------------------------------------------------------------------------
-
-class TestGetCustomerId:
+class TestMeteringAdminSurface:
+    headers: ClassVar[dict[str, str]] = {"X-Admin-Secret": "metering-admin-secret"}
 
     @pytest.mark.asyncio
-    async def test_returns_none_when_no_policy(self, db):
-        cid = await metering_mod.get_customer_id(db, "no-policy-ns")
-        assert cid is None
-
-    @pytest.mark.asyncio
-    async def test_returns_customer_id_from_db(self, db):
-        from src.lians.models import NamespacePolicy
-        pol = NamespacePolicy(namespace="billing-ns", stripe_customer_id="cus_abc123")
-        db.add(pol)
-        await db.commit()
-
-        cid = await metering_mod.get_customer_id(db, "billing-ns")
-        assert cid == "cus_abc123"
-
-    @pytest.mark.asyncio
-    async def test_cache_hit_after_first_lookup(self, db):
-        from src.lians.models import NamespacePolicy
-        pol = NamespacePolicy(namespace="cache-ns", stripe_customer_id="cus_xyz")
-        db.add(pol)
-        await db.commit()
-
-        await metering_mod.get_customer_id(db, "cache-ns")   # first call â€” DB hit
-        # Mutate DB (shouldn't affect cached value within TTL)
-        pol.stripe_customer_id = "cus_changed"
-        await db.commit()
-
-        cid2 = await metering_mod.get_customer_id(db, "cache-ns")
-        assert cid2 == "cus_xyz"  # still cached
-
-    @pytest.mark.asyncio
-    async def test_invalidate_clears_cache(self, db):
-        from src.lians.models import NamespacePolicy
-        pol = NamespacePolicy(namespace="inv-ns", stripe_customer_id="cus_old")
-        db.add(pol)
-        await db.commit()
-
-        await metering_mod.get_customer_id(db, "inv-ns")     # populate cache
-        metering_mod.invalidate_customer_cache("inv-ns")
-
-        pol.stripe_customer_id = "cus_new"
-        await db.commit()
-        await db.refresh(pol)
-
-        cid = await metering_mod.get_customer_id(db, "inv-ns")
-        assert cid == "cus_new"
-
-
-# ---------------------------------------------------------------------------
-# run_metering_worker
-# ---------------------------------------------------------------------------
-
-class TestMeteringWorker:
-
-    @pytest.mark.asyncio
-    async def test_worker_exits_without_api_key(self):
-        """If api_key is empty the worker returns immediately â€” no task loop."""
-        await metering_mod.run_metering_worker("", "w_ev", "r_ev")
-        # no hang, no error
-
-    @pytest.mark.asyncio
-    async def test_worker_exits_when_stripe_not_installed(self, monkeypatch):
-        """If stripe SDK is absent the worker exits with a warning."""
-        saved = sys.modules.get("stripe")
-        sys.modules.pop("stripe", None)  # hide stripe
-
-        try:
-            await metering_mod.run_metering_worker("sk_test_x", "w_ev", "r_ev")
-        finally:
-            if saved is not None:
-                sys.modules["stripe"] = saved
-
-    @pytest.mark.asyncio
-    async def test_worker_sends_queued_event(self, monkeypatch):
-        """Events placed in the queue before the worker starts are sent."""
-        stripe_mock = _make_stripe_mock()
-        monkeypatch.setitem(sys.modules, "stripe", stripe_mock)
-
-        q = asyncio.Queue(maxsize=10_000)
-        monkeypatch.setattr(metering_mod, "_queue", q)
-        q.put_nowait({
-            "event_name": "agentmem_memory_write",
-            "customer_id": "cus_abc",
-            "quantity": 1,
-            "identifier": "w:mem-id",
-        })
-
-        task = asyncio.create_task(
-            metering_mod.run_metering_worker("sk_test_x", "agentmem_memory_write", "agentmem_memory_recall")
+    async def test_status_and_event_projection_are_secret_free_and_operable(
+        self,
+        admin_client,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        event_id = await _stage_event(session_factory, namespace="admin-list")
+        status_response = await admin_client.get(
+            "/v1/admin/billing-metering/status",
+            headers=self.headers,
         )
-        await asyncio.sleep(0.05)   # let worker drain
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        assert status_response.status_code == 200
+        status_body = status_response.json()
+        assert status_body["pending_events"] == 1
+        assert status_body["provider_configured"] is False
 
-        stripe_mock.billing.MeterEvent.create_async.assert_called_once()
-        call_kwargs = stripe_mock.billing.MeterEvent.create_async.call_args.kwargs
-        assert call_kwargs["event_name"] == "agentmem_memory_write"
-        assert call_kwargs["payload"]["stripe_customer_id"] == "cus_abc"
-        assert call_kwargs["payload"]["value"] == "1"
-        assert call_kwargs["identifier"] == "w:mem-id"
+        events_response = await admin_client.get(
+            "/v1/admin/billing-metering/events",
+            headers=self.headers,
+        )
+        assert events_response.status_code == 200
+        event_body = events_response.json()[0]
+        assert event_body["id"] == str(event_id)
+        assert event_body["provider_identifier"].startswith("lians_")
+        assert "customer_id" not in event_body
+        assert "request_hash" not in event_body
 
     @pytest.mark.asyncio
-    async def test_worker_continues_after_stripe_error(self, monkeypatch):
-        """A Stripe API error must not kill the worker â€” next event still sent."""
-        stripe_mock = _make_stripe_mock()
-        call_count = 0
+    async def test_replay_endpoint_requires_reconciliation_body_and_audits_reference_hash(
+        self,
+        admin_client,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        from lians.models import EventLog
 
-        async def _failing_then_ok(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise RuntimeError("Stripe 500")
-
-        stripe_mock.billing.MeterEvent.create_async = _failing_then_ok
-        monkeypatch.setitem(sys.modules, "stripe", stripe_mock)
-
-        q = asyncio.Queue(maxsize=10_000)
-        monkeypatch.setattr(metering_mod, "_queue", q)
-        for i in range(2):
-            q.put_nowait({
-                "event_name": "ev", "customer_id": "cus_1",
-                "quantity": 1, "identifier": f"id{i}",
-            })
-
-        task = asyncio.create_task(
-            metering_mod.run_metering_worker("sk_test_x", "ev", "ev")
+        event_id = await _stage_event(session_factory, namespace="admin-replay")
+        event = await _claim_and_prepare(session_factory, event_id)
+        await metering_mod._record_provider_result(
+            session_factory,
+            event=event,
+            worker_id="worker-a",
+            result=metering_mod._StripeResult(
+                delivered=False,
+                retryable=False,
+                status_code=400,
+                error_code="operator_test",
+                error_digest="e" * 64,
+                response_digest=None,
+                retry_after_seconds=None,
+                duration_ms=4,
+            ),
         )
-        await asyncio.sleep(0.1)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
 
-        assert call_count == 2  # both events attempted
-
-    @pytest.mark.asyncio
-    async def test_worker_cancels_cleanly(self, monkeypatch):
-        stripe_mock = _make_stripe_mock()
-        monkeypatch.setitem(sys.modules, "stripe", stripe_mock)
-        q = asyncio.Queue(maxsize=10_000)
-        monkeypatch.setattr(metering_mod, "_queue", q)
-
-        task = asyncio.create_task(
-            metering_mod.run_metering_worker("sk_test_x", "w", "r")
+        missing = await admin_client.post(
+            f"/v1/admin/billing-metering/events/{event_id}/replay",
+            headers=self.headers,
         )
-        await asyncio.sleep(0.02)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        assert task.done()
-
-
-# ---------------------------------------------------------------------------
-# Admin billing endpoints (integration)
-# ---------------------------------------------------------------------------
-
-class TestAdminBillingEndpoints:
-    ADMIN = "metering-admin-secret"
-
-    @pytest.mark.asyncio
-    async def test_get_billing_returns_null_when_unset(self, app_client):
-        resp = await app_client.get(
-            "/v1/admin/billing/unset-ns",
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["stripe_customer_id"] is None
-
-    @pytest.mark.asyncio
-    async def test_set_and_get_billing(self, app_client):
-        resp = await app_client.put(
-            "/v1/admin/billing/acme",
-            json={"stripe_customer_id": "cus_acme123"},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["stripe_customer_id"] == "cus_acme123"
-
-        get_resp = await app_client.get(
-            "/v1/admin/billing/acme",
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        assert get_resp.json()["stripe_customer_id"] == "cus_acme123"
-
-    @pytest.mark.asyncio
-    async def test_clear_billing_sets_null(self, app_client):
-        await app_client.put(
-            "/v1/admin/billing/clear-ns",
-            json={"stripe_customer_id": "cus_temp"},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        resp = await app_client.put(
-            "/v1/admin/billing/clear-ns",
-            json={"stripe_customer_id": None},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["stripe_customer_id"] is None
-
-    @pytest.mark.asyncio
-    async def test_billing_set_writes_audit_row(self, app_client):
-        await app_client.put(
-            "/v1/admin/billing/audit-billing",
-            json={"stripe_customer_id": "cus_audit"},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        audit = await app_client.get(
-            "/v1/admin/audit/export",
-            params={"namespace": "audit-billing"},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        ops = [e["op"] for e in audit.json()["events"]]
-        assert "admin.billing_set" in ops
-
-    @pytest.mark.asyncio
-    async def test_billing_endpoints_require_admin_secret(self, app_client):
-        assert (await app_client.get("/v1/admin/billing/ns")).status_code == 401
-        assert (await app_client.put("/v1/admin/billing/ns", json={})).status_code == 401
-
-
-# ---------------------------------------------------------------------------
-# Hot-path integration: add/recall queues events when customer_id is set
-# ---------------------------------------------------------------------------
-
-class TestHotPathMetering:
-
-    @pytest.mark.asyncio
-    async def test_add_memory_queues_write_event(self, app_client, monkeypatch):
-        """POST /v1/memories queues one write event when customer_id is set."""
-        queued: list[dict] = []
-
-        def _spy(event_name, customer_id, quantity, identifier):
-            queued.append({"event_name": event_name, "customer_id": customer_id,
-                           "quantity": quantity, "identifier": identifier})
-
-        monkeypatch.setattr(metering_mod, "queue_usage_event", _spy)
-
-        # Provision API key
-        key_resp = await app_client.post(
-            "/v1/admin/api-keys",
-            json={"namespace": "meter-add", "scopes": ["read", "write"]},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        api_key = key_resp.json()["key"]
-
-        # Set billing
-        await app_client.put(
-            "/v1/admin/billing/meter-add",
-            json={"stripe_customer_id": "cus_meter"},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        metering_mod.invalidate_customer_cache("meter-add")
-
-        from datetime import datetime, timezone
-        add_resp = await app_client.post(
-            "/v1/memories",
+        assert missing.status_code == 422
+        ambiguous = await admin_client.post(
+            f"/v1/admin/billing-metering/events/{event_id}/replay",
+            headers=self.headers,
             json={
-                "agent_id": "agent-1",
-                "content": "AAPL at $190",
-                "event_time": datetime.now(timezone.utc).isoformat(),
+                "reconciliation": "ambiguous",
+                "reconciliation_reference": "INC-1",
             },
-            headers={"X-API-Key": api_key},
         )
-        assert add_resp.status_code == 200
-
-        write_events = [e for e in queued if "write" in e["event_name"]]
-        assert len(write_events) == 1
-        assert write_events[0]["customer_id"] == "cus_meter"
-        assert write_events[0]["quantity"] == 1
-        assert write_events[0]["identifier"].startswith("w:")
-
-    ADMIN = "metering-admin-secret"
-
-    @pytest.mark.asyncio
-    async def test_recall_queues_recall_event(self, app_client, monkeypatch):
-        """POST /v1/recall queues one recall event when customer_id is set."""
-        queued: list[dict] = []
-
-        def _spy(event_name, customer_id, quantity, identifier):
-            queued.append({"event_name": event_name, "customer_id": customer_id,
-                           "quantity": quantity, "identifier": identifier})
-
-        monkeypatch.setattr(metering_mod, "queue_usage_event", _spy)
-
-        key_resp = await app_client.post(
-            "/v1/admin/api-keys",
-            json={"namespace": "meter-recall", "scopes": ["read", "write"]},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        api_key = key_resp.json()["key"]
-
-        await app_client.put(
-            "/v1/admin/billing/meter-recall",
-            json={"stripe_customer_id": "cus_rec"},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        metering_mod.invalidate_customer_cache("meter-recall")
-
-        recall_resp = await app_client.post(
-            "/v1/recall",
-            json={"agent_id": "agent-1", "query": "stock price", "k": 3},
-            headers={"X-API-Key": api_key},
-        )
-        assert recall_resp.status_code == 200
-
-        recall_events = [e for e in queued if "recall" in e["event_name"]]
-        assert len(recall_events) == 1
-        assert recall_events[0]["customer_id"] == "cus_rec"
-        assert recall_events[0]["identifier"].startswith("r:")
-
-    @pytest.mark.asyncio
-    async def test_no_event_when_no_customer_id(self, app_client, monkeypatch):
-        """When stripe_customer_id is null, no metering event is queued."""
-        queued: list[dict] = []
-
-        def _spy(event_name, customer_id, quantity, identifier):
-            queued.append({"event_name": event_name})
-
-        monkeypatch.setattr(metering_mod, "queue_usage_event", _spy)
-
-        key_resp = await app_client.post(
-            "/v1/admin/api-keys",
-            json={"namespace": "no-billing", "scopes": ["read", "write"]},
-            headers={"X-Admin-Secret": self.ADMIN},
-        )
-        api_key = key_resp.json()["key"]
-        # No billing set for "no-billing" namespace
-
-        from datetime import datetime, timezone
-        await app_client.post(
-            "/v1/memories",
+        assert ambiguous.status_code == 422
+        replayed = await admin_client.post(
+            f"/v1/admin/billing-metering/events/{event_id}/replay",
+            headers=self.headers,
             json={
-                "agent_id": "agent-1",
-                "content": "no billing test",
-                "event_time": datetime.now(timezone.utc).isoformat(),
+                "reconciliation": "provider_confirmed_not_accepted",
+                "reconciliation_reference": "INC-12345",
             },
-            headers={"X-API-Key": api_key},
         )
-        await app_client.post(
-            "/v1/recall",
-            json={"agent_id": "agent-1", "query": "test", "k": 1},
-            headers={"X-API-Key": api_key},
-        )
-        assert queued == []
+        assert replayed.status_code == 200
+        assert replayed.json()["status"] == "retry"
+
+        async with session_factory() as db:
+            audit = (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.namespace == "admin-replay",
+                        EventLog.op == "admin.billing_meter_replay",
+                    )
+                )
+            ).scalar_one()
+            assert audit.payload["reconciliation"] == "provider_confirmed_not_accepted"
+            assert audit.payload["reconciliation_reference_hash"] == metering_mod._sha256(
+                "INC-12345"
+            )
+            assert "INC-12345" not in str(audit.payload)

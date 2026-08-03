@@ -12,9 +12,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
 
 TEST_NS = "fact-history-ns"
 TEST_KEY = "fact-history-test-key"
@@ -181,7 +181,15 @@ async def test_limit_respected(client):
         await _add(client, f"AAPL EPS v{i}", t, {"ticker": "AAPL", "metric": "eps"})
 
     r = await _history(client, "AAPL", "eps", limit=3)
-    assert r.json()["total"] == 3
+    body = r.json()
+    # ``total`` describes every matching fact in the bounded scan; ``items``
+    # is the requested response page.  Keeping these distinct prevents a
+    # truncated page from masquerading as a complete fact history.
+    assert body["total"] == 5
+    assert len(body["items"]) == 3
+    assert body["has_more"] is True
+    assert body["scan_complete"] is True
+    assert body["total_is_lower_bound"] is False
 
 
 @pytest.mark.asyncio

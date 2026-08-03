@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/universal-recorder/v0.1/envelope.schema.json",
+  "title": "Lians Universal Recorder Envelope v0.1",
+  "description": "A provider-neutral envelope for native Lians, OpenTelemetry GenAI, MCP, and A2A execution events.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol"],
+  "properties": {
+    "schema_version": {"const": "0.1", "default": "0.1"},
+    "protocol": {"enum": ["lians", "otlp.genai", "mcp", "a2a"]},
+    "event_type": {"type": "string", "minLength": 1, "maxLength": 128},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 512},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "subject_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "actor": {"$ref": "#/$defs/actor"},
+    "correlation": {"$ref": "#/$defs/correlation"},
+    "capture": {"$ref": "#/$defs/capture"},
+    "payload": {"type": "object", "additionalProperties": true, "maxProperties": 1000},
+    "extensions": {"type": "object", "additionalProperties": true, "maxProperties": 256}
+  },
+  "$defs": {
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "principal_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "roles": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {"type": "string"}
+        },
+        "authentication_context": {
+          "type": "object",
+          "additionalProperties": true,
+          "maxProperties": 100
+        },
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true,
+          "maxProperties": 256
+        }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "trace_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "span_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "parent_span_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "session_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "task_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "context_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "message_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "tool_call_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "decision_id": {"type": "string", "format": "uuid"},
+        "extensions": {
+          "type": "object",
+          "additionalProperties": true,
+          "maxProperties": 256
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": ["metadata_only", "hash_only", "full"],
+          "default": "hash_only"
+        },
+        "sensitive_fields": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

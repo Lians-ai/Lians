@@ -1,0 +1,145 @@
+name: Security analysis
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  schedule:
+    - cron: "23 8 * * 2"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-policy:
+    name: Immutable Actions policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Reject mutable third-party Action references
+        shell: python
+        run: |
+          import pathlib
+          import re
+          import sys
+
+          failures = []
+          pattern = re.compile(r"\buses:\s*([^\s#]+)@([^\s#]+)")
+          for path in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+              for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  match = pattern.search(line)
+                  if match and not re.fullmatch(r"[0-9a-f]{40}", match.group(2)):
+                      failures.append(f"{path}:{number}: {match.group(0)}")
+          if failures:
+              print("Mutable Action references are forbidden:\n" + "\n".join(failures))
+              sys.exit(1)
+          print("Every third-party Action reference is pinned to a 40-character commit SHA.")
+      - name: Require fail-closed publication source policy
+        shell: python
+        run: |
+          import pathlib
+          import sys
+
+          root = pathlib.Path(".github/workflows")
+          helper_authorized = {
+              "grafana-plugin-release.yml",
+              "publish-backtest-check.yml",
+              "publish-lian.yml",
+              "publish-lian-npm.yml",
+              "release.yml",
+          }
+          inline_authorized = {
+              "backup-supply-chain.yml",
+              "publish-helm-chart.yml",
+              "publish-mcp-container.yml",
+              "supply-chain.yml",
+          }
+          expected = helper_authorized | inline_authorized
+          markers = (
+              "packages: write",
+              "gh-action-pypi-publish@",
+              "npm publish",
+              "action-gh-release@",
+              "-P release deploy",
+          )
+          texts = {
+              path.name: path.read_text(encoding="utf-8")
+              for path in sorted(root.glob("*.yml"))
+          }
+          detected = {
+              name
+              for name, text in texts.items()
+              if name != "security.yml" and any(marker in text for marker in markers)
+          }
+          failures = []
+          if detected != expected:
+              failures.append(
+                  "publication workflow inventory changed: "
+                  f"expected={sorted(expected)} detected={sorted(detected)}"
+              )
+          common = (
+              "fetch-depth: 0",
+              "github.event.repository.default_branch",
+              "github.ref_protected",
+          )
+          for name in sorted(helper_authorized):
+              text = texts.get(name, "")
+              for token in (*common, "check_publish_source.py"):
+                  if token not in text:
+                      failures.append(f"{name}: missing source-policy token {token!r}")
+          for name in sorted(inline_authorized):
+              text = texts.get(name, "")
+              for token in (*common, "git merge-base --is-ancestor"):
+                  if token not in text:
+                      failures.append(f"{name}: missing source-policy token {token!r}")
+          if failures:
+              print("Publication source policy failed:\n" + "\n".join(failures))
+              sys.exit(1)
+          print("Every publication workflow has a complete-history, protected-source gate.")
+
+  dependency-review:
+    name: Dependency review
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-3.0, GPL-3.0
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript-typescript"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ea14db8afdef5d462e69d78c4ca45002d4522418 # v4.37.4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - name: Analyze
+        uses: github/codeql-action/analyze@ea14db8afdef5d462e69d78c4ca45002d4522418 # v4.37.4
+        with:
+          category: /language:${{ matrix.language }}

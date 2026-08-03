@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+configMapGenerator:
+  - name: lians-prometheus-rules
+    files:
+      - lians-rules.yaml
+    options:
+      labels:
+        app.kubernetes.io/name: lians-monitoring
+        app.kubernetes.io/component: rules
+
+generatorOptions:
+  disableNameSuffixHash: true

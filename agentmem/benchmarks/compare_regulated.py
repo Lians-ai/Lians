@@ -14,12 +14,15 @@ Scoring: pass = 1.0, partial = 0.5, absent/fail = 0.0.
 """
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import sys
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "sdk" / "python"))
 
 from benchmarks.regulated_eval import run_regulated_eval  # noqa: E402
 from benchmarks.adapters import PASS, PARTIAL, ABSENT, SCORE  # noqa: E402
@@ -45,12 +48,49 @@ GLYPH = {PASS: "✅ pass", PARTIAL: "🟡 partial", ABSENT: "❌ absent"}
 _STATUS_TO_CAP = {"pass": PASS, "partial": PARTIAL, "fail": ABSENT}
 
 
+@lru_cache(maxsize=1)
 def _lians_live() -> dict[str, str]:
-    """Execute the harness against Lians and return per-invariant status."""
-    from lians import LocalLiansClient
+    """Execute the local-SDK harness in an import-isolated interpreter.
 
-    with LocalLiansClient() as client:
-        report = run_regulated_eval(client)
+    The monorepo intentionally contains two mutually exclusive top-level
+    ``lians`` distributions: the deployable server and the local-capable SDK.
+    Server pytest loads the former in ``conftest.py``, so a later ``sys.path``
+    insertion cannot make ``from lians import LocalLiansClient`` resolve to the
+    SDK.  A clean child interpreter mirrors the supported installation posture
+    and prevents whichever package was imported first from changing benchmark
+    results.
+    """
+    sdk_root = ROOT / "sdk" / "python"
+    environment = os.environ.copy()
+    inherited_pythonpath = environment.get("PYTHONPATH")
+    pythonpath = [str(sdk_root), str(ROOT)]
+    if inherited_pythonpath:
+        pythonpath.append(inherited_pythonpath)
+    environment["PYTHONPATH"] = os.pathsep.join(pythonpath)
+    program = (
+        "import json\n"
+        "from lians import LocalLiansClient\n"
+        "from benchmarks.regulated_eval import run_regulated_eval\n"
+        "with LocalLiansClient() as client:\n"
+        "    report = run_regulated_eval(client)\n"
+        "print(json.dumps(report, separators=(',', ':')))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout)[-2_000:]
+        raise RuntimeError(f"isolated Lians benchmark failed: {detail}")
+    lines = [line for line in completed.stdout.splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError("isolated Lians benchmark returned no report")
+    report = json.loads(lines[-1])
     return {r["check"]: _STATUS_TO_CAP[r["status"]] for r in report["checks"]}
 
 

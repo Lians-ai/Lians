@@ -1,0 +1,249 @@
+name: Publish Helm chart
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact lock-step Lians version to publish
+        required: true
+        type: string
+
+concurrency:
+  group: publish-helm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: Package, attest, sign, publish, and verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.2.3
+
+      - name: Resolve and verify the release version
+        id: release
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_VERSION: ${{ inputs.version }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            push)
+              [[ "$GITHUB_REF" == refs/tags/v* ]]
+              test "$REF_PROTECTED" = true
+              git show-ref --verify "refs/remotes/origin/$DEFAULT_BRANCH"
+              git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"
+              version="${GITHUB_REF_NAME#v}"
+              ;;
+            workflow_dispatch)
+              test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+              version="$MANUAL_VERSION"
+              ;;
+            *)
+              echo "Unsupported publication event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          python .github/scripts/check_release_versions.py "$version"
+          owner="${REPOSITORY_OWNER,,}"
+          {
+            echo "version=$version"
+            echo "repository=${REGISTRY}/${owner}/charts/lians"
+            echo "push_target=oci://${REGISTRY}/${owner}/charts"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Lint every supported production posture
+        shell: bash
+        run: |
+          chart=deploy/helm/lians
+          base="$chart/tests/values-base.yaml"
+          for posture in aws azure vault airgap; do
+            values="$chart/tests/values-${posture}.yaml"
+            helm lint "$chart" --strict --values "$base" --values "$values"
+            helm template lians "$chart" --namespace lians \
+              --values "$base" --values "$values" >/dev/null
+          done
+
+      - name: Create deterministic chart package
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir -p dist/helm
+          staging="$(mktemp -d)"
+          helm package deploy/helm/lians \
+            --version "$VERSION" --app-version "$VERSION" \
+            --destination "$staging"
+          mkdir "$staging/unpacked"
+          tar --extract --gzip --file "$staging/lians-${VERSION}.tgz" \
+            --directory "$staging/unpacked"
+          epoch="$(git show -s --format=%ct HEAD)"
+          chart="dist/helm/lians-${VERSION}.tgz"
+          tar --directory "$staging/unpacked" --sort=name \
+            --mtime="@${epoch}" --owner=0 --group=0 --numeric-owner \
+            --format=ustar --create lians | gzip -n -9 >"$chart"
+          test -s "$chart"
+          helm show chart "$chart" >/dev/null
+          sha256sum "$chart" >"${chart}.sha256"
+          echo "path=$chart" >>"$GITHUB_OUTPUT"
+
+      - name: Attest packaged chart provenance
+        if: ${{ vars.LIANS_ATTESTATIONS_ENABLED != 'false' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-path: ${{ steps.package.outputs.path }}
+
+      - name: Retain chart and checksum
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lians-helm-${{ steps.release.outputs.version }}
+          path: |
+            ${{ steps.package.outputs.path }}
+            ${{ steps.package.outputs.path }}.sha256
+          if-no-files-found: error
+
+      - name: Authenticate Helm to GHCR
+        shell: bash
+        env:
+          HELM_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$HELM_REGISTRY_PASSWORD" \
+            | helm registry login "$REGISTRY" \
+                --username '${{ github.actor }}' --password-stdin
+
+      - name: Publish chart by immutable OCI digest
+        id: push
+        shell: bash
+        env:
+          CHART: ${{ steps.package.outputs.path }}
+          PUSH_TARGET: ${{ steps.release.outputs.push_target }}
+          REPOSITORY: ${{ steps.release.outputs.repository }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/chart-existing"
+          set +e
+          existing_output="$(helm pull "oci://${REPOSITORY}" --version "$VERSION" \
+            --destination "$RUNNER_TEMP/chart-existing" 2>&1)"
+          existing_status=$?
+          set -e
+          if [[ $existing_status -eq 0 ]]; then
+            printf '%s\n' "$existing_output"
+            existing="$RUNNER_TEMP/chart-existing/$(basename "$CHART")"
+            cmp "$CHART" "$existing" || {
+              echo "Refusing to replace an existing Helm version with different bytes" >&2
+              exit 1
+            }
+            output="$existing_output"
+            echo "reused=true" >>"$GITHUB_OUTPUT"
+          else
+            if ! grep -Eiq '(not found|manifest unknown|name unknown)' \
+              <<<"$existing_output"; then
+              printf '%s\n' "$existing_output" >&2
+              echo "Registry preflight failed without a definitive not-found response" >&2
+              exit 1
+            fi
+            output="$(helm push "$CHART" "$PUSH_TARGET" 2>&1)"
+            printf '%s\n' "$output"
+            echo "reused=false" >>"$GITHUB_OUTPUT"
+          fi
+          digest="$(printf '%s\n' "$output" | awk '/^Digest: sha256:/ {print $2}' | tail -1)"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >>"$GITHUB_OUTPUT"
+
+      - name: Attest OCI chart provenance
+        if: ${{ vars.LIANS_ATTESTATIONS_ENABLED != 'false' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ steps.release.outputs.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign OCI chart with GitHub OIDC identity
+        shell: bash
+        env:
+          REPOSITORY: ${{ steps.release.outputs.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${REPOSITORY}@${DIGEST}"
+
+      - name: Re-pull and verify the exact published chart
+        shell: bash
+        env:
+          CHART: ${{ steps.package.outputs.path }}
+          REPOSITORY: ${{ steps.release.outputs.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/chart-verify"
+          helm pull "oci://${REPOSITORY}@${DIGEST}" \
+            --destination "$RUNNER_TEMP/chart-verify"
+          cmp "$CHART" "$RUNNER_TEMP/chart-verify/$(basename "$CHART")"
+          cosign verify "${REPOSITORY}@${DIGEST}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${SOURCE_REPOSITORY}/.github/workflows/publish-helm-chart.yml@${GITHUB_REF}"
+
+      - name: Verify GitHub OCI attestation
+        if: ${{ vars.LIANS_ATTESTATIONS_ENABLED != 'false' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ steps.release.outputs.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+        run: |
+          gh attestation verify "oci://${REPOSITORY}@${DIGEST}" \
+            --repo "$SOURCE_REPOSITORY" \
+            --signer-workflow "${SOURCE_REPOSITORY}/.github/workflows/publish-helm-chart.yml" \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
+
+      - name: Publish immutable install reference
+        shell: bash
+        env:
+          REPOSITORY: ${{ steps.release.outputs.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          {
+            echo "## Lians Helm chart ${VERSION}"
+            echo
+            echo "Published, attested, signed, re-pulled, and byte-compared."
+            echo
+            echo '```shell'
+            echo "helm upgrade --install lians oci://${REPOSITORY}@${DIGEST} --namespace lians --create-namespace --values values.yaml"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"

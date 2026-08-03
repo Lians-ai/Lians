@@ -1,0 +1,155 @@
+{
+  "$schema": "https://lians.ai/specs/decision-receipt/v0.1/schema.json",
+  "receipt_version": "0.1",
+  "receipt_id": "urn:lians:decision-receipt:conformance-unsigned-001",
+  "issued_at": "2026-08-02T12:00:05Z",
+  "issuer": {
+    "name": "Lians Conformance Lab",
+    "category": "decision_evidence_infrastructure",
+    "key_id": null
+  },
+  "decision": {
+    "id": "conformance-unsigned-001",
+    "namespace": "fixture-tenant-münchen",
+    "type": "credit_limit_adjustment",
+    "outcome": "manual_review",
+    "reason_codes": [
+      "policy-threshold",
+      "données-incomplètes"
+    ],
+    "regime": "EU AI Act",
+    "subject_id": "fixture-subject-001",
+    "decided_at": "2026-08-02T12:00:00Z",
+    "recorded_at": "2026-08-02T12:00:05Z",
+    "knowledge_as_of": "2026-08-02T11:59:00Z",
+    "knowledge_recorded_as_of": "2026-08-02T11:59:30Z",
+    "record_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "record_hash_version": 2,
+    "record_integrity_status": "verified",
+    "supersedes_id": null
+  },
+  "actor": {
+    "agent_id": "fixture-credit-agent",
+    "claimed_agent_id": "fixture-credit-agent",
+    "principal": {
+      "auth_method": "oidc",
+      "credential_ref": "lians:credential:v1:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "display_name": "Zoë Fixture",
+      "id": "lians:principal:v1:oidc:conformance.example:fixture-producer"
+    },
+    "recorded_by": {
+      "principal_ref": "lians:principal:v1:oidc:conformance.example:fixture-producer",
+      "auth_method": "oidc",
+      "credential_ref": "lians:credential:v1:sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  },
+  "model": {
+    "provider": "fixture-provider",
+    "id": "fixture-model",
+    "version": "2026-08-01",
+    "system_instruction_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+    "configuration_hash": "4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "artifacts": {
+    "input_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+    "output_hash": "6666666666666666666666666666666666666666666666666666666666666666"
+  },
+  "tools": [
+    {
+      "name": "fixture-risk-lookup",
+      "definition_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "result_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "synthetic_note": "line one\nline two — 東京"
+    }
+  ],
+  "sources": [
+    {
+      "memory_id": "fixture-memory-001",
+      "source": "synthetic://conformance/customer-file",
+      "source_version": "v1",
+      "content": "Résumé received — 東京 office",
+      "content_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "valid_from": "2026-08-01T00:00:00Z",
+      "valid_to": null,
+      "recorded_at": "2026-08-01T00:01:00Z",
+      "erased_at": null
+    }
+  ],
+  "policy": {
+    "version": "fixture-policy-3",
+    "evaluation": {
+      "decision": "review",
+      "threshold_basis_points": 425,
+      "labels": [
+        "α",
+        "beta"
+      ]
+    }
+  },
+  "authorization": {
+    "decision": "allow",
+    "scopes": [
+      "receipt:export"
+    ]
+  },
+  "human_review": {
+    "status": "pending",
+    "reviewer": null,
+    "reviewed_at": null
+  },
+  "correlation": {
+    "session_id": "fixture-session-001",
+    "trace_id": "0123456789abcdef0123456789abcdef",
+    "span_id": "0123456789abcdef"
+  },
+  "reconstruction": {
+    "knowledge_as_of": "2026-08-02T11:59:00Z",
+    "knowledge_recorded_as_of": "2026-08-02T11:59:30Z",
+    "snapshot_count": 1,
+    "cited_source_count": 1,
+    "snapshot_manifest": [
+      {
+        "memory_id": "fixture-memory-001",
+        "content_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+        "valid_from": "2026-08-01T00:00:00Z",
+        "valid_to": null
+      }
+    ]
+  },
+  "audit_chain": {
+    "status": "ok",
+    "rows_checked": 3,
+    "violations": [],
+    "fixture_note": "synthetic evidence only"
+  },
+  "completeness": {
+    "score": 95,
+    "grade": "A",
+    "status": "incomplete",
+    "checks": [
+      {
+        "id": "fixture.evidence-boundary",
+        "label": "Synthetic evidence boundary",
+        "weight": 95,
+        "status": "present",
+        "evidence": "all protected fixture sections"
+      },
+      {
+        "id": "integrity.signature",
+        "label": "Deployment signature",
+        "weight": 5,
+        "status": "missing",
+        "evidence": "integrity.signature"
+      }
+    ],
+    "missing": [
+      "integrity.signature"
+    ]
+  },
+  "integrity": {
+    "hash_algorithm": "sha-256",
+    "canonicalization": "json-sort-keys-utf8-v1",
+    "receipt_hash": "76ccf9521267076303303023bbd4af10ad091fb358b3155a2379ae3f9b18369e",
+    "signature": null
+  }
+}

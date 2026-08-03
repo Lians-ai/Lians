@@ -177,7 +177,7 @@ def main() -> None:
             ingest_ms.append((time.perf_counter() - t0) * 1000 / len(chunk))
             done += len(chunk)
             while marks and done >= marks[0]:
-                mark = marks.pop(0)
+                marks.pop(0)
                 m = measure(client, agent, args.k)
                 live = client.snapshot(agent_id=agent, as_of=now, limit=10 * total)["total"]
                 m.update({"turns": done, "live": live, "total": done,

@@ -15,7 +15,6 @@ callers feed them to ``graph_service.relate`` so the edges inherit the bitempora
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 # Entity = one or more Capitalized tokens (proper nouns), allowing &, ., -.
 _ENT = r"([A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*)*)"

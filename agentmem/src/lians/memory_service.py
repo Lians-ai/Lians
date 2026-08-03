@@ -12,46 +12,94 @@ Performance roadmap changes wired here:
 from __future__ import annotations
 
 import asyncio
+import heapq
 import hashlib
+import json
 import logging
 import math
+import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, update, text
+from sqlalchemy import Text, and_, bindparam, cast, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased, load_only
 
-import time as _time
-
-from .models import Memory, EventLog, SubjectKey, AgentBarrierGroup, NamespacePolicy, ConflictFlag, IdempotencyKey
 from .audit_chain import chain_log
-from .telemetry import tracer
-from .metrics import record_write, observe_add, record_recall, observe_recall, record_erase
-from .schemas import (
-    MemoryAdd, MemoryOut, RecallRequest, RecallResult,
-    MemoryBatchResult,
-    SupersessionReviewItem, SupersessionReviewResult,
-    SupersessionAction, SupersessionActionResult,
-    RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
-    LineageNode, LineageEdge, MemoryLineageResult,
-    ConflictFlagOut, ConflictListResult, ConflictResolveRequest, ConflictResolveResult,
-    ContextRequest, ContextResult,
+from .cache import (
+    get_agent_cache_generation,
+    get_cached_recall,
+    invalidate_agent,
+    set_cached_recall,
 )
-from .embeddings import get_embedding_provider
-from .crypto import encrypt_content, unwrap_subject_key
-from .pii import get_or_create_subject_key, destroy_subject_key
-from .supersession import run_supersession, _utc
-from .ranking import hybrid_recall
-from .cache import get_cached_recall, set_cached_recall, invalidate_agent
+from .cache_fence import acquire_namespace_cache_lock
 from .config import get_settings
-from .current_facts import compute_predicate_key, upsert_live_fact, remove_live_facts, keyed_lookup
-from .dek_cache import get_cached_dek, cache_dek, evict_dek
-from .session_cache import get_working_set, set_working_set, invalidate_working_set
+from .crypto import encrypt_content
+from .current_facts import compute_predicate_key, keyed_lookup, remove_live_facts, upsert_live_fact
+from .dek_cache import cache_dek, get_cached_dek
+from .embeddings import get_embedding_provider
+from .governance_service import estimate_ingest_bytes, reserve_namespace_usage
+from .idempotency import IdempotencyReplayUnavailable
+from .metrics import (
+    observe_add,
+    observe_recall,
+    record_best_effort_failure,
+    record_recall,
+    record_write,
+)
+from .models import (
+    AgentBarrierGroup,
+    ConflictFlag,
+    EventLog,
+    LiveFact,
+    Memory,
+    NamespacePolicy,
+)
+from .mutation_safety import MutationVersionConflict, assert_expected_updated_at
+from .pii import (
+    assert_subject_not_erased,
+    get_or_create_subject_key,
+    lock_subject_key_for_update,
+)
+from .ranking import hybrid_recall, recall_candidate_contract
+from .schemas import (
+    ConflictFlagOut,
+    ConflictListResult,
+    ConflictResolveRequest,
+    ConflictResolveResult,
+    ContextRequest,
+    ContextResult,
+    LineageEdge,
+    LineageNode,
+    MemoryAdd,
+    MemoryBatchResult,
+    MemoryLineageResult,
+    MemoryOut,
+    RecallRequest,
+    RecallResult,
+    RetentionPolicyIn,
+    RetentionPolicyOut,
+    RetentionPruneResult,
+    SupersessionAction,
+    SupersessionActionResult,
+    SupersessionReviewItem,
+    SupersessionReviewResult,
+)
+from .session_cache import invalidate_working_set
+from .subject_key_loader import load_subject_keys
+from .subject_privacy import (
+    replace_subject_identifier,
+    subject_reference,
+)
+from .supersession import SupersessionDecisionUnavailable, _utc, run_supersession
+from .telemetry import tracer
 
-logger = logging.getLogger("agentmem.memory_service")
+logger = logging.getLogger("lians.memory_service")
 
 _IMPORTANCE_RECENCY_HALF_LIFE_DAYS = 90.0
+_SUPERSESSION_BIND_BATCH = 400
+_STALE_CLAUSE_MARK_LIMIT = 5_000
 
 
 def _barrier_visible(row: Any, barrier_group: Optional[str]) -> bool:
@@ -88,15 +136,41 @@ async def _get_in_process_lock(namespace: str, agent_id: str) -> asyncio.Lock:
     return _write_locks[key]
 
 
-async def _acquire_pg_advisory_lock(db: AsyncSession, namespace: str, agent_id: str) -> None:
-    try:
-        engine = db.sync_session.get_bind()
-        if engine.dialect.name != "postgresql":
-            return
-    except Exception:
-        return
+def _uses_postgresql(db: AsyncSession) -> bool:
+    engine = db.sync_session.get_bind()
+    return engine.dialect.name == "postgresql"
+
+
+async def _acquire_pg_advisory_lock(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    *,
+    shared: bool = False,
+) -> bool:
+    if not _uses_postgresql(db):
+        return False
     k1, k2 = _write_lock_keys(namespace, agent_id)
-    await db.execute(text("SELECT pg_advisory_xact_lock(:k1, :k2)"), {"k1": k1, "k2": k2})
+    function = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+    await db.execute(text(f"SELECT {function}(:k1, :k2)"), {"k1": k1, "k2": k2})
+    return True
+
+
+async def _fence_recall_caches_before_commit(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+) -> None:
+    """Invalidate local state and advance the shared generation before commit.
+
+    PostgreSQL writers must already hold the agent's exclusive transaction
+    advisory lock.  Redis failure propagates so the durable mutation rolls
+    back.  Non-PostgreSQL deployments never use these caches because they lack
+    the cross-process lock needed to make cache validation linearizable.
+    """
+    invalidate_working_set(namespace, agent_id)
+    if get_settings().recall_cache_enabled and _uses_postgresql(db):
+        await invalidate_agent(namespace, agent_id)
 
 
 def _compute_importance(event_time: datetime, caller_salience: float) -> float:
@@ -144,39 +218,35 @@ async def _resolve_subject_key(
     db: AsyncSession,
     subject_id: str,
     namespace: str,
+    *,
+    legacy_subject_id: str | None = None,
 ) -> bytes:
-    """Return plaintext DEK for subject, using cache (Change 6)."""
+    """Return the DEK while holding the same subject fence as erasure.
+
+    The cache is only a key-unwrapping optimization. It must never bypass the
+    durable erasure tombstone or allow a write to race past crypto-shredding.
+    """
+    await assert_subject_not_erased(db, subject_id, namespace)
     cached = get_cached_dek(namespace, subject_id)
     if cached is not None:
         return cached
-    key = await get_or_create_subject_key(db, subject_id, namespace)
+    key = await get_or_create_subject_key(
+        db,
+        subject_id,
+        namespace,
+        legacy_subject_id=legacy_subject_id,
+    )
     cache_dek(namespace, subject_id, key)
     return key
 
 
-async def _load_namespace_subject_keys(db: AsyncSession, namespace: str) -> dict[str, bytes]:
-    """Load all active subject keys for a namespace, using DEK cache (Change 6)."""
-    stmt = select(SubjectKey).where(
-        and_(
-            SubjectKey.namespace == namespace,
-            SubjectKey.destroyed_at.is_(None),
-        )
+async def _keys_for_rows(db: AsyncSession, namespace: str, rows: Any) -> dict[str, bytes]:
+    """Load only the DEKs referenced by an already-bounded result window."""
+    return await load_subject_keys(
+        db,
+        namespace,
+        (getattr(row, "subject_id", None) for row in rows),
     )
-    result = await db.execute(stmt)
-    rows = result.scalars().all()
-    keys: dict[str, bytes] = {}
-    for row in rows:
-        cached = get_cached_dek(namespace, row.subject_id)
-        if cached is not None:
-            keys[row.subject_id] = cached
-            continue
-        try:
-            plaintext = unwrap_subject_key(bytes(row.enc_key))
-            cache_dek(namespace, row.subject_id, plaintext)
-            keys[row.subject_id] = plaintext
-        except Exception:
-            pass
-    return keys
 
 
 def _content_hash(text: str) -> str:
@@ -205,41 +275,396 @@ def _memory_to_out(mem: Memory, content: Optional[str]) -> MemoryOut:
     )
 
 
-async def _mark_parent_stale(
+def _supersession_unavailable(code: str, message: str) -> SupersessionDecisionUnavailable:
+    return SupersessionDecisionUnavailable(code, message)
+
+
+async def _lock_supersession_rows(
+    db: AsyncSession,
+    *,
+    namespace: str,
+    agent_id: str,
+    barrier_group: str | None,
+    new_memory_id: UUID,
+    new_event_time: datetime,
+    superseded_ids: list[UUID],
+    conflict_ids: list[UUID],
+    superseded_by_id: UUID | None,
+) -> tuple[list[Memory], list[Memory], Memory | None]:
+    """Lock and revalidate a complete supersession verdict before mutation.
+
+    Candidate discovery is bounded, but its ORM objects are only a decision
+    snapshot. This second, deterministic read acquires row locks, refreshes the
+    authoritative state, and verifies the corresponding current-fact rows.
+    """
+
+    superseded = list(superseded_ids)
+    conflicts = list(conflict_ids)
+    successor_ids = [superseded_by_id] if superseded_by_id is not None else []
+    expected_ids = superseded + conflicts + successor_ids
+    if len(expected_ids) != len(set(expected_ids)) or new_memory_id in expected_ids:
+        raise _supersession_unavailable(
+            "supersession_decision_invalid",
+            "The supersession decision contains duplicate or self-referential candidates",
+        )
+    if len(expected_ids) > get_settings().supersession_candidate_limit:
+        raise _supersession_unavailable(
+            "supersession_decision_invalid",
+            "The supersession decision exceeds the configured candidate capacity",
+        )
+    if not expected_ids:
+        return [], [], None
+
+    rows_by_id: dict[UUID, Memory] = {}
+    ordered_ids = sorted(expected_ids, key=lambda value: value.hex)
+    for start in range(0, len(ordered_ids), _SUPERSESSION_BIND_BATCH):
+        page = ordered_ids[start : start + _SUPERSESSION_BIND_BATCH]
+        rows = (
+            (
+                await db.execute(
+                    select(Memory)
+                    .options(
+                        load_only(
+                            Memory.id,
+                            Memory.namespace,
+                            Memory.agent_id,
+                            Memory.metadata_,
+                            Memory.event_time,
+                            Memory.valid_to,
+                            Memory.system_valid_to,
+                            Memory.superseded_by,
+                            Memory.barrier_group,
+                            Memory.content_hash,
+                            Memory.erased_at,
+                            raiseload=True,
+                        )
+                    )
+                    .where(Memory.namespace == namespace, Memory.id.in_(page))
+                    .order_by(Memory.id.asc())
+                    .execution_options(populate_existing=True)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        rows_by_id.update((row.id, row) for row in rows)
+    if set(rows_by_id) != set(expected_ids):
+        raise _supersession_unavailable(
+            "supersession_snapshot_changed",
+            "A supersession candidate changed while the write was being prepared; retry",
+        )
+
+    for row in rows_by_id.values():
+        if (
+            row.namespace != namespace
+            or row.agent_id != agent_id
+            or row.barrier_group != barrier_group
+            or row.valid_to is not None
+            or row.system_valid_to is not None
+            or row.superseded_by is not None
+            or row.erased_at is not None
+        ):
+            raise _supersession_unavailable(
+                "supersession_snapshot_changed",
+                "A supersession candidate is no longer live in the same scope; retry",
+            )
+
+    new_time = _utc(new_event_time)
+    if any(_utc(rows_by_id[row_id].event_time) > new_time for row_id in superseded):
+        raise _supersession_unavailable(
+            "supersession_decision_invalid",
+            "A superseded candidate is newer than the incoming memory",
+        )
+    if any(_utc(rows_by_id[row_id].event_time) != new_time for row_id in conflicts):
+        raise _supersession_unavailable(
+            "supersession_decision_invalid",
+            "A conflict candidate does not share the incoming event time",
+        )
+    successor = rows_by_id.get(superseded_by_id) if superseded_by_id is not None else None
+    if successor is not None and _utc(successor.event_time) <= new_time:
+        raise _supersession_unavailable(
+            "supersession_decision_invalid",
+            "A superseding candidate is not later than the incoming memory",
+        )
+
+    # Present-time candidates must have one exact derivative row. Locking that
+    # projection now makes a concurrent erasure/supersession either precede
+    # this verdict or wait until this transaction commits.
+    live_ids: set[UUID] = set()
+    for start in range(0, len(ordered_ids), _SUPERSESSION_BIND_BATCH):
+        page = ordered_ids[start : start + _SUPERSESSION_BIND_BATCH]
+        live_rows = (
+            await db.execute(
+                select(
+                    LiveFact.memory_id,
+                    LiveFact.namespace,
+                    LiveFact.agent_id,
+                    LiveFact.barrier_group,
+                )
+                .where(LiveFact.namespace == namespace, LiveFact.memory_id.in_(page))
+                .order_by(LiveFact.memory_id.asc())
+                .with_for_update()
+            )
+        ).all()
+        for live in live_rows:
+            if (
+                live.namespace != namespace
+                or live.agent_id != agent_id
+                or live.barrier_group != barrier_group
+            ):
+                raise _supersession_unavailable(
+                    "supersession_snapshot_changed",
+                    "A supersession candidate's current-fact projection changed; retry",
+                )
+            live_ids.add(live.memory_id)
+    if live_ids != set(expected_ids):
+        raise _supersession_unavailable(
+            "supersession_snapshot_changed",
+            "A supersession candidate is missing from the current-fact projection; retry",
+        )
+
+    return (
+        [rows_by_id[row_id] for row_id in superseded],
+        [rows_by_id[row_id] for row_id in conflicts],
+        successor,
+    )
+
+
+async def _mark_parents_stale(
     db: AsyncSession,
     namespace: str,
     agent_id: str,
-    closed_mem: Memory,
+    barrier_group: str | None,
+    closed_memories: list[Memory],
     closure_time: datetime,
 ) -> None:
-    """When a derived clause closes, its parent turn still contains the stale
-    text. Record the closure on the parent (metadata._stale_clauses, a list of
-    closure timestamps — never clause text, which may be subject-encrypted) so
-    ranking can demote it; the raw content is untouched."""
-    parent_ref = (dict(closed_mem.metadata_ or {})).get("_parent")
-    if not parent_ref:
+    """Batch-lock derived parents and update their denormalized projections."""
+
+    closures_by_parent: dict[UUID, list[Memory]] = {}
+    for closed in closed_memories:
+        parent_ref = dict(closed.metadata_ or {}).get("_parent")
+        if not parent_ref:
+            continue
+        try:
+            parent_id = UUID(str(parent_ref))
+        except (TypeError, ValueError) as exc:
+            raise _supersession_unavailable(
+                "supersession_parent_invariant_violation",
+                "A derived memory has an invalid parent reference",
+            ) from exc
+        if parent_id == closed.id:
+            raise _supersession_unavailable(
+                "supersession_parent_invariant_violation",
+                "A derived memory cannot be its own parent",
+            )
+        closures_by_parent.setdefault(parent_id, []).append(closed)
+    if not closures_by_parent:
         return
-    try:
-        parent = await db.get(Memory, UUID(str(parent_ref)))
-    except (ValueError, TypeError):
-        return
-    if parent is None or parent.erased_at is not None:
-        return
-    meta = dict(parent.metadata_ or {})
-    marks = list(meta.get("_stale_clauses") or [])
-    marks.append(_utc(closure_time).isoformat())
-    meta["_stale_clauses"] = marks
-    parent.metadata_ = meta
-    from .models import LiveFact
-    await db.execute(
-        update(LiveFact).where(LiveFact.memory_id == parent.id).values(metadata_=meta)
+
+    parent_ids = sorted(closures_by_parent, key=lambda value: value.hex)
+    parent_byte_limit = get_settings().supersession_candidate_bytes_limit
+    parent_inventory_bytes = 0
+    for start in range(0, len(parent_ids), _SUPERSESSION_BIND_BATCH):
+        page = parent_ids[start : start + _SUPERSESSION_BIND_BATCH]
+        count, page_bytes = (
+            await db.execute(
+                select(
+                    func.count(Memory.id),
+                    func.coalesce(
+                        func.sum(func.coalesce(func.length(cast(Memory.metadata_, Text)), 0) + 512),
+                        0,
+                    ),
+                ).where(Memory.namespace == namespace, Memory.id.in_(page))
+            )
+        ).one()
+        if int(count or 0) != len(page):
+            raise _supersession_unavailable(
+                "supersession_parent_snapshot_changed",
+                "A derived memory parent is unavailable; retry",
+            )
+        parent_inventory_bytes += int(page_bytes or 0)
+        if parent_inventory_bytes > parent_byte_limit:
+            raise _supersession_unavailable(
+                "supersession_parent_capacity_exceeded",
+                "Derived parent metadata exceeds the configured supersession byte capacity",
+            )
+    parents: dict[UUID, Memory] = {}
+    for start in range(0, len(parent_ids), _SUPERSESSION_BIND_BATCH):
+        page = parent_ids[start : start + _SUPERSESSION_BIND_BATCH]
+        rows = (
+            (
+                await db.execute(
+                    select(Memory)
+                    .options(
+                        load_only(
+                            Memory.id,
+                            Memory.namespace,
+                            Memory.agent_id,
+                            Memory.metadata_,
+                            Memory.valid_to,
+                            Memory.system_valid_to,
+                            Memory.superseded_by,
+                            Memory.barrier_group,
+                            Memory.content_hash,
+                            Memory.erased_at,
+                            raiseload=True,
+                        )
+                    )
+                    .where(Memory.namespace == namespace, Memory.id.in_(page))
+                    .order_by(Memory.id.asc())
+                    .execution_options(populate_existing=True)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        parents.update((row.id, row) for row in rows)
+    if set(parents) != set(parent_ids) or any(
+        parent.agent_id != agent_id or parent.barrier_group != barrier_group
+        for parent in parents.values()
+    ):
+        raise _supersession_unavailable(
+            "supersession_parent_snapshot_changed",
+            "A derived memory parent changed scope or is unavailable; retry",
+        )
+
+    active_parents = {
+        parent_id: parent
+        for parent_id, parent in parents.items()
+        if parent.erased_at is None
+    }
+    updated_metadata: dict[UUID, dict[str, Any]] = {}
+    closure_iso = _utc(closure_time).isoformat()
+    for parent_id, parent in active_parents.items():
+        meta = dict(parent.metadata_ or {})
+        raw_marks = meta.get("_stale_clauses")
+        if raw_marks is None:
+            marks: list[Any] = []
+        elif isinstance(raw_marks, list):
+            marks = list(raw_marks)
+        else:
+            raise _supersession_unavailable(
+                "supersession_parent_invariant_violation",
+                "A derived parent has an invalid stale-clause marker",
+            )
+        marks.extend(closure_iso for _ in closures_by_parent[parent_id])
+        if len(marks) > _STALE_CLAUSE_MARK_LIMIT:
+            raise _supersession_unavailable(
+                "supersession_parent_capacity_exceeded",
+                "A derived parent exceeds the stale-clause marker capacity",
+            )
+        meta["_stale_clauses"] = marks
+        parent.metadata_ = meta
+        updated_metadata[parent_id] = meta
+    updated_metadata_bytes = sum(
+        len(
+            json.dumps(
+                metadata,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                default=str,
+            ).encode("utf-8")
+        )
+        + 512
+        for metadata in updated_metadata.values()
     )
-    await chain_log(
-        db, namespace=namespace, agent_id=agent_id,
-        op="derived_stale_mark", memory_id=parent.id,
-        content_hash=parent.content_hash,
-        payload={"closed_clause": str(closed_mem.id), "closure_time": _utc(closure_time).isoformat()},
+    if updated_metadata_bytes > parent_byte_limit:
+        raise _supersession_unavailable(
+            "supersession_parent_capacity_exceeded",
+            "Derived parent updates exceed the configured supersession byte capacity",
+        )
+
+    # Load only projection identifiers, then use one typed executemany update
+    # per portable bind page rather than hydrating encrypted content/embeddings.
+    projection_rows: list[Any] = []
+    active_ids = sorted(active_parents, key=lambda value: value.hex)
+    for start in range(0, len(active_ids), _SUPERSESSION_BIND_BATCH):
+        page = active_ids[start : start + _SUPERSESSION_BIND_BATCH]
+        projection_rows.extend(
+            (
+                await db.execute(
+                    select(
+                        LiveFact.id,
+                        LiveFact.memory_id,
+                        LiveFact.agent_id,
+                        LiveFact.barrier_group,
+                    )
+                    .where(LiveFact.namespace == namespace, LiveFact.memory_id.in_(page))
+                    .order_by(LiveFact.memory_id.asc())
+                    .with_for_update()
+                )
+            ).all()
+        )
+    if any(
+        row.agent_id != agent_id or row.barrier_group != barrier_group
+        for row in projection_rows
+    ):
+        raise _supersession_unavailable(
+            "supersession_parent_snapshot_changed",
+            "A derived parent's current-fact projection changed scope; retry",
+        )
+    current_parent_ids = {
+        parent_id
+        for parent_id, parent in active_parents.items()
+        if (
+            parent.valid_to is None
+            and parent.system_valid_to is None
+            and parent.superseded_by is None
+        )
+    }
+    projected_parent_ids = {row.memory_id for row in projection_rows}
+    if not current_parent_ids.issubset(projected_parent_ids):
+        raise _supersession_unavailable(
+            "supersession_parent_snapshot_changed",
+            "A live derived parent is missing from the current-fact projection; retry",
+        )
+    closing_ids = {closed.id for closed in closed_memories}
+    if projected_parent_ids - current_parent_ids - closing_ids:
+        raise _supersession_unavailable(
+            "supersession_parent_snapshot_changed",
+            "A non-current derived parent has a stale current-fact projection; retry",
+        )
+    projection_update = (
+        LiveFact.__table__.update()
+        .where(LiveFact.__table__.c.id == bindparam("lians_live_fact_id"))
+        .values(metadata=bindparam("lians_live_fact_metadata"))
     )
+    update_parameters = [
+        {
+            "lians_live_fact_id": row.id,
+            "lians_live_fact_metadata": updated_metadata[row.memory_id],
+        }
+        for row in projection_rows
+        if row.memory_id in current_parent_ids
+    ]
+    for start in range(0, len(update_parameters), _SUPERSESSION_BIND_BATCH):
+        await db.execute(
+            projection_update,
+            update_parameters[start : start + _SUPERSESSION_BIND_BATCH],
+        )
+
+    # The immutable namespace chain is serialized by chain_log, so preserve one
+    # event per closed clause while all avoidable candidate/parent reads stay batched.
+    for parent_id in parent_ids:
+        parent = active_parents.get(parent_id)
+        if parent is None:
+            continue
+        for closed in closures_by_parent[parent_id]:
+            await chain_log(
+                db,
+                namespace=namespace,
+                agent_id=agent_id,
+                op="derived_stale_mark",
+                memory_id=parent.id,
+                content_hash=parent.content_hash,
+                payload={
+                    "closed_clause": str(closed.id),
+                    "closure_time": closure_iso,
+                },
+            )
 
 
 async def _ingest_derived_clause(
@@ -279,8 +704,21 @@ async def _ingest_derived_clause(
         new_content=clause, new_meta=meta, new_embedding=embedding,
         new_event_time=req.event_time, subject_key=subject_key,
         new_memory_id=new_id, cue_hint=parent_cued,
+        barrier_group=parent.barrier_group,
+    )
+    superseded_rows, conflict_rows, successor = await _lock_supersession_rows(
+        db,
+        namespace=namespace,
+        agent_id=req.agent_id,
+        barrier_group=parent.barrier_group,
+        new_memory_id=new_id,
+        new_event_time=req.event_time,
+        superseded_ids=list(supersession.superseded_ids),
+        conflict_ids=list(supersession.conflict_ids),
+        superseded_by_id=supersession.superseded_by_id,
     )
 
+    now = datetime.now(timezone.utc)
     dmem = Memory(
         id=new_id,
         namespace=namespace,
@@ -290,7 +728,8 @@ async def _ingest_derived_clause(
         embedding=embedding,
         metadata_=meta,
         event_time=req.event_time,
-        ingestion_time=datetime.now(timezone.utc),
+        ingestion_time=now,
+        system_valid_from=now,
         valid_from=req.event_time,
         valid_to=None,
         importance=parent.importance,
@@ -301,36 +740,88 @@ async def _ingest_derived_clause(
     db.add(dmem)
     await db.flush()
 
-    for old_id in supersession.superseded_ids:
-        old = await db.get(Memory, old_id)
-        if old:
-            old.valid_to = req.event_time
-            old.superseded_by = dmem.id
-            old.supersession_confidence = supersession.confidence
-            await chain_log(
-                db, namespace=namespace, agent_id=req.agent_id,
-                op="supersede", memory_id=old.id,
-                content_hash=old.content_hash,
-                payload={
-                    "superseded_by": str(dmem.id),
-                    "confidence": supersession.confidence,
-                    "relation": supersession.relation,
-                    "derived": True,
-                },
-            )
-            await _mark_parent_stale(db, namespace, req.agent_id, old, req.event_time)
+    for old in superseded_rows:
+        old.close_validity(valid_to=req.event_time, recorded_at=now)
+        old.superseded_by = dmem.id
+        old.supersession_confidence = supersession.confidence
+    if superseded_rows:
+        await db.flush()
+    for old in superseded_rows:
+        await chain_log(
+            db, namespace=namespace, agent_id=req.agent_id,
+            op="supersede", memory_id=old.id,
+            content_hash=old.content_hash,
+            payload={
+                "superseded_by": str(dmem.id),
+                "confidence": supersession.confidence,
+                "relation": supersession.relation,
+                "derived": True,
+            },
+        )
+    await _mark_parents_stale(
+        db,
+        namespace,
+        req.agent_id,
+        parent.barrier_group,
+        superseded_rows,
+        req.event_time,
+    )
 
     # Backdated arrival: a live later revision of this clause already exists.
     arrived_closed = False
-    if supersession.superseded_by_id is not None:
-        newer = await db.get(Memory, supersession.superseded_by_id)
-        if newer is not None and _utc(newer.event_time) > _utc(req.event_time):
-            dmem.valid_to = newer.event_time
-            dmem.superseded_by = newer.id
-            dmem.supersession_confidence = supersession.confidence
-            arrived_closed = True
+    if successor is not None:
+        dmem.close_validity(valid_to=successor.event_time, recorded_at=now)
+        dmem.superseded_by = successor.id
+        dmem.supersession_confidence = supersession.confidence
+        arrived_closed = True
+        await chain_log(
+            db,
+            namespace=namespace,
+            agent_id=req.agent_id,
+            op="supersede",
+            memory_id=dmem.id,
+            content_hash=dmem.content_hash,
+            payload={
+                "superseded_by": str(successor.id),
+                "confidence": supersession.confidence,
+                "relation": supersession.relation,
+                "backdated_arrival": True,
+                "derived": True,
+            },
+        )
 
-    await remove_live_facts(db, supersession.superseded_ids)
+    conflict_flags = [
+        ConflictFlag(
+            namespace=namespace,
+            agent_id=req.agent_id,
+            memory_a_id=conflict.id,
+            memory_b_id=dmem.id,
+            confidence=supersession.confidence,
+            status="open",
+        )
+        for conflict in conflict_rows
+    ]
+    if conflict_flags:
+        db.add_all(conflict_flags)
+        await db.flush()
+    for conflict in conflict_rows:
+        await chain_log(
+            db,
+            namespace=namespace,
+            agent_id=req.agent_id,
+            op="conflict_detected",
+            memory_id=dmem.id,
+            content_hash=dmem.content_hash,
+            payload={
+                "memory_a_id": str(conflict.id),
+                "memory_b_id": str(dmem.id),
+                "confidence": supersession.confidence,
+                "relation": supersession.relation,
+                "derived": True,
+            },
+        )
+
+    await remove_live_facts(db, [row.id for row in superseded_rows])
     if not arrived_closed:
         await upsert_live_fact(db, dmem, compute_predicate_key(meta))
 
@@ -356,6 +847,7 @@ async def add_memory(
     *,
     barrier_override: Optional[str] = None,
     precomputed_embedding: Optional[list[float]] = None,
+    commit: bool = True,
 ) -> MemoryOut:
     """``precomputed_embedding`` lets batch writers embed many contents in one
     model call (10-20x faster on local models) and pass each vector through;
@@ -365,6 +857,31 @@ async def add_memory(
         span.set_attribute("namespace", namespace)
         span.set_attribute("agent_id", req.agent_id)
         span.set_attribute("has_subject", bool(req.subject_id))
+
+        # Raw customer identifiers are routing inputs only. Persist a keyed,
+        # namespace-scoped reference in every memory/read-model/evidence field.
+        raw_subject_id = req.subject_id
+        if raw_subject_id:
+            persisted_subject_ref = subject_reference(namespace, raw_subject_id)
+            if persisted_subject_ref is None:
+                raise ValueError("subject_id must not be empty")
+            req.subject_id = persisted_subject_ref
+            req.metadata = replace_subject_identifier(
+                req.metadata or {}, raw_subject_id, persisted_subject_ref
+            )
+            if req.source == raw_subject_id:
+                req.source = persisted_subject_ref
+
+        # Reserve before embedding, extraction, encryption, or supersession.
+        # The reservation shares this write's transaction, so any failure before
+        # commit releases it automatically. Transactional idempotency callers
+        # serialize and filter replays before this function is entered.
+        await reserve_namespace_usage(
+            db,
+            namespace=namespace,
+            memory_writes=1,
+            estimated_ingest_bytes=estimate_ingest_bytes(req),
+        )
 
         if precomputed_embedding is not None:
             embedding = precomputed_embedding
@@ -380,8 +897,8 @@ async def add_memory(
         settings = get_settings()
         if settings.auto_metadata_enabled:
             try:
-                from .auto_metadata import enrich_metadata
                 from .adapters import get_adapter
+                from .auto_metadata import enrich_metadata
                 enriched_meta, auto_prov = await enrich_metadata(
                     req.content, req.metadata or {}, adapter=get_adapter(), settings=settings,
                 )
@@ -389,7 +906,10 @@ async def add_memory(
                     req.metadata = enriched_meta
                     span.set_attribute("auto_metadata_keys", ",".join(auto_prov["keys"]))
             except Exception:
-                pass  # fail-open: enrichment must never break ingestion
+                record_best_effort_failure("auto_metadata")
+                logger.warning(
+                    "Auto-metadata enrichment failed; caller metadata retained"
+                )
 
         # Interjection extraction (see interjection.py): durable-fact clauses
         # buried in a conversational turn become derived memories beside the
@@ -404,12 +924,17 @@ async def add_memory(
                     vectors = await get_embedding_provider().embed(clauses)
                     derived_clauses = list(zip(clauses, vectors))
             except Exception:
-                logger.warning("interjection extraction failed — storing raw turn only", exc_info=True)
+                logger.warning("interjection extraction failed; storing raw turn only")
 
         # Change 6: DEK resolved through cache
         subject_key: Optional[bytes] = None
         if req.subject_id:
-            subject_key = await _resolve_subject_key(db, req.subject_id, namespace)
+            subject_key = await _resolve_subject_key(
+                db,
+                req.subject_id,
+                namespace,
+                legacy_subject_id=raw_subject_id,
+            )
 
         stored_bytes = (
             encrypt_content(req.content, subject_key) if subject_key else req.content.encode()
@@ -438,6 +963,18 @@ async def add_memory(
                 new_event_time=req.event_time,
                 subject_key=subject_key,
                 new_memory_id=new_id,
+                barrier_group=barrier_group,
+            )
+            superseded_rows, conflict_rows, successor = await _lock_supersession_rows(
+                db,
+                namespace=namespace,
+                agent_id=req.agent_id,
+                barrier_group=barrier_group,
+                new_memory_id=new_id,
+                new_event_time=req.event_time,
+                superseded_ids=list(supersession.superseded_ids),
+                conflict_ids=list(supersession.conflict_ids),
+                superseded_by_id=supersession.superseded_by_id,
             )
 
             now = datetime.now(timezone.utc)
@@ -451,6 +988,7 @@ async def add_memory(
                 metadata_=req.metadata,
                 event_time=req.event_time,
                 ingestion_time=now,
+                system_valid_from=now,
                 valid_from=req.event_time,
                 valid_to=None,
                 importance=_compute_importance(req.event_time, req.importance),
@@ -461,25 +999,33 @@ async def add_memory(
             db.add(mem)
             await db.flush()
 
-            for old_id in supersession.superseded_ids:
-                old = await db.get(Memory, old_id)
-                if old:
-                    old.valid_to = req.event_time
-                    old.superseded_by = mem.id
-                    old.supersession_confidence = supersession.confidence
-                    await chain_log(
-                        db, namespace=namespace, agent_id=req.agent_id,
-                        op="supersede", memory_id=old.id,
-                        content_hash=old.content_hash,
-                        payload={
-                            "superseded_by": str(mem.id),
-                            "confidence": supersession.confidence,
-                            "relation": supersession.relation,
-                            "rationale": supersession.rationale,
-                            "adjudication_stage": 3 if supersession.rationale else 2,
-                        },
-                    )
-                    await _mark_parent_stale(db, namespace, req.agent_id, old, req.event_time)
+            for old in superseded_rows:
+                old.close_validity(valid_to=req.event_time, recorded_at=now)
+                old.superseded_by = mem.id
+                old.supersession_confidence = supersession.confidence
+            if superseded_rows:
+                await db.flush()
+            for old in superseded_rows:
+                await chain_log(
+                    db, namespace=namespace, agent_id=req.agent_id,
+                    op="supersede", memory_id=old.id,
+                    content_hash=old.content_hash,
+                    payload={
+                        "superseded_by": str(mem.id),
+                        "confidence": supersession.confidence,
+                        "relation": supersession.relation,
+                        "rationale": supersession.rationale,
+                        "adjudication_stage": 3 if supersession.rationale else 2,
+                    },
+                )
+            await _mark_parents_stale(
+                db,
+                namespace,
+                req.agent_id,
+                barrier_group,
+                superseded_rows,
+                req.event_time,
+            )
 
             # Out-of-order ingestion: a live fact with a LATER event_time already
             # covers this key/topic, so the incoming memory arrives historical —
@@ -487,43 +1033,46 @@ async def add_memory(
             # queryable via as_of/snapshot for its own era but never pollutes the
             # current view.
             arrived_closed = False
-            if supersession.superseded_by_id is not None:
-                newer = await db.get(Memory, supersession.superseded_by_id)
-                if newer is not None and _utc(newer.event_time) > _utc(req.event_time):
-                    mem.valid_to = newer.event_time
-                    mem.superseded_by = newer.id
-                    mem.supersession_confidence = supersession.confidence
-                    arrived_closed = True
-                    await chain_log(
-                        db, namespace=namespace, agent_id=req.agent_id,
-                        op="supersede", memory_id=mem.id,
-                        content_hash=mem.content_hash,
-                        payload={
-                            "superseded_by": str(newer.id),
-                            "confidence": supersession.confidence,
-                            "relation": supersession.relation,
-                            "backdated_arrival": True,
-                        },
-                    )
+            if successor is not None:
+                mem.close_validity(valid_to=successor.event_time, recorded_at=now)
+                mem.superseded_by = successor.id
+                mem.supersession_confidence = supersession.confidence
+                arrived_closed = True
+                await chain_log(
+                    db, namespace=namespace, agent_id=req.agent_id,
+                    op="supersede", memory_id=mem.id,
+                    content_hash=mem.content_hash,
+                    payload={
+                        "superseded_by": str(successor.id),
+                        "confidence": supersession.confidence,
+                        "relation": supersession.relation,
+                        "backdated_arrival": True,
+                    },
+                )
 
             # Same-time contradiction: persist a ConflictFlag for human review.
             # Both memories stay live (neither superseded) until someone resolves it.
-            for conflict_old_id in supersession.conflict_ids:
-                flag = ConflictFlag(
+            conflict_flags = [
+                ConflictFlag(
                     namespace=namespace,
                     agent_id=req.agent_id,
-                    memory_a_id=conflict_old_id,   # pre-existing memory
+                    memory_a_id=conflict.id,       # pre-existing memory
                     memory_b_id=mem.id,            # newly ingested memory
                     confidence=supersession.confidence,
                     status="open",
                 )
-                db.add(flag)
+                for conflict in conflict_rows
+            ]
+            if conflict_flags:
+                db.add_all(conflict_flags)
+                await db.flush()
+            for conflict in conflict_rows:
                 await chain_log(
                     db, namespace=namespace, agent_id=req.agent_id,
                     op="conflict_detected", memory_id=mem.id,
                     content_hash=mem.content_hash,
                     payload={
-                        "memory_a_id": str(conflict_old_id),
+                        "memory_a_id": str(conflict.id),
                         "memory_b_id": str(mem.id),
                         "confidence": supersession.confidence,
                         "relation": supersession.relation,
@@ -532,7 +1081,7 @@ async def add_memory(
 
             # Change 1: maintain live_facts projection. A memory that arrived
             # already superseded (backdated) is never live.
-            await remove_live_facts(db, supersession.superseded_ids)
+            await remove_live_facts(db, [row.id for row in superseded_rows])
             if not arrived_closed:
                 await upsert_live_fact(db, mem, predicate_key)
 
@@ -558,12 +1107,14 @@ async def add_memory(
                     await _ingest_derived_clause(
                         db, namespace, req, mem, clause_text, clause_vec, subject_key,
                     )
+                except SupersessionDecisionUnavailable:
+                    raise
                 except Exception:
-                    logger.warning("derived-clause ingest failed — raw turn unaffected", exc_info=True)
+                    logger.warning("derived-clause ingest failed; raw turn unaffected")
 
             # Fan out webhook events for the write outcome. dispatch_event is a
             # no-op when no endpoint subscribes, so this is safe on every write.
-            from .webhook_service import dispatch_event, MEMORY_SUPERSEDED, MEMORY_CONFLICT
+            from .webhook_service import MEMORY_CONFLICT, MEMORY_SUPERSEDED, dispatch_event
             if supersession.superseded_ids:
                 await dispatch_event(db, namespace, MEMORY_SUPERSEDED, {
                     "agent_id": req.agent_id,
@@ -580,75 +1131,71 @@ async def add_memory(
                     "confidence": supersession.confidence,
                 }, barrier_group=barrier_group)
 
-            await db.commit()
+            # The usage fact and authoritative memory mutation share one
+            # commit. A provider outage is handled later by the durable worker;
+            # no billable write can disappear between two transactions.
+            from .metering import enqueue_usage_event
+
+            await enqueue_usage_event(
+                db,
+                namespace=namespace,
+                event_name=get_settings().stripe_meter_write_event,
+                quantity=1,
+                source_identifier=f"w:{mem.id}",
+                occurred_at=mem.ingestion_time,
+            )
+
+            # Fence every older Redis/process-local generation while the
+            # exclusive advisory lock is still held.  If Redis is unavailable,
+            # invalidate_agent raises and this mutation is not committed.
+            await _fence_recall_caches_before_commit(db, namespace, req.agent_id)
+            if commit:
+                await db.commit()
+            else:
+                await db.flush()
 
         await db.refresh(mem)
-
-        # Change 7: invalidate in-process session cache on write
-        invalidate_working_set(namespace, req.agent_id)
-        await invalidate_agent(namespace, req.agent_id)
 
         span.set_attribute("memory_id", str(mem.id))
         span.set_attribute("supersession_relation", supersession.relation)
         span.set_attribute("predicate_key", predicate_key or "")
 
-        from .metering import get_customer_id, queue_usage_event
-        customer_id = await get_customer_id(db, namespace)
-        if customer_id:
-            settings = get_settings()
-            queue_usage_event(settings.stripe_meter_write_event, customer_id, 1, f"w:{mem.id}")
-
         record_write(namespace, supersession.relation)
         observe_add(namespace, _time.perf_counter() - _add_t0)
 
-        return _memory_to_out(mem, req.content)
+        response = _memory_to_out(mem, req.content)
+        # Echo the caller's transient identifier only on this direct response;
+        # the persisted row and all later reads expose the keyed reference.
+        if raw_subject_id:
+            response.subject_id = raw_subject_id
+        return response
 
 
-async def add_memory_idempotent(
+async def replay_memory_result(
     db: AsyncSession,
     namespace: str,
-    req: MemoryAdd,
-    idempotency_key: Optional[str],
+    memory_id: UUID,
     *,
+    raw_subject_id: str | None = None,
     barrier_override: Optional[str] = None,
 ) -> MemoryOut:
-    """
-    Idempotent wrapper around :func:`add_memory`.
+    """Rehydrate a completed memory write without persisting response content."""
+    mem = await db.get(Memory, memory_id)
+    if (
+        mem is None
+        or mem.namespace != namespace
+        or not _barrier_visible(mem, barrier_override)
+    ):
+        raise IdempotencyReplayUnavailable(
+            "The committed idempotency result is not visible to this caller"
+        )
+    subject_keys = await _keys_for_rows(db, namespace, [mem])
+    from .ranking import _decrypt
 
-    When ``idempotency_key`` is supplied, a previously-seen key (in this
-    namespace) returns the original memory instead of inserting a duplicate —
-    giving exactly-once semantics for a retried write. Without a key, behaves
-    exactly like ``add_memory``.
-
-    The SDKs send a stable key on automatic retries, so a write that succeeded
-    server-side but whose response was lost to a network blip is not duplicated.
-    """
-    if not idempotency_key:
-        return await add_memory(db, namespace, req, barrier_override=barrier_override)
-
-    existing = await db.get(IdempotencyKey, (idempotency_key, namespace))
-    if existing is not None:
-        mem = await db.get(Memory, existing.memory_id)
-        if mem is not None:
-            subject_keys = await _load_namespace_subject_keys(db, namespace)
-            from .ranking import _decrypt
-            return _memory_to_out(mem, _decrypt(mem, subject_keys))
-
-    result = await add_memory(db, namespace, req, barrier_override=barrier_override)
-    db.add(IdempotencyKey(key=idempotency_key, namespace=namespace, memory_id=result.id))
-    try:
-        await db.commit()
-    except Exception:
-        # Lost a race with a concurrent identical request — return the winner's row.
-        await db.rollback()
-        existing = await db.get(IdempotencyKey, (idempotency_key, namespace))
-        if existing is not None:
-            mem = await db.get(Memory, existing.memory_id)
-            if mem is not None:
-                subject_keys = await _load_namespace_subject_keys(db, namespace)
-                from .ranking import _decrypt
-                return _memory_to_out(mem, _decrypt(mem, subject_keys))
-    return result
+    response = _memory_to_out(mem, _decrypt(mem, subject_keys))
+    if raw_subject_id:
+        response.subject_id = raw_subject_id
+    return response
 
 
 def _estimate_tokens(text: str) -> int:
@@ -668,6 +1215,7 @@ async def _attach_context(
     subject_keys: dict[str, bytes],
     *,
     as_of: Optional[datetime] = None,
+    barrier_override: Optional[str] = None,
 ) -> None:
     """Populate ``context_before``/``context_after`` on recall hits.
 
@@ -680,6 +1228,7 @@ async def _attach_context(
     from .ranking import _decrypt
 
     gap = timedelta(seconds=CONTEXT_GAP_S)
+    context_rows: list[tuple[MemoryOut, Memory | None, Memory | None]] = []
     for out in memories_out:
         base = [
             Memory.namespace == namespace,
@@ -689,6 +1238,9 @@ async def _attach_context(
         ]
         if as_of is not None:
             base.append(Memory.event_time <= as_of)
+        barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
+        if barrier_condition is not None:
+            base.append(barrier_condition)
         before_stmt = (
             select(Memory)
             .where(and_(*base, Memory.event_time < out.event_time,
@@ -705,10 +1257,98 @@ async def _attach_context(
         )
         before = (await db.execute(before_stmt)).scalars().first()
         after = (await db.execute(after_stmt)).scalars().first()
+        context_rows.append((out, before, after))
+    neighbor_keys = await _keys_for_rows(
+        db,
+        namespace,
+        [
+            row
+            for _, before, after in context_rows
+            for row in (before, after)
+            if row is not None
+        ],
+    )
+    subject_keys = {**subject_keys, **neighbor_keys}
+    for out, before, after in context_rows:
         if before is not None:
             out.context_before = _decrypt(before, subject_keys)
         if after is not None:
             out.context_after = _decrypt(after, subject_keys)
+
+
+async def _visible_conflict_rows(
+    db: AsyncSession,
+    namespace: str,
+    *,
+    status: Optional[str],
+    limit: int,
+    barrier_override: Optional[str],
+    agent_id: Optional[str] = None,
+    oldest_first: bool = False,
+    after_detected_at: Optional[datetime] = None,
+    after_id: Optional[UUID] = None,
+) -> tuple[int, list[tuple[ConflictFlag, Memory, Memory]]]:
+    """Load a bounded conflict page and both memories in one tenant-safe query."""
+    memory_a = aliased(Memory)
+    memory_b = aliased(Memory)
+    filters: list[Any] = [
+        ConflictFlag.namespace == namespace,
+        memory_a.namespace == namespace,
+        memory_b.namespace == namespace,
+    ]
+    if status:
+        filters.append(ConflictFlag.status == status)
+    if agent_id:
+        filters.append(ConflictFlag.agent_id == agent_id)
+    if barrier_override is not None:
+        filters.extend(
+            (
+                or_(memory_a.barrier_group.is_(None), memory_a.barrier_group == barrier_override),
+                or_(memory_b.barrier_group.is_(None), memory_b.barrier_group == barrier_override),
+            )
+        )
+    page_filters = list(filters)
+    if after_detected_at is not None and after_id is not None:
+        timestamp_comparison = (
+            ConflictFlag.detected_at > after_detected_at
+            if oldest_first
+            else ConflictFlag.detected_at < after_detected_at
+        )
+        id_comparison = (
+            ConflictFlag.id > after_id if oldest_first else ConflictFlag.id < after_id
+        )
+        page_filters.append(
+            or_(
+                timestamp_comparison,
+                and_(
+                    ConflictFlag.detected_at == after_detected_at,
+                    id_comparison,
+                ),
+            )
+        )
+    joins = (
+        (memory_a, memory_a.id == ConflictFlag.memory_a_id),
+        (memory_b, memory_b.id == ConflictFlag.memory_b_id),
+    )
+    count_stmt = select(func.count(ConflictFlag.id)).select_from(ConflictFlag)
+    page_stmt = select(ConflictFlag, memory_a, memory_b)
+    for target, condition in joins:
+        count_stmt = count_stmt.join(target, condition)
+        page_stmt = page_stmt.join(target, condition)
+    total = int((await db.execute(count_stmt.where(*filters))).scalar_one() or 0)
+    ordering = (
+        (ConflictFlag.detected_at.asc(), ConflictFlag.id.asc())
+        if oldest_first
+        else (ConflictFlag.detected_at.desc(), ConflictFlag.id.desc())
+    )
+    rows = list(
+        (
+            await db.execute(
+                page_stmt.where(*page_filters).order_by(*ordering).limit(limit)
+            )
+        ).all()
+    )
+    return total, rows
 
 
 async def _agent_open_conflicts(
@@ -716,34 +1356,30 @@ async def _agent_open_conflicts(
     namespace: str,
     agent_id: str,
     limit: int,
+    barrier_override: Optional[str] = None,
 ) -> tuple[list[ConflictFlagOut], int]:
     """
     Open conflicts for one agent, oldest first (the longest-unresolved conflict
     is the most overdue), plus the total open count. Backs the active-resurfacing
     section of ``assemble_context``.
     """
-    from sqlalchemy import func
-
-    conds = and_(
-        ConflictFlag.namespace == namespace,
-        ConflictFlag.agent_id == agent_id,
-        ConflictFlag.status == "open",
+    total, rows = await _visible_conflict_rows(
+        db,
+        namespace,
+        status="open",
+        limit=limit,
+        barrier_override=barrier_override,
+        agent_id=agent_id,
+        oldest_first=True,
     )
-    total = (await db.execute(select(func.count()).select_from(ConflictFlag).where(conds))).scalar() or 0
     if total == 0:
         return [], 0
-
-    flags = (await db.execute(
-        select(ConflictFlag).where(conds).order_by(ConflictFlag.detected_at.asc()).limit(limit)
-    )).scalars().all()
-
-    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    memory_rows = [memory for _, mem_a, mem_b in rows for memory in (mem_a, mem_b)]
+    subject_keys = await _keys_for_rows(db, namespace, memory_rows)
     from .ranking import _decrypt
 
     out: list[ConflictFlagOut] = []
-    for flag in flags:
-        mem_a = await db.get(Memory, flag.memory_a_id)
-        mem_b = await db.get(Memory, flag.memory_b_id)
+    for flag, mem_a, mem_b in rows:
         out.append(ConflictFlagOut(
             id=flag.id,
             namespace=flag.namespace,
@@ -802,7 +1438,11 @@ async def assemble_context(
     open_conflicts_total = 0
     if req.surface_conflicts and req.max_conflicts > 0:
         open_conflicts, open_conflicts_total = await _agent_open_conflicts(
-            db, namespace, req.agent_id, req.max_conflicts
+            db,
+            namespace,
+            req.agent_id,
+            req.max_conflicts,
+            barrier_override,
         )
     if open_conflicts:
         banner = "⚠ UNRESOLVED MEMORY CONFLICTS — contested facts, pending adjudication:"
@@ -845,9 +1485,76 @@ async def assemble_context(
         token_estimate=used,
         truncated=truncated,
         retrieval_degraded=result.retrieval_degraded,
+        graph_search_complete=result.graph_search_complete,
+        candidate_window_complete=result.candidate_window_complete,
+        candidates_considered=result.candidates_considered,
+        candidate_limit=result.candidate_limit,
         open_conflicts=open_conflicts,
         open_conflicts_total=open_conflicts_total,
     )
+
+
+async def _complete_recall(
+    db: AsyncSession,
+    namespace: str,
+    req: RecallRequest,
+    result: RecallResult,
+    *,
+    router: str,
+    cache_hit: bool,
+    started_at: float,
+) -> RecallResult:
+    """Durably audit one successful recall before returning its result.
+
+    Every router, including Redis and keyed fast paths, passes through this
+    awaited boundary. The audit row and durable metering outbox row share one
+    commit, so a successful response cannot lose its billable usage fact.
+    """
+    audit_payload: dict[str, Any] = {
+        "query_hash": _content_hash(req.query),
+        "k": req.k,
+        "as_of": req.as_of.isoformat() if req.as_of else None,
+        "filters": req.filters,
+        "result_ids": [str(memory.id) for memory in result.memories],
+        "router": router,
+        "cache_hit": cache_hit,
+        "candidate_window_complete": result.candidate_window_complete,
+        "candidates_considered": result.candidates_considered,
+        "candidate_limit": result.candidate_limit,
+        "candidate_mode": result.candidate_mode,
+        "graph_search_complete": result.graph_search_complete,
+    }
+    if result.retrieval_degraded:
+        audit_payload["retrieval_degraded"] = True
+
+    # Reserve the durable namespace recall budget in the same transaction as
+    # the audit and billing facts. A rejected quota reservation returns no
+    # result and leaves no partial counter, audit, or metering state.
+    await reserve_namespace_usage(db, namespace=namespace, recalls=1)
+
+    recall_log = await chain_log(
+        db,
+        namespace=namespace,
+        agent_id=req.agent_id,
+        op="recall",
+        payload=audit_payload,
+    )
+
+    from .metering import enqueue_usage_event
+
+    await enqueue_usage_event(
+        db,
+        namespace=namespace,
+        event_name=get_settings().stripe_meter_recall_event,
+        quantity=1,
+        source_identifier=f"r:{recall_log.id}",
+        occurred_at=recall_log.created_at,
+    )
+    await db.commit()
+
+    record_recall(namespace, router=router, cache_hit=cache_hit)
+    observe_recall(namespace, _time.perf_counter() - started_at)
+    return result
 
 
 async def recall_memories(
@@ -882,16 +1589,51 @@ async def recall_memories(
             except (TypeError, ValueError):
                 mmr_lambda = 0.5
 
+        # Cache coherence is supported only on PostgreSQL, where recall holds a
+        # shared transaction advisory lock through its audit commit and writers
+        # take the matching exclusive lock. Other databases always use durable
+        # reads rather than an unsafe process-local approximation.
+        cache_generation: str | None = None
+        if (
+            settings.recall_cache_enabled
+            and not req.as_of
+            and barrier_override is None
+            and await acquire_namespace_cache_lock(db, namespace, shared=True)
+            and await _acquire_pg_advisory_lock(
+                db, namespace, req.agent_id, shared=True
+            )
+        ):
+            cache_generation = await get_agent_cache_generation(namespace, req.agent_id)
+        candidate_contract = recall_candidate_contract(req.k)
+
         # Hot cache (Redis)
-        if settings.recall_cache_enabled and not req.as_of and not near_entity and not rerank and barrier_override is None:
+        if (
+            cache_generation is not None
+            and not near_entity
+            and not rerank
+        ):
             cached = await get_cached_recall(
-                namespace, req.agent_id, req.query, req.as_of, req.k, req.filters
+                namespace,
+                req.agent_id,
+                req.query,
+                req.as_of,
+                req.k,
+                req.filters,
+                generation=cache_generation,
+                candidate_contract=candidate_contract,
             )
             if cached is not None:
                 span.set_attribute("cache_hit", True)
-                record_recall(namespace, router="cache", cache_hit=True)
-                observe_recall(namespace, _time.perf_counter() - _recall_t0)
-                return RecallResult.model_validate_json(cached)
+                result = RecallResult.model_validate_json(cached)
+                return await _complete_recall(
+                    db,
+                    namespace,
+                    req,
+                    result,
+                    router="cache",
+                    cache_hit=True,
+                    started_at=_recall_t0,
+                )
         span.set_attribute("cache_hit", False)
 
         # Change 2: keyed router — exact lookup if filters resolve to a known predicate
@@ -904,7 +1646,7 @@ async def recall_memories(
                         db, namespace, req.agent_id, predicate_key, barrier_group
                     )
                     if live_fact is not None:
-                        subject_keys = await _load_namespace_subject_keys(db, namespace)
+                        subject_keys = await _keys_for_rows(db, namespace, [live_fact])
                         from .ranking import _decrypt
                         content = _decrypt(live_fact, subject_keys)
                         # Build a synthetic Memory-like result for the schema
@@ -918,11 +1660,20 @@ async def recall_memories(
                                 memories=[mem_out],
                                 as_of=None,
                                 total_candidates=1,
+                                candidate_window_complete=True,
+                                candidates_considered=1,
+                                candidate_limit=1,
+                                candidate_mode="keyed_exact",
                             )
-                            _fire_recall_audit(db, namespace, req, [mem_out])
-                            record_recall(namespace, router="keyed", cache_hit=False)
-                            observe_recall(namespace, _time.perf_counter() - _recall_t0)
-                            return result
+                            return await _complete_recall(
+                                db,
+                                namespace,
+                                req,
+                                result,
+                                router="keyed",
+                                cache_hit=False,
+                                started_at=_recall_t0,
+                            )
 
         span.set_attribute("router", "semantic")
 
@@ -949,38 +1700,18 @@ async def recall_memories(
                 retrieval_degraded = True
                 embed_span.set_attribute("retrieval_degraded", True)
                 logger.warning(
-                    "embedding provider failed (%s: %s) — recall degrading to lexical-only",
-                    type(exc).__name__, exc,
+                    "embedding provider failed (%s) — recall degrading to lexical-only",
+                    type(exc).__name__,
                 )
         span.set_attribute("retrieval_degraded", retrieval_degraded)
 
-        with tracer.start_as_current_span("recall.load_keys"):
-            subject_keys = await _load_namespace_subject_keys(db, namespace)
-            barrier_group = await _get_barrier_group(db, namespace, req.agent_id, override=barrier_override)
-
-        # Change 7: in-process working-set cache (present-time only). The cache is
-        # keyed by (namespace, agent_id); a key-level barrier (SSO) can vary the
-        # barrier for the same agent, so bypass the cache when an override is in
-        # play to avoid serving one barrier's working set to another.
-        live_facts_cache: Optional[list] = None
-        if not req.as_of:
-            from .current_facts import fetch_working_set
-            if barrier_override is not None:
-                with tracer.start_as_current_span("recall.prefetch_working_set"):
-                    live_facts_cache = await fetch_working_set(
-                        db, namespace, req.agent_id, barrier_group
-                    )
-            else:
-                live_facts_cache = get_working_set(namespace, req.agent_id)
-                if live_facts_cache is None:
-                    with tracer.start_as_current_span("recall.prefetch_working_set"):
-                        live_facts_cache = await fetch_working_set(
-                            db, namespace, req.agent_id, barrier_group
-                        )
-                    set_working_set(namespace, req.agent_id, live_facts_cache)
-                    span.set_attribute("working_set_cold", True)
-                else:
-                    span.set_attribute("working_set_cold", False)
+        barrier_group = await _get_barrier_group(
+            db,
+            namespace,
+            req.agent_id,
+            override=barrier_override,
+        )
+        recall_diagnostics: dict[str, Any] = {}
 
         with tracer.start_as_current_span("recall.search"):
             results = await hybrid_recall(
@@ -992,9 +1723,10 @@ async def recall_memories(
                 k=req.k,
                 as_of=req.as_of,
                 filters=req.filters,
-                subject_keys=subject_keys,
+                subject_keys=None,
                 barrier_group=barrier_group,
-                live_facts_override=live_facts_cache,
+                live_facts_override=None,
+                diagnostics=recall_diagnostics,
             )
 
         span.set_attribute("result_count", len(results))
@@ -1009,12 +1741,16 @@ async def recall_memories(
 
         # Graph-proximity reranking: boost results whose entity sits near the
         # anchor entity in the relationship graph (Graphiti-style node-distance).
+        graph_search_complete = True
         if near_entity and results:
-            results = await _rerank_by_proximity(
+            results, graph_search_complete = await _rerank_by_proximity(
                 db, namespace, req.agent_id, near_entity, near_key, results, req.as_of,
                 barrier_override=barrier_override,
             )
             span.set_attribute("graph_rerank", True)
+            span.set_attribute("graph_search_complete", graph_search_complete)
+            retrieval_degraded = retrieval_degraded or not graph_search_complete
+            span.set_attribute("retrieval_degraded", retrieval_degraded)
 
         # hybrid_recall always returns Memory objects (Change 1 fetch-back ensures this)
         with tracer.start_as_current_span("recall.assemble"):
@@ -1027,61 +1763,59 @@ async def recall_memories(
         if req.include_context and memories_out:
             with tracer.start_as_current_span("recall.context"):
                 await _attach_context(
-                    db, namespace, req.agent_id, memories_out, subject_keys,
+                    db,
+                    namespace,
+                    req.agent_id,
+                    memories_out,
+                    await _keys_for_rows(db, namespace, [item[0] for item in results]),
                     as_of=req.as_of,
+                    barrier_override=barrier_override,
                 )
-
-        audit_payload = {
-            "query_hash": _content_hash(req.query),
-            "k": req.k,
-            "as_of": req.as_of.isoformat() if req.as_of else None,
-            "filters": req.filters,
-            "result_ids": [str(m.id) for m in memories_out],
-        }
-        if retrieval_degraded:
-            audit_payload["retrieval_degraded"] = True
-        recall_log = await chain_log(
-            db, namespace=namespace, agent_id=req.agent_id,
-            op="recall",
-            payload=audit_payload,
-        )
-        await db.commit()
 
         result = RecallResult(
             memories=memories_out,
             as_of=req.as_of,
             total_candidates=len(results),
             retrieval_degraded=retrieval_degraded,
+            graph_search_complete=graph_search_complete,
+            candidate_window_complete=bool(
+                recall_diagnostics.get("candidate_window_complete", True)
+            ),
+            candidates_considered=int(
+                recall_diagnostics.get("candidates_considered", len(results))
+            ),
+            candidate_limit=int(recall_diagnostics.get("candidate_limit", len(results))),
+            candidate_mode=str(recall_diagnostics.get("candidate_mode", "exact")),
             token_estimate=sum(
                 _estimate_tokens(m.content) for m in memories_out if m.content),
         )
 
-        from .metering import get_customer_id, queue_usage_event
-        customer_id = await get_customer_id(db, namespace)
-        if customer_id:
-            queue_usage_event(
-                settings.stripe_meter_recall_event,
-                customer_id, 1, f"r:{recall_log.id}",
-            )
+        router = "semantic_degraded" if retrieval_degraded else "semantic"
+        result = await _complete_recall(
+            db,
+            namespace,
+            req,
+            result,
+            router=router,
+            cache_hit=False,
+            started_at=_recall_t0,
+        )
 
         # Never cache a degraded result — it would keep serving lexical-only
         # recall after the embedding provider recovers.
         if (
-            settings.recall_cache_enabled and not req.as_of and not near_entity
+            cache_generation is not None and not near_entity
             and barrier_override is None and not retrieval_degraded
+            and result.candidate_mode in {"ann", "historical_ann"}
         ):
             await set_cached_recall(
                 namespace, req.agent_id, req.query, req.as_of, req.k, req.filters,
                 result.model_dump_json(),
                 settings.recall_cache_ttl_seconds,
+                generation=cache_generation,
+                candidate_contract=candidate_contract,
             )
 
-        record_recall(
-            namespace,
-            router="semantic_degraded" if retrieval_degraded else "semantic",
-            cache_hit=False,
-        )
-        observe_recall(namespace, _time.perf_counter() - _recall_t0)
         return result
 
 
@@ -1094,16 +1828,17 @@ async def _rerank_by_proximity(
     results: list,
     as_of: Optional[datetime],
     barrier_override: Optional[str] = None,
-) -> list:
+) -> tuple[list, bool]:
     """
     Reorder recall results by graph proximity to ``anchor``.
 
     Each result's entity is read from metadata[``near_key``]; its hop-distance to
     the anchor in the relationship graph yields an additive proximity bonus
     (1/(1+distance)), so closely-connected facts rise without displacing strong
-    semantic matches. Unreachable entities get no bonus — pure semantic order.
+    semantic matches. Unreachable entities get no bonus. A budget-capped search
+    also gives unknown distances no bonus but reports ``search_complete=False``.
     """
-    from .graph_service import entity_distances, canon_entity
+    from .graph_service import canon_entity, entity_distances
 
     candidates: set[str] = set()
     for mem, _score, _content in results:
@@ -1111,9 +1846,9 @@ async def _rerank_by_proximity(
         if val:
             candidates.add(str(val))
     if not candidates:
-        return results
+        return results, True
 
-    distances = await entity_distances(
+    distances, search_complete = await entity_distances(
         db, namespace, agent_id, anchor, candidates, as_of=as_of,
         barrier_override=barrier_override,
     )
@@ -1125,29 +1860,7 @@ async def _rerank_by_proximity(
         bonus = 1.0 / (1.0 + dist) if dist is not None else 0.0
         return score + bonus
 
-    return sorted(results, key=_key, reverse=True)
-
-
-def _fire_recall_audit(db: AsyncSession, namespace: str, req: RecallRequest, memories: list) -> None:
-    """Fire-and-forget recall audit log for keyed-router fast exits."""
-    async def _log():
-        try:
-            await chain_log(
-                db, namespace=namespace, agent_id=req.agent_id,
-                op="recall",
-                payload={
-                    "query_hash": _content_hash(req.query),
-                    "k": req.k,
-                    "as_of": None,
-                    "filters": req.filters,
-                    "result_ids": [str(m.id) for m in memories],
-                    "router": "keyed",
-                },
-            )
-            await db.commit()
-        except Exception:
-            pass
-    asyncio.create_task(_log())
+    return sorted(results, key=_key, reverse=True), search_complete
 
 
 async def batch_add_memories(
@@ -1155,11 +1868,42 @@ async def batch_add_memories(
     namespace: str,
     reqs: list[MemoryAdd],
     barrier_override: Optional[str] = None,
+    *,
+    commit: bool = True,
 ) -> MemoryBatchResult:
-    """Add multiple memories sequentially — later items can supersede earlier ones."""
+    """Atomically add memories; later items may supersede earlier items.
+
+    PostgreSQL transaction advisory locks survive each nested ``add_memory``
+    call until the batch commits. Subject locks precede agent locks, matching
+    single writes and erasure; both sets use a canonical order.
+    """
+    # Match the single-write/erasure lock order: subject before agent. Both
+    # collections are canonicalized so overlapping batches cannot deadlock.
+    subject_refs = sorted(
+        {
+            persisted
+            for req in reqs
+            if req.subject_id is not None
+            and (persisted := subject_reference(namespace, req.subject_id)) is not None
+        }
+    )
+    for persisted_subject_ref in subject_refs:
+        await lock_subject_key_for_update(db, persisted_subject_ref, namespace)
+    for agent_id in sorted({req.agent_id for req in reqs}):
+        await _acquire_pg_advisory_lock(db, namespace, agent_id)
     out: list[MemoryOut] = []
     for req in reqs:
-        out.append(await add_memory(db, namespace, req, barrier_override=barrier_override))
+        out.append(
+            await add_memory(
+                db,
+                namespace,
+                req,
+                barrier_override=barrier_override,
+                commit=False,
+            )
+        )
+    if commit:
+        await db.commit()
     return MemoryBatchResult(added=len(out), memories=out)
 
 
@@ -1169,34 +1913,70 @@ async def get_pending_supersessions(
     confidence_threshold: Optional[float] = None,
     limit: int = 50,
     barrier_override: Optional[str] = None,
+    before_chain_position: Optional[int] = None,
 ) -> SupersessionReviewResult:
     settings = get_settings()
     threshold = confidence_threshold if confidence_threshold is not None else settings.supersession_review_threshold
 
-    stmt = (
-        select(EventLog)
+    resolution = aliased(EventLog)
+    confidence = func.coalesce(EventLog.payload["confidence"].as_float(), 1.0)
+    base_conditions: list[Any] = [
+        EventLog.namespace == namespace,
+        EventLog.op == "supersede",
+        confidence < threshold,
+        ~select(resolution.id)
         .where(
-            and_(
-                EventLog.namespace == namespace,
-                EventLog.op == "supersede",
-            )
+            resolution.namespace == EventLog.namespace,
+            resolution.memory_id == EventLog.memory_id,
+            resolution.op.in_(("supersession_confirmed", "supersession_rejected")),
+            resolution.chain_position > EventLog.chain_position,
         )
-        .order_by(EventLog.created_at.desc())
-        .limit(limit * 4)
+        .exists(),
+    ]
+    page_conditions = list(base_conditions)
+    if before_chain_position is not None:
+        page_conditions.append(EventLog.chain_position < before_chain_position)
+
+    def _statement(*, conditions: list[Any]):
+        statement = select(EventLog)
+        if barrier_override is not None:
+            statement = statement.join(
+                Memory,
+                and_(
+                    Memory.namespace == EventLog.namespace,
+                    Memory.id == EventLog.memory_id,
+                ),
+            ).where(
+                or_(
+                    Memory.barrier_group.is_(None),
+                    Memory.barrier_group == barrier_override,
+                )
+            )
+        return statement.where(*conditions)
+
+    # Exact total is independent of cursor; the EventLog namespace/chain index
+    # and correlated resolution predicate keep work in the authenticated scope.
+    count_statement = _statement(conditions=base_conditions).with_only_columns(
+        func.count(EventLog.id),
+        maintain_column_froms=True,
     )
-    result = await db.execute(stmt)
-    rows = result.scalars().all()
+    total = int((await db.execute(count_statement)).scalar_one())
+    rows = list(
+        (
+            await db.execute(
+                _statement(conditions=page_conditions)
+                .order_by(EventLog.chain_position.desc())
+                .limit(limit + 1)
+            )
+        ).scalars().all()
+    )
+    has_more = len(rows) > limit
+    page = rows[:limit]
 
     items: list[SupersessionReviewItem] = []
-    for row in rows:
-        if barrier_override is not None:
-            memory = await db.get(Memory, row.memory_id)
-            if memory is None or not _barrier_visible(memory, barrier_override):
-                continue
+    for row in page:
         payload = dict(row.payload or {})
         confidence = float(payload.get("confidence", 1.0))
-        if confidence >= threshold:
-            continue
         items.append(SupersessionReviewItem(
             event_id=row.id,
             memory_id=row.memory_id,
@@ -1208,12 +1988,14 @@ async def get_pending_supersessions(
             created_at=row.created_at,
             content_hash=row.content_hash,
         ))
-        if len(items) >= limit:
-            break
 
     return SupersessionReviewResult(
         items=items,
-        total=len(items),
+        total=total,
+        returned=len(items),
+        complete=before_chain_position is None and not has_more,
+        has_more=has_more,
+        next_chain_position=(page[-1].chain_position if has_more and page else None),
         confidence_threshold=threshold,
     )
 
@@ -1237,10 +2019,55 @@ async def apply_supersession_action(
         from fastapi import HTTPException
         raise HTTPException(status_code=422, detail="action must be 'confirm' or 'reject'")
 
+    await _acquire_pg_advisory_lock(db, namespace, mem.agent_id)
+    mem = (
+        await db.execute(
+            select(Memory)
+            .where(Memory.id == memory_id, Memory.namespace == namespace)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if mem is None or not _barrier_visible(mem, barrier_override):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Memory not found")
+    if mem.superseded_by != action.expected_superseded_by:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Supersession version conflict")
+    supersede_event = (
+        await db.execute(
+            select(EventLog.id, EventLog.chain_position)
+            .where(
+                EventLog.namespace == namespace,
+                EventLog.memory_id == memory_id,
+                EventLog.op == "supersede",
+            )
+            .order_by(EventLog.chain_position.desc())
+            .limit(1)
+        )
+    ).one_or_none()
+    if supersede_event is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Supersession evidence is missing")
+    prior_resolution = (
+        await db.execute(
+            select(EventLog.id)
+            .where(
+                EventLog.namespace == namespace,
+                EventLog.memory_id == memory_id,
+                EventLog.op.in_(("supersession_confirmed", "supersession_rejected")),
+                EventLog.chain_position > supersede_event.chain_position,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if prior_resolution is not None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Supersession is already resolved")
     now = datetime.now(timezone.utc)
 
     if action.action == "reject":
-        mem.valid_to = None
+        mem.reopen_validity()
         mem.superseded_by = None
         mem.supersession_confidence = None
         # Change 1: restore to live_facts when supersession is rejected
@@ -1258,20 +2085,25 @@ async def apply_supersession_action(
             "reviewer_note": action.reviewer_note,
             "action": action.action,
             "actioned_at": now.isoformat(),
+            "supersede_event_id": str(supersede_event.id),
+            "superseded_by": str(action.expected_superseded_by),
         },
     )
+    await _fence_recall_caches_before_commit(db, namespace, mem.agent_id)
     await db.commit()
-    invalidate_working_set(namespace, mem.agent_id)
     return SupersessionActionResult(memory_id=memory_id, action=action.action, applied_at=now)
 
 
 async def get_retention_policy(db: AsyncSession, namespace: str) -> RetentionPolicyOut:
     pol = await db.get(NamespacePolicy, namespace)
     if pol is None:
-        pol = NamespacePolicy(namespace=namespace)
-        db.add(pol)
-        await db.commit()
-        await db.refresh(pol)
+        return RetentionPolicyOut(
+            namespace=namespace,
+            content_ttl_days=None,
+            audit_retention_days=1825,
+            legal_hold=False,
+            updated_at=None,
+        )
     return RetentionPolicyOut.model_validate(pol)
 
 
@@ -1281,10 +2113,29 @@ async def set_retention_policy(
     data: RetentionPolicyIn,
     actor_id: str = "__admin__",
 ) -> RetentionPolicyOut:
-    pol = await db.get(NamespacePolicy, namespace)
+    # Use the same namespace-policy boundary as governance reservations and
+    # administration so creation is serialized even before a row exists.
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"lians:namespace-governance:{namespace}"},
+        )
+    pol = (
+        await db.execute(
+            select(NamespacePolicy)
+            .where(NamespacePolicy.namespace == namespace)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if pol is None:
+        if data.expected_updated_at is not None:
+            raise MutationVersionConflict("Resource version conflict")
         pol = NamespacePolicy(namespace=namespace)
         db.add(pol)
+    else:
+        if data.expected_updated_at is None:
+            raise MutationVersionConflict("Resource version conflict")
+        assert_expected_updated_at(pol.updated_at, data.expected_updated_at)
     pol.content_ttl_days = data.content_ttl_days
     pol.audit_retention_days = data.audit_retention_days
     pol.legal_hold = data.legal_hold
@@ -1303,11 +2154,34 @@ async def set_retention_policy(
     return RetentionPolicyOut.model_validate(pol)
 
 
-async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPruneResult:
-    pol = await db.get(NamespacePolicy, namespace)
+async def prune_expired_content(
+    db: AsyncSession,
+    namespace: str,
+    *,
+    batch_limit: int = 500,
+) -> RetentionPruneResult:
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"lians:namespace-governance:{namespace}"},
+        )
+    pol = (
+        await db.execute(
+            select(NamespacePolicy)
+            .where(NamespacePolicy.namespace == namespace)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
     if pol is None or pol.content_ttl_days is None:
         cutoff = datetime.min.replace(tzinfo=timezone.utc)
-        return RetentionPruneResult(namespace=namespace, memories_pruned=0, cutoff_date=cutoff)
+        return RetentionPruneResult(
+            namespace=namespace,
+            memories_pruned=0,
+            cutoff_date=cutoff,
+            remaining=0,
+            complete=True,
+            batch_limit=batch_limit,
+        )
 
     if pol.legal_hold:
         from fastapi import HTTPException
@@ -1319,23 +2193,43 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=pol.content_ttl_days)
 
-    stmt = select(Memory).where(
-        and_(
-            Memory.namespace == namespace,
-            Memory.ingestion_time < cutoff,
-            Memory.content_encrypted.is_not(None),
-            Memory.erased_at.is_(None),
-        )
+    prune_conditions = and_(
+        Memory.namespace == namespace,
+        Memory.ingestion_time < cutoff,
+        Memory.content_encrypted.is_not(None),
+        Memory.erased_at.is_(None),
     )
-    result = await db.execute(stmt)
-    memories = result.scalars().all()
-
-    pruned_agents: set[str] = set()
+    candidates = list(
+        (
+            await db.execute(
+                select(Memory.id, Memory.agent_id)
+                .where(prune_conditions)
+                .order_by(Memory.ingestion_time.asc(), Memory.id.asc())
+                .limit(batch_limit)
+            )
+        ).all()
+    )
+    candidate_ids = [row.id for row in candidates]
+    pruned_agents = {row.agent_id for row in candidates}
+    for aid in sorted(pruned_agents):
+        await _acquire_pg_advisory_lock(db, namespace, aid)
+    # Re-read after the cooperating agent boundaries are held. This prevents a
+    # stale pre-lock snapshot from generating duplicate prune evidence after a
+    # concurrent erase or conflict/supersession mutation commits.
+    memories = list(
+        (
+            await db.execute(
+                select(Memory)
+                .where(prune_conditions, Memory.id.in_(candidate_ids))
+                .order_by(Memory.ingestion_time.asc(), Memory.id.asc())
+                .with_for_update()
+            )
+        ).scalars()
+    )
     for mem in memories:
         mem.content_encrypted = None
         mem.embedding = None
         mem.erased_at = now
-        pruned_agents.add(mem.agent_id)
         await chain_log(
             db, namespace=namespace, agent_id=mem.agent_id,
             op="retention_prune", memory_id=mem.id,
@@ -1346,14 +2240,26 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
     # Same tombstone hazard as erase_subject: pruned content must leave the
     # present-time read model and caches, or recall returns empty husks.
     await remove_live_facts(db, [mem.id for mem in memories])
+    for aid in sorted(pruned_agents):
+        await _fence_recall_caches_before_commit(db, namespace, aid)
 
     await db.commit()
-
-    for aid in pruned_agents:
-        invalidate_working_set(namespace, aid)
-        await invalidate_agent(namespace, aid)
-
-    return RetentionPruneResult(namespace=namespace, memories_pruned=len(memories), cutoff_date=cutoff)
+    remaining = int(
+        (
+            await db.execute(
+                select(func.count(Memory.id)).where(prune_conditions)
+            )
+        ).scalar_one()
+        or 0
+    )
+    return RetentionPruneResult(
+        namespace=namespace,
+        memories_pruned=len(memories),
+        cutoff_date=cutoff,
+        remaining=remaining,
+        complete=remaining == 0,
+        batch_limit=batch_limit,
+    )
 
 
 async def erase_subject(
@@ -1361,62 +2267,26 @@ async def erase_subject(
     namespace: str,
     subject_id: str,
     request_ref: str,
-) -> int:
-    stmt = select(Memory).where(
-        and_(
-            Memory.namespace == namespace,
-            Memory.subject_id == subject_id,
-            Memory.erased_at.is_(None),
-        )
+) -> Any:
+    """Compatibility entry point for the durable bounded workflow."""
+
+    from .subject_erasure_service import enqueue_subject_erasure
+
+    job, _ = await enqueue_subject_erasure(
+        db,
+        namespace=namespace,
+        subject_id=subject_id,
+        request_ref=request_ref,
+        principal_ref="lians:principal:v1:local-privacy-controller",
+        auth_method="local",
     )
-    result = await db.execute(stmt)
-    memories = result.scalars().all()
+    return job
 
-    now = datetime.now(timezone.utc)
-    agent_ids: set[str] = set()
-    for mem in memories:
-        mem.content_encrypted = None
-        # The embedding is derived from the content (inversion attacks can
-        # approximate the original text) and metadata routinely carries
-        # personal identifiers — GDPR erasure must shred both, not just the
-        # ciphertext.
-        mem.embedding = None
-        mem.metadata_ = {}
-        mem.erased_at = now
-        agent_ids.add(mem.agent_id)
-        await chain_log(
-            db, namespace=namespace, agent_id=mem.agent_id,
-            op="erase", memory_id=mem.id,
-            content_hash=mem.content_hash,
-            payload={"subject_id": subject_id, "request_ref": request_ref},
-        )
 
-    # Purge the denormalized present-time read model. Without this the next
-    # working-set fill resurrects the erased fact as a null-content tombstone
-    # in recall results (with its own denormalized embedding copy).
-    await remove_live_facts(db, [mem.id for mem in memories])
+async def _removed_unbounded_erase_subject_reference_only() -> None:
+    """Marker retained so release notes can name the removed implementation."""
 
-    await destroy_subject_key(db, subject_id, namespace)
-
-    if memories:
-        from .webhook_service import dispatch_event, MEMORY_ERASED
-        await dispatch_event(db, namespace, MEMORY_ERASED, {
-            "subject_id": subject_id,
-            "request_ref": request_ref,
-            "memories_erased": len(memories),
-        })
-
-    await db.commit()
-
-    # Change 6: evict destroyed key from DEK cache
-    evict_dek(namespace, subject_id)
-    # Change 7: invalidate session caches for all agents that had this subject's data
-    for aid in agent_ids:
-        invalidate_working_set(namespace, aid)
-        await invalidate_agent(namespace, aid)
-
-    record_erase(namespace, len(memories))
-    return len(memories)
+    return None
 
 
 async def get_knowledge_snapshot(
@@ -1426,21 +2296,41 @@ async def get_knowledge_snapshot(
     as_of: datetime,
     limit: int = 1000,
     barrier_override: Optional[str] = None,
+    recorded_as_of: Optional[datetime] = None,
+    after_event_time: Optional[datetime] = None,
+    after_id: Optional[UUID] = None,
+    include_content: bool = True,
 ) -> list[MemoryOut]:
     """
-    Exhaustive point-in-time knowledge state — every memory valid at *as_of*.
+    Bounded point-in-time knowledge-state page for memories valid at *as_of*.
 
-    Unlike :func:`recall_memories` (vector search → top-k), this returns *all*
-    memories whose validity window contains ``as_of``
+    Unlike :func:`recall_memories` (vector search → top-k), this applies no
+    relevance ranking. It returns a deterministic keyset page of memories whose
+    validity window contains ``as_of``
     (``valid_from <= as_of < valid_to``) and whose ``event_time <= as_of``,
     ordered by ``event_time`` ascending. No relevance filter is applied —
-    regulators want the complete state, not the most relevant slice.
+    Callers combine :func:`count_knowledge_snapshot` with route completeness and
+    cursor fields to distinguish a whole snapshot from one bounded page.
 
     Content is decrypted where the per-subject key is still live; memories whose
     subject key was crypto-shredded return ``content=None`` (existence and
     metadata preserved, content unrecoverable). This is the read side of the
     GDPR/HIPAA erasure guarantee.
+
+    ``recorded_as_of`` is the independent transaction-time cutoff. When it is
+    supplied, facts ingested later are excluded and business-time closures
+    learned later are ignored. Omitting it preserves the legacy event-time-only
+    behavior.
     """
+    business_validity = or_(Memory.valid_to.is_(None), Memory.valid_to > as_of)
+    if recorded_as_of is not None:
+        # A later correction may backdate valid_to. Before the transaction-time
+        # closure was recorded, that business interval was still believed open.
+        business_validity = or_(
+            business_validity,
+            Memory.system_valid_to > recorded_as_of,
+        )
+
     stmt = (
         select(Memory)
         .where(
@@ -1448,27 +2338,161 @@ async def get_knowledge_snapshot(
                 Memory.namespace == namespace,
                 Memory.agent_id == agent_id,
                 Memory.valid_from <= as_of,
-                or_(Memory.valid_to.is_(None), Memory.valid_to > as_of),
+                business_validity,
                 Memory.event_time <= as_of,
                 # No erased_at filter: crypto-shredded memories appear as
                 # tombstones (content=None, existence + hash preserved) — an
                 # examiner must see that a fact existed even after erasure.
             )
         )
-        .order_by(Memory.event_time.asc())
+        .order_by(Memory.event_time.asc(), Memory.id.asc())
         .limit(limit)
     )
+    if recorded_as_of is not None:
+        stmt = stmt.where(Memory.system_valid_from <= recorded_as_of)
+
     barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
     if barrier_condition is not None:
         stmt = stmt.where(barrier_condition)
+    if (after_event_time is None) != (after_id is None):
+        raise ValueError("snapshot cursor requires both after_event_time and after_id")
+    if after_event_time is not None and after_id is not None:
+        stmt = stmt.where(
+            or_(
+                Memory.event_time > after_event_time,
+                and_(Memory.event_time == after_event_time, Memory.id > after_id),
+            )
+        )
     result = await db.execute(stmt)
     mems = result.scalars().all()
+
+    if not include_content:
+        # Hash-only receipts must not unwrap keys or materialize plaintext that
+        # will be discarded by the portable envelope.
+        return [_memory_to_out(memory, None) for memory in mems]
 
     # Decrypt content using the namespace's live subject keys.
     from .ranking import _decrypt
 
-    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    subject_keys = await _keys_for_rows(db, namespace, mems)
     return [_memory_to_out(m, _decrypt(m, subject_keys)) for m in mems]
+
+
+async def measure_knowledge_snapshot_bytes(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    as_of: datetime,
+    *,
+    include_content: bool,
+    barrier_override: Optional[str] = None,
+    recorded_as_of: Optional[datetime] = None,
+    after_event_time: Optional[datetime] = None,
+    after_id: Optional[UUID] = None,
+    limit: int | None = None,
+) -> tuple[int, int]:
+    """Return selected rows plus a conservative serialized-byte upper estimate.
+
+    This aggregate runs before ORM hydration, subject-key loading, or plaintext
+    decryption. Stored JSON is multiplied by four; source text and ciphertext
+    are multiplied by six to cover worst-case JSON escaping after decryption.
+    Fixed fields receive a 2 KiB allowance per row. Without ``limit`` the
+    cardinality is the exact full snapshot total; with ``limit`` it measures
+    only that deterministic keyset page so later pages remain traversable.
+    """
+
+    business_validity = or_(Memory.valid_to.is_(None), Memory.valid_to > as_of)
+    if recorded_as_of is not None:
+        business_validity = or_(
+            business_validity,
+            Memory.system_valid_to > recorded_as_of,
+        )
+    conditions: list[Any] = [
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+        Memory.valid_from <= as_of,
+        business_validity,
+        Memory.event_time <= as_of,
+    ]
+    if recorded_as_of is not None:
+        conditions.append(Memory.system_valid_from <= recorded_as_of)
+    barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
+    if barrier_condition is not None:
+        conditions.append(barrier_condition)
+    if (after_event_time is None) != (after_id is None):
+        raise ValueError("snapshot cursor requires both after_event_time and after_id")
+    if after_event_time is not None and after_id is not None:
+        conditions.append(
+            or_(
+                Memory.event_time > after_event_time,
+                and_(Memory.event_time == after_event_time, Memory.id > after_id),
+            )
+        )
+
+    row_bytes = (
+        literal(2_048)
+        + 4 * func.coalesce(func.length(cast(Memory.metadata_, Text)), 0)
+        + 6 * func.coalesce(func.length(Memory.source), 0)
+    )
+    if include_content:
+        # Ciphertext is at least as large as plaintext. Six times its byte
+        # length covers worst-case JSON escaping of control characters in the
+        # decrypted string before the response is serialized.
+        row_bytes = row_bytes + 6 * func.coalesce(
+            func.length(Memory.content_encrypted), 0
+        )
+    if limit is None:
+        aggregate = select(
+            func.count(Memory.id),
+            func.coalesce(func.sum(row_bytes), 0),
+        ).where(*conditions)
+    else:
+        bounded = (
+            select(row_bytes.label("estimated_bytes"))
+            .where(*conditions)
+            .order_by(Memory.event_time.asc(), Memory.id.asc())
+            .limit(limit)
+            .subquery()
+        )
+        aggregate = select(
+            func.count(),
+            func.coalesce(func.sum(bounded.c.estimated_bytes), 0),
+        ).select_from(bounded)
+    count, estimated_bytes = (await db.execute(aggregate)).one()
+    return int(count or 0), int(estimated_bytes or 0)
+
+
+async def count_knowledge_snapshot(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    as_of: datetime,
+    *,
+    barrier_override: Optional[str] = None,
+    recorded_as_of: Optional[datetime] = None,
+) -> int:
+    """Return exact visible snapshot cardinality without hydrating memory rows."""
+    business_validity = or_(Memory.valid_to.is_(None), Memory.valid_to > as_of)
+    if recorded_as_of is not None:
+        business_validity = or_(business_validity, Memory.system_valid_to > recorded_as_of)
+    conditions: list[Any] = [
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+        Memory.valid_from <= as_of,
+        business_validity,
+        Memory.event_time <= as_of,
+    ]
+    if recorded_as_of is not None:
+        conditions.append(Memory.system_valid_from <= recorded_as_of)
+    barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
+    if barrier_condition is not None:
+        conditions.append(barrier_condition)
+    return int(
+        (
+            await db.execute(select(func.count(Memory.id)).where(*conditions))
+        ).scalar_one()
+        or 0
+    )
 
 
 def _lineage_node(mem: Memory, content: Optional[str]) -> LineageNode:
@@ -1485,8 +2509,257 @@ def _lineage_node(mem: Memory, content: Optional[str]) -> LineageNode:
         supersession_confidence=mem.supersession_confidence,
         erased_at=mem.erased_at,
         metadata=dict(mem.metadata_ or {}),
-        # The live tip of the chain: nothing supersedes it and it is still valid.
+        # A current graph tip has no successor and its business interval is open.
         is_current=(mem.superseded_by is None and mem.valid_to is None),
+    )
+
+
+_LINEAGE_BIND_BATCH = 400
+_LINEAGE_RELATIONS = frozenset(
+    {"SUPERSEDES", "REFINES", "CONFIRMS", "ADDS", "CONTRADICTS_SAME_TIME"}
+)
+
+
+def _lineage_graph_statement(
+    *,
+    namespace: str,
+    agent_id: str,
+    memory_id: UUID,
+    barrier_override: Optional[str],
+    limit: int,
+):
+    """Build a bounded recursive walk of the visible weak component.
+
+    ``UNION`` (rather than ``UNION ALL``) makes the walk terminate even if a
+    legacy or out-of-band writer introduced a cycle. The outer statement has no
+    sort, allowing the database to stop once the explicit limit is satisfied.
+    """
+
+    anchor_conditions: list[Any] = [
+        Memory.id == memory_id,
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+    ]
+    anchor_barrier = _barrier_filter(Memory.barrier_group, barrier_override)
+    if anchor_barrier is not None:
+        anchor_conditions.append(anchor_barrier)
+    lineage = (
+        select(
+            Memory.id.label("id"),
+            Memory.superseded_by.label("superseded_by"),
+        )
+        .where(*anchor_conditions)
+        .cte("memory_lineage_graph", recursive=True)
+    )
+
+    neighbor = aliased(Memory, name="lineage_neighbor")
+    neighbor_conditions: list[Any] = [
+        neighbor.namespace == namespace,
+        neighbor.agent_id == agent_id,
+    ]
+    neighbor_barrier = _barrier_filter(neighbor.barrier_group, barrier_override)
+    if neighbor_barrier is not None:
+        neighbor_conditions.append(neighbor_barrier)
+    lineage = lineage.union(
+        select(
+            neighbor.id.label("id"),
+            neighbor.superseded_by.label("superseded_by"),
+        )
+        .join(
+            lineage,
+            or_(
+                neighbor.id == lineage.c.superseded_by,
+                neighbor.superseded_by == lineage.c.id,
+            ),
+        )
+        .where(*neighbor_conditions)
+    )
+    return select(lineage.c.id, lineage.c.superseded_by).limit(limit)
+
+
+def _lineage_memory_bytes_expression():
+    """Conservative response-size estimate evaluated before ORM hydration."""
+
+    return (
+        literal(2_048)
+        + func.coalesce(func.length(Memory.content_encrypted), 0)
+        + 4 * func.coalesce(func.length(cast(Memory.metadata_, Text)), 0)
+        + 4 * func.coalesce(func.length(Memory.source), 0)
+    )
+
+
+def _ranked_lineage_events(namespace: str, memory_ids: list[UUID]):
+    """Latest immutable supersession event for each bounded source-node set."""
+
+    return (
+        select(
+            EventLog.id.label("id"),
+            EventLog.memory_id.label("memory_id"),
+            EventLog.payload.label("payload"),
+            EventLog.created_at.label("created_at"),
+            EventLog.chain_position.label("chain_position"),
+            func.row_number()
+            .over(
+                partition_by=EventLog.memory_id,
+                order_by=(EventLog.chain_position.desc(), EventLog.id.desc()),
+            )
+            .label("lineage_rank"),
+        )
+        .where(
+            EventLog.namespace == namespace,
+            EventLog.op == "supersede",
+            EventLog.memory_id.in_(memory_ids),
+        )
+        .subquery("ranked_lineage_events")
+    )
+
+
+def _lineage_sort_key(mem: Memory) -> tuple[str, str]:
+    return mem.event_time.isoformat(), str(mem.id)
+
+
+def _topologically_order_lineage(
+    memories: dict[UUID, Memory],
+) -> tuple[list[Memory], list[UUID], list[UUID], int]:
+    """Order a bounded induced supersession DAG and reject persisted cycles."""
+
+    indegree = {memory_id: 0 for memory_id in memories}
+    outgoing: dict[UUID, UUID] = {}
+    for memory_id, mem in memories.items():
+        successor = mem.superseded_by
+        if successor in memories:
+            outgoing[memory_id] = successor
+            indegree[successor] += 1
+
+    root_ids = sorted(
+        (memory_id for memory_id, degree in indegree.items() if degree == 0),
+        key=lambda value: _lineage_sort_key(memories[value]),
+    )
+    queue = [
+        (*_lineage_sort_key(memories[memory_id]), memory_id)
+        for memory_id in root_ids
+    ]
+    heapq.heapify(queue)
+    ordered_ids: list[UUID] = []
+    while queue:
+        _event_time, _stable_id, memory_id = heapq.heappop(queue)
+        ordered_ids.append(memory_id)
+        successor = outgoing.get(memory_id)
+        if successor is None:
+            continue
+        indegree[successor] -= 1
+        if indegree[successor] == 0:
+            heapq.heappush(
+                queue,
+                (*_lineage_sort_key(memories[successor]), successor),
+            )
+
+    if len(ordered_ids) != len(memories):
+        raise ValueError("memory lineage contains a supersession cycle")
+    tip_ids = sorted(
+        (
+            memory_id
+            for memory_id, mem in memories.items()
+            if mem.superseded_by not in memories
+        ),
+        key=lambda value: _lineage_sort_key(memories[value]),
+    )
+    return (
+        [memories[memory_id] for memory_id in ordered_ids],
+        root_ids,
+        tip_ids,
+        len(outgoing),
+    )
+
+
+def _lineage_edge(
+    older: Memory,
+    newer: Memory,
+    event: Any | None,
+) -> LineageEdge:
+    """Bind one structural pointer to its latest immutable audit evidence."""
+
+    payload: dict[str, Any] = {}
+    binding_status = "missing"
+    if event is not None:
+        if isinstance(event.payload, dict):
+            payload = dict(event.payload)
+            binding_status = (
+                "bound"
+                if str(payload.get("superseded_by", "")) == str(newer.id)
+                else "target_mismatch"
+            )
+        else:
+            binding_status = "malformed"
+
+    fallback_confidence = older.supersession_confidence
+    if (
+        fallback_confidence is None
+        or not math.isfinite(float(fallback_confidence))
+        or not 0.0 <= float(fallback_confidence) <= 1.0
+    ):
+        fallback_confidence = 1.0
+
+    relation_value = payload.get("relation")
+    relation = (
+        relation_value
+        if isinstance(relation_value, str) and relation_value in _LINEAGE_RELATIONS
+        else "SUPERSEDES"
+    )
+    confidence_value = payload.get("confidence")
+    try:
+        confidence = float(confidence_value)
+    except (TypeError, ValueError):
+        confidence = float(fallback_confidence)
+        if binding_status == "bound":
+            binding_status = "malformed"
+    if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+        confidence = float(fallback_confidence)
+        if binding_status == "bound":
+            binding_status = "malformed"
+
+    stage_value = payload.get("adjudication_stage", 2)
+    if isinstance(stage_value, bool):
+        stage = 2
+        if binding_status == "bound":
+            binding_status = "malformed"
+    else:
+        try:
+            stage = int(stage_value)
+        except (TypeError, ValueError):
+            stage = 2
+            if binding_status == "bound":
+                binding_status = "malformed"
+    if stage not in {1, 2, 3}:
+        stage = 2
+        if binding_status == "bound":
+            binding_status = "malformed"
+
+    rationale_value = payload.get("rationale")
+    rationale = rationale_value if isinstance(rationale_value, str) else None
+    if rationale_value is not None and rationale is None and binding_status == "bound":
+        binding_status = "malformed"
+    if relation_value is not None and relation == "SUPERSEDES" and (
+        relation_value != "SUPERSEDES"
+    ):
+        if binding_status == "bound":
+            binding_status = "malformed"
+
+    return LineageEdge(
+        from_id=older.id,
+        to_id=newer.id,
+        relation=relation,
+        confidence=confidence,
+        rationale=rationale,
+        adjudication_stage=stage,
+        superseded_at=(
+            event.created_at
+            if event is not None and binding_status == "bound"
+            else older.valid_to or older.ingestion_time
+        ),
+        audit_event_id=event.id if event is not None else None,
+        audit_chain_position=event.chain_position if event is not None else None,
+        audit_binding_status=binding_status,
     )
 
 
@@ -1495,107 +2768,281 @@ async def get_memory_lineage(
     namespace: str,
     memory_id: UUID,
     barrier_override: Optional[str] = None,
+    max_nodes: int = 1000,
 ) -> MemoryLineageResult:
     """
-    Reconstruct the full belief-provenance chain a memory belongs to.
+    Return the bounded caller-visible supersession graph containing a memory.
 
-    Walks the ``superseded_by`` pointers forward (to the current tip) and backward
-    (to the oldest ancestor), then returns every version oldest-first with the
-    supersession edges connecting them. The queried memory may sit anywhere in the
-    chain — root, tip, or middle.
-
-    Edge metadata (relation, confidence, rationale, adjudication stage) is read
-    from the tamper-evident ``supersede`` event-log rows, so the lineage is
-    backed by the same audit trail an examiner would inspect.
+    Supersession can converge when one new fact replaces several earlier facts,
+    so the result is a topologically ordered DAG rather than a flattened chain.
+    The queried memory may sit anywhere in the graph: the singular root and tip
+    fields are compatibility aliases; their plural forms are authoritative.
+    Each edge reports whether its latest immutable audit event is structurally
+    bound to the returned successor.
     """
     from fastapi import HTTPException
 
-    queried = await db.get(Memory, memory_id)
-    if (
-        queried is None
-        or queried.namespace != namespace
-        or not _barrier_visible(queried, barrier_override)
-    ):
+    if not 3 <= max_nodes <= 5_000:
+        raise HTTPException(status_code=422, detail="max_nodes must be between 3 and 5000")
+
+    queried_conditions: list[Any] = [
+        Memory.id == memory_id,
+        Memory.namespace == namespace,
+    ]
+    queried_barrier = _barrier_filter(Memory.barrier_group, barrier_override)
+    if queried_barrier is not None:
+        queried_conditions.append(queried_barrier)
+    queried = (
+        await db.execute(
+            select(
+                Memory.id,
+                Memory.agent_id,
+                Memory.superseded_by,
+            ).where(*queried_conditions)
+        )
+    ).one_or_none()
+    if queried is None:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    # Walk forward: follow superseded_by until the live tip (superseded_by IS NULL).
-    forward: list[Memory] = []
-    cursor: Optional[Memory] = queried
-    seen: set = set()
-    while cursor is not None and cursor.id not in seen:
-        forward.append(cursor)
-        seen.add(cursor.id)
-        if cursor.superseded_by is None:
-            break
-        cursor = await db.get(Memory, cursor.superseded_by)
-        if cursor is not None and not _barrier_visible(cursor, barrier_override):
-            cursor = None
+    graph_statement = _lineage_graph_statement(
+        namespace=namespace,
+        agent_id=queried.agent_id,
+        memory_id=memory_id,
+        barrier_override=barrier_override,
+        limit=max_nodes + 1,
+    )
+    candidate_rows = list((await db.execute(graph_statement)).all())
+    candidate_links = [(row.id, row.superseded_by) for row in candidate_rows]
+    if memory_id not in {row_id for row_id, _ in candidate_links}:
+        # Recursive CTEs emit the anchor first on supported databases, but keep
+        # the security boundary explicit if a future backend does not.
+        candidate_links.insert(0, (memory_id, queried.superseded_by))
+    has_more = len(candidate_links) > max_nodes
+    selected_links = candidate_links[:max_nodes]
+    pointer_snapshot = dict(selected_links)
+    selected_ids = list(pointer_snapshot)
 
-    # Walk backward: find the memory whose superseded_by points AT the current root.
-    backward: list[Memory] = []
-    current_root = queried
-    while True:
-        stmt = select(Memory).where(
-            and_(
-                Memory.namespace == namespace,
-                Memory.superseded_by == current_root.id,
+    memory_count = 0
+    memory_estimated_bytes = 0
+    memory_row_bytes = _lineage_memory_bytes_expression()
+    for start in range(0, len(selected_ids), _LINEAGE_BIND_BATCH):
+        chunk = selected_ids[start : start + _LINEAGE_BIND_BATCH]
+        inventory_conditions: list[Any] = [
+            Memory.namespace == namespace,
+            Memory.agent_id == queried.agent_id,
+            Memory.id.in_(chunk),
+        ]
+        inventory_barrier = _barrier_filter(Memory.barrier_group, barrier_override)
+        if inventory_barrier is not None:
+            inventory_conditions.append(inventory_barrier)
+        count, estimated_bytes = (
+            await db.execute(
+                select(
+                    func.count(Memory.id),
+                    func.coalesce(func.sum(memory_row_bytes), 0),
+                ).where(*inventory_conditions)
             )
+        ).one()
+        memory_count += int(count or 0)
+        memory_estimated_bytes += int(estimated_bytes or 0)
+    if memory_count != len(selected_ids):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "lineage_snapshot_changed",
+                "message": "The lineage changed while it was being read; retry the request",
+            },
         )
-        barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
-        if barrier_condition is not None:
-            stmt = stmt.where(barrier_condition)
-        older = (await db.execute(stmt)).scalars().first()
-        if older is None or older.id in seen:
-            break
-        backward.append(older)
-        seen.add(older.id)
-        current_root = older
 
-    # Oldest-first: reversed backward ancestors, then the forward chain.
-    ordered = list(reversed(backward)) + forward
+    selected_id_set = set(selected_ids)
+    edge_source_ids = [
+        source_id
+        for source_id, successor_id in selected_links
+        if successor_id in selected_id_set
+    ]
+    event_variable_bytes = 0
+    for start in range(0, len(edge_source_ids), _LINEAGE_BIND_BATCH):
+        chunk = edge_source_ids[start : start + _LINEAGE_BIND_BATCH]
+        ranked = _ranked_lineage_events(namespace, chunk)
+        event_variable_bytes += int(
+            (
+                await db.execute(
+                    select(
+                        func.coalesce(
+                            func.sum(
+                                4
+                                * func.coalesce(
+                                    func.length(cast(ranked.c.payload, Text)),
+                                    0,
+                                )
+                            ),
+                            0,
+                        )
+                    ).where(ranked.c.lineage_rank == 1)
+                )
+            ).scalar_one()
+            or 0
+        )
+    estimated_bytes = (
+        memory_estimated_bytes + event_variable_bytes + 1_024 * len(edge_source_ids)
+    )
+    byte_limit = get_settings().lineage_response_bytes_limit
+    if estimated_bytes > byte_limit:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": "lineage_response_byte_capacity_exceeded",
+                "message": "The requested lineage graph exceeds the response byte budget",
+                "estimated_bytes": estimated_bytes,
+                "byte_limit": byte_limit,
+                "candidate_nodes": len(selected_ids),
+                "candidate_edges": len(edge_source_ids),
+                "requested_max_nodes": max_nodes,
+            },
+        )
 
-    # Decrypt content for every node in one pass.
-    subject_keys = await _load_namespace_subject_keys(db, namespace)
-    from .ranking import _decrypt
-    nodes = [_lineage_node(m, _decrypt(m, subject_keys)) for m in ordered]
-
-    # Build edges from the supersede event-log rows (older -> newer).
-    edges: list[LineageEdge] = []
-    for older, newer in zip(ordered, ordered[1:]):
-        log_stmt = (
-            select(EventLog)
-            .where(
-                and_(
-                    EventLog.namespace == namespace,
-                    EventLog.op == "supersede",
-                    EventLog.memory_id == older.id,
+    memory_fields = (
+        Memory.id,
+        Memory.namespace,
+        Memory.agent_id,
+        Memory.subject_id,
+        Memory.content_encrypted,
+        Memory.content_hash,
+        Memory.event_time,
+        Memory.ingestion_time,
+        Memory.valid_from,
+        Memory.valid_to,
+        Memory.superseded_by,
+        Memory.supersession_confidence,
+        Memory.barrier_group,
+        Memory.importance,
+        Memory.source,
+        Memory.erased_at,
+        Memory.metadata_,
+    )
+    memories: dict[UUID, Memory] = {}
+    for start in range(0, len(selected_ids), _LINEAGE_BIND_BATCH):
+        chunk = selected_ids[start : start + _LINEAGE_BIND_BATCH]
+        hydration_conditions: list[Any] = [
+            Memory.namespace == namespace,
+            Memory.agent_id == queried.agent_id,
+            Memory.id.in_(chunk),
+        ]
+        hydration_barrier = _barrier_filter(Memory.barrier_group, barrier_override)
+        if hydration_barrier is not None:
+            hydration_conditions.append(hydration_barrier)
+        hydrated = (
+            (
+                await db.execute(
+                    select(Memory)
+                    .options(load_only(*memory_fields, raiseload=True))
+                    .where(*hydration_conditions)
                 )
             )
-            .order_by(EventLog.created_at.desc())
+            .scalars()
+            .all()
         )
-        row = (await db.execute(log_stmt)).scalars().first()
-        payload = dict(row.payload) if row and row.payload else {}
-        edges.append(LineageEdge(
-            from_id=older.id,
-            to_id=newer.id,
-            relation=payload.get("relation", "SUPERSEDES"),
-            confidence=float(
-                payload.get("confidence", older.supersession_confidence or 1.0)
-            ),
-            rationale=payload.get("rationale"),
-            adjudication_stage=int(payload.get("adjudication_stage", 2)),
-            superseded_at=row.created_at if row else older.valid_to or older.ingestion_time,
-        ))
+        memories.update((mem.id, mem) for mem in hydrated)
+    if len(memories) != len(selected_ids) or any(
+        memories[memory_id].superseded_by != pointer_snapshot[memory_id]
+        for memory_id in selected_ids
+        if memory_id in memories
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "lineage_snapshot_changed",
+                "message": "The lineage changed while it was being read; retry the request",
+            },
+        )
 
-    root = ordered[0]
-    tip = ordered[-1]
+    try:
+        ordered, root_ids, tip_ids, edge_count = _topologically_order_lineage(memories)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "lineage_cycle_detected",
+                "message": "Stored supersession pointers contain a cycle",
+            },
+        ) from exc
+
+    event_rows: dict[UUID, Any] = {}
+    for start in range(0, len(edge_source_ids), _LINEAGE_BIND_BATCH):
+        chunk = edge_source_ids[start : start + _LINEAGE_BIND_BATCH]
+        ranked = _ranked_lineage_events(namespace, chunk)
+        rows = (
+            await db.execute(
+                select(
+                    ranked.c.id,
+                    ranked.c.memory_id,
+                    ranked.c.payload,
+                    ranked.c.created_at,
+                    ranked.c.chain_position,
+                ).where(ranked.c.lineage_rank == 1)
+            )
+        ).all()
+        event_rows.update((row.memory_id, row) for row in rows)
+
+    order_index = {mem.id: index for index, mem in enumerate(ordered)}
+    edges = [
+        _lineage_edge(mem, memories[mem.superseded_by], event_rows.get(mem.id))
+        for mem in ordered
+        if mem.superseded_by in memories
+    ]
+    edges.sort(key=lambda edge: (order_index[edge.from_id], order_index[edge.to_id]))
+
+    # If the first walk fit, repeat its pointers-only projection at the end.
+    # This catches a concurrent new predecessor that would not modify an
+    # already-selected row under READ COMMITTED isolation.
+    if not has_more:
+        final_rows = list((await db.execute(graph_statement)).all())
+        final_links = {(row.id, row.superseded_by) for row in final_rows}
+        if final_links != set(candidate_links):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "lineage_snapshot_changed",
+                    "message": "The lineage changed while it was being read; retry the request",
+                },
+            )
+
+    subject_keys = await _keys_for_rows(db, namespace, ordered)
+    from .ranking import _decrypt
+
+    nodes = [_lineage_node(mem, _decrypt(mem, subject_keys)) for mem in ordered]
+    root_complete = not has_more
+    tip_complete = not has_more and all(
+        memories[tip_id].superseded_by is None for tip_id in tip_ids
+    )
+    complete = root_complete and tip_complete
+    is_chain = (
+        len(root_ids) == 1
+        and len(tip_ids) == 1
+        and edge_count == max(0, len(memories) - 1)
+    )
     return MemoryLineageResult(
-        agent_id=queried.agent_id,
+        agent_id=str(queried.agent_id),
         namespace=namespace,
         queried_id=memory_id,
-        root_id=root.id,
-        tip_id=tip.id,
+        root_id=root_ids[0],
+        tip_id=tip_ids[0],
+        root_ids=root_ids,
+        tip_ids=tip_ids,
+        shape="chain" if is_chain else "dag",
         depth=len(nodes),
+        edge_count=len(edges),
+        truncated=not complete,
+        has_more=has_more,
+        complete=complete,
+        root_complete=root_complete,
+        tip_complete=tip_complete,
+        reachable_nodes=len(candidate_links),
+        reachable_nodes_is_lower_bound=has_more,
+        audit_binding_complete=all(
+            edge.audit_binding_status == "bound" for edge in edges
+        ),
+        max_nodes=max_nodes,
         nodes=nodes,
         edges=edges,
     )
@@ -1609,6 +3056,7 @@ async def get_structured_fact_history(
     adapter,
     limit: int = 100,
     barrier_override: Optional[str] = None,
+    diagnostics: Optional[dict[str, Any]] = None,
 ) -> list[MemoryOut]:
     """
     Return every recorded version of a structured fact, ordered by event_time asc.
@@ -1620,6 +3068,17 @@ async def get_structured_fact_history(
     evolved. Entity normalization is applied through the domain ``adapter`` so
     'Apple Inc.', 'AAPL', and ISIN 'US0378331005' all collapse to one series.
     """
+    alias_map = {canonical: adapter.key_aliases(canonical) for canonical in key_values}
+    metadata_presence = [
+        or_(
+            *(
+                Memory.metadata_[alias].as_string().is_not(None)
+                for alias in aliases
+            )
+        )
+        for aliases in alias_map.values()
+    ]
+    scan_limit = min(20_000, max(5_000, limit * 50))
     stmt = (
         select(Memory)
         .where(
@@ -1627,20 +3086,22 @@ async def get_structured_fact_history(
                 Memory.namespace == namespace,
                 Memory.agent_id == agent_id,
                 Memory.erased_at.is_(None),
+                *metadata_presence,
             )
         )
-        .order_by(Memory.event_time.asc())
+        .order_by(Memory.event_time.asc(), Memory.id.asc())
+        .limit(scan_limit + 1)
     )
     barrier_condition = _barrier_filter(Memory.barrier_group, barrier_override)
     if barrier_condition is not None:
         stmt = stmt.where(barrier_condition)
-    rows = (await db.execute(stmt)).scalars().all()
+    fetched = (await db.execute(stmt)).scalars().all()
+    scan_truncated = len(fetched) > scan_limit
+    rows = fetched[:scan_limit]
 
     # For each requested (canonical) key, accept any of its metadata aliases.
     # e.g. for finance, 'ticker' is satisfied by metadata 'ticker' | 'entity' |
     # 'isin' | 'cusip' — all normalized to the same canonical value.
-    alias_map = {c: adapter.key_aliases(c) for c in key_values}
-
     matched: list[Memory] = []
     for mem in rows:
         meta = dict(mem.metadata_ or {})
@@ -1656,12 +3117,21 @@ async def get_structured_fact_history(
                 break
         if ok:
             matched.append(mem)
-            if len(matched) >= limit:
-                break
+    total_matches_in_window = len(matched)
+    returned = matched[:limit]
+    if diagnostics is not None:
+        diagnostics.update(
+            rows_scanned=len(rows),
+            scan_limit=scan_limit,
+            scan_complete=not scan_truncated,
+            total_is_lower_bound=scan_truncated,
+            matches_in_scan=total_matches_in_window,
+            has_more=total_matches_in_window > limit or scan_truncated,
+        )
 
-    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    subject_keys = await _keys_for_rows(db, namespace, returned)
     from .ranking import _decrypt
-    return [_memory_to_out(m, _decrypt(m, subject_keys)) for m in matched]
+    return [_memory_to_out(m, _decrypt(m, subject_keys)) for m in returned]
 
 
 # ── Conflicts ──────────────────────────────────────────────────────────────────
@@ -1673,6 +3143,8 @@ async def list_conflicts(
     status: Optional[str] = "open",
     limit: int = 50,
     barrier_override: Optional[str] = None,
+    after_detected_at: Optional[datetime] = None,
+    after_id: Optional[UUID] = None,
 ) -> ConflictListResult:
     """
     List conflict flags for a namespace, newest first.
@@ -1682,31 +3154,23 @@ async def list_conflicts(
     ``status`` to filter (``open`` | ``accept_a`` | ``accept_b`` | ``dismissed``),
     or ``None`` for all statuses.
     """
-    conds = [ConflictFlag.namespace == namespace]
-    if status:
-        conds.append(ConflictFlag.status == status)
-    stmt = (
-        select(ConflictFlag)
-        .where(and_(*conds))
-        .order_by(ConflictFlag.detected_at.desc())
-        .limit(limit)
+    total, rows = await _visible_conflict_rows(
+        db,
+        namespace,
+        status=status,
+        limit=limit + 1,
+        barrier_override=barrier_override,
+        after_detected_at=after_detected_at,
+        after_id=after_id,
     )
-    flags = (await db.execute(stmt)).scalars().all()
-
-    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    memory_rows = [memory for _, mem_a, mem_b in rows for memory in (mem_a, mem_b)]
+    subject_keys = await _keys_for_rows(db, namespace, memory_rows)
     from .ranking import _decrypt
 
     conflicts: list[ConflictFlagOut] = []
-    for flag in flags:
-        mem_a = await db.get(Memory, flag.memory_a_id)
-        mem_b = await db.get(Memory, flag.memory_b_id)
-        if barrier_override is not None and (
-            mem_a is None
-            or mem_b is None
-            or not _barrier_visible(mem_a, barrier_override)
-            or not _barrier_visible(mem_b, barrier_override)
-        ):
-            continue
+    for flag, mem_a, mem_b in rows:
         conflicts.append(ConflictFlagOut(
             id=flag.id,
             namespace=flag.namespace,
@@ -1728,7 +3192,12 @@ async def list_conflicts(
 
     return ConflictListResult(
         conflicts=conflicts,
-        total=len(conflicts),
+        total=total,
+        returned=len(conflicts),
+        complete=after_detected_at is None and not has_more,
+        has_more=has_more,
+        next_detected_at=(rows[-1][0].detected_at if has_more and rows else None),
+        next_id=(rows[-1][0].id if has_more and rows else None),
         status_filter=status,
     )
 
@@ -1766,9 +3235,19 @@ async def resolve_conflict(
             or not _barrier_visible(mem_b, barrier_override)
         ):
             raise HTTPException(status_code=404, detail="Conflict not found")
+    await _acquire_pg_advisory_lock(db, namespace, flag.agent_id)
+    flag = (
+        await db.execute(
+            select(ConflictFlag)
+            .where(ConflictFlag.id == conflict_id, ConflictFlag.namespace == namespace)
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if flag is None:
+        raise HTTPException(status_code=404, detail="Conflict not found")
     if flag.status != "open":
         raise HTTPException(status_code=409, detail="Conflict already resolved")
-
     now = datetime.now(timezone.utc)
     invalidated: Optional[UUID] = None
 
@@ -1778,9 +3257,16 @@ async def resolve_conflict(
         invalidated = flag.memory_a_id
 
     if invalidated is not None:
-        loser = await db.get(Memory, invalidated)
+        loser = (
+            await db.execute(
+                select(Memory)
+                .where(Memory.id == invalidated, Memory.namespace == namespace)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
         if loser is not None:
-            loser.valid_to = now
+            loser.close_validity(valid_to=now, recorded_at=now)
             await remove_live_facts(db, [invalidated])
 
     flag.status = "dismissed" if req.resolution == "dismiss" else req.resolution
@@ -1799,9 +3285,8 @@ async def resolve_conflict(
             "resolved_at": now.isoformat(),
         },
     )
+    await _fence_recall_caches_before_commit(db, namespace, flag.agent_id)
     await db.commit()
-    invalidate_working_set(namespace, flag.agent_id)
-    await invalidate_agent(namespace, flag.agent_id)
 
     return ConflictResolveResult(
         conflict_id=conflict_id,
@@ -1819,61 +3304,27 @@ async def get_erasure_certificate(
     namespace: str,
     subject_id: str,
 ) -> Optional[dict]:
-    """
-    Build a proof-of-erasure certificate for a crypto-shredded data subject.
+    """Compatibility wrapper for the first bounded certificate page."""
 
-    Reads the ``erase`` event-log rows for the subject — their content was
-    destroyed but the SHA-256 ``content_hash`` of each survives — and reports the
-    preserved hashes plus the current audit-chain status. Returns ``None`` when no
-    erasure has been recorded for the subject (the route turns that into a 404).
-    """
-    import uuid as _uuid
-
-    stmt = (
-        select(EventLog)
-        .where(
-            and_(
-                EventLog.namespace == namespace,
-                EventLog.op == "erase",
-            )
-        )
-        .order_by(EventLog.created_at.asc())
+    from .subject_erasure_service import (
+        SubjectErasureNotComplete,
+        erasure_certificate_dict,
+        get_subject_erasure_job_for_subject,
     )
-    rows = [
-        r for r in (await db.execute(stmt)).scalars().all()
-        if dict(r.payload or {}).get("subject_id") == subject_id
-    ]
-    if not rows:
+
+    job = await get_subject_erasure_job_for_subject(
+        db,
+        namespace=namespace,
+        subject_id=subject_id,
+    )
+    if job is None:
         return None
-
-    content_hashes = [r.content_hash for r in rows if r.content_hash]
-    erased_at = max(r.created_at for r in rows)
-    request_ref = next(
-        (dict(r.payload or {}).get("request_ref") for r in rows
-         if dict(r.payload or {}).get("request_ref")),
-        None,
-    )
-
-    from .audit_chain import verify_chain as _verify_chain
     try:
-        chain = await _verify_chain(db, namespace=namespace)
-        chain_status = chain.get("status", "unchecked")
-    except Exception:
-        chain_status = "unchecked"
-
-    certificate_id = str(_uuid.uuid5(
-        _uuid.NAMESPACE_URL,
-        f"lians-erasure:{namespace}:{subject_id}:{erased_at.isoformat()}",
-    ))
-
-    return {
-        "certificate_id": certificate_id,
-        "subject_id": subject_id,
-        "namespace": namespace,
-        "request_ref": request_ref,
-        "erased_at": erased_at,
-        "memories_erased": len(rows),
-        "content_hashes": content_hashes,
-        "chain_status": chain_status,
-        "generated_at": datetime.now(timezone.utc),
-    }
+        return await erasure_certificate_dict(
+            db,
+            job=job,
+            limit=100,
+            after_memory_id=None,
+        )
+    except SubjectErasureNotComplete:
+        return None

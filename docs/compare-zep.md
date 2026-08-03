@@ -31,7 +31,7 @@ design worth adopting — on our terms, for regulated work.
 | Tamper-evidence | Episode provenance only | SHA-256 hash chain (SEC 17a-4), `verify_chain` |
 | Right-to-erasure | Not a feature | Per-subject crypto-shred + erasure certificate |
 | Access control | None in Graphiti; Zep Cloud only | Scoped keys + **RBAC roles** + PostgreSQL RLS barriers (DB-layer, CI-proven) |
-| Audit egress | — | **SIEM streaming** (Splunk/Datadog/Elastic) + signed-webhook events + export |
+| Audit egress | — | Durable, retryable SIEM/GRC/ticketing integration deliveries plus verified export |
 | Production | Managed cloud only | Self-host: idempotency keys, SDK retries, `/livez`+`/readyz`, rate limiting, air-gap |
 | Backend | Neo4j / FalkorDB / Neptune (graph DB) | Postgres 16 + pgvector (no extra infra) |
 | Determinism | Extraction-quality dependent | Reproducible; same input → same supersession |
@@ -128,7 +128,7 @@ Graphiti is an engine, not a product — by its own docs it has **no access cont
 no multi-tenancy, no audit logs, and no compliance features** beyond episode
 provenance; Zep Cloud supplies those. Lians' differentiators are exactly that gap:
 the SEC 17a-4 hash chain, crypto-shred erasure with surviving audit, DB-layer
-information barriers, conflict-review queue, backtest-contamination proof, and
+information barriers, conflict-review queue, recorded-data backtest checks, and
 deterministic supersession. A graph layer should extend these, never dilute them —
 every edge belongs in the audit chain and inside the barrier, just like every fact.
 

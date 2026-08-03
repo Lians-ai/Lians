@@ -6,7 +6,7 @@
 
 # Lians Java SDK
 
-**Bitemporal long-term memory for JVM agents.** Keep current facts clean, reconstruct what an agent knew at a past time, retain tamper-evident audit records, and query relationship graphs for conflict-of-interest and related-party workflows.
+**Provider-neutral decision evidence and governed memory for JVM agents.** Reconstruct what an agent knew, preserve tamper-evident records, and operate bitemporal relationship graphs for consequential workflows.
 
 Java 11+, one runtime dependency on Jackson, and HTTP through the JDK.
 
@@ -18,17 +18,17 @@ Maven:
 <dependency>
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.4.1</version>
+  <version>0.5.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```groovy
-implementation "ai.lians:lians-sdk:0.4.1"
+implementation "ai.lians:lians-sdk:0.5.0"
 ```
 
-Version 0.4.1 is available from [Maven Central](https://central.sonatype.com/artifact/ai.lians/lians-sdk/0.4.1). Release JARs are also attached to [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
+Released versions are available from [Maven Central](https://central.sonatype.com/artifact/ai.lians/lians-sdk). Release JARs are also attached to [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
 
 ## Quickstart
 
@@ -42,6 +42,7 @@ import java.util.Map;
 LiansClient client = new LiansClient(LiansClientOptions.builder()
         .baseUrl("https://mem.yourfirm.internal")
         .apiKey(System.getenv("LIANS_API_KEY"))
+        .timeout(java.time.Duration.ofSeconds(30))
         .build());
 
 client.addMemory("equity-desk", "NVDA FY2026 revenue guidance raised to $40B",
@@ -52,6 +53,27 @@ RecallResult current = client.recall("equity-desk", "NVDA revenue guidance", 5);
 RecallResult past = client.recallAt("equity-desk", "NVDA revenue guidance",
         Instant.parse("2025-09-01T00:00:00Z"), 5);
 ```
+
+For business-stable replay across process restarts, use the `addMemory` overload
+whose final argument is an idempotency key. The ordinary overload generates one
+unpredictable key per invocation and reuses it for all internal attempts.
+
+## Transport guarantees
+
+- Base URLs must be absolute HTTP(S) URLs without embedded credentials, queries,
+  or fragments. Redirect following is disabled so API credentials never cross an
+  origin boundary. Use HTTPS outside local development.
+- The default 30-second deadline covers all attempts. Up to two retries are made
+  for GETs and writes carrying an `Idempotency-Key`. Recall, erasure, conflict
+  resolution, and graph mutations are not retried automatically.
+- `Retry-After` is honored within a two-second default cap. Both retry count and
+  delay are configurable in `LiansClientOptions`; response bodies are capped at
+  16 MiB by default.
+- Non-2xx `LiansException` messages omit the server body. The bounded `body()` is
+  retained for programmatic inspection and should be treated as sensitive.
+- Instances are immutable and thread-safe. JDK 11 `HttpClient` does not expose a
+  close method; request bodies are fully consumed or cancelled by the bounded
+  subscriber.
 
 ## Audit and graph surfaces
 

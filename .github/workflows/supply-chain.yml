@@ -1,0 +1,426 @@
+name: Production image supply chain
+
+on:
+  pull_request:
+  push:
+    # GitHub workflow filters cannot interpolate the repository default branch.
+    # Scan every branch push, then let the policy job authorize publication only
+    # when the ref equals the API-provided default branch.
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  policy:
+    name: Authorize source revision
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      publish: ${{ steps.policy.outputs.publish }}
+    steps:
+      - name: Check out source and default-branch history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fail closed on an unapproved publication ref
+        id: policy
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          publish=false
+          case "$EVENT_NAME" in
+            pull_request)
+              ;;
+            push)
+              if [[ "$REF" == refs/heads/* ]]; then
+                if test "$REF" = "refs/heads/$DEFAULT_BRANCH"; then
+                  publish=true
+                fi
+              elif [[ "$REF" == refs/tags/v* ]]; then
+                test "$REF_PROTECTED" = true
+                git show-ref --verify "refs/remotes/origin/$DEFAULT_BRANCH"
+                git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"
+                publish=true
+              else
+                echo "Publication is limited to the default branch or a protected v* tag." >&2
+                exit 1
+              fi
+              ;;
+            workflow_dispatch)
+              test "$REF" = "refs/heads/$DEFAULT_BRANCH"
+              publish=true
+              ;;
+            *)
+              echo "Unsupported event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+      - name: Require a release tag to match every published surface
+        if: ${{ github.ref_type == 'tag' }}
+        run: python .github/scripts/check_release_versions.py "$GITHUB_REF_NAME"
+
+  build-and-scan:
+    name: Build and scan ${{ matrix.platform }}
+    needs: policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            slug: linux-amd64
+          - platform: linux/arm64
+            slug: linux-arm64
+    steps:
+      - name: Check out authorized source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Derive canonical image name
+        id: image
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          canonical="${REPOSITORY,,}"
+          echo "name=${REGISTRY}/${canonical}" >> "$GITHUB_OUTPUT"
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Authenticate staging publication to GHCR
+        if: ${{ needs.policy.outputs.publish == 'true' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build pull-request payload once
+        if: ${{ needs.policy.outputs.publish != 'true' }}
+        id: local
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          tags: lians-security-scan:${{ github.sha }}-${{ matrix.slug }}
+          build-args: PREDOWNLOAD_MODEL=
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=production-${{ matrix.slug }}
+      - name: Stage the release payload once by immutable digest
+        if: ${{ needs.policy.outputs.publish == 'true' }}
+        id: staged
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          build-args: PREDOWNLOAD_MODEL=
+          labels: |
+            org.opencontainers.image.title=Lians decision evidence infrastructure
+            org.opencontainers.image.description=Recorder, receipt, runtime Gate, and Investigator control plane
+            org.opencontainers.image.vendor=Lians
+            org.opencontainers.image.revision=${{ github.sha }}
+          # Keep each staged subject a single deployable platform manifest so
+          # the digest scanned below is the exact descriptor composed later.
+          # Provenance and SBOM attestations bind the final promoted index.
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=production-${{ matrix.slug }}
+          cache-to: type=gha,mode=max,scope=production-${{ matrix.slug }}
+      - name: Select the exact scan subject
+        id: subject
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          PUBLISH: ${{ needs.policy.outputs.publish }}
+          STAGED_DIGEST: ${{ steps.staged.outputs.digest }}
+          LOCAL_IMAGE: lians-security-scan:${{ github.sha }}-${{ matrix.slug }}
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH" == true ]]; then
+            [[ "$STAGED_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+            echo "value=${IMAGE}@${STAGED_DIGEST}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${LOCAL_IMAGE}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reject high and critical vulnerabilities in the exact payload
+        id: scan
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: ${{ steps.subject.outputs.value }}
+          fail-build: true
+          severity-cutoff: high
+          output-format: sarif
+          only-fixed: false
+      - name: Upload platform vulnerability findings
+        if: ${{ always() && steps.scan.outputs.sarif != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+        uses: github/codeql-action/upload-sarif@ea14db8afdef5d462e69d78c4ca45002d4522418 # v4.37.4
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+          category: lians-production-image-${{ matrix.slug }}
+      - name: Record the scanned immutable platform digest
+        if: ${{ needs.policy.outputs.publish == 'true' }}
+        shell: bash
+        env:
+          DIGEST: ${{ steps.staged.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/platform-digest"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/platform-digest/${{ matrix.slug }}.digest"
+          printf '%s\n' "$PLATFORM" > "$RUNNER_TEMP/platform-digest/${{ matrix.slug }}.platform"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/platform-digest/${{ matrix.slug }}.source-sha"
+          (cd "$RUNNER_TEMP/platform-digest" && \
+            sha256sum \
+              "${{ matrix.slug }}.digest" \
+              "${{ matrix.slug }}.platform" \
+              "${{ matrix.slug }}.source-sha" \
+              > "${{ matrix.slug }}.sha256")
+      - name: Transfer the scanned digest to promotion
+        if: ${{ needs.policy.outputs.publish == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lians-platform-${{ matrix.slug }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/platform-digest
+          if-no-files-found: error
+          retention-days: 1
+
+  promote:
+    name: Promote, attest, and sign scanned manifest
+    if: ${{ needs.policy.outputs.publish == 'true' }}
+    needs: [policy, build-and-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.manifest.outputs.digest }}
+    steps:
+      - name: Check out authorized source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download only this revision's scanned platform digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: lians-platform-*-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/platform-digests
+          merge-multiple: true
+      - name: Derive canonical image name
+        id: image
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          canonical="${REPOSITORY,,}"
+          echo "name=${REGISTRY}/${canonical}" >> "$GITHUB_OUTPUT"
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Authenticate promotion to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate release aliases
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=sha-${{ github.sha }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+      - name: Compose only the scanned payloads and capture exact index bytes
+        id: manifest
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          METADATA_JSON: ${{ steps.metadata.outputs.json }}
+        run: |
+          set -euo pipefail
+          directory="$RUNNER_TEMP/platform-digests"
+          expected=(linux-amd64 linux-arm64)
+          references=()
+          amd64_digest=""
+          arm64_digest=""
+          for slug in "${expected[@]}"; do
+            digest_file="$directory/$slug.digest"
+            platform_file="$directory/$slug.platform"
+            source_file="$directory/$slug.source-sha"
+            checksum_file="$directory/$slug.sha256"
+            test -f "$digest_file" -a -f "$platform_file" -a -f "$source_file" -a -f "$checksum_file"
+            (cd "$directory" && sha256sum --check --strict "$slug.sha256")
+            digest="$(tr -d '\r\n' < "$digest_file")"
+            platform="$(tr -d '\r\n' < "$platform_file")"
+            source_sha="$(tr -d '\r\n' < "$source_file")"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            test "$source_sha" = "$GITHUB_SHA"
+            test "$platform" = "${slug/-//}"
+            references+=("${IMAGE}@${digest}")
+            case "$platform" in
+              linux/amd64) amd64_digest="$digest" ;;
+              linux/arm64) arm64_digest="$digest" ;;
+              *) exit 1 ;;
+            esac
+          done
+          test "$(find "$directory" -type f -name '*.digest' | wc -l)" -eq 2
+          test "$(find "$directory" -type f -name '*.sha256' | wc -l)" -eq 2
+          mapfile -t tags < <(jq -er '.tags[]' <<< "$METADATA_JSON")
+          test "${#tags[@]}" -gt 0
+          tag_arguments=()
+          for tag in "${tags[@]}"; do
+            [[ "$tag" == "$IMAGE:"* ]]
+            tag_arguments+=(--tag "$tag")
+          done
+          promotion_metadata="$RUNNER_TEMP/release-index.metadata.json"
+          docker buildx imagetools create \
+            --metadata-file "$promotion_metadata" \
+            "${tag_arguments[@]}" "${references[@]}"
+          digest="$(jq -er '."containerimage.descriptor".digest' "$promotion_metadata")"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          raw_manifest="$RUNNER_TEMP/release-index.json"
+          docker buildx imagetools inspect "${IMAGE}@${digest}" --raw > "$raw_manifest"
+          jq -e --arg amd64 "$amd64_digest" --arg arm64 "$arm64_digest" '
+            .manifests as $items
+            | ($items | length) == 2
+            and ($items | map(select(
+              .digest == $amd64
+              and .platform.os == "linux"
+              and .platform.architecture == "amd64"
+            )) | length) == 1
+            and ($items | map(select(
+              .digest == $arm64
+              and .platform.os == "linux"
+              and .platform.architecture == "arm64"
+            )) | length) == 1
+          ' "$raw_manifest" >/dev/null
+          docker buildx imagetools inspect "${IMAGE}@${digest}" >/dev/null
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Generate SPDX SBOM for the promoted immutable index
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.image.outputs.name }}@${{ steps.manifest.outputs.digest }}
+          format: spdx-json
+          output-file: lians-${{ github.sha }}.spdx.json
+          artifact-name: lians-${{ github.sha }}-attempt-${{ github.run_attempt }}.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+      - name: Attest exact promoted-index provenance
+        if: ${{ vars.LIANS_ATTESTATIONS_ENABLED != 'false' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+      - name: Attest exact promoted-index SBOM
+        if: ${{ vars.LIANS_ATTESTATIONS_ENABLED != 'false' }}
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          sbom-path: lians-${{ github.sha }}.spdx.json
+          push-to-registry: true
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign only the exact promoted index digest
+        env:
+          SUBJECT: ${{ steps.image.outputs.name }}@${{ steps.manifest.outputs.digest }}
+        run: cosign sign --yes "$SUBJECT"
+      - name: Re-verify exact signature and provenance
+        run: |
+          set -euo pipefail
+          cosign verify "$SUBJECT" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${REPOSITORY}/.github/workflows/supply-chain.yml@${GITHUB_REF}"
+          if [[ "${LIANS_ATTESTATIONS_ENABLED:-true}" != false ]]; then
+            gh attestation verify "oci://${SUBJECT}" \
+              --repo "$REPOSITORY" \
+              --signer-workflow "${REPOSITORY}/.github/workflows/supply-chain.yml" \
+              --source-ref "$GITHUB_REF" \
+              --source-digest "$GITHUB_SHA" \
+              --deny-self-hosted-runners
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUBJECT: ${{ steps.image.outputs.name }}@${{ steps.manifest.outputs.digest }}
+          REPOSITORY: ${{ github.repository }}
+          LIANS_ATTESTATIONS_ENABLED: ${{ vars.LIANS_ATTESTATIONS_ENABLED }}
+      - name: Require GitHub provenance on the Fly production channel
+        if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        shell: bash
+        env:
+          LIANS_ATTESTATIONS_ENABLED: ${{ vars.LIANS_ATTESTATIONS_ENABLED }}
+        run: test "${LIANS_ATTESTATIONS_ENABLED:-true}" != false
+      - name: Export the sole production deployment subject
+        if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          mkdir -p "$RUNNER_TEMP/fly-production"
+          {
+            printf 'image_ref=%s@%s\n' "$IMAGE" "$DIGEST"
+            printf 'source_sha=%s\n' "$GITHUB_SHA"
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'workflow_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+          } > "$RUNNER_TEMP/fly-production/subject.txt"
+          (cd "$RUNNER_TEMP/fly-production" && \
+            sha256sum subject.txt > subject.txt.sha256)
+      - name: Publish verified Fly deployment subject
+        if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fly-production-image-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/fly-production
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish verification summary
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          {
+            echo "## Lians production image"
+            echo
+            echo "Built once per platform, scanned by exact payload digest, promoted, signed, and re-verified: \`${IMAGE}@${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

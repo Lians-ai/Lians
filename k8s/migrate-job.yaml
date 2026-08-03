@@ -3,14 +3,17 @@
 #
 # Usage:
 # # Update IMAGE below to match the target release tag, then:
+# kubectl apply -f k8s/migration-secret.yaml
 # kubectl apply -f k8s/migrate-job.yaml
-# kubectl wait --for=condition=complete job/agentmem-migrate -n agentmem --timeout=120s
+# kubectl wait --for=condition=complete job/agentmem-migrate -n agentmem --timeout=1800s
 # # If the job fails:
 # kubectl logs -n agentmem -l job-name=agentmem-migrate
 #
 # The job is idempotent — alembic upgrade head is safe to run multiple times.
-# Delete the job after confirming success:
+# Delete the job and the separately held migration Secret after confirming
+# success and retaining the logs/evidence:
 # kubectl delete job agentmem-migrate -n agentmem
+# kubectl delete secret agentmem-migration-secret -n agentmem
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -25,6 +28,8 @@ metadata:
 spec:
   # Keep the completed/failed pod for 10 minutes so logs are inspectable
   ttlSecondsAfterFinished: 600
+  # Bound a wedged migration independently of the client-side wait timeout.
+  activeDeadlineSeconds: 1800
   # Retry up to 3 times before marking the job failed
   backoffLimit: 3
   template:
@@ -33,38 +38,50 @@ spec:
         app.kubernetes.io/name: agentmem
         app.kubernetes.io/component: migrate
     spec:
-      restartPolicy: OnFailure
+      restartPolicy: Never
+      serviceAccountName: agentmem-migrator
       automountServiceAccountToken: false
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: migrate
-          # CHANGE: match the image tag you are deploying
-          image: agentmem:latest
+          # Replace the fail-closed digest with the exact same verified subject
+          # deployed to the API. Never migrate from a mutable tag.
+          image: ghcr.io/lians-ai/lians@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           # alembic.ini lives in /app/agentmem/; alembic is on PATH from pip install
           command:
-            - alembic
+            - sh
             - -c
-            - agentmem/alembic.ini
-            - upgrade
-            - head
-          workingDir: /app
+            - |
+              set -eu
+              python -m lians.migration_preflight
+              alembic -c alembic.ini upgrade head
+              python -m lians.migration_contract
+          workingDir: /app/agentmem
           env:
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: production
+            - name: PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS
+              value: "false"
+            - name: MIGRATION_STATEMENT_TIMEOUT_MS
+              value: "1500000"
+            - name: MIGRATION_LOCK_TIMEOUT_MS
+              value: "5000"
+            - name: MIGRATION_IDLE_TRANSACTION_TIMEOUT_MS
+              value: "300000"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: agentmem-secret
+                  name: agentmem-migration-secret
                   key: DATABASE_URL
-            - name: MASTER_ENCRYPTION_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: agentmem-secret
-                  key: MASTER_ENCRYPTION_KEY
           resources:
             requests:
               cpu: "100m"
@@ -84,6 +101,8 @@ spec:
               mountPath: /app/agentmem/__pycache__
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
         - name: app-cache
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 128Mi

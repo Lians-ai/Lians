@@ -3,12 +3,10 @@ Happy-path integration tests for memory_service.add() + recall().
 Uses local embedding provider (no API calls).
 """
 import pytest
-import pytest_asyncio
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, AsyncMock
 
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories
+from lians.schemas import MemoryAdd, RecallRequest
+from lians.memory_service import add_memory, recall_memories
 
 
 NS = "test-tenant"
@@ -61,7 +59,7 @@ async def test_supersession_closes_old_memory(db):
     new = await add_memory(db, NS, new_req)
 
     # Refresh old from DB
-    from src.lians.models import Memory
+    from lians.models import Memory
     refreshed_old = await db.get(Memory, old.id)
     assert refreshed_old.valid_to is not None, "Old memory must be closed after supersession"
     assert refreshed_old.superseded_by == new.id

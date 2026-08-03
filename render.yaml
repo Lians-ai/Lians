@@ -1,40 +1,193 @@
 services:
   - type: web
     name: agentmem-api
-    runtime: python
+    # Legacy source-built service definition. Source builds cannot prove that
+    # the scanned release subject is the payload Render executes, so automatic
+    # deployment is disabled. Recreate this service with runtime: image and a
+    # verified image.url digest before treating Render as production.
+    runtime: docker
     plan: standard
+    numInstances: 2
     region: oregon
     branch: master
-    buildCommand: pip install -e ".[otel,metrics]"
-    # Render provides a bare postgresql:// URL, but the app's parse_db_url()
-    # expects postgresql+asyncpg:// (SQLAlchemy async). Rewrite the scheme in
-    # both the migration and start commands. Migrations run here (preDeploy),
-    # from inside agentmem/ because alembic.ini uses relative paths.
-    preDeployCommand: export DATABASE_URL=$(echo "$DATABASE_URL" | sed 's#postgresql://#postgresql+asyncpg://#') && export PYTHONPATH=$PWD/agentmem/src && cd agentmem && alembic -c alembic.ini upgrade head
-    startCommand: export DATABASE_URL=$(echo "$DATABASE_URL" | sed 's#postgresql://#postgresql+asyncpg://#') && uvicorn lians.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # The Docker image's WORKDIR is /app/agentmem and parse_db_url normalizes
+    # Render's libpq-style URL to asyncpg without exposing it to shell output.
+    # Runtime never receives schema-owner credentials. A separately controlled
+    # migrator must upgrade first; deploy fails closed unless the database and
+    # image declare the exact same single Alembic head.
+    preDeployCommand: python -m lians.migration_contract
+    healthCheckPath: /readyz
     envVars:
       - key: DEPLOYMENT_ENVIRONMENT
         value: production
+      - key: DEPLOYMENT_REGION
+        value: render-oregon
+      - key: API_SURFACE
+        value: public
+      # Supply a non-owner runtime login with sslmode=verify-full. Never attach
+      # the distinct migrator credential to this web service.
       - key: DATABASE_URL
-        fromDatabase:
-          name: agentmem-pg
-          property: connectionString
+        sync: false
+      # Production requires authenticated, hostname-verifying rediss://. A
+      # plaintext private-network Redis URL is intentionally not auto-wired.
       - key: REDIS_URL
-        fromService:
-          name: agentmem-redis
-          type: redis
-          property: connectionString
-      # local = hash-projection embeddings, no external API key required.
-      # Switch to "voyage" only if you also set VOYAGE_API_KEY (sync:false).
+        sync: false
+      # The locked production image bakes the pinned self-hosted model.
+      # Production rejects the deterministic test-only "local" provider.
       - key: EMBEDDING_PROVIDER
+        value: sentence-transformers
+      # Production refuses KMS_PROVIDER=env. Select aws, azure, or vault and
+      # configure only that provider through Render secrets/workload identity.
+      - key: KMS_PROVIDER
+        sync: false
+      - key: MASTER_KEY_ID
+        sync: false
+      - key: MASTER_KEY_PREVIOUS_ID
+        sync: false
+      - key: MASTER_ENCRYPTION_KEY_PREVIOUS
+        sync: false
+      - key: KMS_AWS_REGION
+        value: us-east-1
+      - key: KMS_AWS_ENCRYPTED_KEY
+        sync: false
+      - key: KMS_AWS_KEY_ID
+        sync: false
+      - key: KMS_AWS_PREVIOUS_REGION
+        sync: false
+      - key: KMS_AWS_PREVIOUS_ENCRYPTED_KEY
+        sync: false
+      - key: KMS_AWS_PREVIOUS_KEY_ID
+        sync: false
+      - key: KMS_AZURE_VAULT_URL
+        sync: false
+      - key: KMS_AZURE_SECRET_NAME
+        value: agentmem-master-key
+      - key: KMS_AZURE_PREVIOUS_VAULT_URL
+        sync: false
+      - key: KMS_AZURE_PREVIOUS_SECRET_NAME
+        sync: false
+      - key: KMS_VAULT_ADDR
+        sync: false
+      - key: KMS_VAULT_TOKEN
+        sync: false
+      - key: KMS_VAULT_PATH
+        value: agentmem/master-key
+      - key: KMS_VAULT_PREVIOUS_ADDR
+        sync: false
+      - key: KMS_VAULT_PREVIOUS_PATH
+        sync: false
+      - key: KMS_VAULT_PREVIOUS_MOUNT_POINT
+        sync: false
+      - key: RECEIPT_SIGNING_PRIVATE_KEY
+        sync: false          # raw Ed25519 private key: 32 bytes as base64 or hex
+      - key: RECEIPT_SIGNING_KEY_ID
+        sync: false          # stable ID published with this deployment's public key
+      - key: RECEIPT_SIGNING_PROVIDER
         value: local
-      - key: MASTER_ENCRYPTION_KEY
-        generateValue: true  # base64 256-bit — decodes to 32 bytes; pinned forever
-      - key: ADMIN_SECRET
-        sync: false          # set this = the website's LIANS_ADMIN_SECRET
-      - key: API_SECRET_SEED
-        generateValue: true  # retained for deployment compatibility
+      - key: WORKLOAD_CREDENTIAL_MIN_TTL_SECONDS
+        value: "300"
+      - key: WORKLOAD_CREDENTIAL_MAX_TTL_SECONDS
+        value: "2592000"
+      - key: WORKLOAD_CREDENTIAL_LAST_USED_WRITE_INTERVAL_SECONDS
+        value: "900"
+      # Durable exhaustive impact processing runs safely on every replica.
+      - key: IMPACT_ASSESSMENT_WORKER_ENABLED
+        value: "true"
+      - key: IMPACT_ASSESSMENT_WORKER_POLL_SECONDS
+        value: "1"
+      - key: IMPACT_ASSESSMENT_WORKER_BATCH_SIZE
+        value: "4"
+      - key: IMPACT_ASSESSMENT_WORKER_CONCURRENCY
+        value: "2"
+      - key: IMPACT_ASSESSMENT_WORKER_LEASE_SECONDS
+        value: "120"
+      - key: IMPACT_ASSESSMENT_WORKER_PAGE_SIZE
+        value: "250"
+      - key: IMPACT_ASSESSMENT_WORKER_MAX_PAGES_PER_CLAIM
+        value: "1"
+      - key: IMPACT_ASSESSMENT_WORKER_RETRY_BASE_SECONDS
+        value: "2"
+      - key: IMPACT_ASSESSMENT_WORKER_RETRY_MAX_SECONDS
+        value: "300"
+      - key: IMPACT_ASSESSMENT_WORKER_MAX_ATTEMPTS
+        value: "8"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_ENABLED
+        value: "true"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_POLL_SECONDS
+        value: "1"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_BATCH_SIZE
+        value: "4"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_CONCURRENCY
+        value: "2"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_LEASE_SECONDS
+        value: "120"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_PAGE_SIZE
+        value: "100"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_MAX_PAGES_PER_CLAIM
+        value: "2"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_RETRY_BASE_SECONDS
+        value: "2"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_RETRY_MAX_SECONDS
+        value: "300"
+      - key: RECORDER_EVIDENCE_INDEX_WORKER_MAX_ATTEMPTS
+        value: "8"
+      - key: SUBJECT_ERASURE_WORKER_ENABLED
+        value: "true"
+      - key: SUBJECT_ERASURE_WORKER_POLL_SECONDS
+        value: "1"
+      - key: SUBJECT_ERASURE_WORKER_BATCH_SIZE
+        value: "4"
+      - key: SUBJECT_ERASURE_WORKER_CONCURRENCY
+        value: "2"
+      - key: SUBJECT_ERASURE_WORKER_LEASE_SECONDS
+        value: "120"
+      - key: SUBJECT_ERASURE_WORKER_PAGE_SIZE
+        value: "250"
+      - key: SUBJECT_ERASURE_WORKER_MAX_PAGES_PER_CLAIM
+        value: "2"
+      - key: SUBJECT_ERASURE_WORKER_RETRY_BASE_SECONDS
+        value: "2"
+      - key: SUBJECT_ERASURE_WORKER_RETRY_MAX_SECONDS
+        value: "300"
+      - key: SUBJECT_ERASURE_WORKER_MAX_ATTEMPTS
+        value: "8"
+      - key: SCIM_RECONCILIATION_WORKER_ENABLED
+        value: "true"
+      - key: SCIM_RECONCILIATION_WORKER_POLL_SECONDS
+        value: "1"
+      - key: SCIM_RECONCILIATION_WORKER_BATCH_SIZE
+        value: "4"
+      - key: SCIM_RECONCILIATION_WORKER_CONCURRENCY
+        value: "2"
+      - key: SCIM_RECONCILIATION_WORKER_LEASE_SECONDS
+        value: "120"
+      - key: SCIM_RECONCILIATION_WORKER_PAGE_SIZE
+        value: "100"
+      - key: SCIM_RECONCILIATION_WORKER_MAX_PAGES_PER_CLAIM
+        value: "2"
+      - key: SCIM_RECONCILIATION_WORKER_RETRY_BASE_SECONDS
+        value: "2"
+      - key: SCIM_RECONCILIATION_WORKER_RETRY_MAX_SECONDS
+        value: "300"
+      - key: SCIM_RECONCILIATION_WORKER_MAX_ATTEMPTS
+        value: "8"
+      # Stripe credentials and the asynchronous-error attestation are operator
+      # configuration; semantic event names are non-secret and stable.
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: STRIPE_METER_ASYNC_ERROR_DESTINATION_CONFIGURED
+        sync: false
+      - key: STRIPE_METER_DECISION_EVENT
+        value: lians_authoritative_decision
+      - key: STRIPE_METER_PROTECTED_ACTION_EVENT
+        value: lians_protected_action
+      - key: STRIPE_METER_WRITE_EVENT
+        value: agentmem_memory_write
+      - key: STRIPE_METER_RECALL_EVENT
+        value: agentmem_memory_recall
       - key: CORS_ORIGINS
         value: "https://lians.ai,https://www.lians.ai"
       - key: ANTHROPIC_API_KEY
@@ -47,25 +200,43 @@ services:
         value: "true"
       - key: RECALL_CACHE_TTL_SECONDS
         value: "60"
+      - key: RATE_LIMIT_BACKEND_FAILURE_MODE
+        value: deny
+      - key: CONTENT_EXPORT_PAGE_BYTES_LIMIT
+        value: "33554432"
+      - key: HASH_ONLY_EXPORT_PAGE_BYTES_LIMIT
+        value: "16777216"
+      - key: AUDIT_EXPORT_PAGE_BYTES_LIMIT
+        value: "16777216"
+      - key: LINEAGE_RESPONSE_BYTES_LIMIT
+        value: "16777216"
+      - key: DECISION_EVIDENCE_CANDIDATE_LIMIT
+        value: "5000"
+      - key: DECISION_EVIDENCE_CANDIDATE_BYTES_LIMIT
+        value: "16777216"
+      - key: DATABASE_STATEMENT_TIMEOUT_MS
+        value: "30000"
+      - key: DATABASE_POOL_SIZE
+        value: "10"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "20"
+      - key: DATABASE_POOL_TIMEOUT_SECONDS
+        value: "30"
+      - key: DATABASE_LOCK_TIMEOUT_MS
+        value: "5000"
+      - key: DATABASE_IDLE_TRANSACTION_TIMEOUT_MS
+        value: "60000"
+      - key: PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS
+        value: "false"
+      - key: EMBEDDING_PROVIDER_TIMEOUT_SECONDS
+        value: "20"
+      - key: LLM_PROVIDER_TIMEOUT_SECONDS
+        value: "20"
       - key: SUPERSESSION_REVIEW_THRESHOLD
         value: "0.75"
       - key: OTEL_SERVICE_NAME
-        value: agentmem
-      - key: PYTHONPATH
-        value: agentmem/src
-
-  # Redis is a service (type: redis), not a database entry.
-  - type: redis
-    name: agentmem-redis
-    plan: starter
-    region: oregon
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []          # empty = internal-only (no public access)
-
-databases:
-  # Postgres plan slugs are basic-256mb / basic-1gb / pro-* — NOT "standard".
-  - name: agentmem-pg
-    plan: basic-256mb
-    region: oregon
-    databaseName: agentmem
-    user: agentmem
+        value: lians
+      # Supply the exact Render proxy source CIDRs from deployment inventory.
+      # Empty is safe against spoofing but buckets traffic by the shared peer.
+      - key: TRUSTED_PROXY_CIDRS
+        sync: false

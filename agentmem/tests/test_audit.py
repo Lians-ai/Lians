@@ -7,9 +7,9 @@ before T (that was valid at T) may be missing.
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from src.lians.schemas import MemoryAdd
-from src.lians.memory_service import add_memory
-from src.lians.audit import reconstruct
+from lians.schemas import MemoryAdd
+from lians.memory_service import add_memory
+from lians.audit import reconstruct
 
 NS = "audit-ns"
 AGENT = "audit-agent"

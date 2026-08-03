@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timezone
 
-from src.lians.schemas import MemoryAdd, ContextRequest, ConflictResolveRequest
-from src.lians.memory_service import (
+from lians.schemas import MemoryAdd, ContextRequest, ConflictResolveRequest
+from lians.memory_service import (
     add_memory, assemble_context, list_conflicts, resolve_conflict,
 )
 

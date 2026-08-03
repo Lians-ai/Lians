@@ -6,11 +6,11 @@
 
   <groupId>ai.lians</groupId>
   <artifactId>lians-sdk</artifactId>
-  <version>0.4.1</version>
+  <version>0.5.0</version>
   <packaging>jar</packaging>
 
   <name>Lians SDK</name>
-  <description>Bitemporal agent memory for the JVM with deterministic supersession, point-in-time recall, audit history, information barriers, and relationship graphs.</description>
+  <description>Provider-neutral decision evidence and bitemporal memory client for consequential AI systems on the JVM.</description>
   <url>https://www.lians.ai</url>
 
   <licenses>

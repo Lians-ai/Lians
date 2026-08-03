@@ -11,23 +11,42 @@ questions atomic facts can't:
 
 All reads accept ``as_of`` for point-in-time traversal — "who was connected on the
 day of the trade?" — the same temporal guarantee Lians gives for facts, now for
-relationships. Traversal runs in-process over the namespace's edges (no graph DB);
-for very large graphs this can move to recursive SQL later without an API change.
+relationships. Traversal performs indexed, bounded frontier queries and discloses
+whether a node/edge budget prevented a conclusive negative result.
 """
 from __future__ import annotations
 
 import hashlib
-from collections import deque
+import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
-from .models import Relationship
 from .audit_chain import chain_log
+from .config import get_settings
 from .entity_normalizer import cached_normalize
+from .models import Relationship
 
+_GRAPH_INVALIDATION_SERIALIZATION_RESERVE = 4 * 1024
+
+
+class GraphMutationDecisionUnavailable(RuntimeError):
+    """A graph mutation could not be decided completely inside its ceiling."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        status_code: int = 503,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.public_message = message
+        self.status_code = status_code
 
 # ── Canonicalization ────────────────────────────────────────────────────────────
 
@@ -68,6 +87,11 @@ def _is_valid_at(edge: Relationship, as_of: Optional[datetime]) -> bool:
     return vf <= aso and (vt is None or vt > aso)
 
 
+def _exact_barrier(column, barrier_group: str | None):
+    """Return an exact write-boundary predicate; null is not a wildcard."""
+    return column.is_(None) if barrier_group is None else column == barrier_group
+
+
 # ── Write ───────────────────────────────────────────────────────────────────────
 
 
@@ -86,6 +110,7 @@ async def relate(
     metadata: Optional[dict[str, Any]] = None,
     normalize: bool = False,
     barrier_override: Optional[str] = None,
+    commit: bool = True,
 ) -> Relationship:
     """
     Assert a relationship edge.
@@ -95,11 +120,28 @@ async def relate(
     other live ``src --rel_type--> Y`` (Y != X) — the deterministic equivalent of
     Graphiti's contradiction-driven invalidation, e.g. a person's current employer.
     """
-    from .memory_service import _get_barrier_group
+    from .memory_service import _acquire_pg_advisory_lock, _get_barrier_group
+    from .pii import assert_subject_not_erased
+    from .subject_privacy import replace_subject_identifier
 
     src = canon_entity(src_entity, normalize=normalize)
     dst = canon_entity(dst_entity, normalize=normalize)
+    raw_subject_id = subject_id
+    persisted_subject_ref = (
+        await assert_subject_not_erased(db, raw_subject_id, namespace)
+        if raw_subject_id
+        else None
+    )
+    if raw_subject_id and persisted_subject_ref:
+        if src == raw_subject_id:
+            src = persisted_subject_ref
+        if dst == raw_subject_id:
+            dst = persisted_subject_ref
+        metadata = replace_subject_identifier(
+            metadata or {}, raw_subject_id, persisted_subject_ref
+        )
     rel = rel_type.strip()
+    await _acquire_pg_advisory_lock(db, namespace, agent_id)
     barrier_group = await _get_barrier_group(
         db, namespace, agent_id, override=barrier_override
     )
@@ -113,13 +155,67 @@ async def relate(
             Relationship.dst_entity == dst,
             Relationship.valid_to.is_(None),
     ]
-    if barrier_group is not None:
-        existing_conditions.append(Relationship.barrier_group == barrier_group)
-    existing = (await db.execute(
-        select(Relationship).where(and_(*existing_conditions))
-    )).scalars().first()
-    if existing is not None:
-        return existing
+    existing_conditions.append(
+        _exact_barrier(Relationship.barrier_group, barrier_group)
+    )
+    existing_rows = list(
+        (
+            await db.execute(
+                select(Relationship)
+                .where(and_(*existing_conditions))
+                .order_by(Relationship.id)
+                .limit(2)
+                .with_for_update()
+            )
+        ).scalars().all()
+    )
+    if len(existing_rows) > 1:
+        raise GraphMutationDecisionUnavailable(
+            "graph_live_edge_invariant_violation",
+            "Multiple identical live relationship edges require reconciliation",
+        )
+    if existing_rows:
+        return existing_rows[0]
+
+    superseded: list[Relationship] = []
+    if exclusive:
+        exclusive_conditions = [
+            Relationship.namespace == namespace,
+            Relationship.agent_id == agent_id,
+            Relationship.src_entity == src,
+            Relationship.rel_type == rel,
+            Relationship.dst_entity != dst,
+            Relationship.valid_to.is_(None),
+            _exact_barrier(Relationship.barrier_group, barrier_group),
+        ]
+        invalidation_limit = get_settings().graph_exclusive_invalidation_limit
+        superseded = list(
+            (
+                await db.execute(
+                    select(Relationship)
+                    .options(
+                        load_only(
+                            Relationship.id,
+                            Relationship.agent_id,
+                            Relationship.src_entity,
+                            Relationship.rel_type,
+                            Relationship.dst_entity,
+                            Relationship.barrier_group,
+                            Relationship.content_hash,
+                        )
+                    )
+                    .where(and_(*exclusive_conditions))
+                    .order_by(Relationship.id)
+                    .limit(invalidation_limit + 1)
+                    .with_for_update()
+                )
+            ).scalars().all()
+        )
+        if len(superseded) > invalidation_limit:
+            raise GraphMutationDecisionUnavailable(
+                "graph_exclusive_invalidation_capacity_exceeded",
+                "Exclusive relationship invalidation exceeds the atomic capacity",
+            )
 
     now = datetime.now(timezone.utc)
 
@@ -134,7 +230,7 @@ async def relate(
         valid_from=event_time,
         valid_to=None,
         barrier_group=barrier_group,
-        subject_id=subject_id,
+        subject_id=persisted_subject_ref,
         source=source,
         metadata_=metadata or {},
         content_hash=_rel_hash(src, rel, dst, event_time),
@@ -143,19 +239,6 @@ async def relate(
     await db.flush()
 
     if exclusive:
-        exclusive_conditions = [
-                Relationship.namespace == namespace,
-                Relationship.agent_id == agent_id,
-                Relationship.src_entity == src,
-                Relationship.rel_type == rel,
-                Relationship.dst_entity != dst,
-                Relationship.valid_to.is_(None),
-        ]
-        if barrier_group is not None:
-            exclusive_conditions.append(Relationship.barrier_group == barrier_group)
-        superseded = (await db.execute(
-            select(Relationship).where(and_(*exclusive_conditions))
-        )).scalars().all()
         for old in superseded:
             old.valid_to = event_time
             old.invalidated_by = edge.id
@@ -167,8 +250,11 @@ async def relate(
         payload={"src": src, "rel_type": rel, "dst": dst,
                  "event_time": event_time.isoformat(), "exclusive": exclusive},
     )
-    await db.commit()
-    await db.refresh(edge)
+    if commit:
+        await db.commit()
+        await db.refresh(edge)
+    else:
+        await db.flush()
     return edge
 
 
@@ -195,7 +281,7 @@ async def unrelate(
     rel = rel_type.strip()
     when = event_time or datetime.now(timezone.utc)
 
-    conditions = [
+    identity_conditions = [
             Relationship.namespace == namespace,
             Relationship.agent_id == agent_id,
             Relationship.src_entity == src,
@@ -203,13 +289,70 @@ async def unrelate(
             Relationship.dst_entity == dst,
             Relationship.valid_to.is_(None),
     ]
+    observed_conditions = list(identity_conditions)
     if barrier_override is not None:
-        conditions.append(Relationship.barrier_group == barrier_override)
-    edge = (await db.execute(
-        select(Relationship).where(and_(*conditions))
-    )).scalars().first()
-    if edge is None:
+        observed_conditions.append(Relationship.barrier_group == barrier_override)
+    observed_rows = (
+        await db.execute(
+            select(Relationship.id, Relationship.subject_id).where(
+                and_(*observed_conditions)
+            )
+            .order_by(Relationship.id)
+            .limit(get_settings().graph_exclusive_invalidation_limit + 1)
+        )
+    ).all()
+    if len(observed_rows) > get_settings().graph_exclusive_invalidation_limit:
+        raise GraphMutationDecisionUnavailable(
+            "graph_mutation_candidate_capacity_exceeded",
+            "Relationship mutation candidates exceed the configured capacity",
+        )
+    if not observed_rows:
         return 0
+
+    # Subject erasure takes the subject boundary before graph rows; match that
+    # order before taking the agent mutex and the authoritative row lock. Lock
+    # every observed candidate because an unbarriered caller's effective agent
+    # assignment is resolved only after the agent mutex is held.
+    from .pii import lock_subject_key_for_update
+
+    for subject_ref in sorted(
+        {str(subject_ref) for _, subject_ref in observed_rows if subject_ref}
+    ):
+        await lock_subject_key_for_update(db, subject_ref, namespace)
+    from .memory_service import _acquire_pg_advisory_lock, _get_barrier_group
+
+    await _acquire_pg_advisory_lock(db, namespace, agent_id)
+    effective_barrier = await _get_barrier_group(
+        db,
+        namespace,
+        agent_id,
+        override=barrier_override,
+    )
+    authoritative_conditions = [
+        *identity_conditions,
+        _exact_barrier(Relationship.barrier_group, effective_barrier),
+        Relationship.id.in_([row_id for row_id, _ in observed_rows]),
+    ]
+    authoritative_rows = list(
+        (
+            await db.execute(
+                select(Relationship)
+                .where(and_(*authoritative_conditions))
+                .order_by(Relationship.id)
+                .execution_options(populate_existing=True)
+                .with_for_update()
+                .limit(2)
+            )
+        ).scalars().all()
+    )
+    if len(authoritative_rows) > 1:
+        raise GraphMutationDecisionUnavailable(
+            "graph_live_edge_invariant_violation",
+            "Multiple identical live relationship edges require reconciliation",
+        )
+    if not authoritative_rows:
+        return 0
+    edge = authoritative_rows[0]
 
     edge.valid_to = when
     await _log_invalidation(db, namespace, edge, reason="unrelate")
@@ -224,7 +367,7 @@ async def _log_invalidation(db: AsyncSession, namespace: str, edge: Relationship
         payload={"src": edge.src_entity, "rel_type": edge.rel_type,
                  "dst": edge.dst_entity, "reason": reason},
     )
-    from .webhook_service import dispatch_event, RELATIONSHIP_INVALIDATED
+    from .webhook_service import RELATIONSHIP_INVALIDATED, dispatch_event
     await dispatch_event(db, namespace, RELATIONSHIP_INVALIDATED, {
         "agent_id": edge.agent_id,
         "edge_id": str(edge.id),
@@ -238,41 +381,109 @@ async def _log_invalidation(db: AsyncSession, namespace: str, edge: Relationship
 # ── Read / traversal ────────────────────────────────────────────────────────────
 
 
-async def _live_edges(
-    db: AsyncSession,
+_GRAPH_FRONTIER_BIND_BATCH = 400
+_DEFAULT_GRAPH_MAX_NODES = 5_000
+_DEFAULT_GRAPH_MAX_EDGES = 20_000
+
+
+def _edge_scope_filters(
     namespace: str,
     agent_id: str,
     as_of: Optional[datetime],
+    rel_types: Optional[list[str]],
+    barrier_override: Optional[str],
+) -> list[Any]:
+    filters: list[Any] = [
+        Relationship.namespace == namespace,
+        Relationship.agent_id == agent_id,
+    ]
+    if as_of is None:
+        filters.append(Relationship.valid_to.is_(None))
+    else:
+        filters.extend(
+            (
+                Relationship.valid_from <= as_of,
+                or_(Relationship.valid_to.is_(None), Relationship.valid_to > as_of),
+            )
+        )
+    if rel_types:
+        filters.append(Relationship.rel_type.in_(rel_types))
+    if barrier_override is not None:
+        filters.append(
+            or_(
+                Relationship.barrier_group.is_(None),
+                Relationship.barrier_group == barrier_override,
+            )
+        )
+    return filters
+
+
+async def _frontier_edges(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    frontier: set[str],
+    direction: str,
+    as_of: Optional[datetime],
     rel_types: Optional[list[str]] = None,
     barrier_override: Optional[str] = None,
-) -> list[Relationship]:
-    conds = [Relationship.namespace == namespace, Relationship.agent_id == agent_id]
-    if as_of is None:
-        conds.append(Relationship.valid_to.is_(None))
-    if rel_types:
-        conds.append(Relationship.rel_type.in_(rel_types))
-    if barrier_override is not None:
-        conds.append(or_(
-            Relationship.barrier_group.is_(None),
-            Relationship.barrier_group == barrier_override,
-        ))
-    rows = (await db.execute(select(Relationship).where(and_(*conds)))).scalars().all()
-    if as_of is None:
-        return list(rows)
-    # Point-in-time validity is compared in Python to dodge SQLite naive-datetime
-    # pitfalls; the namespace+agent edge set is bounded.
-    return [e for e in rows if _is_valid_at(e, as_of)]
+    *,
+    edge_budget: int,
+    seen_edge_ids: set[Any],
+) -> tuple[list[Relationship], bool]:
+    """Fetch only indexed edges incident to one BFS frontier.
 
-
-def _adjacency(edges: list[Relationship], direction: str) -> dict[str, list[Relationship]]:
-    """Map each entity to the edges leaving it under the chosen direction semantics."""
-    adj: dict[str, list[Relationship]] = {}
-    for e in edges:
-        if direction in ("out", "any"):
-            adj.setdefault(e.src_entity, []).append(e)
-        if direction in ("in", "any"):
-            adj.setdefault(e.dst_entity, []).append(e)
-    return adj
+    The boolean is true when the edge budget prevented an exhaustive frontier
+    read.  Callers must treat a negative result as unknown in that case.
+    """
+    if not frontier or edge_budget <= 0:
+        return [], bool(frontier)
+    scope = _edge_scope_filters(
+        namespace,
+        agent_id,
+        as_of,
+        rel_types,
+        barrier_override,
+    )
+    ordered_frontier = sorted(frontier)
+    rows: list[Relationship] = []
+    truncated = False
+    for start in range(0, len(ordered_frontier), _GRAPH_FRONTIER_BIND_BATCH):
+        remaining = edge_budget - len(rows)
+        if remaining <= 0:
+            truncated = True
+            break
+        chunk = ordered_frontier[start : start + _GRAPH_FRONTIER_BIND_BATCH]
+        if direction == "out":
+            incident = Relationship.src_entity.in_(chunk)
+        elif direction == "in":
+            incident = Relationship.dst_entity.in_(chunk)
+        else:
+            incident = or_(
+                Relationship.src_entity.in_(chunk),
+                Relationship.dst_entity.in_(chunk),
+            )
+        fetched = list(
+            (
+                await db.execute(
+                    select(Relationship)
+                    .where(*scope, incident)
+                    .order_by(Relationship.id)
+                    .limit(remaining + 1)
+                )
+            ).scalars()
+        )
+        if len(fetched) > remaining:
+            truncated = True
+            fetched = fetched[:remaining]
+        for edge in fetched:
+            if edge.id in seen_edge_ids:
+                continue
+            seen_edge_ids.add(edge.id)
+            rows.append(edge)
+        if truncated:
+            break
+    return rows, truncated
 
 
 def _other_end(edge: Relationship, current: str) -> str:
@@ -291,6 +502,8 @@ async def neighbors(
     direction: str = "any",
     normalize: bool = False,
     barrier_override: Optional[str] = None,
+    max_nodes: int = _DEFAULT_GRAPH_MAX_NODES,
+    max_edges: int = _DEFAULT_GRAPH_MAX_EDGES,
 ) -> dict[str, Any]:
     """
     Return entities reachable from ``entity`` within ``depth`` hops.
@@ -301,35 +514,65 @@ async def neighbors(
     at the first hop are included for context.
     """
     start = canon_entity(entity, normalize=normalize)
-    edges = await _live_edges(
-        db, namespace, agent_id, as_of, rel_types, barrier_override
-    )
-    adj = _adjacency(edges, direction)
-
     dist: dict[str, int] = {start: 0}
-    q: deque[str] = deque([start])
-    while q:
-        node = q.popleft()
-        if dist[node] >= depth:
-            continue
-        for edge in adj.get(node, []):
-            nxt = _other_end(edge, node)
-            if nxt not in dist:
-                dist[nxt] = dist[node] + 1
-                q.append(nxt)
+    frontier = {start}
+    seen_edge_ids: set[Any] = set()
+    direct_edges: list[Relationship] = []
+    search_complete = True
+    for current_depth in range(depth):
+        edges, edge_truncated = await _frontier_edges(
+            db,
+            namespace,
+            agent_id,
+            frontier,
+            direction,
+            as_of,
+            rel_types,
+            barrier_override,
+            edge_budget=max_edges - len(seen_edge_ids),
+            seen_edge_ids=seen_edge_ids,
+        )
+        if current_depth == 0:
+            direct_edges = list(edges)
+        next_frontier: set[str] = set()
+        for edge in edges:
+            candidates: list[str] = []
+            if direction in {"out", "any"} and edge.src_entity in frontier:
+                candidates.append(edge.dst_entity)
+            if direction in {"in", "any"} and edge.dst_entity in frontier:
+                candidates.append(edge.src_entity)
+            for candidate in candidates:
+                if candidate in dist:
+                    continue
+                if len(dist) >= max_nodes:
+                    search_complete = False
+                    break
+                dist[candidate] = current_depth + 1
+                next_frontier.add(candidate)
+            if not search_complete:
+                break
+        if edge_truncated:
+            search_complete = False
+        if not search_complete or not next_frontier:
+            break
+        frontier = next_frontier
 
     neighbor_list = [
         {"entity": e, "depth": d}
         for e, d in sorted(dist.items(), key=lambda kv: (kv[1], kv[0]))
         if e != start
     ]
-    direct = [_edge_dict(e) for e in adj.get(start, [])]
+    direct = [_edge_dict(edge) for edge in direct_edges]
     return {
         "entity": start,
         "depth": depth,
         "as_of": as_of.isoformat() if as_of else None,
         "neighbors": neighbor_list,
         "direct_edges": direct,
+        "search_complete": search_complete,
+        "truncated": not search_complete,
+        "nodes_examined": len(dist),
+        "edges_examined": len(seen_edge_ids),
     }
 
 
@@ -345,37 +588,67 @@ async def path(
     rel_types: Optional[list[str]] = None,
     normalize: bool = False,
     barrier_override: Optional[str] = None,
+    max_nodes: int = _DEFAULT_GRAPH_MAX_NODES,
+    max_edges: int = _DEFAULT_GRAPH_MAX_EDGES,
 ) -> dict[str, Any]:
     """
     Shortest connection between two entities — the conflict-of-interest /
     related-party query. Returns the chain of edges linking ``src`` to ``dst``
-    (empty when unconnected within ``max_depth``). Treats edges as undirected.
+    (empty when unconnected within ``max_depth``). ``connected`` is ``None``
+    when a node/edge budget prevents a conclusive negative. Treats edges as
+    undirected.
     """
     src = canon_entity(src_entity, normalize=normalize)
     dst = canon_entity(dst_entity, normalize=normalize)
-    edges = await _live_edges(
-        db, namespace, agent_id, as_of, rel_types, barrier_override
-    )
-    adj = _adjacency(edges, "any")
-
-    # BFS tracking the edge used to reach each node, to reconstruct the trail.
+    # Indexed frontier BFS tracks the edge used to reach each node, allowing a
+    # shortest trail without hydrating the entire tenant-agent graph.
     prev: dict[str, tuple[str, Relationship]] = {}
     seen = {src}
-    q: deque[tuple[str, int]] = deque([(src, 0)])
+    seen_edge_ids: set[Any] = set()
+    frontier = {src}
     found = src == dst
-    while q and not found:
-        node, d = q.popleft()
-        if d >= max_depth:
-            continue
-        for edge in adj.get(node, []):
-            nxt = _other_end(edge, node)
-            if nxt not in seen:
-                seen.add(nxt)
-                prev[nxt] = (node, edge)
-                if nxt == dst:
+    search_complete = True
+    for _current_depth in range(max_depth):
+        if found or not frontier:
+            break
+        edges, edge_truncated = await _frontier_edges(
+            db,
+            namespace,
+            agent_id,
+            frontier,
+            "any",
+            as_of,
+            rel_types,
+            barrier_override,
+            edge_budget=max_edges - len(seen_edge_ids),
+            seen_edge_ids=seen_edge_ids,
+        )
+        next_frontier: set[str] = set()
+        for edge in edges:
+            endpoints: list[tuple[str, str]] = []
+            if edge.src_entity in frontier:
+                endpoints.append((edge.src_entity, edge.dst_entity))
+            if edge.dst_entity in frontier:
+                endpoints.append((edge.dst_entity, edge.src_entity))
+            for parent, candidate in endpoints:
+                if candidate in seen:
+                    continue
+                if len(seen) >= max_nodes:
+                    search_complete = False
+                    break
+                seen.add(candidate)
+                prev[candidate] = (parent, edge)
+                if candidate == dst:
                     found = True
                     break
-                q.append((nxt, d + 1))
+                next_frontier.add(candidate)
+            if found or not search_complete:
+                break
+        if edge_truncated:
+            search_complete = False
+        if found or not search_complete:
+            break
+        frontier = next_frontier
 
     trail: list[dict] = []
     if found and src != dst:
@@ -389,10 +662,14 @@ async def path(
     return {
         "src": src,
         "dst": dst,
-        "connected": found,
+        "connected": True if found else False if search_complete else None,
         "hops": len(trail),
         "as_of": as_of.isoformat() if as_of else None,
         "path": trail,
+        "search_complete": search_complete,
+        "truncated": not search_complete,
+        "nodes_examined": len(seen),
+        "edges_examined": len(seen_edge_ids),
     }
 
 
@@ -416,7 +693,140 @@ async def extract_and_relate(
     """
     from .graph_extract import extract_relationships
 
-    triplets = await extract_relationships(text, use_llm=use_llm)
+    raw_triplets = await extract_relationships(text, use_llm=use_llm)
+    settings = get_settings()
+    if len(raw_triplets) > settings.graph_extract_candidate_limit:
+        raise GraphMutationDecisionUnavailable(
+            "graph_extraction_candidate_capacity_exceeded",
+            "Extracted relationship candidates exceed the atomic row capacity",
+            status_code=413,
+        )
+
+    triplets: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    serialized_bytes = 2
+    for raw_triplet in raw_triplets:
+        if (
+            not isinstance(raw_triplet, (list, tuple))
+            or len(raw_triplet) != 3
+            or not all(isinstance(value, str) for value in raw_triplet)
+        ):
+            raise GraphMutationDecisionUnavailable(
+                "graph_extraction_candidate_invalid",
+                "The relationship extractor returned an invalid candidate",
+            )
+        raw_src, raw_rel, raw_dst = raw_triplet
+        src = " ".join(raw_src.split())
+        rel = raw_rel.strip()
+        dst = " ".join(raw_dst.split())
+        if (
+            not src
+            or len(src) > 1_000
+            or not rel
+            or len(rel) > 200
+            or not dst
+            or len(dst) > 1_000
+        ):
+            raise GraphMutationDecisionUnavailable(
+                "graph_extraction_candidate_field_capacity_exceeded",
+                "An extracted relationship field exceeds the supported capacity",
+                status_code=413,
+            )
+        identity = (
+            canon_entity(src, normalize=normalize),
+            rel,
+            canon_entity(dst, normalize=normalize),
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        candidate_bytes = len(
+            json.dumps(
+                {"src": src, "rel_type": rel, "dst": dst},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+        # Reserve deterministic envelope/edge/audit serialization overhead in
+        # addition to the visible triplet itself.
+        serialized_bytes += candidate_bytes + 512 + int(bool(triplets))
+        if serialized_bytes > settings.graph_extract_candidate_bytes_limit:
+            raise GraphMutationDecisionUnavailable(
+                "graph_extraction_candidate_bytes_exceeded",
+                "Extracted relationship candidates exceed the atomic byte capacity",
+                status_code=413,
+            )
+        triplets.append((src, rel, dst))
+
+    if exclusive and triplets:
+        from .memory_service import _acquire_pg_advisory_lock, _get_barrier_group
+
+        destinations_by_pair: dict[tuple[str, str], str] = {}
+        for src, rel, dst in triplets:
+            pair = (canon_entity(src, normalize=normalize), rel)
+            normalized_dst = canon_entity(dst, normalize=normalize)
+            prior_destination = destinations_by_pair.setdefault(pair, normalized_dst)
+            if prior_destination != normalized_dst:
+                raise GraphMutationDecisionUnavailable(
+                    "graph_extraction_exclusive_conflict",
+                    "Exclusive extraction produced multiple destinations for one relation",
+                    status_code=409,
+                )
+
+        # Serialize the complete preflight with every cooperating graph write.
+        # Re-entrant advisory locking inside relate() preserves the same
+        # transaction boundary without opening a race after this inventory.
+        await _acquire_pg_advisory_lock(db, namespace, agent_id)
+        barrier_group = await _get_barrier_group(
+            db,
+            namespace,
+            agent_id,
+            override=barrier_override,
+        )
+        invalidation_count = 0
+        pairs = sorted(destinations_by_pair.items())
+        for start in range(0, len(pairs), 100):
+            chunk = pairs[start : start + 100]
+            pair_conditions = [
+                and_(
+                    Relationship.src_entity == src,
+                    Relationship.rel_type == rel,
+                    Relationship.dst_entity != dst,
+                )
+                for (src, rel), dst in chunk
+            ]
+            invalidation_count += int(
+                (
+                    await db.execute(
+                        select(func.count(Relationship.id)).where(
+                            Relationship.namespace == namespace,
+                            Relationship.agent_id == agent_id,
+                            Relationship.valid_to.is_(None),
+                            _exact_barrier(
+                                Relationship.barrier_group,
+                                barrier_group,
+                            ),
+                            or_(*pair_conditions),
+                        )
+                    )
+                ).scalar_one()
+            )
+            if invalidation_count > settings.graph_exclusive_invalidation_limit:
+                raise GraphMutationDecisionUnavailable(
+                    "graph_extraction_exclusive_capacity_exceeded",
+                    "Exclusive extraction invalidations exceed the atomic capacity",
+                    status_code=413,
+                )
+        if (
+            serialized_bytes
+            + invalidation_count * _GRAPH_INVALIDATION_SERIALIZATION_RESERVE
+            > settings.graph_extract_candidate_bytes_limit
+        ):
+            raise GraphMutationDecisionUnavailable(
+                "graph_extraction_candidate_bytes_exceeded",
+                "Extracted relationships and invalidations exceed the atomic byte capacity",
+                status_code=413,
+            )
     edges: list[dict[str, Any]] = []
     for src, rel, dst in triplets:
         edge = await relate(
@@ -425,8 +835,10 @@ async def extract_and_relate(
             event_time=event_time, exclusive=exclusive, normalize=normalize,
             source="extracted",
             barrier_override=barrier_override,
+            commit=False,
         )
         edges.append(_edge_dict(edge))
+    await db.commit()
     return {
         "extracted": [{"src": s, "rel_type": r, "dst": d} for (s, r, d) in triplets],
         "edges": edges,
@@ -444,35 +856,62 @@ async def entity_distances(
     as_of: Optional[datetime] = None,
     normalize: bool = False,
     barrier_override: Optional[str] = None,
-) -> dict[str, int]:
+    max_nodes: int = _DEFAULT_GRAPH_MAX_NODES,
+    max_edges: int = _DEFAULT_GRAPH_MAX_EDGES,
+) -> tuple[dict[str, int], bool]:
     """
     Graph hop-distance from ``anchor`` to each candidate entity (BFS, undirected).
 
-    Unreachable candidates are omitted. Used by graph-proximity reranking to boost
-    facts about entities near the query's anchor entity.
+    Unreachable candidates are omitted. The second value is false when a budget
+    cap makes omitted candidates unknown rather than conclusively unreachable.
     """
     start = canon_entity(anchor, normalize=normalize)
     wanted = {canon_entity(c, normalize=normalize) for c in candidates}
-    edges = await _live_edges(
-        db, namespace, agent_id, as_of, barrier_override=barrier_override
-    )
-    adj = _adjacency(edges, "any")
-
     dist: dict[str, int] = {start: 0}
-    q: deque[str] = deque([start])
     out: dict[str, int] = {}
-    while q:
-        node = q.popleft()
-        if node in wanted:
-            out[node] = dist[node]
-        if dist[node] >= max_depth:
-            continue
-        for edge in adj.get(node, []):
-            nxt = _other_end(edge, node)
-            if nxt not in dist:
-                dist[nxt] = dist[node] + 1
-                q.append(nxt)
-    return out
+    frontier = {start}
+    seen_edge_ids: set[Any] = set()
+    search_complete = True
+    for current_depth in range(max_depth + 1):
+        for node in frontier:
+            if node in wanted:
+                out[node] = current_depth
+        if wanted.issubset(out) or current_depth >= max_depth:
+            break
+        edges, truncated = await _frontier_edges(
+            db,
+            namespace,
+            agent_id,
+            frontier,
+            "any",
+            as_of,
+            barrier_override=barrier_override,
+            edge_budget=max_edges - len(seen_edge_ids),
+            seen_edge_ids=seen_edge_ids,
+        )
+        next_frontier: set[str] = set()
+        for edge in edges:
+            candidates: list[str] = []
+            if edge.src_entity in frontier:
+                candidates.append(edge.dst_entity)
+            if edge.dst_entity in frontier:
+                candidates.append(edge.src_entity)
+            for candidate in candidates:
+                if candidate in dist:
+                    continue
+                if len(dist) >= max_nodes:
+                    truncated = True
+                    break
+                dist[candidate] = current_depth + 1
+                next_frontier.add(candidate)
+            if truncated:
+                break
+        if truncated or not next_frontier:
+            if truncated:
+                search_complete = False
+            break
+        frontier = next_frontier
+    return out, search_complete
 
 
 def _edge_dict(e: Relationship) -> dict[str, Any]:

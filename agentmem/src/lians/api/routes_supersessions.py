@@ -15,6 +15,7 @@ GET /v1/supersessions/review
         limit       int     max items (default 50)
 """
 from __future__ import annotations
+
 from typing import Optional
 from uuid import UUID
 
@@ -22,9 +23,10 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..schemas import SupersessionReviewResult, SupersessionAction, SupersessionActionResult
-from ..memory_service import get_pending_supersessions, apply_supersession_action
-from .deps import get_auth, AuthContext
+from ..memory_service import apply_supersession_action, get_pending_supersessions
+from ..mutation_safety import reject_non_replayable_idempotency_key
+from ..schemas import SupersessionAction, SupersessionActionResult, SupersessionReviewResult
+from .deps import AuthContext, get_auth
 
 router = APIRouter(prefix="/v1", tags=["supersessions"])
 
@@ -35,6 +37,7 @@ async def review_supersessions(
         description="Confidence threshold — events below this score are returned. "
                     "Defaults to config.supersession_review_threshold (0.75)."),
     limit: int = Query(default=50, ge=1, le=500),
+    before_chain_position: int | None = Query(default=None, ge=1),
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ) -> SupersessionReviewResult:
@@ -58,6 +61,7 @@ async def review_supersessions(
         confidence_threshold=threshold,
         limit=limit,
         barrier_override=auth.barrier_group,
+        before_chain_position=before_chain_position,
     )
 
 
@@ -65,6 +69,7 @@ async def review_supersessions(
     "/supersessions/{memory_id}",
     response_model=SupersessionActionResult,
     summary="Confirm or reject a supersession",
+    dependencies=[Depends(reject_non_replayable_idempotency_key)],
 )
 async def action_supersession(
     memory_id: UUID,

@@ -4,16 +4,16 @@ WORM posture endpoint — reports the SEC 17a-4 immutability posture.
 from __future__ import annotations
 
 import hashlib
-from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.config import get_settings
+from lians.db import get_db
+from lians.models import ApiKey
 
 NS = "worm-ns"
 KEY = "worm-key"
@@ -55,7 +55,11 @@ async def test_worm_posture_default(client):
 
 @pytest.mark.asyncio
 async def test_worm_posture_attested(client, monkeypatch):
-    monkeypatch.setattr("src.lians.config.get_settings", lambda: SimpleNamespace(worm_mode=True))
+    settings = get_settings().model_copy(update={"worm_mode": True})
+    monkeypatch.setattr(
+        "lians.api.routes_compliance.get_settings",
+        lambda: settings,
+    )
     r = await client.get("/v1/compliance/worm", headers=_h())
     body = r.json()
     assert body["worm_mode"] is True

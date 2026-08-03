@@ -1,0 +1,511 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/decision-receipt/v0.1/schema.json",
+  "title": "Lians Decision Receipt v0.1",
+  "description": "A provider-neutral, portable evidence boundary for a consequential AI decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "receipt_version",
+    "receipt_id",
+    "issued_at",
+    "issuer",
+    "decision",
+    "actor",
+    "model",
+    "artifacts",
+    "tools",
+    "sources",
+    "policy",
+    "authorization",
+    "human_review",
+    "correlation",
+    "reconstruction",
+    "audit_chain",
+    "completeness",
+    "integrity"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://lians.ai/specs/decision-receipt/v0.1/schema.json"
+    },
+    "receipt_version": {
+      "const": "0.1"
+    },
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^urn:lians:decision-receipt:.+$"
+    },
+    "issued_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "issuer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "category", "key_id"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "category": {"const": "decision_evidence_infrastructure"},
+        "key_id": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "namespace",
+        "type",
+        "outcome",
+        "reason_codes",
+        "regime",
+        "subject_id",
+        "decided_at",
+        "recorded_at",
+        "knowledge_as_of",
+        "knowledge_recorded_as_of",
+        "record_hash",
+        "record_hash_version",
+        "record_integrity_status",
+        "supersedes_id"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "namespace": {"$ref": "#/$defs/nullableString"},
+        "type": {"type": "string", "minLength": 1},
+        "outcome": {"$ref": "#/$defs/nullableString"},
+        "reason_codes": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "regime": {"$ref": "#/$defs/nullableString"},
+        "subject_id": {"$ref": "#/$defs/nullableString"},
+        "decided_at": {"$ref": "#/$defs/timestamp"},
+        "recorded_at": {"$ref": "#/$defs/timestamp"},
+        "knowledge_as_of": {"$ref": "#/$defs/timestamp"},
+        "knowledge_recorded_as_of": {"$ref": "#/$defs/nullableTimestamp"},
+        "record_hash": {"$ref": "#/$defs/nullableHash"},
+        "record_hash_version": {"type": ["integer", "null"]},
+        "record_integrity_status": {
+          "type": ["string", "null"],
+          "enum": ["verified", "legacy_unverified", null]
+        },
+        "supersedes_id": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "claimed_agent_id", "principal", "recorded_by"],
+      "properties": {
+        "agent_id": {"type": "string", "minLength": 1},
+        "claimed_agent_id": {"type": "string", "minLength": 1},
+        "principal": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": true},
+            {"type": "null"}
+          ]
+        },
+        "recorded_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["principal_ref", "auth_method", "credential_ref"],
+          "properties": {
+            "principal_ref": {"$ref": "#/$defs/nullableString"},
+            "auth_method": {"$ref": "#/$defs/nullableString"},
+            "credential_ref": {"$ref": "#/$defs/nullableString"},
+            "principal_type": {"$ref": "#/$defs/nullableString"},
+            "role": {
+              "type": ["string", "null"],
+              "enum": ["owner", "analyst", "compliance", "readonly", null]
+            },
+            "scopes": {
+              "type": "array",
+              "maxItems": 50,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,100}$"
+              }
+            },
+            "authorization_snapshot_verified": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "id",
+        "version",
+        "system_instruction_hash",
+        "configuration_hash"
+      ],
+      "properties": {
+        "provider": {"$ref": "#/$defs/nullableString"},
+        "id": {"$ref": "#/$defs/nullableString"},
+        "version": {"$ref": "#/$defs/nullableString"},
+        "system_instruction_hash": {"$ref": "#/$defs/nullableHash"},
+        "configuration_hash": {"$ref": "#/$defs/nullableHash"}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_hash", "output_hash"],
+      "properties": {
+        "input_hash": {"$ref": "#/$defs/nullableHash"},
+        "output_hash": {"$ref": "#/$defs/nullableHash"}
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {"type": "string"},
+          "tool_id": {"type": "string"},
+          "definition_hash": {"$ref": "#/$defs/hash"},
+          "result_hash": {"$ref": "#/$defs/hash"}
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/source"}
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "evaluation"],
+      "properties": {
+        "version": {"$ref": "#/$defs/nullableString"},
+        "evaluation": {
+          "oneOf": [
+            {"type": "object", "additionalProperties": true},
+            {"type": "string"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "authorization": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "recording_write": {
+              "$ref": "#/$defs/recordingWriteAuthorization"
+            },
+            "declared_workflow_context": {
+              "oneOf": [
+                {"$ref": "#/$defs/declaredWorkflowAuthorization"},
+                {"type": "null"}
+              ]
+            }
+          }
+        },
+        {"type": "null"}
+      ]
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reviewer", "reviewed_at"],
+      "properties": {
+        "status": {"$ref": "#/$defs/nullableString"},
+        "reviewer": {"$ref": "#/$defs/nullableString"},
+        "reviewed_at": {"$ref": "#/$defs/nullableTimestamp"}
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "trace_id", "span_id"],
+      "properties": {
+        "session_id": {"$ref": "#/$defs/nullableString"},
+        "trace_id": {"$ref": "#/$defs/nullableString"},
+        "span_id": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "reconstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "knowledge_as_of",
+        "knowledge_recorded_as_of",
+        "snapshot_count",
+        "cited_source_count",
+        "snapshot_manifest"
+      ],
+      "properties": {
+        "knowledge_as_of": {"$ref": "#/$defs/timestamp"},
+        "knowledge_recorded_as_of": {"$ref": "#/$defs/nullableTimestamp"},
+        "snapshot_count": {"type": "integer", "minimum": 0},
+        "cited_source_count": {"type": "integer", "minimum": 0},
+        "snapshot_manifest": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["memory_id", "content_hash", "valid_from", "valid_to"],
+            "properties": {
+              "memory_id": {"type": "string", "minLength": 1},
+              "content_hash": {"$ref": "#/$defs/nullableHash"},
+              "valid_from": {"$ref": "#/$defs/nullableTimestamp"},
+              "valid_to": {"$ref": "#/$defs/nullableTimestamp"}
+            }
+          }
+        }
+      }
+    },
+    "audit_chain": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "rows_checked": {"type": "integer", "minimum": 0},
+        "violations": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "completeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "grade", "status", "checks", "missing"],
+      "properties": {
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "grade": {"enum": ["A", "B", "C", "D", "F"]},
+        "status": {"enum": ["complete", "incomplete"]},
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "weight", "status", "evidence"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "label": {"type": "string", "minLength": 1},
+              "weight": {"type": "integer", "minimum": 0, "maximum": 100},
+              "status": {"enum": ["present", "missing"]},
+              "evidence": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "missing": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hash_algorithm",
+        "canonicalization",
+        "receipt_hash",
+        "signature"
+      ],
+      "properties": {
+        "hash_algorithm": {"const": "sha-256"},
+        "canonicalization": {"const": "json-sort-keys-utf8-v1"},
+        "receipt_hash": {"$ref": "#/$defs/hash"},
+        "signature": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/signature"}
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["decision"],
+        "properties": {
+          "decision": {
+            "required": ["record_hash_version"],
+            "properties": {
+              "record_hash_version": {"const": 3}
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "actor": {
+            "properties": {
+              "principal": {
+                "type": "object",
+                "required": ["id", "auth_method", "credential_ref", "type", "role", "scopes"]
+              },
+              "recorded_by": {
+                "required": [
+                  "principal_ref",
+                  "auth_method",
+                  "credential_ref",
+                  "principal_type",
+                  "role",
+                  "scopes",
+                  "authorization_snapshot_verified"
+                ],
+                "properties": {
+                  "principal_type": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,32}$"
+                  },
+                  "scopes": {
+                    "minItems": 1,
+                    "contains": {"const": "write"}
+                  },
+                  "authorization_snapshot_verified": {"const": true}
+                }
+              }
+            }
+          },
+          "authorization": {
+            "type": "object",
+            "required": ["recording_write"],
+            "properties": {
+              "recording_write": {
+                "properties": {
+                  "verified": {"const": true},
+                  "decision": {"const": "allowed"},
+                  "principal_type": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,32}$"
+                  },
+                  "scopes": {
+                    "minItems": 1,
+                    "contains": {"const": "write"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableHash": {
+      "oneOf": [
+        {"$ref": "#/$defs/hash"},
+        {"type": "null"}
+      ]
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        {"$ref": "#/$defs/timestamp"},
+        {"type": "null"}
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "memory_id",
+        "source",
+        "source_version",
+        "content",
+        "content_hash",
+        "valid_from",
+        "valid_to",
+        "recorded_at",
+        "erased_at"
+      ],
+      "properties": {
+        "memory_id": {"type": "string", "minLength": 1},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "source_version": {"$ref": "#/$defs/nullableString"},
+        "content": {"$ref": "#/$defs/nullableString"},
+        "content_hash": {"$ref": "#/$defs/nullableHash"},
+        "valid_from": {"$ref": "#/$defs/nullableTimestamp"},
+        "valid_to": {"$ref": "#/$defs/nullableTimestamp"},
+        "recorded_at": {"$ref": "#/$defs/nullableTimestamp"},
+        "erased_at": {"$ref": "#/$defs/nullableTimestamp"}
+      }
+    },
+    "recordingWriteAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "decision",
+        "action",
+        "principal_ref",
+        "principal_type",
+        "role",
+        "scopes",
+        "auth_method",
+        "credential_ref"
+      ],
+      "properties": {
+        "verified": {"type": "boolean"},
+        "decision": {"enum": ["allowed", "unverified"]},
+        "action": {"const": "decision.record"},
+        "principal_ref": {"$ref": "#/$defs/nullableString"},
+        "principal_type": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9_.:-]{1,32}$"
+        },
+        "role": {
+          "type": ["string", "null"],
+          "enum": ["owner", "analyst", "compliance", "readonly", null]
+        },
+        "scopes": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,100}$"
+          }
+        },
+        "auth_method": {"$ref": "#/$defs/nullableString"},
+        "credential_ref": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "declaredWorkflowAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verified", "source"],
+      "properties": {
+        "verified": {"const": false},
+        "source": {"const": "caller_supplied_decision_metadata"},
+        "authorization": {},
+        "permissions": {}
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key", "value"],
+      "properties": {
+        "algorithm": {"const": "ed25519"},
+        "key_id": {"type": "string", "minLength": 1},
+        "public_key": {"type": "string", "contentEncoding": "base64"},
+        "value": {"type": "string", "contentEncoding": "base64"}
+      }
+    }
+  }
+}

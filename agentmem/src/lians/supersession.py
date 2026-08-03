@@ -28,20 +28,23 @@ import asyncio
 import logging
 import math
 import os as _os
-from datetime import datetime, timezone as _tz
+import re as _re_mod
+from datetime import UTC, datetime
+from datetime import timezone as _tz
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_
+from sqlalchemy import String, and_, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ._types import _FINANCE_STRUCTURED_KEYS
+from .config import get_settings
+from .crypto import decrypt_content
+from .llm_adjudication import llm_adjudicate  # module-level so tests can patch it
 from .models import Memory
 from .schemas import SupersessionResult
-from .crypto import decrypt_content
-from .config import get_settings
-from .llm_adjudication import llm_adjudicate  # module-level so tests can patch it
 
-logger = logging.getLogger("agentmem.supersession")
+logger = logging.getLogger("lians.supersession")
 
 # Threshold: cosine similarity above this is considered "same topic"
 _SIM_THRESHOLD = 0.82
@@ -53,6 +56,76 @@ _SIM_THRESHOLD = 0.82
 # interjections), which measure ≤0.59 on the same model.
 _CUE_SIM_THRESHOLD = 0.60
 
+
+class SupersessionDecisionUnavailable(RuntimeError):
+    """A complete, bounded supersession decision could not be produced."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.public_message = message
+
+
+def _exact_barrier_condition(column, barrier_group: Optional[str]):
+    return column.is_(None) if barrier_group is None else column == barrier_group
+
+
+def _candidate_row_bytes():
+    settings = get_settings()
+    fixed_row_allowance = settings.embedding_dim * 4 + 512
+    return (
+        func.coalesce(func.length(Memory.content_encrypted), 0)
+        + func.coalesce(func.length(cast(Memory.metadata_, String)), 0)
+        + fixed_row_allowance
+    )
+
+
+async def _complete_candidate_set(
+    db: AsyncSession,
+    conditions: list[Any],
+    *,
+    bind_values: dict[str, Any] | None = None,
+) -> list[Memory]:
+    """Load an entire candidate set inside explicit row and byte ceilings."""
+
+    settings = get_settings()
+    row_limit = settings.supersession_candidate_limit
+    byte_limit = settings.supersession_candidate_bytes_limit
+    row_bytes = _candidate_row_bytes()
+    inventory = (
+        select(func.count(), func.coalesce(func.sum(row_bytes), 0))
+        .select_from(Memory)
+        .where(and_(*conditions))
+    )
+    if bind_values:
+        inventory = inventory.params(**bind_values)
+    count, total_bytes = (await db.execute(inventory)).one()
+    if int(count or 0) > row_limit or int(total_bytes or 0) > byte_limit:
+        raise SupersessionDecisionUnavailable(
+            "supersession_candidate_capacity_exceeded",
+            "Supersession candidates exceed the configured decision capacity",
+        )
+
+    statement = (
+        select(Memory, row_bytes.label("candidate_row_bytes"))
+        .where(and_(*conditions))
+        .order_by(Memory.event_time.asc(), Memory.id.asc())
+        .limit(row_limit + 1)
+    )
+    if bind_values:
+        statement = statement.params(**bind_values)
+    fetched = list((await db.execute(statement)).all())
+    fetched_bytes = sum(int(item[1] or 0) for item in fetched)
+    if len(fetched) > row_limit or fetched_bytes > byte_limit:
+        # Re-check after hydration because READ COMMITTED permits a new row
+        # between the inventory statement and this bounded select when a
+        # non-Lians writer ignores the per-agent advisory lock.
+        raise SupersessionDecisionUnavailable(
+            "supersession_candidate_capacity_exceeded",
+            "Supersession candidates exceed the configured decision capacity",
+        )
+    return [item[0] for item in fetched]
+
 def _get_structured_keys() -> frozenset[str]:
     """Read structured keys from the active domain adapter — never hardcoded."""
     from .adapters import get_adapter
@@ -63,12 +136,14 @@ def _get_structured_keys() -> frozenset[str]:
 # supersession.py is hot-path code; we resolve once and cache the result.
 # If the adapter changes at runtime (tests), callers that need the live value
 # should call _get_structured_keys() directly.
-_STRUCTURED_KEYS: frozenset[str] = frozenset({"ticker", "metric", "entity", "instrument", "cusip", "isin", "field"})
+_STRUCTURED_KEYS: frozenset[str] = _FINANCE_STRUCTURED_KEYS
 
 
 # ── Async LLM adjudication queue (Change 3) ──────────────────────────────────
 
 _llm_queue: asyncio.Queue | None = None
+_llm_worker_running = False
+_llm_worker_last_heartbeat_at: datetime | None = None
 
 AdjudicationTask = tuple[
     str,    # namespace
@@ -99,54 +174,97 @@ async def run_llm_adjudication_worker(session_factory) -> None:
     """
     from .audit_chain import chain_log
 
+    global _llm_worker_last_heartbeat_at, _llm_worker_running
+
     queue = get_llm_queue()
+    _llm_worker_running = True
+    _llm_worker_last_heartbeat_at = datetime.now(UTC)
     logger.info("LLM adjudication worker started")
 
-    while True:
-        try:
-            task: AdjudicationTask = await asyncio.wait_for(queue.get(), timeout=5.0)
-        except asyncio.TimeoutError:
-            continue
-        except asyncio.CancelledError:
-            logger.info("LLM adjudication worker stopping")
-            return
+    try:
+        while True:
+            try:
+                task: AdjudicationTask = await asyncio.wait_for(queue.get(), timeout=5.0)
+            except asyncio.TimeoutError:
+                _llm_worker_last_heartbeat_at = datetime.now(UTC)
+                continue
+            except asyncio.CancelledError:
+                logger.info("LLM adjudication worker stopping")
+                raise
 
-        namespace, agent_id, old_id, new_id, old_content, new_content, meta = task
-        try:
-            relation, confidence, rationale = await llm_adjudicate(old_content, new_content, meta)
-            if relation == "CONFIRMS":
-                # Verdict: paraphrase — restore the superseded memory
-                async with session_factory() as db:
-                    old_mem = await db.get(Memory, old_id)
-                    if old_mem and old_mem.valid_to is not None:
-                        old_mem.valid_to = None
-                        old_mem.superseded_by = None
-                        old_mem.supersession_confidence = None
-                        await chain_log(
-                            db, namespace=namespace, agent_id=agent_id,
-                            op="supersession_async_rejected",
-                            memory_id=old_id,
-                            content_hash=old_mem.content_hash,
-                            payload={
-                                "new_memory_id": str(new_id),
-                                "llm_relation": relation,
-                                "confidence": confidence,
-                                "rationale": rationale,
-                            },
-                        )
-                        await db.commit()
-                        logger.info(
-                            "Async LLM: restored superseded memory %s (CONFIRMS paraphrase)", old_id
-                        )
-            else:
-                logger.debug(
-                    "Async LLM: confirmed supersession %s → %s (%s %.2f)",
-                    old_id, new_id, relation, confidence,
+            namespace, agent_id, old_id, new_id, old_content, new_content, meta = task
+            _llm_worker_last_heartbeat_at = datetime.now(UTC)
+            try:
+                relation, confidence, rationale = await llm_adjudicate(
+                    old_content,
+                    new_content,
+                    meta,
                 )
-        except Exception as exc:
-            logger.warning("LLM adjudication worker error: %s", exc)
-        finally:
-            queue.task_done()
+                if relation == "CONFIRMS":
+                    # Verdict: paraphrase — restore the superseded memory.
+                    async with session_factory() as db:
+                        # Use the same exclusive agent fence as synchronous memory
+                        # writes so another replica cannot serve the prior cache
+                        # generation after this restoration commits.
+                        from .current_facts import compute_predicate_key, upsert_live_fact
+                        from .memory_service import (
+                            _acquire_pg_advisory_lock,
+                            _fence_recall_caches_before_commit,
+                        )
+
+                        await _acquire_pg_advisory_lock(db, namespace, agent_id)
+                        old_mem = await db.get(Memory, old_id)
+                        if old_mem and old_mem.valid_to is not None:
+                            old_mem.reopen_validity()
+                            old_mem.superseded_by = None
+                            old_mem.supersession_confidence = None
+                            await upsert_live_fact(
+                                db,
+                                old_mem,
+                                compute_predicate_key(dict(old_mem.metadata_ or {})),
+                            )
+                            await chain_log(
+                                db,
+                                namespace=namespace,
+                                agent_id=agent_id,
+                                op="supersession_async_rejected",
+                                memory_id=old_id,
+                                content_hash=old_mem.content_hash,
+                                payload={
+                                    "new_memory_id": str(new_id),
+                                    "llm_relation": relation,
+                                    "confidence": confidence,
+                                    "rationale": rationale,
+                                },
+                            )
+                            await _fence_recall_caches_before_commit(
+                                db,
+                                namespace,
+                                agent_id,
+                            )
+                            await db.commit()
+                            logger.info("Async LLM restored one superseded memory")
+                else:
+                    logger.debug("Async LLM confirmed one supersession")
+            except Exception:
+                # Provider/DB exception strings may include tenant content or query
+                # parameters. This development-only worker reports a safe class.
+                logger.warning("LLM adjudication worker failed")
+            finally:
+                _llm_worker_last_heartbeat_at = datetime.now(UTC)
+                queue.task_done()
+    finally:
+        _llm_worker_running = False
+
+
+def llm_adjudication_worker_status() -> tuple[bool, datetime | None]:
+    """Return liveness of the optional process-local compatibility worker."""
+
+    heartbeat = _llm_worker_last_heartbeat_at
+    fresh = heartbeat is not None and (
+        datetime.now(UTC) - heartbeat
+    ).total_seconds() <= 15.0
+    return _llm_worker_running and fresh, heartbeat
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -156,7 +274,11 @@ def _norm_meta(meta: dict) -> dict[str, str]:
     from .adapters import get_adapter
     adapter = get_adapter()
     sk = adapter.structured_keys
-    return {k: adapter.normalize(k, str(meta[k])) for k in meta if k in sk}
+    return {
+        k: adapter.normalize(k, str(meta[k]))
+        for k in meta
+        if k in sk and meta[k] is not None and str(meta[k]).strip()
+    }
 
 
 def _has_structured_key(meta: dict) -> bool:
@@ -186,6 +308,23 @@ def _metadata_overlap(old_meta: dict, new_meta: dict) -> set[str]:
     return {k for k in shared if old_n[k] == new_n[k]}
 
 
+def _structured_identity_conflicts(old_meta: dict, new_meta: dict) -> set[str]:
+    """Return shared structured dimensions whose normalized values disagree.
+
+    Stage 1 normally prevents different fact identities from reaching the
+    classifier. Keeping that invariant inside Stage 2 also makes direct callers
+    safe and distinguishes adjacent reporting periods such as Q2 and Q3.
+
+    Only dimensions present on both sides participate. This preserves partial
+    key compatibility while refusing to collapse explicitly different entities,
+    metrics, or reporting periods.
+    """
+    old_n = _norm_meta(old_meta)
+    new_n = _norm_meta(new_meta)
+    shared = set(old_n) & set(new_n)
+    return {key for key in shared if old_n[key] != new_n[key]}
+
+
 def _narrows(old_content: Optional[str], new_content: str) -> bool:
     """True when NEW restates everything OLD said and adds detail (a narrowing).
 
@@ -210,8 +349,6 @@ def _narrows(old_content: Optional[str], new_content: str) -> bool:
 # explicit change marker plus a later event_time. Rule-based, reproducible, no
 # model call — and the verdict lands at moderate confidence so it is visible in
 # review_supersessions and eligible for Stage-3 LLM adjudication when enabled.
-import re as _re_mod
-
 _REVISION_CUE_RE = _re_mod.compile(
     r"\b(?:"
     r"no longer|not\s+\w+\s+anymore|anymore|"
@@ -314,6 +451,7 @@ async def _keyed_supersession(
     new_content_hash: Optional[str] = None,
     new_content: Optional[str] = None,
     subject_key: Optional[bytes] = None,
+    barrier_group: Optional[str] = None,
 ) -> SupersessionResult:
     """Fast path for keyed facts: supersede strictly by event_time, no model call.
 
@@ -329,16 +467,30 @@ async def _keyed_supersession(
     unreachable for keyed facts — every keyed rewrite audited as a 1.0
     supersession even when nothing changed.
     """
-    stmt = select(Memory).where(
-        and_(
-            Memory.namespace == namespace,
-            Memory.agent_id == agent_id,
-            Memory.valid_to.is_(None),
-            Memory.erased_at.is_(None),
+    new_structured = _norm_meta(new_meta or {})
+    if not new_structured:
+        return SupersessionResult(relation="ADDS", confidence=1.0)
+    if len(new_structured) > 100:
+        raise SupersessionDecisionUnavailable(
+            "supersession_context_invalid",
+            "Structured supersession context exceeds the supported key capacity",
         )
+    candidate_conditions: list[Any] = [
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+        Memory.valid_to.is_(None),
+        Memory.erased_at.is_(None),
+        _exact_barrier_condition(Memory.barrier_group, barrier_group),
+    ]
+    # Every full normalized match must contain each incoming structured key.
+    # Filtering by key presence bounds the database candidate partition without
+    # assuming raw values are canonical (e.g. "Apple" and "AAPL" normalize to
+    # the same ticker). Python performs the authoritative normalization below.
+    candidate_conditions.extend(
+        Memory.metadata_[key].as_string().is_not(None)
+        for key in sorted(new_structured)
     )
-    result = await db.execute(stmt)
-    candidates = result.scalars().all()
+    candidates = await _complete_candidate_set(db, candidate_conditions)
 
     superseded_ids: list[UUID] = []
     refines_ids: list[UUID] = []
@@ -447,6 +599,7 @@ async def find_supersession_candidates(
     new_event_time: datetime,
     new_content: Optional[str] = None,
     cue_hint: bool = False,
+    barrier_group: Optional[str] = None,
 ) -> list[Memory]:
     """Stage 1: find prior valid memories sharing structured keys + high cosine sim.
 
@@ -455,17 +608,6 @@ async def find_supersession_candidates(
     never supersede or refine each other, because run_supersession only routes
     here when the new fact has no structured keys.
     """
-    stmt = select(Memory).where(
-        and_(
-            Memory.namespace == namespace,
-            Memory.agent_id == agent_id,
-            Memory.valid_to.is_(None),
-            Memory.erased_at.is_(None),
-        )
-    )
-    result = await db.execute(stmt)
-    candidates = result.scalars().all()
-
     new_structured = _norm_meta(new_meta or {})
     # A cued unkeyed revision qualifies for candidacy at the lower bar; the
     # final supersession decision stays top-1-only in run_supersession.
@@ -473,6 +615,64 @@ async def find_supersession_candidates(
         _CUE_SIM_THRESHOLD
         if not new_structured and (cue_hint or _has_revision_cue(new_content))
         else _SIM_THRESHOLD
+    )
+    if not new_structured and not new_embedding:
+        return []
+    if new_embedding:
+        try:
+            new_embedding = [float(value) for value in new_embedding]
+        except (TypeError, ValueError) as exc:
+            raise SupersessionDecisionUnavailable(
+                "supersession_embedding_invalid",
+                "The supersession embedding is invalid for this deployment",
+            ) from exc
+        if not all(math.isfinite(value) for value in new_embedding):
+            raise SupersessionDecisionUnavailable(
+                "supersession_embedding_invalid",
+                "The supersession embedding is invalid for this deployment",
+            )
+    candidate_conditions: list[Any] = [
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+        Memory.valid_to.is_(None),
+        Memory.erased_at.is_(None),
+        _exact_barrier_condition(Memory.barrier_group, barrier_group),
+    ]
+    bind_values: dict[str, Any] | None = None
+    if new_structured:
+        candidate_conditions.extend(
+            Memory.metadata_[key].as_string().is_not(None)
+            for key in sorted(new_structured)
+        )
+    elif new_embedding and db.get_bind().dialect.name == "postgresql":
+        if len(new_embedding) != get_settings().embedding_dim:
+            raise SupersessionDecisionUnavailable(
+                "supersession_embedding_invalid",
+                "The supersession embedding is invalid for this deployment",
+            )
+        vector_literal = "[" + ",".join(
+            format(float(value), ".8f") for value in new_embedding
+        ) + "]"
+        candidate_conditions.extend(
+            [
+                Memory.embedding.is_not(None),
+                text(
+                    "(embedding <=> CAST(:supersession_vector AS vector)) "
+                    "<= :supersession_max_distance"
+                ),
+            ]
+        )
+        bind_values = {
+            "supersession_vector": vector_literal,
+            # Widen only for floating-point boundary equality. Python applies
+            # the authoritative threshold after the complete set is loaded.
+            "supersession_max_distance": 1.0 - unkeyed_threshold + 1e-9,
+        }
+
+    candidates = await _complete_candidate_set(
+        db,
+        candidate_conditions,
+        bind_values=bind_values,
     )
     filtered = []
     for mem in candidates:
@@ -486,9 +686,20 @@ async def find_supersession_candidates(
                 filtered.append(mem)
                 continue
 
-        if mem.embedding is None:
+        if mem.embedding is None or not new_embedding:
             continue
-        emb = mem.embedding if isinstance(mem.embedding, list) else list(mem.embedding)
+        try:
+            emb = [float(value) for value in mem.embedding]
+        except (TypeError, ValueError) as exc:
+            raise SupersessionDecisionUnavailable(
+                "supersession_embedding_invalid",
+                "A stored supersession embedding is invalid",
+            ) from exc
+        if len(emb) != len(new_embedding) or not all(math.isfinite(value) for value in emb):
+            raise SupersessionDecisionUnavailable(
+                "supersession_embedding_invalid",
+                "A stored supersession embedding is invalid",
+            )
         threshold = _SIM_THRESHOLD if new_structured else unkeyed_threshold
         if _cosine(emb, new_embedding) >= threshold:
             filtered.append(mem)
@@ -507,6 +718,12 @@ def classify_relation(
     new_meta: dict,
 ) -> tuple[str, float]:
     """Stage 2: rule-based relation classification. Returns (relation, confidence)."""
+    # Explicitly different structured dimensions are independent facts,
+    # regardless of event order or textual similarity. Reporting period is one
+    # such dimension for the finance adapter.
+    if _structured_identity_conflicts(old_meta, new_meta):
+        return "ADDS", 0.95
+
     old_metric = old_meta.get("metric") or old_meta.get("field")
     new_metric = new_meta.get("metric") or new_meta.get("field")
     if old_metric and new_metric and old_metric != new_metric:
@@ -561,6 +778,7 @@ async def run_supersession(
     subject_key: Optional[bytes] = None,
     new_memory_id: Optional[UUID] = None,
     cue_hint: bool = False,
+    barrier_group: Optional[str] = None,
 ) -> SupersessionResult:
     """Full supersession funnel.
 
@@ -590,12 +808,13 @@ async def run_supersession(
         return await _keyed_supersession(
             db, namespace, agent_id, new_meta, new_event_time, new_content_hash,
             new_content=new_content, subject_key=subject_key,
+            barrier_group=barrier_group,
         )
 
     # Unkeyed path: Stage 1 + Stage 2
     candidates = await find_supersession_candidates(
         db, namespace, agent_id, new_meta, new_embedding, new_event_time,
-        new_content=new_content, cue_hint=cue_hint,
+        new_content=new_content, cue_hint=cue_hint, barrier_group=barrier_group,
     )
     if not candidates:
         return SupersessionResult(relation="ADDS", confidence=1.0)

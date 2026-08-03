@@ -18,7 +18,8 @@ from .config import get_settings
 
 
 def siem_enabled() -> bool:
-    return bool(get_settings().siem_url)
+    settings = get_settings()
+    return not settings.airgap_mode and bool(settings.siem_url)
 
 
 async def stream_event(event: dict[str, Any]) -> bool:
@@ -29,6 +30,8 @@ async def stream_event(event: dict[str, Any]) -> bool:
     failure must not affect the request that produced the event.
     """
     settings = get_settings()
+    if settings.airgap_mode:
+        return False
     url = settings.siem_url
     if not url:
         return False

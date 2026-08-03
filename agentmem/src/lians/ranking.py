@@ -27,13 +27,24 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import select, and_, or_, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import Memory, LiveFact
 from .crypto import decrypt_content
+from .models import LiveFact, Memory
+from .subject_key_loader import load_subject_keys
 
 _ANN_PREFETCH_MULTIPLIER = 20
+_CANDIDATE_WINDOW_LIMIT = max(
+    100,
+    min(10_000, int(os.getenv("RECALL_CANDIDATE_WINDOW_LIMIT", "2000"))),
+)
+
+
+def recall_candidate_contract(k: int) -> str:
+    """Stable cache partition for the bounded candidate-discovery contract."""
+    ann_limit = min(_CANDIDATE_WINDOW_LIMIT, max(k * _ANN_PREFETCH_MULTIPLIER, 100))
+    return f"bounded-candidates-v1:ann={ann_limit}:fallback={_CANDIDATE_WINDOW_LIMIT}"
 
 W_SEM = 0.50
 # BM25 is unbounded while cosine lives in [-1, 1]; at 0.20 a single strong
@@ -455,6 +466,7 @@ async def _fetch_live_candidates(
     filters: Optional[dict],
     query_embedding: list[float],
     k: int,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[LiveFact]:
     """Fetch from live_facts — the compact present-time projection."""
     conditions = [
@@ -474,20 +486,49 @@ async def _fetch_live_candidates(
 
     if query_embedding:
         try:
-            pre_k = max(k * _ANN_PREFETCH_MULTIPLIER, 100)
+            pre_k = min(
+                _CANDIDATE_WINDOW_LIMIT,
+                max(k * _ANN_PREFETCH_MULTIPLIER, 100),
+            )
             vec_lit = "[" + ",".join(f"{x:.8f}" for x in query_embedding) + "]"
             ann_stmt = (
                 base_stmt
                 .order_by(text(f"embedding <=> '{vec_lit}'::vector"))
-                .limit(pre_k)
+                .limit(pre_k + 1)
             )
-            result = await db.execute(ann_stmt)
-            return list(result.scalars().all())
+            # PostgreSQL leaves a transaction aborted after a failed vector
+            # expression.  Keep ANN discovery inside a savepoint so the
+            # bounded lexical fallback remains usable when pgvector is
+            # temporarily unavailable or the stored vector shape is invalid.
+            async with db.begin_nested():
+                result = await db.execute(ann_stmt)
+                fetched = list(result.scalars().all())
+            if diagnostics is not None:
+                diagnostics.update(
+                    candidate_limit=pre_k,
+                    candidates_considered=min(len(fetched), pre_k),
+                    candidate_window_complete=len(fetched) <= pre_k,
+                    candidate_mode="ann",
+                )
+            return fetched[:pre_k]
         except Exception:
-            pass
+            if diagnostics is not None:
+                diagnostics["ann_fallback"] = True
 
-    result = await db.execute(base_stmt)
-    return list(result.scalars().all())
+    fallback_stmt = base_stmt.order_by(
+        LiveFact.importance.desc(),
+        LiveFact.event_time.desc(),
+        LiveFact.id.asc(),
+    ).limit(_CANDIDATE_WINDOW_LIMIT + 1)
+    fetched = list((await db.execute(fallback_stmt)).scalars().all())
+    if diagnostics is not None:
+        diagnostics.update(
+            candidate_limit=_CANDIDATE_WINDOW_LIMIT,
+            candidates_considered=min(len(fetched), _CANDIDATE_WINDOW_LIMIT),
+            candidate_window_complete=len(fetched) <= _CANDIDATE_WINDOW_LIMIT,
+            candidate_mode="bounded_lexical_fallback",
+        )
+    return fetched[:_CANDIDATE_WINDOW_LIMIT]
 
 
 async def _fetch_historical_candidates(
@@ -499,6 +540,7 @@ async def _fetch_historical_candidates(
     query_embedding: list[float],
     k: int,
     as_of: datetime,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[Memory]:
     """Fetch from memories for point-in-time (as_of) recall."""
     conditions = [
@@ -521,20 +563,45 @@ async def _fetch_historical_candidates(
 
     if query_embedding:
         try:
-            pre_k = max(k * _ANN_PREFETCH_MULTIPLIER, 100)
+            pre_k = min(
+                _CANDIDATE_WINDOW_LIMIT,
+                max(k * _ANN_PREFETCH_MULTIPLIER, 100),
+            )
             vec_lit = "[" + ",".join(f"{x:.8f}" for x in query_embedding) + "]"
             ann_stmt = (
                 base_stmt
                 .order_by(text(f"embedding <=> '{vec_lit}'::vector"))
-                .limit(pre_k)
+                .limit(pre_k + 1)
             )
-            result = await db.execute(ann_stmt)
-            return list(result.scalars().all())
+            async with db.begin_nested():
+                result = await db.execute(ann_stmt)
+                fetched = list(result.scalars().all())
+            if diagnostics is not None:
+                diagnostics.update(
+                    candidate_limit=pre_k,
+                    candidates_considered=min(len(fetched), pre_k),
+                    candidate_window_complete=len(fetched) <= pre_k,
+                    candidate_mode="historical_ann",
+                )
+            return fetched[:pre_k]
         except Exception:
-            pass
+            if diagnostics is not None:
+                diagnostics["ann_fallback"] = True
 
-    result = await db.execute(base_stmt)
-    return list(result.scalars().all())
+    fallback_stmt = base_stmt.order_by(
+        Memory.importance.desc(),
+        Memory.event_time.desc(),
+        Memory.id.asc(),
+    ).limit(_CANDIDATE_WINDOW_LIMIT + 1)
+    fetched = list((await db.execute(fallback_stmt)).scalars().all())
+    if diagnostics is not None:
+        diagnostics.update(
+            candidate_limit=_CANDIDATE_WINDOW_LIMIT,
+            candidates_considered=min(len(fetched), _CANDIDATE_WINDOW_LIMIT),
+            candidate_window_complete=len(fetched) <= _CANDIDATE_WINDOW_LIMIT,
+            candidate_mode="bounded_historical_lexical_fallback",
+        )
+    return fetched[:_CANDIDATE_WINDOW_LIMIT]
 
 
 def _decrypt(row: Any, subject_keys: dict[str, bytes]) -> Optional[str]:
@@ -802,6 +869,7 @@ async def hybrid_recall(
     subject_keys: Optional[dict[str, bytes]] = None,
     barrier_group: Optional[str] = None,
     live_facts_override: Optional[list] = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[tuple[Any, float, Optional[str]]]:
     """Return list of (row, score, decrypted_content).
 
@@ -812,13 +880,25 @@ async def hybrid_recall(
     point-in-time (as_of set): queries ``memories`` with the full temporal
     filter — as_of recall always hits the bitemporal log.
     """
-    subject_keys = subject_keys or {}
-
     if as_of is not None:
         # Point-in-time: must go to the bitemporal log
         candidates = await _fetch_historical_candidates(
-            db, namespace, agent_id, barrier_group, filters, query_embedding, k, as_of
+            db,
+            namespace,
+            agent_id,
+            barrier_group,
+            filters,
+            query_embedding,
+            k,
+            as_of,
+            diagnostics,
         )
+        if subject_keys is None:
+            subject_keys = await load_subject_keys(
+                db,
+                namespace,
+                (candidate.subject_id for candidate in candidates),
+            )
         cutoff = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
         parts = [
             _score_components(mem, query, query_embedding, subject_keys,
@@ -847,16 +927,52 @@ async def hybrid_recall(
                     f for f in facts
                     if all((dict(f.metadata_ or {})).get(key) == str(val) for key, val in filters.items())
                 ]
+            facts = sorted(
+                facts,
+                key=lambda fact: (
+                    -float(fact.importance),
+                    -_event_ts(fact),
+                    str(fact.id),
+                ),
+            )
+            if diagnostics is not None:
+                diagnostics.update(
+                    candidate_limit=_CANDIDATE_WINDOW_LIMIT,
+                    candidates_considered=min(len(facts), _CANDIDATE_WINDOW_LIMIT),
+                    candidate_window_complete=len(facts) <= _CANDIDATE_WINDOW_LIMIT,
+                    candidate_mode="bounded_working_set_override",
+                )
+            facts = facts[:_CANDIDATE_WINDOW_LIMIT]
         else:
             facts = await _fetch_live_candidates(
-                db, namespace, agent_id, barrier_group, filters, query_embedding, k
+                db,
+                namespace,
+                agent_id,
+                barrier_group,
+                filters,
+                query_embedding,
+                k,
+                diagnostics,
+            )
+
+        if subject_keys is None:
+            subject_keys = await load_subject_keys(
+                db,
+                namespace,
+                (fact.subject_id for fact in facts),
             )
 
         # Vectorized fast path (Change 7 extension): when the pool is the
         # agent's whole working set, score against the cached _ScoringPack —
         # one matrix product instead of per-row python.
         pack = None
-        if _np is not None and facts and not filters and barrier_group is None:
+        if (
+            _np is not None
+            and facts
+            and live_facts_override is not None
+            and not filters
+            and barrier_group is None
+        ):
             from .session_cache import get_scoring_pack, set_scoring_pack
             pack = get_scoring_pack(namespace, agent_id)
             if pack is None or pack.fingerprint != _pack_fingerprint(facts):

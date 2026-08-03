@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/integration-outbox/v1/envelope.schema.json",
+  "title": "Lians durable integration delivery envelope",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "time",
+    "datacontenttype",
+    "dataschema",
+    "lianspayloadhash",
+    "data"
+  ],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string", "format": "uuid" },
+    "source": {
+      "type": "string",
+      "pattern": "^urn:lians:namespace:"
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "subject": { "type": "string", "maxLength": 1024 },
+    "time": { "type": "string", "format": "date-time" },
+    "datacontenttype": { "const": "application/json" },
+    "dataschema": {
+      "type": "string",
+      "pattern": "^urn:lians:integration-event:"
+    },
+    "lianspayloadhash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "lianscorrelationid": { "type": "string", "maxLength": 255 },
+    "data": { "type": "object" }
+  }
+}

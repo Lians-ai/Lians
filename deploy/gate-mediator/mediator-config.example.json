@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "server_tls": {
+    "certificate_file": "/var/run/secrets/lians-mediator/tls.crt",
+    "private_key_file": "/var/run/secrets/lians-mediator/tls.key",
+    "require_client_certificate": false
+  },
+  "gate": {
+    "base_url": "https://agentmem.agentmem.svc.cluster.local:8443/",
+    "api_key_file": "/var/run/secrets/lians-mediator/gate-api-key",
+    "allowed_ip_cidrs": [
+      "10.96.0.0/12"
+    ],
+    "timeout_seconds": 5.0,
+    "tls": {}
+  },
+  "expected_mediator_principal_id": "lians:principal:v1:api-key:00000000-0000-0000-0000-000000000001",
+  "expected_namespace": "replace-tenant",
+  "expected_barrier_group": "replace-barrier",
+  "caller_token_file": "/var/run/secrets/lians-mediator/caller-token",
+  "metrics_bearer_token_file": "/var/run/secrets/lians-mediator/metrics-token",
+  "max_in_flight": 32,
+  "queue_timeout_seconds": 0.25,
+  "dns_timeout_seconds": 2.0,
+  "identity_recheck_seconds": 60,
+  "routes": [
+    {
+      "route_id": "orders.release.v1",
+      "route_version": "v1",
+      "action": "orders.release",
+      "target_ref": "urn:lians:orders:replace-production-account",
+      "target_binding": "fixed-route-authority-v1",
+      "upstream_url": "https://example.com/v1/orders/release",
+      "method": "POST",
+      "request_content_type": "application/json",
+      "request_contract_ref": "replace-orders-release-request.v1",
+      "allowed_json_top_level_fields": [
+        "order_id",
+        "release"
+      ],
+      "required_json_top_level_fields": [
+        "order_id"
+      ],
+      "max_json_depth": 16,
+      "max_json_nodes": 10000,
+      "response_content_types": [
+        "application/json"
+      ],
+      "max_request_bytes": 262144,
+      "max_response_bytes": 1048576,
+      "timeout_seconds": 10.0,
+      "allowed_ip_cidrs": [],
+      "fixed_headers": {
+        "x-provider-account": "replace-production-account"
+      },
+      "credential": {
+        "header_name": "authorization",
+        "secret_file": "/var/run/secrets/lians-mediator/provider-credential",
+        "binding_ref": "replace-provider-account.v1",
+        "value_prefix": "Bearer "
+      },
+      "idempotency_header_name": "idempotency-key",
+      "audit_correlation_header_name": "x-lians-audit-correlation",
+      "tls": {}
+    }
+  ]
+}

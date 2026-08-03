@@ -4,9 +4,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from src.lians.supersession import classify_relation
+from lians.supersession import classify_relation
 
 # (old_content, new_content, old_t, new_t, old_meta, new_meta, expected_relation)
 CASES = [
@@ -108,10 +108,9 @@ CASES = [
         datetime(2026, 5, 1, tzinfo=timezone.utc),
         {"ticker": "NVDA", "metric": "guidance"},
         {"ticker": "AMD", "metric": "guidance"},
-        # Stage 2 only sees content + event_time; same metric, new_is_later â†’ SUPERSEDES.
-        # Stage 1 prevents this pair from ever reaching Stage 2 in production.
-        # Mark as SUPERSEDES to reflect Stage 2 behavior in isolation.
-        "SUPERSEDES",
+        # Stage 2 independently enforces structured identity, even when called
+        # without the Stage-1 candidate filter.
+        "ADDS",
     ),
     # --- Backdated memory (new has older event_time) â€” should NOT supersede ---
     (
@@ -221,8 +220,8 @@ REAL_WORLD_CASES = [
         "TSLA Q3 2024 deliveries: 462,890 vehicles (Oct 2 2024)",
         datetime(2024, 7, 2, tzinfo=timezone.utc),
         datetime(2024, 10, 2, tzinfo=timezone.utc),
-        {"ticker": "TSLA", "metric": "quarterly_deliveries"},
-        {"ticker": "TSLA", "metric": "quarterly_deliveries"},
+        {"ticker": "TSLA", "metric": "quarterly_deliveries", "period": "Q2 2024"},
+        {"ticker": "TSLA", "metric": "quarterly_deliveries", "period": "Q3 2024"},
         # Different quarters â€” additive, not supersession
         "ADDS",
     ),
@@ -231,8 +230,8 @@ REAL_WORLD_CASES = [
         "TSLA Q3 2024 deliveries: 462,890 vehicles (actual, Oct 2 2024)",
         datetime(2024, 9, 15, tzinfo=timezone.utc),
         datetime(2024, 10, 2, tzinfo=timezone.utc),
-        {"ticker": "TSLA", "metric": "q3_2024_deliveries"},
-        {"ticker": "TSLA", "metric": "q3_2024_deliveries"},
+        {"ticker": "TSLA", "metric": "deliveries", "period": "Q3 2024"},
+        {"ticker": "TSLA", "metric": "deliveries", "period": "Q3 2024"},
         # Estimate vs. actual â€” same metric, later actual supersedes estimate
         "SUPERSEDES",
     ),

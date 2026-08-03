@@ -7,7 +7,7 @@ that LangGraph expects for graph nodes.
 
 Install::
 
-    pip install lians[langgraph]
+    pip install lians-sdk[langgraph]
 
 Usage — inject memories into a ReAct agent graph::
 

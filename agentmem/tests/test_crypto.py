@@ -1,8 +1,7 @@
 ﻿"""crypto.py: encrypt/decrypt round-trip + crypto-shred makes content unreadable."""
 import pytest
-from cryptography.exceptions import InvalidTag
 
-from src.lians.crypto import (
+from lians.crypto import (
     generate_subject_key,
     wrap_subject_key,
     unwrap_subject_key,

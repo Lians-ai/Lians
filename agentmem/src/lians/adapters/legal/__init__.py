@@ -1,12 +1,12 @@
 """
 Legal domain adapter — matter ID, jurisdiction, claim type normalization.
 
-This adapter is the ONLY place in AgentMem where legal-specific concepts
+This adapter is the ONLY place in Lians where legal-specific concepts
 (matter identifiers, court jurisdictions, privilege dates) exist.
 
 Compliance mapping
 ------------------
-AgentMem features map directly to legal requirements:
+Lians features map directly to legal requirements:
 
   Information barriers (RLS, barrier_group per matter team)
     → ABA Model Rule 1.7 / 1.9 (conflicts of interest); Chinese wall enforcement

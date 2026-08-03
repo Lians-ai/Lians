@@ -1,5 +1,6 @@
 # PodDisruptionBudget — guarantees at least 1 pod stays up during voluntary
-# disruptions (node drain, cluster upgrade, AZ failure).
+# disruptions (node drain and cluster upgrade). PDBs do not protect against an
+# involuntary node or zone failure; topology spread and spare capacity do.
 # Required for financial-grade uptime: prevents the Kubernetes scheduler from
 # evicting all pods simultaneously during a rolling node replacement.
 apiVersion: policy/v1

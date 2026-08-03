@@ -33,11 +33,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 
@@ -131,8 +131,8 @@ class LocalLiansClient:
 
         # Point the settings at the local embedding provider before any import
         os.environ.setdefault("EMBEDDING_PROVIDER", embedding_provider)
-        # LocalAgentMemClient is a dev/test tool â€” allow running without a real key.
-        # Production deployments use AgentMemClient (HTTP) against a server that
+        # LocalLiansClient is a dev/test tool â€” allow running without a real key.
+        # Production deployments use LiansClient (HTTP) against a server that
         # enforces MASTER_ENCRYPTION_KEY at startup.
         os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
         os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
@@ -164,8 +164,36 @@ class LocalLiansClient:
     # ------------------------------------------------------------------
 
     async def _init_db(self) -> None:
-        from src.lians.models import Base  # lazy import; avoids circular refs
         from src.lians.kms import load_master_key
+        from src.lians.models import Base  # lazy import; avoids circular refs
+
+        # The engine keeps additive domains in separate model modules.  A
+        # service deployment imports those modules while assembling the API,
+        # but LocalLiansClient creates its schema directly from Base and has no
+        # application bootstrap to do that registration for it.  Import every
+        # domain used by core local memory operations before ``create_all`` so
+        # quota reservations and durable subject erasure never discover a
+        # missing table on their first write.
+        # Use explicit submodule imports rather than ``from src.lians import``.
+        # In an installed wheel ``src.lians`` is an alias of
+        # ``lians_engine.lians``; package attributes can otherwise resolve a
+        # module loaded under the original name and register its tables on a
+        # second SQLAlchemy Base instead of the aliased local-engine Base.
+        import importlib
+
+        for module_name in (
+            "control_models",
+            "enterprise_models",
+            "evidence_models",
+            "governance_models",
+            "identity_models",
+            "integration_models",
+            "metering_models",
+            "recorder_models",
+            "subject_erasure_models",
+        ):
+            importlib.import_module(f"src.lians.{module_name}")
+
         # In-process recall caches are keyed by (namespace, agent); a fresh
         # client is a fresh database, so anything cached by a previous client
         # in this process must not leak into it.
@@ -177,13 +205,17 @@ class LocalLiansClient:
             idx
             for table in Base.metadata.tables.values()
             for idx in list(table.indexes)
-            if idx.dialect_kwargs.get("postgresql_using") is not None
+            if idx.dialect_kwargs.get("postgresql_using") not in (None, False)
         ]
         for idx in pg_indexes:
             idx.table.indexes.discard(idx)
 
-        async with self._engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        try:
+            async with self._engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        finally:
+            for idx in pg_indexes:
+                idx.table.indexes.add(idx)
 
         await load_master_key()
 
@@ -229,8 +261,8 @@ class LocalLiansClient:
         ))
 
     async def _async_add(self, **kwargs) -> dict:
-        from src.lians.schemas import MemoryAdd
         from src.lians.memory_service import add_memory
+        from src.lians.schemas import MemoryAdd
         req = MemoryAdd(**kwargs)
         async with self._session_factory() as db:
             result = await add_memory(db, self._namespace, req)
@@ -244,9 +276,9 @@ class LocalLiansClient:
         return self._run(self._async_add_batch(agent_id, items))
 
     async def _async_add_batch(self, agent_id: str, items: list[dict]) -> list[dict]:
-        from src.lians.schemas import MemoryAdd
-        from src.lians.memory_service import add_memory
         from src.lians.embeddings import get_embedding_provider
+        from src.lians.memory_service import add_memory
+        from src.lians.schemas import MemoryAdd
         provider = get_embedding_provider()
         embeddings = await provider.embed([it["content"] for it in items])
         out = []
@@ -280,8 +312,8 @@ class LocalLiansClient:
         ))
 
     async def _async_recall(self, **kwargs) -> dict:
-        from src.lians.schemas import RecallRequest
         from src.lians.memory_service import recall_memories
+        from src.lians.schemas import RecallRequest
         req = RecallRequest(**kwargs)
         async with self._session_factory() as db:
             result = await recall_memories(db, self._namespace, req)
@@ -293,10 +325,17 @@ class LocalLiansClient:
         as_of: datetime,
         query: Optional[str] = None,
         k: int = 20,
+        memory_limit: int = 1000,
+        event_limit: int = 5000,
     ) -> dict:
         """Audit reconstruction. Returns AuditReconstructResult as a dict."""
         return self._run(self._async_reconstruct(
-            agent_id=agent_id, as_of=as_of, query=query, k=k,
+            agent_id=agent_id,
+            as_of=as_of,
+            query=query,
+            k=k,
+            memory_limit=memory_limit,
+            event_limit=event_limit,
         ))
 
     async def _async_reconstruct(self, **kwargs) -> dict:
@@ -306,39 +345,46 @@ class LocalLiansClient:
         return result.model_dump(mode="json")
 
     def erase(self, subject_id: str, request_ref: str) -> dict:
-        """
-        GDPR crypto-shred.  Returns ``{"subject_id": ..., "memories_erased": N}``.
-        """
+        """Destroy the DEK and return the durable bounded scrub job."""
         return self._run(self._async_erase(
             subject_id=subject_id, request_ref=request_ref,
         ))
 
     async def _async_erase(self, subject_id: str, request_ref: str) -> dict:
         from src.lians.memory_service import erase_subject
+        from src.lians.subject_erasure_service import subject_erasure_job_dict
+
         async with self._session_factory() as db:
-            count = await erase_subject(db, self._namespace, subject_id, request_ref)
-        return {
-            "subject_id": subject_id,
-            "memories_erased": count,
-            "request_ref": request_ref,
-        }
+            job = await erase_subject(db, self._namespace, subject_id, request_ref)
+        return subject_erasure_job_dict(job)
 
     def audit_export(
         self,
         from_dt: Optional[datetime] = None,
         to_dt: Optional[datetime] = None,
-        limit: int = 100_000,
+        limit: int = 10_000,
         verify: bool = False,
+        after_chain_position: Optional[int] = None,
+        through_chain_position: Optional[int] = None,
     ) -> dict:
         """
-        Export the full audit log for this namespace.
+        Export one exact-count, keyset-paginated audit-log page.
 
         Returns a dict matching AuditExportResult schema with an ``events``
-        list of all event_log rows in chronological order.  Pass ``verify=True``
-        to include a tamper-evidence chain verification report.
+        list ordered by chain position. Follow ``next_chain_position`` while
+        ``has_more`` is true; only an uncursored result with ``complete=true``
+        contains the full filtered collection. Retain
+        ``snapshot_max_chain_position`` as ``through_chain_position`` across
+        continuation calls. Pass ``verify=True`` to include a bounded
+        tamper-evidence report.
         """
         return self._run(self._async_audit_export(
-            from_dt=from_dt, to_dt=to_dt, limit=limit, include_chain_status=verify,
+            from_dt=from_dt,
+            to_dt=to_dt,
+            limit=limit,
+            include_chain_status=verify,
+            after_chain_position=after_chain_position,
+            through_chain_position=through_chain_position,
         ))
 
     async def _async_audit_export(
@@ -347,6 +393,8 @@ class LocalLiansClient:
         to_dt: Optional[datetime],
         limit: int,
         include_chain_status: bool,
+        after_chain_position: Optional[int],
+        through_chain_position: Optional[int],
     ) -> dict:
         from src.lians.audit_chain import export_audit_log
         async with self._session_factory() as db:
@@ -357,6 +405,8 @@ class LocalLiansClient:
                 to_dt=to_dt,
                 limit=limit,
                 include_chain_status=include_chain_status,
+                after_chain_position=after_chain_position,
+                through_chain_position=through_chain_position,
             )
         # Serialize datetimes to ISO strings for consistent dict output
         for evt in result.get("events", []):
@@ -395,8 +445,8 @@ class LocalLiansClient:
         return self._run(self._async_batch_add(memories))
 
     async def _async_batch_add(self, memories: list[dict]) -> dict:
-        from src.lians.schemas import MemoryAdd
         from src.lians.memory_service import batch_add_memories
+        from src.lians.schemas import MemoryAdd
         items = [MemoryAdd(**m) for m in memories]
         async with self._session_factory() as db:
             result = await batch_add_memories(db, self._namespace, items)
@@ -529,6 +579,7 @@ class LocalLiansClient:
         self,
         threshold: Optional[float] = None,
         limit: int = 50,
+        before_chain_position: Optional[int] = None,
     ) -> dict:
         """
         Return supersession events whose confidence is below *threshold*.
@@ -536,12 +587,19 @@ class LocalLiansClient:
         Returns a SupersessionReviewResult dict with an ``items`` list, sorted
         newest-first.  Defaults to the configured review threshold.
         """
-        return self._run(self._async_review_supersessions(threshold=threshold, limit=limit))
+        return self._run(
+            self._async_review_supersessions(
+                threshold=threshold,
+                limit=limit,
+                before_chain_position=before_chain_position,
+            )
+        )
 
     async def _async_review_supersessions(
         self,
         threshold: Optional[float],
         limit: int,
+        before_chain_position: Optional[int],
     ) -> dict:
         from src.lians.memory_service import get_pending_supersessions
         async with self._session_factory() as db:
@@ -550,45 +608,76 @@ class LocalLiansClient:
                 namespace=self._namespace,
                 confidence_threshold=threshold,
                 limit=limit,
+                before_chain_position=before_chain_position,
             )
         return result.model_dump(mode="json")
 
     def confirm_supersession(
         self,
         memory_id: str,
+        *,
+        expected_superseded_by: Optional[str],
         reviewer_note: Optional[str] = None,
     ) -> dict:
         """
         Confirm a supersession was correct.
 
         Writes an immutable audit event; the superseded memory remains closed.
+        Pass ``superseded_by`` from the review item as the expected version token.
         Returns a SupersessionActionResult dict.
         """
-        return self._run(self._async_supersession_action(memory_id, "confirm", reviewer_note))
+        return self._run(
+            self._async_supersession_action(
+                memory_id,
+                "confirm",
+                expected_superseded_by,
+                reviewer_note,
+            )
+        )
 
     def reject_supersession(
         self,
         memory_id: str,
+        *,
+        expected_superseded_by: Optional[str],
         reviewer_note: Optional[str] = None,
     ) -> dict:
         """
         Reject a supersession â€” the engine was wrong.
 
         Restores the old memory as currently valid (valid_to = NULL) and writes
-        an immutable audit event.  Returns a SupersessionActionResult dict.
+        an immutable audit event. Pass ``superseded_by`` from the review item as
+        the expected version token. Returns a SupersessionActionResult dict.
         """
-        return self._run(self._async_supersession_action(memory_id, "reject", reviewer_note))
+        return self._run(
+            self._async_supersession_action(
+                memory_id,
+                "reject",
+                expected_superseded_by,
+                reviewer_note,
+            )
+        )
 
     async def _async_supersession_action(
         self,
         memory_id: str,
         action: str,
+        expected_superseded_by: Optional[str],
         reviewer_note: Optional[str],
     ) -> dict:
         from uuid import UUID
-        from src.lians.schemas import SupersessionAction
+
         from src.lians.memory_service import apply_supersession_action
-        body = SupersessionAction(action=action, reviewer_note=reviewer_note)
+        from src.lians.schemas import SupersessionAction
+        body = SupersessionAction(
+            action=action,
+            expected_superseded_by=(
+                UUID(expected_superseded_by)
+                if expected_superseded_by is not None
+                else None
+            ),
+            reviewer_note=reviewer_note,
+        )
         async with self._session_factory() as db:
             result = await apply_supersession_action(
                 db, self._namespace, UUID(memory_id), body
@@ -602,25 +691,94 @@ class LocalLiansClient:
         agent_id: str,
         as_of: datetime,
         limit: int = 1000,
+        after_event_time: Optional[datetime] = None,
+        after_id: Optional[str] = None,
+        recorded_as_of: Optional[datetime] = None,
     ) -> dict:
         """
-        Return agent's complete knowledge state at *as_of* (exhaustive, no ANN).
+        Return a deterministic page of the knowledge state at *as_of* (no ANN).
 
-        Unlike ``recall()``, this is not ranked â€” it returns every memory that
-        was valid at that instant, ordered by event_time ascending.  Use for
-        compliance audit: "what did the agent know on date X?"
+        Exact ``total`` and explicit completeness/cursor fields distinguish a
+        complete small snapshot from a bounded page of a larger one.
+        Retain the returned ``recorded_as_of`` across continuation calls.
         """
-        return self._run(self._async_snapshot(agent_id=agent_id, as_of=as_of, limit=limit))
+        return self._run(
+            self._async_snapshot(
+                agent_id=agent_id,
+                as_of=as_of,
+                limit=limit,
+                after_event_time=after_event_time,
+                after_id=after_id,
+                recorded_as_of=recorded_as_of,
+            )
+        )
 
-    async def _async_snapshot(self, agent_id: str, as_of: datetime, limit: int) -> dict:
-        from src.lians.memory_service import get_knowledge_snapshot
+    async def _async_snapshot(
+        self,
+        agent_id: str,
+        as_of: datetime,
+        limit: int,
+        after_event_time: Optional[datetime],
+        after_id: Optional[str],
+        recorded_as_of: Optional[datetime],
+    ) -> dict:
+        from uuid import UUID
+
+        from src.lians.memory_service import (
+            count_knowledge_snapshot,
+            get_knowledge_snapshot,
+            measure_knowledge_snapshot_bytes,
+        )
+
+        cursor_id = UUID(after_id) if after_id is not None else None
+        effective_recorded_as_of = recorded_as_of or datetime.now(timezone.utc)
         async with self._session_factory() as db:
-            items = await get_knowledge_snapshot(db, self._namespace, agent_id, as_of, limit)
+            measured_rows, _estimated_bytes = await measure_knowledge_snapshot_bytes(
+                db,
+                self._namespace,
+                agent_id,
+                as_of,
+                include_content=True,
+                recorded_as_of=effective_recorded_as_of,
+                after_event_time=after_event_time,
+                after_id=cursor_id,
+                limit=limit + 1,
+            )
+            fetched = await get_knowledge_snapshot(
+                db,
+                self._namespace,
+                agent_id,
+                as_of,
+                limit,
+                recorded_as_of=effective_recorded_as_of,
+                after_event_time=after_event_time,
+                after_id=cursor_id,
+            )
+            total = await count_knowledge_snapshot(
+                db,
+                self._namespace,
+                agent_id,
+                as_of,
+                recorded_as_of=effective_recorded_as_of,
+            )
+        has_more = measured_rows > limit
+        items = fetched
+        next_item = items[-1] if has_more and items else None
         return {
             "agent_id": agent_id,
             "namespace": self._namespace,
             "as_of": as_of.isoformat(),
-            "total": len(items),
+            "recorded_as_of": effective_recorded_as_of.isoformat(),
+            "total": total,
+            "returned": len(items),
+            "complete": (
+                after_event_time is None and not has_more and total == len(items)
+            ),
+            "has_more": has_more,
+            "next_event_time": (
+                next_item.event_time.isoformat() if next_item is not None else None
+            ),
+            "next_id": str(next_item.id) if next_item is not None else None,
             "items": [m.model_dump(mode="json") for m in items],
         }
 
@@ -628,6 +786,10 @@ class LocalLiansClient:
         self,
         agent_id: str,
         simulation_as_of: datetime,
+        *,
+        flag_limit: int = 1000,
+        after_event_time: Optional[datetime] = None,
+        after_id: Optional[str] = None,
     ) -> dict:
         """
         Detect lookahead bias in a backtest.
@@ -635,15 +797,38 @@ class LocalLiansClient:
         Returns a ContaminationReport dict with any ``future_event`` or
         ``late_revision`` flags that could invalidate the simulation.
         """
-        return self._run(self._async_backtest_check(
-            agent_id=agent_id, simulation_as_of=simulation_as_of,
-        ))
+        return self._run(
+            self._async_backtest_check(
+                agent_id=agent_id,
+                simulation_as_of=simulation_as_of,
+                flag_limit=flag_limit,
+                after_event_time=after_event_time,
+                after_id=after_id,
+            )
+        )
 
-    async def _async_backtest_check(self, agent_id: str, simulation_as_of: datetime) -> dict:
+    async def _async_backtest_check(
+        self,
+        agent_id: str,
+        simulation_as_of: datetime,
+        flag_limit: int,
+        after_event_time: Optional[datetime],
+        after_id: Optional[str],
+    ) -> dict:
+        from uuid import UUID
+
         from src.lians.backtest import check_contamination
         from src.lians.schemas import ContaminationFlagOut, ContaminationReportOut
         async with self._session_factory() as db:
-            report = await check_contamination(db, self._namespace, agent_id, simulation_as_of)
+            report = await check_contamination(
+                db,
+                self._namespace,
+                agent_id,
+                simulation_as_of,
+                flag_limit=flag_limit,
+                after_event_time=after_event_time,
+                after_id=UUID(after_id) if after_id is not None else None,
+            )
         # check_contamination returns a plain dataclass; project it onto the
         # pydantic schema so the dict shape matches the HTTP API exactly.
         out = ContaminationReportOut(
@@ -651,6 +836,12 @@ class LocalLiansClient:
             namespace=report.namespace,
             simulation_as_of=report.simulation_as_of,
             memories_checked=report.memories_checked,
+            flags_total=report.flags_total,
+            flags_returned=report.flags_returned,
+            flags_complete=report.flags_complete,
+            has_more=report.has_more,
+            next_event_time=report.next_event_time,
+            next_id=report.next_id,
             flags=[
                 ContaminationFlagOut(
                     memory_id=f.memory_id,
@@ -673,6 +864,8 @@ class LocalLiansClient:
         self,
         status: Optional[str] = None,
         limit: int = 50,
+        after_detected_at: Optional[str] = None,
+        after_id: Optional[str] = None,
     ) -> dict:
         """
         List conflict flags for this namespace.
@@ -680,23 +873,57 @@ class LocalLiansClient:
         *status* filters by ``"open"``, ``"accept_a"``, ``"accept_b"``, or
         ``"dismissed"``.  Returns a ConflictListResult dict.
         """
-        return self._run(self._async_list_conflicts(status=status, limit=limit))
+        if (after_detected_at is None) != (after_id is None):
+            raise ValueError("after_detected_at and after_id must be supplied together")
+        return self._run(
+            self._async_list_conflicts(
+                status=status,
+                limit=limit,
+                after_detected_at=after_detected_at,
+                after_id=after_id,
+            )
+        )
 
-    async def _async_list_conflicts(self, status: Optional[str], limit: int) -> dict:
+    async def _async_list_conflicts(
+        self,
+        status: Optional[str],
+        limit: int,
+        after_detected_at: Optional[str],
+        after_id: Optional[str],
+    ) -> dict:
+        from uuid import UUID
+
         from src.lians.memory_service import list_conflicts
         async with self._session_factory() as db:
-            result = await list_conflicts(db, self._namespace, status=status, limit=limit)
+            result = await list_conflicts(
+                db,
+                self._namespace,
+                status=status,
+                limit=limit,
+                after_detected_at=(
+                    datetime.fromisoformat(after_detected_at.replace("Z", "+00:00"))
+                    if after_detected_at is not None
+                    else None
+                ),
+                after_id=UUID(after_id) if after_id is not None else None,
+            )
         return result.model_dump(mode="json")
 
-    def memory_lineage(self, memory_id: str) -> dict:
-        """Return every version in a memory's supersession lineage."""
-        return self._run(self._async_memory_lineage(memory_id))
+    def memory_lineage(self, memory_id: str, max_nodes: int = 1000) -> dict:
+        """Return a bounded supersession graph with explicit completeness fields."""
+        return self._run(self._async_memory_lineage(memory_id, max_nodes))
 
-    async def _async_memory_lineage(self, memory_id: str) -> dict:
+    async def _async_memory_lineage(self, memory_id: str, max_nodes: int) -> dict:
         from uuid import UUID
+
         from src.lians.memory_service import get_memory_lineage
         async with self._session_factory() as db:
-            result = await get_memory_lineage(db, self._namespace, UUID(memory_id))
+            result = await get_memory_lineage(
+                db,
+                self._namespace,
+                UUID(memory_id),
+                max_nodes=max_nodes,
+            )
         return result.model_dump(mode="json")
 
     def resolve_conflict(
@@ -719,8 +946,9 @@ class LocalLiansClient:
         self, conflict_id: str, resolution: str, note: Optional[str]
     ) -> dict:
         from uuid import UUID
-        from src.lians.schemas import ConflictResolveRequest
+
         from src.lians.memory_service import resolve_conflict
+        from src.lians.schemas import ConflictResolveRequest
         req = ConflictResolveRequest(resolution=resolution, note=note)
         async with self._session_factory() as db:
             result = await resolve_conflict(db, self._namespace, UUID(conflict_id), req)
@@ -771,12 +999,12 @@ class LocalLiansClient:
         Not available in local mode.
 
         The compliance report aggregates SQL window queries that require a
-        full PostgreSQL deployment.  Use AgentMemClient (HTTP) against a
+        full PostgreSQL deployment.  Use LiansClient (HTTP) against a
         running server for this endpoint.
         """
         raise NotImplementedError(
             "compliance_report() requires a server deployment. "
-            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+            "Use LiansClient (HTTP) instead of LocalLiansClient."
         )
 
     # â”€â”€ Relationship graph â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -845,11 +1073,14 @@ class LocalLiansClient:
         rel_types: Optional[list[str]] = None,
         direction: str = "any",
         normalize: bool = False,
+        max_nodes: int = 5000,
+        max_edges: int = 20000,
     ) -> dict:
         """Entities within ``depth`` hops of ``entity`` (optional point-in-time ``as_of``)."""
         return self._run(self._async_neighbors(
             agent_id=agent_id, entity=entity, depth=depth, as_of=as_of,
             rel_types=rel_types, direction=direction, normalize=normalize,
+            max_nodes=max_nodes, max_edges=max_edges,
         ))
 
     async def _async_neighbors(self, **kwargs) -> dict:
@@ -866,14 +1097,18 @@ class LocalLiansClient:
         as_of: Optional[datetime] = None,
         rel_types: Optional[list[str]] = None,
         normalize: bool = False,
+        max_nodes: int = 5000,
+        max_edges: int = 20000,
     ) -> dict:
         """
         Shortest connection between two entities â€” the conflict-of-interest /
-        related-party reachability query. ``{"connected": False}`` is the clean result.
+        related-party reachability query. ``connected=False`` is returned only
+        for a complete negative search; a budget-capped negative is ``None``.
         """
         return self._run(self._async_path(
             agent_id=agent_id, src_entity=src_entity, dst_entity=dst_entity,
             max_depth=max_depth, as_of=as_of, rel_types=rel_types, normalize=normalize,
+            max_nodes=max_nodes, max_edges=max_edges,
         ))
 
     async def _async_path(self, **kwargs) -> dict:
@@ -905,33 +1140,33 @@ class LocalLiansClient:
         """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
-            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+            "Use LiansClient (HTTP) instead of LocalLiansClient."
         )
 
     def list_webhooks(self, *args: Any, **kwargs: Any) -> list:  # noqa: ARG002
         """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
-            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+            "Use LiansClient (HTTP) instead of LocalLiansClient."
         )
 
     def update_webhook(self, *args: Any, **kwargs: Any) -> dict:  # noqa: ARG002
         """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
-            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+            "Use LiansClient (HTTP) instead of LocalLiansClient."
         )
 
     def delete_webhook(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
         """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
-            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+            "Use LiansClient (HTTP) instead of LocalLiansClient."
         )
 
     def webhook_deliveries(self, *args: Any, **kwargs: Any) -> list:  # noqa: ARG002
         """Not available in local mode â€” webhooks require an HTTP server."""
         raise NotImplementedError(
             "Webhooks require a server deployment. "
-            "Use AgentMemClient (HTTP) instead of LocalAgentMemClient."
+            "Use LiansClient (HTTP) instead of LocalLiansClient."
         )

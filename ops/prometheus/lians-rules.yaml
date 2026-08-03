@@ -1,0 +1,1113 @@
+# Lians production recording and alerting rules.
+#
+# Expected scrape jobs:
+#   lians-api             Blackbox HTTPS probe of /readyz (30s interval)
+#   agentmem              Authenticated scrape of the API /metrics endpoint
+#   lians-otel-collector  Scrape of the collector's internal metrics on :8888
+#   lians-gate-mediator   TLS + bearer scrape of isolated mediator /metrics
+#
+# The deployed collector explicitly sets without_type_suffix=true, so its
+# counter names intentionally do not carry Prometheus' usual `_total` suffix.
+groups:
+  - name: lians.api-slo.recording
+    interval: 30s
+    rules:
+      - record: lians:api_probe_error_ratio:5m
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[5m])
+      - record: lians:api_probe_error_ratio:30m
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[30m])
+      - record: lians:api_probe_error_ratio:1h
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[1h])
+      - record: lians:api_probe_error_ratio:2h
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[2h])
+      - record: lians:api_probe_error_ratio:6h
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[6h])
+      - record: lians:api_probe_error_ratio:1d
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[1d])
+      - record: lians:api_probe_error_ratio:3d
+        expr: 1 - avg_over_time(probe_success{job="lians-api"}[3d])
+      - record: lians:api_request_error_ratio:5m
+        expr: |
+          sum(rate(lians_http_requests_total{job="agentmem",status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(lians_http_requests_total{job="agentmem"}[5m])), 0.001)
+      - record: lians:api_request_error_ratio:30m
+        expr: |
+          sum(rate(lians_http_requests_total{job="agentmem",status_class="5xx"}[30m]))
+          /
+          clamp_min(sum(rate(lians_http_requests_total{job="agentmem"}[30m])), 0.001)
+      - record: lians:api_request_error_ratio:1h
+        expr: |
+          sum(rate(lians_http_requests_total{job="agentmem",status_class="5xx"}[1h]))
+          /
+          clamp_min(sum(rate(lians_http_requests_total{job="agentmem"}[1h])), 0.001)
+      - record: lians:api_request_error_ratio:6h
+        expr: |
+          sum(rate(lians_http_requests_total{job="agentmem",status_class="5xx"}[6h]))
+          /
+          clamp_min(sum(rate(lians_http_requests_total{job="agentmem"}[6h])), 0.001)
+      - record: lians:recall_request_latency_p95_seconds:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(lians_http_request_duration_seconds_bucket{
+                job="agentmem",
+                route_group="recall"
+              }[5m])
+            )
+          )
+      - record: lians:otel_queue_utilization:ratio
+        expr: |
+          max by (job, instance, exporter) (
+            otelcol_exporter_queue_size{job="lians-otel-collector",exporter="otlphttp/lians"}
+          )
+          /
+          clamp_min(
+            max by (job, instance, exporter) (
+              otelcol_exporter_queue_capacity{job="lians-otel-collector",exporter="otlphttp/lians"}
+            ),
+            1
+          )
+
+  - name: lians.api-slo.alerts
+    interval: 30s
+    rules:
+      - alert: LiansApiProbeMissing
+        expr: absent_over_time(probe_success{job="lians-api"}[5m])
+        for: 1m
+        keep_firing_for: 5m
+        labels:
+          severity: page
+          service: lians-api
+        annotations:
+          summary: "The external Lians API readiness SLI is missing"
+          description: "No /readyz blackbox probe samples have arrived for five minutes. Treat missing telemetry as an availability incident."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansApiUnavailable
+        expr: max_over_time(probe_success{job="lians-api"}[2m]) == 0
+        for: 1m
+        keep_firing_for: 5m
+        labels:
+          severity: page
+          service: lians-api
+        annotations:
+          summary: "The Lians API has failed every readiness probe for two minutes"
+          description: "External readiness probes to {{ $labels.instance }} are continuously failing."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      # 99.9% availability objective, 30-day window. These are the standard
+      # multi-window/multi-burn-rate page thresholds: 14.4x over 1h+5m and 6x
+      # over 6h+30m. Both windows must burn before paging.
+      - alert: LiansApiAvailabilityBudgetFastBurn
+        expr: |
+          (lians:api_probe_error_ratio:1h > (14.4 * 0.001))
+          and
+          (lians:api_probe_error_ratio:5m > (14.4 * 0.001))
+        for: 2m
+        keep_firing_for: 15m
+        labels:
+          severity: page
+          service: lians-api
+          slo: availability
+        annotations:
+          summary: "Lians API is rapidly consuming its availability error budget"
+          description: "The 99.9% availability budget is burning above 14.4x on both the 1h and 5m windows for {{ $labels.instance }}."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansApiAvailabilityBudgetSustainedBurn
+        expr: |
+          (lians:api_probe_error_ratio:6h > (6 * 0.001))
+          and
+          (lians:api_probe_error_ratio:30m > (6 * 0.001))
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-api
+          slo: availability
+        annotations:
+          summary: "Lians API has a sustained availability error-budget burn"
+          description: "The 99.9% availability budget is burning above 6x on both the 6h and 30m windows for {{ $labels.instance }}."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansApiAvailabilityBudgetSlowBurn
+        expr: |
+          (
+            (lians:api_probe_error_ratio:1d > (3 * 0.001))
+            and
+            (lians:api_probe_error_ratio:2h > (3 * 0.001))
+          )
+          or
+          (
+            (lians:api_probe_error_ratio:3d > 0.001)
+            and
+            (lians:api_probe_error_ratio:6h > 0.001)
+          )
+        for: 30m
+        keep_firing_for: 1h
+        labels:
+          severity: ticket
+          service: lians-api
+          slo: availability
+        annotations:
+          summary: "Lians API is slowly consuming its availability error budget"
+          description: "A long-window availability burn requires owner review before it becomes a paging event."
+          runbook: "docs/slo-alerting.md#error-budget-policy"
+
+      - alert: LiansApiProbeLatencyHigh
+        expr: quantile_over_time(0.95, probe_duration_seconds{job="lians-api"}[15m]) > 0.5
+        for: 15m
+        keep_firing_for: 10m
+        labels:
+          severity: warning
+          service: lians-api
+          slo: readiness-latency
+        annotations:
+          summary: "Lians external readiness latency exceeds 500 ms at p95"
+          description: "The blackbox readiness probe is slow. This measures the control-plane path, not end-user request latency."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansApiCertificateExpiring
+        expr: (probe_ssl_earliest_cert_expiry{job="lians-api"} - time()) < (14 * 24 * 60 * 60)
+        for: 1h
+        labels:
+          severity: ticket
+          service: lians-api
+        annotations:
+          summary: "Lians API TLS certificate expires in less than 14 days"
+          description: "Renew the certificate for {{ $labels.instance }} and verify the served chain from outside the cluster."
+          runbook: "docs/production-operations.md#certificate-or-trust-chain-expiry"
+
+      - alert: LiansApiMetricsScrapeDown
+        expr: up{job="agentmem"} == 0
+        for: 5m
+        keep_firing_for: 5m
+        labels:
+          severity: warning
+          service: lians-api
+        annotations:
+          summary: "Prometheus cannot scrape the Lians API metrics endpoint"
+          description: "The external availability probe is authoritative for paging; repair the authenticated /metrics scrape to restore diagnostic coverage."
+          runbook: "docs/slo-alerting.md#scrape-and-routing-contract"
+
+      - alert: LiansApiRequestMetricsMissing
+        expr: absent_over_time(lians_http_requests_total{job="agentmem"}[5m])
+        for: 1m
+        keep_firing_for: 5m
+        labels:
+          severity: warning
+          service: lians-api
+        annotations:
+          summary: "Lians request-quality metrics are missing"
+          description: "The API may still be reachable, but request success and latency SLO coverage is unavailable."
+          runbook: "docs/slo-alerting.md#scrape-and-routing-contract"
+
+      - alert: LiansApiRequestBudgetFastBurn
+        expr: |
+          (lians:api_request_error_ratio:1h > (14.4 * 0.001))
+          and
+          (lians:api_request_error_ratio:5m > (14.4 * 0.001))
+        for: 2m
+        keep_firing_for: 15m
+        labels:
+          severity: page
+          service: lians-api
+          slo: request-success
+        annotations:
+          summary: "Lians server errors are rapidly consuming the request-success budget"
+          description: "The 99.9% non-5xx request budget is burning above 14.4x on the 1h and 5m windows."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansApiRequestBudgetSustainedBurn
+        expr: |
+          (lians:api_request_error_ratio:6h > (6 * 0.001))
+          and
+          (lians:api_request_error_ratio:30m > (6 * 0.001))
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-api
+          slo: request-success
+        annotations:
+          summary: "Lians has a sustained server-error budget burn"
+          description: "The 99.9% non-5xx request budget is burning above 6x on the 6h and 30m windows."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansRecallRequestLatencyHigh
+        expr: lians:recall_request_latency_p95_seconds:5m > 0.5
+        for: 15m
+        keep_firing_for: 10m
+        labels:
+          severity: warning
+          service: lians-api
+          slo: recall-latency
+        annotations:
+          summary: "Lians recall request latency exceeds 500 ms at p95"
+          description: "Authenticated /v1/recall and /v1/context request latency has exceeded the initial objective for 15 minutes."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansIdempotencyRequestConflictsSustained
+        expr: |
+          sum(increase(lians_idempotency_operations_total{
+            job="agentmem",
+            outcome="request_conflict"
+          }[15m])) > 10
+        for: 10m
+        keep_firing_for: 10m
+        labels:
+          severity: warning
+          service: lians-api
+        annotations:
+          summary: "Lians is rejecting sustained idempotency key/body conflicts"
+          description: "Inspect client retry-key reuse. A key is cryptographically bound to one exact request in one operation."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansIdempotencyReplayUnavailable
+        expr: |
+          sum(increase(lians_idempotency_operations_total{
+            job="agentmem",
+            outcome="replay_unavailable"
+          }[5m])) > 0
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-api
+          data_integrity: suspect
+        annotations:
+          summary: "A completed Lians idempotency claim cannot replay its resource"
+          description: "Preserve the database and investigate retention, RLS, and ledger/resource integrity before retrying writes."
+          runbook: "docs/production-operations.md#api-unavailable-or-readiness-failing"
+
+      - alert: LiansSemanticRecallDegraded
+        expr: |
+          (
+            sum(rate(agentmem_memory_recalls_total{router="semantic_degraded"}[10m]))
+            /
+            clamp_min(
+              sum(rate(agentmem_memory_recalls_total[10m])),
+              0.001
+            )
+          ) > 0.05
+          and
+          sum(rate(agentmem_memory_recalls_total[10m])) > 0.1
+        for: 10m
+        keep_firing_for: 10m
+        labels:
+          severity: warning
+          service: lians-api
+        annotations:
+          summary: "More than 5% of recalls are using degraded semantic retrieval"
+          description: "The bounded aggregate recall path is falling back from embedding-backed retrieval. Use tenant-authorized logs or Investigator workflows to determine scope."
+          runbook: "docs/production-operations.md#embedding-provider-or-egress-failure"
+
+  - name: lians.decision-evidence.recording
+    interval: 30s
+    rules:
+      # Durable inventory is intentionally repeated by API replicas. Use max,
+      # never sum, so replica count cannot inflate a database-global backlog.
+      - record: lians:recorder_waiting_runs
+        expr: max(lians_recorder_runs{job="agentmem",readiness="waiting"})
+      - record: lians:recorder_readiness_ratio
+        expr: |
+          max(lians_recorder_runs{job="agentmem",readiness="ready"})
+          /
+          clamp_min(
+            max(lians_recorder_runs{job="agentmem",readiness="ready"})
+            + max(lians_recorder_runs{job="agentmem",readiness="waiting"}),
+            1
+          )
+      - record: lians:integration_actionable_backlog
+        expr: |
+          max(lians_integration_deliveries{job="agentmem",status="pending"})
+          + max(lians_integration_deliveries{job="agentmem",status="retry"})
+          + max(lians_integration_deliveries{job="agentmem",status="leased"})
+      - record: lians:impact_active_jobs
+        expr: |
+          max(lians_impact_jobs{job="agentmem",status="pending"})
+          + max(lians_impact_jobs{job="agentmem",status="running"})
+      - record: lians:recorder_evidence_index_active_jobs
+        expr: |
+          max(lians_recorder_evidence_index_jobs{job="agentmem",status="pending"})
+          + max(lians_recorder_evidence_index_jobs{job="agentmem",status="running"})
+      - record: lians:subject_erasure_active_jobs
+        expr: |
+          max(lians_subject_erasure_jobs{job="agentmem",status="pending"})
+          + max(lians_subject_erasure_jobs{job="agentmem",status="running"})
+      - record: lians:scim_binding_reconciliation_active_jobs
+        expr: |
+          max(lians_scim_binding_reconciliation_jobs{job="agentmem",status="pending"})
+          + max(lians_scim_binding_reconciliation_jobs{job="agentmem",status="running"})
+
+  - name: lians.decision-evidence.alerts
+    interval: 30s
+    rules:
+      - alert: LiansDurableInventoryRefreshUnhealthy
+        expr: lians_durable_inventory_refresh_healthy{job="agentmem"} == 0
+        for: 5m
+        keep_firing_for: 10m
+        labels:
+          severity: page
+          service: lians-observability
+        annotations:
+          summary: "A Lians replica cannot refresh authoritative inventory"
+          description: "Durable Recorder, integration, impact, and conflict gauges on {{ $labels.instance }} are stale; do not interpret the last values as current."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansDurableInventoryRefreshStale
+        expr: time() - lians_durable_inventory_last_success_unixtime_seconds{job="agentmem"} > 600
+        for: 2m
+        keep_firing_for: 10m
+        labels:
+          severity: page
+          service: lians-observability
+        annotations:
+          summary: "A Lians durable inventory snapshot is more than ten minutes old"
+          description: "Restore database access and the per-replica inventory refresher before using backlog gauges for operational decisions."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRecorderRejectedEvents
+        expr: sum(increase(lians_recorder_events_total{job="agentmem",outcome="rejected"}[10m])) > 0
+        keep_firing_for: 30m
+        labels:
+          severity: warning
+          service: lians-recorder
+          evidence_integrity: investigate
+        annotations:
+          summary: "The Lians Recorder rejected one or more evidence events"
+          description: "Reconcile producer acknowledgements and bounded rejection responses; metric labels intentionally omit tenant, payload, and error details."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRecorderReadinessBacklog
+        expr: lians:recorder_waiting_runs > 100
+        for: 15m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-recorder
+        annotations:
+          summary: "More than 100 durable Recorder runs are not receipt-ready"
+          description: "Inspect capture coverage and producer instrumentation through tenant-authorized readiness APIs; Prometheus exposes only the global bounded count."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansIntegrationWorkerStale
+        expr: lians_integration_delivery_enabled{job="agentmem"} == 1 and lians_integration_worker_healthy{job="agentmem"} == 0
+        for: 2m
+        keep_firing_for: 10m
+        labels:
+          severity: page
+          service: lians-integrations
+        annotations:
+          summary: "A configured Lians integration worker is not polling"
+          description: "The per-replica worker heartbeat is unhealthy; durable delivery inventory remains in PostgreSQL."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansIntegrationDeadLetters
+        expr: max(lians_integration_deliveries{job="agentmem",status="dead_letter"}) > 0
+        for: 2m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-integrations
+          evidence_delivery: at_risk
+        annotations:
+          summary: "Lians has unreconciled integration dead letters"
+          description: "Use the tenant-authorized integration inventory and audited replay workflow; never infer destination identity from metrics."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansIntegrationOldestDueHigh
+        expr: max(lians_integration_oldest_due_age_seconds{job="agentmem"}) > 300
+        for: 10m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-integrations
+        annotations:
+          summary: "Lians integration delivery is more than five minutes behind"
+          description: "Inspect worker health, leases, destination reachability, and retry posture through authorized operational records."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansIntegrationOldestDueCritical
+        expr: max(lians_integration_oldest_due_age_seconds{job="agentmem"}) > 3600
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-integrations
+          evidence_delivery: at_risk
+        annotations:
+          summary: "Lians integration delivery is more than one hour behind"
+          description: "Preserve the outbox and attempt ledger while restoring safe delivery; do not bypass TLS, SSRF guards, or idempotency."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansImpactAssessmentWorkerUnhealthy
+        expr: |
+          max(lians_impact_worker_enabled{job="agentmem"}) == 1
+          and
+          min(lians_impact_worker_healthy{job="agentmem"}) < 1
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-impact-assessment
+          decision_integrity: at_risk
+        annotations:
+          summary: "An autonomous impact-assessment worker is unhealthy"
+          description: "Restore safe queue polling; durable leases make interrupted pages recoverable without replacing frozen jobs."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansImpactAssessmentWorkerHeartbeatStale
+        expr: |
+          lians_impact_worker_enabled{job="agentmem"} == 1
+          and
+          time() - lians_impact_worker_last_heartbeat_unixtime_seconds{job="agentmem"} > 300
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-impact-assessment
+          decision_integrity: at_risk
+        annotations:
+          summary: "A Lians impact-assessment worker heartbeat is stale"
+          description: "Check database reachability and bounded page processing before intervening in durable leases."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansImpactAssessmentFailed
+        expr: |
+          max(lians_impact_jobs{job="agentmem",status="failed"}) > 0
+          or
+          sum(increase(lians_impact_job_events_total{
+            job="agentmem",
+            outcome="failed"
+          }[10m])) > 0
+        for: 2m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-impact-assessment
+          decision_integrity: investigate
+        annotations:
+          summary: "An exhaustive impact assessment failed or could not advance"
+          description: "Preserve its frozen snapshot and cursor, then inspect the authorized job and failed advancement before retrying or replacing it."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansImpactAssessmentBacklogOld
+        expr: max(lians_impact_oldest_active_age_seconds{job="agentmem"}) > 3600
+        for: 15m
+        keep_firing_for: 30m
+        labels:
+          severity: warning
+          service: lians-impact-assessment
+        annotations:
+          summary: "An exhaustive impact assessment has been active for over one hour"
+          description: "Review durable cursor progress and advance capacity; never delete and recreate the frozen job to hide backlog age."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRecorderEvidenceIndexWorkerUnhealthy
+        expr: |
+          max(lians_recorder_evidence_index_worker_enabled{job="agentmem"}) == 1
+          and
+          min(lians_recorder_evidence_index_worker_healthy{job="agentmem"}) < 1
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-recorder-index
+          evidence_integrity: at_risk
+        annotations:
+          summary: "A Recorder evidence-index worker is unhealthy"
+          description: "Restore bounded fixed-snapshot indexing; preserve the durable job, cursor, and Recorder events while investigating."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRecorderEvidenceIndexWorkerHeartbeatStale
+        expr: |
+          lians_recorder_evidence_index_worker_enabled{job="agentmem"} == 1
+          and
+          time() - lians_recorder_evidence_index_worker_last_heartbeat_unixtime_seconds{job="agentmem"} > 300
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-recorder-index
+          evidence_integrity: at_risk
+        annotations:
+          summary: "A Recorder evidence-index worker heartbeat is stale"
+          description: "Check database reachability and bounded page processing before intervening in durable leases."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRecorderEvidenceIndexFailed
+        expr: max(lians_recorder_evidence_index_jobs{job="agentmem",status="failed"}) > 0
+        for: 2m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-recorder-index
+          evidence_integrity: investigate
+        annotations:
+          summary: "A Recorder evidence-index job failed"
+          description: "Preserve the immutable snapshot and cursor, inspect its stable failure code through authorized records, and use the audited retry path."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRecorderEvidenceIndexBacklogOld
+        expr: max(lians_recorder_evidence_index_oldest_active_age_seconds{job="agentmem"}) > 3600
+        for: 15m
+        keep_firing_for: 30m
+        labels:
+          severity: warning
+          service: lians-recorder-index
+          evidence_integrity: at_risk
+        annotations:
+          summary: "A Recorder evidence-index job has been active for over one hour"
+          description: "Review persisted progress and worker capacity without replacing the fixed-snapshot job."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansSubjectErasureWorkerUnhealthy
+        expr: |
+          max(lians_subject_erasure_worker_enabled{job="agentmem"}) == 1
+          and
+          min(lians_subject_erasure_worker_healthy{job="agentmem"}) < 1
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-subject-erasure
+          privacy_control: at_risk
+        annotations:
+          summary: "A subject-erasure worker is unhealthy"
+          description: "The subject DEK is destroyed synchronously, but derivative scrubbing and certificate completion remain at risk."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansSubjectErasureWorkerHeartbeatStale
+        expr: |
+          lians_subject_erasure_worker_enabled{job="agentmem"} == 1
+          and
+          time() - lians_subject_erasure_worker_last_heartbeat_unixtime_seconds{job="agentmem"} > 300
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-subject-erasure
+          privacy_control: at_risk
+        annotations:
+          summary: "A subject-erasure worker heartbeat is stale"
+          description: "Restore bounded queue polling and preserve the durable job, row cursor, and certificate evidence."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansSubjectErasureFailed
+        expr: max(lians_subject_erasure_jobs{job="agentmem",status="failed"}) > 0
+        for: 2m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-subject-erasure
+          privacy_control: incomplete
+        annotations:
+          summary: "A subject-erasure job failed"
+          description: "Preserve the request and job evidence, remedy the stable failure code, and use the explicit authorized retry endpoint."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansSubjectErasureBacklogOld
+        expr: max(lians_subject_erasure_oldest_active_age_seconds{job="agentmem"}) > 3600
+        for: 15m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-subject-erasure
+          privacy_control: delayed
+        annotations:
+          summary: "A subject-erasure job has been active for over one hour"
+          description: "Derivative scrubbing and certificate completion are delayed; increase safe capacity without deleting durable evidence."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansScimBindingReconciliationWorkerUnhealthy
+        expr: |
+          max(lians_scim_binding_reconciliation_worker_enabled{job="agentmem"}) == 1
+          and
+          min(lians_scim_binding_reconciliation_worker_healthy{job="agentmem"}) < 1
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-scim-reconciliation
+          identity_control: at_risk
+        annotations:
+          summary: "A SCIM binding-reconciliation worker is unhealthy"
+          description: "Restore bounded fixed-User-snapshot reconciliation while preserving the tenant-version job and activation fence."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansScimBindingReconciliationWorkerHeartbeatStale
+        expr: |
+          lians_scim_binding_reconciliation_worker_enabled{job="agentmem"} == 1
+          and
+          time() - lians_scim_binding_reconciliation_worker_last_heartbeat_unixtime_seconds{job="agentmem"} > 300
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-scim-reconciliation
+          identity_control: at_risk
+        annotations:
+          summary: "A SCIM binding-reconciliation worker heartbeat is stale"
+          description: "Check database reachability and bounded page processing; do not bypass the version activation fence."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansScimBindingReconciliationFailed
+        expr: max(lians_scim_binding_reconciliation_jobs{job="agentmem",status="failed"}) > 0
+        for: 2m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-scim-reconciliation
+          identity_control: investigate
+        annotations:
+          summary: "A SCIM binding-reconciliation job failed"
+          description: "Bindings remain fenced for the incomplete tenant version; preserve the snapshot and repair the stable failure through authorized operations."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansScimBindingReconciliationBacklogOld
+        expr: max(lians_scim_binding_reconciliation_oldest_active_age_seconds{job="agentmem"}) > 3600
+        for: 15m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-scim-reconciliation
+          identity_control: delayed
+        annotations:
+          summary: "A SCIM binding-reconciliation job has been active for over one hour"
+          description: "A tenant identity version remains fenced; increase safe worker capacity without deleting or replacing durable evidence."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansDecisionEvidenceCompletenessBelowTarget
+        expr: |
+          max(lians_protected_decisions{job="agentmem"}) >= 20
+          and
+          max(lians_decision_evidence_complete_ratio{job="agentmem"}) < 0.95
+        for: 30m
+        keep_firing_for: 30m
+        labels:
+          severity: warning
+          service: lians-decision-evidence
+          evidence_completeness: at_risk
+        annotations:
+          summary: "Fewer than 95% of protected decisions have complete evidence coverage"
+          description: "Use tenant-authorized Recorder readiness and Investigator workflows to repair missing evidence kinds; aggregate metrics intentionally omit tenant identity."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRemediationTasksOverdue
+        expr: max(lians_remediation_overdue_tasks{job="agentmem"}) > 0
+        for: 15m
+        keep_firing_for: 30m
+        labels:
+          severity: warning
+          service: lians-investigator
+          remediation: overdue
+        annotations:
+          summary: "One or more Lians remediation tasks are overdue"
+          description: "Use the tenant-authorized Investigator queue to identify owners and advance or explicitly re-plan each task."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRetentionSchedulerStale
+        expr: |
+          lians_retention_scheduler_enabled{job="agentmem"} == 1
+          and
+          time() - lians_retention_scheduler_last_heartbeat_unixtime_seconds{job="agentmem"}
+            > clamp_min(lians_retention_scheduler_interval_seconds{job="agentmem"} * 1.5, 300)
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-retention
+        annotations:
+          summary: "A Lians retention scheduler heartbeat is stale"
+          description: "Verify the scheduler task and database leader-election path; do not run an unaudited manual delete."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansRetentionCycleFailed
+        expr: sum(increase(lians_retention_cycles_total{job="agentmem",outcome=~"failed|partial_failure"}[30m])) > 0
+        keep_firing_for: 1h
+        labels:
+          severity: page
+          service: lians-retention
+        annotations:
+          summary: "A Lians retention cycle failed wholly or partially"
+          description: "Inspect committed prune receipts and legal-hold boundaries before retrying affected work."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+      - alert: LiansAuditAppendBoundaryRejected
+        expr: sum(increase(lians_audit_append_boundary_attempts_total{job="agentmem",outcome="rejected"}[5m])) > 0
+        keep_firing_for: 1h
+        labels:
+          severity: page
+          service: lians-audit
+          data_integrity: suspect
+        annotations:
+          summary: "The authoritative Lians audit append boundary rejected a call"
+          description: "Fence consequential writes as needed and investigate the database append function, role grants, chain head, and transaction outcome."
+          runbook: "docs/production-operations.md#durable-control-plane-backlog-or-observability-incident"
+
+  - name: lians.gate.alerts
+    interval: 30s
+    rules:
+      - alert: LiansGateMetricsMissing
+        expr: absent_over_time(lians_gate_permit_events_total{job="agentmem"}[5m])
+        for: 1m
+        keep_firing_for: 10m
+        labels:
+          severity: warning
+          service: lians-gate
+        annotations:
+          summary: "Gate permit lifecycle metrics are missing"
+          description: "The API scrape is present but Gate control-loop observability is incomplete."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGatePermitReplayOrMismatch
+        expr: |
+          sum(increase(lians_gate_permit_events_total{
+            job="agentmem",
+            outcome=~"replayed|mismatched"
+          }[5m])) > 0
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-gate
+          security: investigate
+        annotations:
+          summary: "Gate observed a replayed or claim-mismatched execution permit"
+          description: "Investigate version skew, credential misuse, and attempted replay. Metrics intentionally contain no permit, tenant, principal, route, or target identity."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGatePermitRejectionsHigh
+        expr: |
+          sum(increase(lians_gate_permit_events_total{
+            job="agentmem",
+            outcome="rejected"
+          }[10m])) > 10
+        for: 5m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-gate
+        annotations:
+          summary: "Gate permit rejection volume is elevated"
+          description: "Check invalid capability traffic, caller authentication, and mediator/Gate health."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGatePermitExpiryHigh
+        expr: |
+          sum(increase(lians_gate_permit_events_total{
+            job="agentmem",
+            outcome="expired"
+          }[15m])) > 5
+        for: 5m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-gate
+        annotations:
+          summary: "Too many valid Gate capabilities reach redemption after expiry"
+          description: "Check evaluator latency, clock synchronization, queueing, and permit TTL policy."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGateNonAllowRateHigh
+        expr: |
+          (
+            sum(rate(lians_gate_evaluations_total{
+              job="agentmem",
+              disposition=~"deny|review"
+            }[10m]))
+            /
+            clamp_min(sum(rate(lians_gate_evaluations_total{job="agentmem"}[10m])), 0.001)
+          ) > 0.50
+          and
+          sum(rate(lians_gate_evaluations_total{job="agentmem"}[10m])) > 0.1
+        for: 10m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-gate
+        annotations:
+          summary: "More than half of active Gate evaluations are non-allow"
+          description: "Review policy rollout, receipt trust, evidence freshness, and approval availability."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGateMediatorScrapeDown
+        expr: up{job="lians-gate-mediator"} == 0
+        for: 2m
+        keep_firing_for: 10m
+        labels:
+          severity: page
+          service: lians-gate-mediator
+        annotations:
+          summary: "A Gate mediator metrics scrape is unavailable"
+          description: "Protected actions may be unavailable or unobservable; verify the TLS and bearer-authenticated scrape."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGateMediatorMetricsMissing
+        expr: |
+          absent_over_time(lians_gate_mediator_upstream_requests_total{
+            job="lians-gate-mediator"
+          }[5m])
+          and on()
+          (count(up{job="lians-gate-mediator"}) > 0)
+        for: 1m
+        keep_firing_for: 10m
+        labels:
+          severity: page
+          service: lians-gate-mediator
+        annotations:
+          summary: "Gate mediator provider metrics are missing"
+          description: "A mediator scrape target exists, but its bounded provider outcome families are absent."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGateMediatorOutcomeUnknown
+        expr: |
+          sum(increase(lians_gate_mediator_upstream_requests_total{
+            job="lians-gate-mediator",
+            outcome="outcome_unknown"
+          }[5m])) > 0
+        keep_firing_for: 1h
+        labels:
+          severity: page
+          service: lians-gate-mediator
+          reconciliation: required
+        annotations:
+          summary: "A consumed permit has an unknown provider outcome"
+          description: "Do not retry automatically; reconcile the permit, Gate consumption, and provider idempotency record."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGateMediatorUpstreamErrorsHigh
+        expr: |
+          (
+            sum(rate(lians_gate_mediator_upstream_requests_total{
+              job="lians-gate-mediator",
+              outcome=~"server_error|outcome_unknown"
+            }[5m]))
+            /
+            clamp_min(sum(rate(lians_gate_mediator_upstream_requests_total{
+              job="lians-gate-mediator"
+            }[5m])), 0.001)
+          ) > 0.10
+          and
+          sum(rate(lians_gate_mediator_upstream_requests_total{
+            job="lians-gate-mediator"
+          }[5m])) > 0.05
+        for: 5m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-gate-mediator
+        annotations:
+          summary: "Gate mediator upstream failures exceed ten percent"
+          description: "Inspect provider availability, TLS, egress, response contracts, and idempotency reconciliation."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+      - alert: LiansGateMediatorUpstreamLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(lians_gate_mediator_upstream_duration_seconds_bucket{
+                job="lians-gate-mediator"
+              }[10m])
+            )
+          ) > 5
+          and
+          sum(rate(lians_gate_mediator_upstream_requests_total{
+            job="lians-gate-mediator"
+          }[10m])) > 0.05
+        for: 10m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-gate-mediator
+        annotations:
+          summary: "Gate mediator provider latency exceeds five seconds at p95"
+          description: "Check provider saturation, egress, TLS, and route timeout budgets before permits expire."
+          runbook: "docs/gate-enforcement-mediator.md#operations-and-metrics"
+
+  - name: lians.durable-metering.alerts
+    interval: 30s
+    rules:
+      - alert: LiansMeteringWorkerStale
+        expr: lians_metering_delivery_enabled == 1 and lians_metering_worker_healthy == 0
+        for: 2m
+        keep_firing_for: 10m
+        labels:
+          severity: page
+          service: lians-billing
+          revenue_integrity: at_risk
+        annotations:
+          summary: "A configured Lians metering worker is not polling"
+          description: "The local durable Stripe worker is configured for delivery but has remained unhealthy."
+          runbook: "docs/durable-metering.md#operations-and-reconciliation"
+
+      - alert: LiansMeteringDeadLetters
+        expr: max(lians_metering_events{status="dead_letter"}) > 0
+        for: 2m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-billing
+          revenue_integrity: at_risk
+        annotations:
+          summary: "Lians has unreconciled Stripe metering dead letters"
+          description: "At least one durable usage obligation needs provider reconciliation before an audited replay."
+          runbook: "docs/durable-metering.md#operations-and-reconciliation"
+
+      - alert: LiansMeteringOldestDueHigh
+        expr: max(lians_metering_oldest_due_age_seconds) > 300
+        for: 10m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-billing
+          revenue_integrity: at_risk
+        annotations:
+          summary: "Lians Stripe metering delivery is behind its five-minute SLO"
+          description: "The oldest non-terminal durable usage obligation is {{ $value | humanizeDuration }} old."
+          runbook: "docs/durable-metering.md#operations-and-reconciliation"
+
+      - alert: LiansMeteringOldestDueCritical
+        expr: max(lians_metering_oldest_due_age_seconds) > 3600
+        for: 5m
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-billing
+          revenue_integrity: at_risk
+        annotations:
+          summary: "Lians Stripe metering delivery is more than one hour behind"
+          description: "Investigate credentials, provider reachability, leases, and retry errors before the idempotency safety window is approached."
+          runbook: "docs/durable-metering.md#operations-and-reconciliation"
+
+      - alert: LiansMeteringRetriesSustained
+        expr: sum(increase(lians_metering_delivery_attempts_total{outcome="retry"}[15m])) > 5
+        for: 15m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-billing
+        annotations:
+          summary: "Lians Stripe metering retries are sustained"
+          description: "More than five retryable provider outcomes occurred in the last 15 minutes."
+          runbook: "docs/durable-metering.md#operations-and-reconciliation"
+
+  - name: lians.otel-queue.alerts
+    interval: 30s
+    rules:
+      - alert: LiansOtelCollectorScrapeDown
+        expr: up{job="lians-otel-collector"} == 0
+        for: 2m
+        keep_firing_for: 5m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+        annotations:
+          summary: "An OpenTelemetry collector replica is not observable"
+          description: "Prometheus cannot scrape {{ $labels.instance }}. Its local persistent queue must be treated as at risk until the pod and PVC are inspected."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelCollectorMetricsMissing
+        expr: absent_over_time(otelcol_exporter_queue_capacity{job="lians-otel-collector",exporter="otlphttp/lians"}[5m])
+        for: 1m
+        keep_firing_for: 5m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+        annotations:
+          summary: "OpenTelemetry persistent-queue metrics are missing"
+          description: "Queue observability is part of the evidence-ingest durability boundary; missing capacity telemetry is fail-unsafe."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelQueueHigh
+        expr: lians:otel_queue_utilization:ratio > 0.70
+        for: 15m
+        keep_firing_for: 15m
+        labels:
+          severity: warning
+          service: lians-recorder-gateway
+        annotations:
+          summary: "OpenTelemetry persistent queue is above 70%"
+          description: "Exporter {{ $labels.exporter }} on {{ $labels.instance }} is {{ $value | humanizePercentage }} full."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelQueueCritical
+        expr: lians:otel_queue_utilization:ratio > 0.90
+        for: 5m
+        keep_firing_for: 15m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+        annotations:
+          summary: "OpenTelemetry persistent queue is above 90%"
+          description: "Exporter {{ $labels.exporter }} on {{ $labels.instance }} is close to refusing telemetry. Preserve its PVC."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelQueueEnqueueLoss
+        expr: |
+          sum by (job, instance, exporter) (
+            increase(otelcol_exporter_enqueue_failed_spans{job="lians-otel-collector",exporter="otlphttp/lians"}[5m])
+          ) > 0
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+          data_loss: possible
+        annotations:
+          summary: "OpenTelemetry spans failed to enter the persistent queue"
+          description: "{{ $value }} spans failed to enqueue on {{ $labels.instance }} in five minutes. This can represent evidence loss."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelReceiverRefusingSpans
+        expr: |
+          sum by (job, instance, receiver) (
+            increase(otelcol_receiver_refused_spans{job="lians-otel-collector"}[5m])
+          ) > 0
+        keep_firing_for: 30m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+          data_loss: possible
+        annotations:
+          summary: "OpenTelemetry collector refused incoming spans"
+          description: "Producers may have lost evidence unless their SDKs retried successfully."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelExporterPersistentFailure
+        expr: |
+          sum by (job, instance, exporter) (
+            increase(otelcol_exporter_send_failed_spans{job="lians-otel-collector",exporter="otlphttp/lians"}[15m])
+          ) > 0
+          and on (job, instance, exporter)
+          lians:otel_queue_utilization:ratio > 0.50
+        for: 10m
+        keep_firing_for: 15m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+        annotations:
+          summary: "OpenTelemetry export is failing while the persistent queue grows"
+          description: "Send failures alone are retryable; send failures plus a half-full queue require immediate intervention."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"
+
+      - alert: LiansOtelQueueVolumeLow
+        expr: |
+          (
+            kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"queue-lians-otel-collector.*"}
+            /
+            clamp_min(
+              kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"queue-lians-otel-collector.*"},
+              1
+            )
+          ) < 0.15
+        for: 10m
+        keep_firing_for: 15m
+        labels:
+          severity: page
+          service: lians-recorder-gateway
+        annotations:
+          summary: "OpenTelemetry persistent-queue PVC has less than 15% free space"
+          description: "Do not delete or recreate the PVC. Restore exporter flow, expand the volume, or shed upstream traffic explicitly."
+          runbook: "docs/production-operations.md#collector-or-persistent-queue-incident"

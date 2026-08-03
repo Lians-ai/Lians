@@ -1,0 +1,430 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lians.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "lians.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "lians.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lians.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ toJson (dict "config" .Values.config "serviceAccountAnnotations" .Values.serviceAccount.annotations) | sha256sum }}
+        checksum/external-secret-revision: {{ printf "%s:%s:%s:%s:%s:%s:%s" .Values.existingSecrets.application.name .Values.existingSecrets.database.runtime.name .Values.existingSecrets.database.migration.name .Values.existingSecrets.receipts.name .Values.existingSecrets.redis.name .Values.existingSecrets.kms.name .Values.existingSecrets.rolloutRevision | sha256sum }}
+        lians.ai/oidc-provisioning-expected: {{ .Values.identity.expectOidcProvisioning | quote }}
+        lians.ai/scim-provisioning-expected: {{ .Values.identity.expectScimProvisioning | quote }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "lians.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "lians.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else if .Values.podAntiAffinity.enabled }}
+      affinity:
+        podAntiAffinity:
+          {{- if eq .Values.podAntiAffinity.type "required" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "lians.selectorLabels" . | nindent 18 }}
+              topologyKey: {{ .Values.podAntiAffinity.topologyKey }}
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "lians.selectorLabels" . | nindent 20 }}
+                topologyKey: {{ .Values.podAntiAffinity.topologyKey }}
+          {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: schema-head-preflight
+          image: {{ include "lians.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          workingDir: /app/agentmem
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              python - <<'PY'
+              import asyncio
+              import os
+              from types import SimpleNamespace
+
+              from sqlalchemy import text
+              from sqlalchemy.ext.asyncio import create_async_engine
+              from lians.connection_security import validate_production_data_transports
+              from lians.db import parse_db_url
+
+              transport_posture = SimpleNamespace(
+                  database_url=os.environ["DATABASE_URL"],
+                  redis_url="rediss://transport-preflight.invalid:6379/0",
+                  production_allow_local_data_service_sockets=False,
+                  database_pool_size=int(os.environ["DATABASE_POOL_SIZE"]),
+                  database_max_overflow=int(os.environ["DATABASE_MAX_OVERFLOW"]),
+                  database_pool_timeout_seconds=float(
+                      os.environ["DATABASE_POOL_TIMEOUT_SECONDS"]
+                  ),
+              )
+              transport_failures = validate_production_data_transports(transport_posture)
+              if transport_failures:
+                  raise SystemExit(
+                      "Runtime database transport refused: "
+                      + "; ".join(transport_failures)
+                  )
+
+              async def verify_runtime_role() -> None:
+                  database_url, connect_args = parse_db_url(os.environ["DATABASE_URL"])
+                  engine = create_async_engine(database_url, connect_args=connect_args)
+                  try:
+                      async with engine.connect() as connection:
+                          row = (
+                              await connection.execute(
+                                  text(
+                                      """
+                                      SELECT
+                                          current_user AS runtime_user,
+                                          role.rolsuper,
+                                          role.rolbypassrls,
+                                          runtime.rolcanlogin AS runtime_role_can_login,
+                                          runtime.rolsuper AS runtime_role_superuser,
+                                          runtime.rolbypassrls AS runtime_role_bypasses_rls,
+                                          pg_has_role(current_user, 'lians_runtime', 'USAGE') AS has_runtime_capability,
+                                          (
+                                              EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_database database
+                                                  WHERE database.datname = current_database()
+                                                    AND database.datdba = role.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_namespace namespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND namespace.nspowner = role.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_class relation
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = relation.relnamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND relation.relowner = role.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_proc procedure
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = procedure.pronamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND procedure.proowner = role.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_type data_type
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = data_type.typnamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND data_type.typowner = role.oid
+                                              )
+                                          ) AS owns_application_object,
+                                          (
+                                              EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_database database
+                                                  WHERE database.datname = current_database()
+                                                    AND database.datdba = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_namespace namespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND namespace.nspowner = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_class relation
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = relation.relnamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND relation.relowner = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_proc procedure
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = procedure.pronamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND procedure.proowner = runtime.oid
+                                              )
+                                              OR EXISTS (
+                                                  SELECT 1
+                                                  FROM pg_type data_type
+                                                  JOIN pg_namespace namespace
+                                                    ON namespace.oid = data_type.typnamespace
+                                                  WHERE namespace.nspname NOT IN ('pg_catalog', 'information_schema')
+                                                    AND namespace.nspname !~ '^pg_toast'
+                                                    AND data_type.typowner = runtime.oid
+                                              )
+                                          ) AS runtime_role_owns_application_object
+                                      FROM pg_roles role
+                                      JOIN pg_roles runtime
+                                        ON runtime.rolname = 'lians_runtime'
+                                      WHERE role.rolname = current_user
+                                      """
+                                  )
+                              )
+                          ).mappings().one()
+                          if (
+                              row["rolsuper"]
+                              or row["rolbypassrls"]
+                              or row["runtime_role_can_login"]
+                              or row["runtime_role_superuser"]
+                              or row["runtime_role_bypasses_rls"]
+                              or not row["has_runtime_capability"]
+                              or row["owns_application_object"]
+                              or row["runtime_role_owns_application_object"]
+                              or row["runtime_user"] == "lians_runtime"
+                          ):
+                              raise SystemExit(
+                                  "Runtime database identity must be a non-owner, "
+                                  "NOSUPERUSER/NOBYPASSRLS login inheriting the non-owner "
+                                  "NOLOGIN/NOSUPERUSER/NOBYPASSRLS lians_runtime capability"
+                              )
+                  finally:
+                      await engine.dispose()
+
+              asyncio.run(verify_runtime_role())
+              PY
+              heads="$(alembic -c alembic.ini heads | awk 'NF {print $1}' | sort -u)"
+              head_count="$(printf '%s\n' "${heads}" | awk 'NF {count++} END {print count+0}')"
+              if [ "${head_count}" -ne 1 ]; then
+                echo "Refusing startup: image must contain exactly one Alembic head." >&2
+                exit 1
+              fi
+              current="$(alembic -c alembic.ini current | awk 'NF {print $1}' | sort -u)"
+              if [ -z "${current}" ] || [ "${current}" != "${heads}" ]; then
+                echo "Refusing startup: database revision does not match the image schema head." >&2
+                echo "Run the opt-in migration hook after reviewing the migration plan." >&2
+                exit 1
+              fi
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.database.runtime.name }}
+                  key: {{ .Values.existingSecrets.database.runtime.key }}
+            - name: DATABASE_POOL_SIZE
+              value: {{ .Values.config.database.poolSize | quote }}
+            - name: DATABASE_MAX_OVERFLOW
+              value: {{ .Values.config.database.maxOverflow | quote }}
+            - name: DATABASE_POOL_TIMEOUT_SECONDS
+              value: {{ .Values.config.database.poolTimeoutSeconds | quote }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime-cache
+              mountPath: /var/cache/lians
+      containers:
+        - name: api
+          image: {{ include "lians.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "lians.fullname" . }}-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.database.runtime.name }}
+                  key: {{ .Values.existingSecrets.database.runtime.key }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.redis.name }}
+                  key: {{ .Values.existingSecrets.redis.key }}
+            - name: SUBJECT_REFERENCE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.application.name }}
+                  key: SUBJECT_REFERENCE_KEY
+            {{- if eq .Values.config.receipts.provider "local" }}
+            - name: RECEIPT_SIGNING_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.receipts.name }}
+                  key: {{ .Values.existingSecrets.receipts.localPrivateKeyKey }}
+            {{- else if .Values.existingSecrets.receipts.vaultTokenKey }}
+            - name: RECEIPT_VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.receipts.name }}
+                  key: {{ .Values.existingSecrets.receipts.vaultTokenKey }}
+            {{- end }}
+            {{- if .Values.config.metrics.enabled }}
+            - name: METRICS_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.application.name }}
+                  key: METRICS_BEARER_TOKEN
+            {{- end }}
+            {{- if .Values.config.metering.enabled }}
+            - name: STRIPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.application.name }}
+                  key: STRIPE_API_KEY
+            {{- end }}
+            {{- if eq .Values.config.embedding.provider "voyage" }}
+            - name: VOYAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.application.name }}
+                  key: VOYAGE_API_KEY
+            {{- else if eq .Values.config.embedding.provider "openai" }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.application.name }}
+                  key: OPENAI_API_KEY
+            {{- end }}
+            {{- if eq .Values.config.kms.provider "aws" }}
+            - name: KMS_AWS_ENCRYPTED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.kms.name }}
+                  key: KMS_AWS_ENCRYPTED_KEY
+            {{- if .Values.config.kms.previousEnvelopeKeyId }}
+            - name: KMS_AWS_PREVIOUS_ENCRYPTED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.kms.name }}
+                  key: KMS_AWS_PREVIOUS_ENCRYPTED_KEY
+            {{- end }}
+            {{- else if eq .Values.config.kms.provider "vault" }}
+            - name: KMS_VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.kms.name }}
+                  key: KMS_VAULT_TOKEN
+            {{- end }}
+            - name: XDG_CACHE_HOME
+              value: /var/cache/lians
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime-cache
+              mountPath: /var/cache/lians
+            {{- if and (eq .Values.config.receipts.provider "vault-transit") .Values.existingSecrets.receipts.vaultTokenFileKey }}
+            - name: receipt-vault-token
+              mountPath: /run/secrets/lians/receipt-vault-token
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: runtime-cache
+          emptyDir:
+            sizeLimit: 2Gi
+        {{- if and (eq .Values.config.receipts.provider "vault-transit") .Values.existingSecrets.receipts.vaultTokenFileKey }}
+        - name: receipt-vault-token
+          secret:
+            secretName: {{ .Values.existingSecrets.receipts.name }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.existingSecrets.receipts.vaultTokenFileKey }}
+                path: token
+                mode: 0440
+        {{- end }}

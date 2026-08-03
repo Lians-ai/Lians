@@ -1,57 +1,73 @@
 # Releasing Lians
 
-One command cuts a release across all five SDKs. Versions are kept in lock-step.
+One annotated `vX.Y.Z` tag releases the lock-step platform, five SDKs, API and
+backup images, MCP image, and signed OCI Helm chart. The private package under
+`sdk/python` is retained only for compatibility/conformance testing and is never
+uploaded. The desktop MCPB under `integrations/mcpb` is a downstream bundle, not
+a lock-step artifact: it advances only after the corresponding `lians-sdk` is
+resolvable from PyPI and has been verified independently.
+
+## Preflight
+
+1. Update every version listed in [docs/publishing.md](docs/publishing.md), release
+   notes, and supported installation examples.
+2. Prove the shared contract locally:
+
+   ```bash
+   python .github/scripts/check_release_versions.py X.Y.Z
+   ```
+
+3. Merge only after the complete CI, dependency review, CodeQL, schema/chart, SDK,
+   site, and image-candidate gates pass.
+4. Confirm protected `pypi` and `npm` environments have the exact OIDC trusted
+   publishers; confirm Maven Central secrets and the
+   `PUBLISH_MAVEN_CENTRAL=true` variable when Java publication is intended.
+5. Protect the release tag pattern and require an approved maintainer for
+   environment deployments.
+
+## Cut the release
 
 ```bash
-# 1. Bump versions (already 0.3.0 — see the files below) and update CHANGELOG.md
-# 2. Tag and push:
-git tag v0.3.0
-git push origin v0.3.0
+git tag -a vX.Y.Z -m "release: vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-Pushing a `vX.Y.Z` tag triggers:
+Every publishing workflow calls the same version-contract script. A mismatched
+platform, Python, private compatibility, TypeScript lock/package, Java, Go, C,
+MCP, Helm chart, or Helm application version stops that path before publication.
 
-| Workflow | Does |
-|----------|------|
-| `publish-lian.yml` | Builds + publishes **Python** `lians-sdk` to PyPI (OIDC trusted publishing) |
-| `publish-lian-npm.yml` | `npm publish` **TypeScript** `@lians-ai/lians` (needs `NPM_TOKEN`) |
-| `release.yml` → `java-jar` | Attaches the **Java** jar to the GitHub Release |
-| `release.yml` → `c-tarball` | Attaches `lians-c-<version>.tar.gz` (the **C** source) to the Release |
-| `release.yml` → `go-tag` | Mirrors the tag to `agentmem/sdk/go/vX.Y.Z` so `go get …@vX.Y.Z` resolves |
-| `release.yml` → `maven-central` | Publishes **Java** to Maven Central — only when opted in (below) |
+| Workflow | Result |
+|---|---|
+| `publish-lian.yml` | Hash-constrained Python wheel/sdist to PyPI through OIDC |
+| `publish-lian-npm.yml` | TypeScript package to npm through OIDC with provenance |
+| `release.yml` | Attested Java JAR, deterministic attested C archive, Go module tag, optional signed Maven Central release |
+| `supply-chain.yml` | Vulnerability-gated, SBOM/provenance-bearing, keyless-signed API image |
+| `backup-supply-chain.yml` | Equivalent hardened WORM backup image |
+| `publish-mcp-container.yml` | Contract-smoked, scanned, attested, signed MCP image |
+| `publish-helm-chart.yml` | Rendered, attested, keyless-signed, re-pulled OCI Helm chart |
 
-## Version locations (keep in sync)
+## Verify before announcing
 
-- Python: `agentmem/sdk/python/pyproject.toml` → `version`
-- TypeScript: `agentmem/sdk/typescript/package.json` → `version`
-- Java: `agentmem/sdk/java/pom.xml` → `<version>`
-- C: `agentmem/sdk/c/CMakeLists.txt` → `project(... VERSION ...)` **and** `src/lians.c` user-agent string
-- MCP: `server.json`; Claude plugin: `.claude-plugin/marketplace.json` + `integrations/lians-plugin/.claude-plugin/plugin.json`
-- Go: `agentmem/sdk/go/version.go` → `Version` const (the resolvable version is still the git tag)
+- Install `lians-sdk==X.Y.Z` into a clean environment outside the monorepo and
+  exercise both remote and `[local]` modes.
+- Resolve and test the npm, Go, Maven, Java, and C artifacts by immutable
+  version/digest; verify GitHub artifact attestations for Java/C.
+- Verify Cosign and GitHub provenance for the exact API, backup, and MCP image
+  digests and confirm the vulnerability decision and SBOM correspond to them.
+- Verify the Helm OCI digest and workflow identity, pull by digest, and render it
+  with the protected production values before promotion.
+- Confirm the Go module-path tag `agentmem/sdk/go/vX.Y.Z` points to the release
+  commit.
+- Publish `server.json` to the MCP registry using its authenticated publisher
+  and verify the registry returns exactly `X.Y.Z`; container publication does not
+  update that registry entry.
+- After PyPI propagation is verified, advance and relock the independently
+  versioned MCPB against the public SDK, pack it, verify it in a clean host, and
+  publish it through its separate channel. Never create an MCPB lock that points
+  at an SDK version the registry cannot yet resolve.
+- Record registry URLs, digests, attestation results, workflow run IDs, release
+  commit, approver, and UTC time in the release evidence package.
 
-## Required secrets / setup (one-time)
-
-| Registry | Setup |
-|----------|-------|
-| **PyPI** | Configure a *Trusted Publisher* for `lians-sdk` pointing at `publish-lian.yml` (no token needed). |
-| **npm** | Create the `@lians-ai` org (or your chosen scope), add repo secret `NPM_TOKEN` with publish rights. |
-| **Maven Central** | Create a [Central Portal](https://central.sonatype.com) account for `ai.lians` (verified via a TXT record on lians.ai); add secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`, `MAVEN_GPG_KEY` (ASCII-armored private key), `MAVEN_GPG_PASSPHRASE`; set repo **variable** `PUBLISH_MAVEN_CENTRAL=true`. Until then, the jar is attached to the GitHub Release. |
-| **Go / pkg.go.dev** | Nothing — `go-tag` creates the resolvable tag automatically. |
-
-## After a release
-
-- **Publish to the MCP registry — manual, easy to forget** (0.3.3 and the
-  first day of 0.3.4 were missing because this step lives outside the
-  tag-triggered pipeline):
-
-  ```bash
-  # from the repo root (reads server.json, which the version bump updated)
-  mcp-publisher login github     # interactive device flow; token expires
-  mcp-publisher publish
-  # verify:
-  curl -s "https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest"
-  ```
-
-- Verify: `pip install lians-sdk==X.Y.Z`, `npm view @lians-ai/lians`, `go get github.com/Lians-ai/Lians/agentmem/sdk/go@vX.Y.Z`, and the Maven Central listing.
-- **Verify the wheel outside the monorepo**: `pip install "lians-sdk[local]==X.Y.Z"` in a clean venv and run a `LocalLiansClient` round-trip — the local mode imports the vendored engine, which only a from-scratch install exercises (the 0.3.2 wheel shipped broken because all testing ran inside the repo).
-- Update the npm scope decision if `@lians-ai` is not your final choice. It is referenced in `package.json`, `README.md`, `docs/`, and `integrations/lians-plugin/README.md`.
+Do not rerun a failed publisher against an already-published immutable version.
+Diagnose registry state first; use the explicit npm/MCP manual version input only
+when the requested version is still unpublished and the release contract passes.

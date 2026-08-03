@@ -1,8 +1,9 @@
 ﻿"""
-AgentMem Python SDK — webhook signature verification.
+Lians Python SDK — webhook signature verification.
 
-Every AgentMem webhook delivery is HMAC-SHA256-signed.
-The signature is in the ``X-AgentMem-Signature`` header as ``sha256=<hex>``.
+Every Lians webhook delivery is HMAC-SHA256-signed. The signature is in the
+``X-Lians-Signature`` header as ``sha256=<hex>``; deployments also emit the
+legacy ``X-AgentMem-Signature`` compatibility header.
 
 Usage::
 
@@ -11,7 +12,7 @@ Usage::
     @app.post("/webhook")
     async def handle(request: Request):
         body = await request.body()
-        header = request.headers.get("X-AgentMem-Signature", "")
+        header = request.headers.get("X-Lians-Signature", "")
         if not verify_webhook_signature(body, header, WEBHOOK_SECRET):
             raise HTTPException(status_code=401)
         payload = parse_webhook_payload(body, header, WEBHOOK_SECRET)
@@ -27,12 +28,13 @@ from typing import Any
 
 def verify_webhook_signature(body: bytes, signature_header: str, secret: str) -> bool:
     """
-    Verify the HMAC-SHA256 signature on an AgentMem webhook delivery.
+    Verify the HMAC-SHA256 signature on a Lians webhook delivery.
 
     Args:
         body:              Raw request body bytes.
-        signature_header:  Value of the ``X-AgentMem-Signature`` header,
-                           e.g. ``sha256=abc123...``
+        signature_header: Value of ``X-Lians-Signature`` (or the legacy
+            ``X-AgentMem-Signature`` compatibility header), for example
+            ``sha256=abc123...``
         secret:            The webhook secret returned at endpoint registration.
 
     Returns:

@@ -2,9 +2,10 @@
 # Restricts what can reach the API pods and where the pods can connect to.
 #
 # Ingress: only traffic from the ingress-nginx controller namespace is allowed.
-# Egress:  only Postgres (5432), Redis (6379), and external HTTPS (443) are
-# allowed.  The HTTPS egress covers Voyage AI, Anthropic, Stripe, and
-# any KMS endpoint.  DNS (53/UDP+TCP) is always permitted.
+# Egress: only the selected DNS pods and explicitly inventoried fixed-address
+# database, cache, observability, and HTTPS egress boundaries are allowed.
+# The documentation CIDRs deliberately route nowhere in production; replace
+# every one in an environment overlay after verifying the destination owner.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -29,35 +30,109 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+              app.kubernetes.io/component: controller
       ports:
         - port: 8000
           protocol: TCP
 
+    # The in-cluster Recorder gateway exports authenticated OTLP batches.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: lians-otel-collector
+              app.kubernetes.io/component: recorder-gateway
+      ports:
+        - port: 8000
+          protocol: TCP
+
+    # Prometheus scrapes the bearer-protected /metrics endpoint. NetworkPolicy
+    # cannot restrict by HTTP path, so the application token remains mandatory.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 8000
+          protocol: TCP
+
+    # The standalone Gate mediator is the only provider-side enforcement
+    # identity. It may redeem permits, but it is never exposed through the API
+    # Ingress. Port 8443 is an authenticated TLS sidecar/service-mesh boundary;
+    # clear-text application port 8000 is intentionally not admitted here.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: lians-gate-mediator
+              app.kubernetes.io/component: gate-mediator
+      ports:
+        - port: 8443
+          protocol: TCP
+
   egress:
-    # DNS — required for service discovery
-    - ports:
+    # DNS -- require both the namespace and kube-dns workload identity.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
         - port: 53
           protocol: UDP
         - port: 53
           protocol: TCP
 
-    # Postgres
-    - ports:
+    # Runtime Postgres private endpoint. TEST-NET-1 is fail-closed until an
+    # overlay supplies the reviewed /32 or private endpoint CIDR.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.10/32
+      ports:
         - port: 5432
           protocol: TCP
 
-    # Redis
-    - ports:
+    # Authenticated TLS Redis private endpoint.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.11/32
+      ports:
         - port: 6379
           protocol: TCP
 
-    # External HTTPS — Voyage AI, Anthropic, Stripe, AWS KMS, Azure KV, Vault
-    - ports:
+    # Authenticated outbound proxy/private endpoints for provider HTTPS. Do
+    # not replace this with 0.0.0.0/0; use a fixed egress gateway where vendor
+    # addresses are not stable.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.12/32
+      ports:
         - port: 443
           protocol: TCP
 
-    # HashiCorp Vault (in-cluster) — only needed when KMS_PROVIDER=vault
-    - ports:
+    # TLS observability collector, separate from the Recorder gateway.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.13/32
+      ports:
+        - port: 4317
+          protocol: TCP
+
+    # HashiCorp Vault workload identity -- keep only for KMS_PROVIDER=vault.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
         - port: 8200
           protocol: TCP
 ---
@@ -77,11 +152,22 @@ spec:
   policyTypes:
     - Egress
   egress:
-    - ports:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
         - port: 53
           protocol: UDP
         - port: 53
           protocol: TCP
-    - ports:
+    - to:
+        - ipBlock:
+            # Must match the reviewed migration Postgres endpoint overlay.
+            cidr: 192.0.2.10/32
+      ports:
         - port: 5432
           protocol: TCP

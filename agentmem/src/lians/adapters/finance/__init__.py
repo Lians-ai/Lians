@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 _KEY_ALIASES: dict[str, list[str]] = {
     "ticker": ["ticker", "entity", "isin", "cusip"],
     "metric": ["metric", "field"],
+    "period": ["period", "quarter"],
+    "quarter": ["period", "quarter"],
 }
 
 

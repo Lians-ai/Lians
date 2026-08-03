@@ -24,13 +24,14 @@ import numpy as np
 
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
+sys.path.insert(0, str(_REPO / "src"))
 
 from benchmarks.longmemeval_lians import (  # noqa: E402
     _DATASET, _CACHE, _parse_session_date, _bm25_scores,
     W_SEM, W_LEX, SMOOTH, T_BONUS,
 )
 from benchmarks.locomo_replay import _bm25_tokens  # noqa: E402
-from src.lians.ranking import query_time_windows  # noqa: E402
+from lians.ranking import query_time_windows  # noqa: E402
 
 
 class Q:

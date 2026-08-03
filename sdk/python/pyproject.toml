@@ -1,11 +1,12 @@
-﻿[build-system]
-requires = ["hatchling"]
+[build-system]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "lians"
-version = "0.2.0"
-description = "Financial-grade AI memory — bitemporal facts, SEC 17a-4 audit chain, GDPR crypto-shred"
+version = "0.5.0"
+description = "Source-only Lians compatibility and API-conformance client (not published)"
+readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 keywords = [
@@ -13,6 +14,7 @@ keywords = [
     "bitemporal", "audit", "SEC", "FINRA", "GDPR"
 ]
 classifiers = [
+    "Private :: Do Not Upload",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "Intended Audience :: Developers",

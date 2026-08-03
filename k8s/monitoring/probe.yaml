@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: lians-api
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: lians-monitoring
+spec:
+  jobName: lians-api
+  interval: 30s
+  scrapeTimeout: 10s
+  module: http_2xx
+  prober:
+    url: prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - https://CHANGE_ME_LIANS_API_HOST/readyz

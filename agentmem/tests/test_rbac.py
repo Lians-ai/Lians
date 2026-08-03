@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
 
 NS = "rbac-ns"
 AGENT = "rbac-agent"

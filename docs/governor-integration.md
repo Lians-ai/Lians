@@ -109,13 +109,16 @@ engine rather than duplicating them:
 |---|---|---|
 | `similarity()` (Jaccard) | embeddings + ranking/MMR | Route matching through Lians on the Lians backend |
 | `decide()` ADD/CONFIRM/SUPERSEDE | `supersession` relations `CONFIRMS`/`SUPERSEDES`/`CONTRADICTS_SAME_TIME` | Align action vocabulary so proposals ↔ relations are interoperable |
-| `REFINE` (narrowing) | *(gap — Lians has no explicit narrowing relation)* | Harvest into Lians supersession as a first-class relation |
-| `IGNORE` (too vague) | *(pre-admission filter Lians may lack)* | Add vagueness pre-filter as an admission reason |
+| `REFINE` (narrowing) | First-class `REFINES` supersession relation | Map the Governor action to the native relation |
+| `IGNORE` (too vague) | Native admission `vague` risk tag and enforce-mode rejection | Reuse the same durable-memory admission rule |
 | SHA-256 chain | `audit_chain` + `merkle_audit` | Governor emits proposal events into the Lians audit chain |
 | Quarantine policy | `admission.py` enforce mode | Governor quarantine defers to Lians admission on the Lians backend |
 
-Net new to Lians from this work: the **REFINE relation**, the **vagueness
-pre-filter**, and — the real prize — the **Memory-PR review surface**.
+The first two reconciliation items are now delivered in Lians: `REFINES`
+closes the prior fact's validity window while preserving a reviewable relation,
+and the admission layer tags and rejects overly vague durable-memory candidates
+in enforce mode. The remaining integration prize is the shared **Memory-PR
+review surface**.
 
 ## Plan of record
 
@@ -131,8 +134,9 @@ engine. Stand up the Governor's existing HTTP/MCP surface against real Lians
 data as a demo. This is the artifact to react to together.
 
 **Phase 3 — vocabulary + matching alignment.** Map proposal actions to Lians
-supersession relations; add `REFINE`; on the Lians backend route `similarity()`
-through embeddings + adjudication instead of Jaccard.
+supersession relations, including Governor `REFINE` to Lians `REFINES`; on the
+Lians backend route `similarity()` through embeddings + adjudication instead
+of Jaccard.
 
 **Phase 4 — the Memory-PR review console.** The differentiated product surface,
 and the compliance-native selling point. Neither codebase has a UI today.

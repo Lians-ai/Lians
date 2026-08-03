@@ -21,15 +21,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..api.deps import AuthContext, get_auth
+from ..audit_chain import AuditCapacityExceeded, verify_chain
+from ..config import get_settings
 from ..db import get_db
-from ..api.deps import get_auth, AuthContext
-from ..models import Memory, EventLog, ConflictFlag, NamespacePolicy
-from ..audit_chain import verify_chain
+from ..models import ConflictFlag, EventLog, Memory, NamespacePolicy
+from ..subject_erasure_models import SubjectErasureJob
 
 router = APIRouter(prefix="/v1", tags=["compliance"])
 
@@ -56,7 +58,10 @@ class AuditChainStatus(BaseModel):
 class ErasureSummary(BaseModel):
     total_requests: int
     total_records_erased: int
-    subject_ids: list[str]       # anonymized subject IDs that had erasures
+    subject_ids: list[str]       # tenant-scoped pseudonymous subject references
+    subject_ids_total: int
+    subject_ids_complete: bool
+    subject_ids_limit: int
 
 
 class ConflictSummary(BaseModel):
@@ -109,10 +114,24 @@ async def worm_posture(
     configures (``WORM_MODE`` true ⇒ object-locked storage + a DB role with no
     UPDATE/DELETE on the audit tables — see docs/worm-storage.md).
     """
-    from ..config import get_settings
     auth.require("read")
     auth.require_unbarriered()
-    chain = await verify_chain(db, auth.namespace)
+    try:
+        chain = await verify_chain(
+            db,
+            auth.namespace,
+            max_response_bytes=get_settings().audit_export_page_bytes_limit,
+        )
+    except AuditCapacityExceeded as exc:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": exc.code,
+                "message": exc.public_message,
+                "estimated_bytes": exc.estimated_bytes,
+                "byte_limit": exc.byte_limit,
+            },
+        ) from exc
     worm_mode = get_settings().worm_mode
     return {
         "namespace": auth.namespace,
@@ -141,6 +160,12 @@ async def compliance_report(
     from_: Optional[str] = Query(None, alias="from", description="ISO-8601 window start (UTC)"),
     to: Optional[str] = Query(None, description="ISO-8601 window end (UTC)"),
     verify: bool = Query(False, description="Run audit chain verification (adds latency)"),
+    subject_id_limit: int = Query(
+        1_000,
+        ge=1,
+        le=5_000,
+        description="Maximum distinct pseudonymous erasure subjects returned",
+    ),
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -192,7 +217,22 @@ async def compliance_report(
     # ── Audit chain ────────────────────────────────────────────────────────────
 
     if verify:
-        chain_result = await verify_chain(db, ns)
+        try:
+            chain_result = await verify_chain(
+                db,
+                ns,
+                max_response_bytes=get_settings().audit_export_page_bytes_limit,
+            )
+        except AuditCapacityExceeded as exc:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "code": exc.code,
+                    "message": exc.public_message,
+                    "estimated_bytes": exc.estimated_bytes,
+                    "byte_limit": exc.byte_limit,
+                },
+            ) from exc
         chain_status = AuditChainStatus(
             status=chain_result.get("status", "unchecked"),
             rows_checked=chain_result.get("rows_checked", 0),
@@ -207,19 +247,32 @@ async def compliance_report(
 
     # ── Erasures ───────────────────────────────────────────────────────────────
 
-    erase_filter = [EventLog.namespace == ns, EventLog.op == "erase"]
+    erase_filter = [SubjectErasureJob.namespace == ns]
     if win_from:
-        erase_filter.append(EventLog.created_at >= win_from)
+        erase_filter.append(SubjectErasureJob.created_at >= win_from)
     if win_to:
-        erase_filter.append(EventLog.created_at <= win_to)
+        erase_filter.append(SubjectErasureJob.created_at <= win_to)
 
-    erase_rows = (await db.execute(select(EventLog).where(*erase_filter))).scalars().all()
-    subject_ids_seen: set[str] = set()
-    for row in erase_rows:
-        payload = dict(row.payload or {})
-        sid = payload.get("subject_id")
-        if sid:
-            subject_ids_seen.add(str(sid))
+    total_erase_requests = (
+        await db.execute(select(func.count()).where(*erase_filter))
+    ).scalar_one()
+    subject_ref = SubjectErasureJob.subject_ref
+    subject_filter = [*erase_filter, subject_ref.is_not(None), subject_ref != ""]
+    subject_ids_total = (
+        await db.execute(
+            select(func.count(func.distinct(subject_ref))).where(*subject_filter)
+        )
+    ).scalar_one()
+    subject_rows = (
+        await db.execute(
+            select(subject_ref.label("subject_id"))
+            .where(*subject_filter)
+            .distinct()
+            .order_by(subject_ref)
+            .limit(subject_id_limit)
+        )
+    ).scalars().all()
+    subject_ids_seen = [str(subject_id) for subject_id in subject_rows]
 
     total_erased_records = (await db.execute(
         select(func.count()).where(Memory.namespace == ns, Memory.erased_at.isnot(None))
@@ -255,8 +308,15 @@ async def compliance_report(
     if win_to:
         sup_event_filt.append(EventLog.created_at <= win_to)
 
-    sup_events = (await db.execute(select(EventLog).where(*sup_event_filt))).scalars().all()
-    total_sup_events = len(sup_events)
+    total_sup_events = (
+        await db.execute(select(func.count()).where(*sup_event_filt))
+    ).scalar_one()
+    confidence = func.coalesce(EventLog.payload["confidence"].as_float(), 0.0)
+    high_conf = (
+        await db.execute(
+            select(func.count()).where(*sup_event_filt, confidence >= 0.9)
+        )
+    ).scalar_one()
 
     # Count confirm/reject from review ops
     confirm_filt = [EventLog.namespace == ns, EventLog.op == "supersession_confirmed"]
@@ -271,7 +331,6 @@ async def compliance_report(
     confirmed = (await db.execute(select(func.count()).where(*confirm_filt))).scalar_one()
     rejected  = (await db.execute(select(func.count()).where(*reject_filt))).scalar_one()
 
-    high_conf = sum(1 for e in sup_events if (dict(e.payload or {}).get("confidence") or 0.0) >= 0.9)
     low_conf  = total_sup_events - high_conf
 
     # ── Retention policy ───────────────────────────────────────────────────────
@@ -301,9 +360,12 @@ async def compliance_report(
         ),
         audit_chain=chain_status,
         erasures=ErasureSummary(
-            total_requests=len(erase_rows),
+            total_requests=total_erase_requests,
             total_records_erased=total_erased_records,
-            subject_ids=sorted(subject_ids_seen),
+            subject_ids=subject_ids_seen,
+            subject_ids_total=subject_ids_total,
+            subject_ids_complete=subject_ids_total <= subject_id_limit,
+            subject_ids_limit=subject_id_limit,
         ),
         conflicts=ConflictSummary(
             open=open_cnt,

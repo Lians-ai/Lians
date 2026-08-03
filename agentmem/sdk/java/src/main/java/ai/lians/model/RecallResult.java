@@ -10,6 +10,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class RecallResult {
 
+    /** Memories selected for the recall, ordered by relevance. */
     @JsonProperty("memories")
     public List<MemoryOut> memories = Collections.emptyList();
 
@@ -17,6 +18,7 @@ public final class RecallResult {
     @JsonProperty("as_of")
     public String asOf;
 
+    /** Total number of candidate memories considered before result limiting. */
     @JsonProperty("total_candidates")
     public int totalCandidates;
 }

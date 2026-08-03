@@ -13,21 +13,67 @@ import com.fasterxml.jackson.databind.JsonNode;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class MemoryOut {
 
-    @JsonProperty("id")              public String id;
-    @JsonProperty("namespace")       public String namespace;
-    @JsonProperty("agent_id")        public String agentId;
-    @JsonProperty("content")         public String content;          // null if erased
-    @JsonProperty("subject_id")      public String subjectId;
-    @JsonProperty("event_time")      public String eventTime;        // ISO-8601
-    @JsonProperty("valid_from")      public String validFrom;
-    @JsonProperty("valid_to")        public String validTo;          // null = currently valid
-    @JsonProperty("superseded_by")   public String supersededBy;
-    @JsonProperty("importance")      public double importance;
-    @JsonProperty("source")          public String source;
-    @JsonProperty("content_hash")    public String contentHash;
-    @JsonProperty("erased_at")       public String erasedAt;
-    @JsonProperty("metadata")        public JsonNode metadata;
+    /** Stable memory identifier. */
+    @JsonProperty("id")
+    public String id;
 
+    /** Namespace that owns the memory. */
+    @JsonProperty("namespace")
+    public String namespace;
+
+    /** Agent identifier associated with the memory. */
+    @JsonProperty("agent_id")
+    public String agentId;
+
+    /** Plaintext memory content, or {@code null} after erasure. */
+    @JsonProperty("content")
+    public String content;
+
+    /** Optional data-subject identifier used for governed erasure. */
+    @JsonProperty("subject_id")
+    public String subjectId;
+
+    /** Business event time in ISO-8601 format. */
+    @JsonProperty("event_time")
+    public String eventTime;
+
+    /** Start of the memory's system-time validity interval. */
+    @JsonProperty("valid_from")
+    public String validFrom;
+
+    /** End of the validity interval, or {@code null} while currently valid. */
+    @JsonProperty("valid_to")
+    public String validTo;
+
+    /** Identifier of the memory that superseded this one, when present. */
+    @JsonProperty("superseded_by")
+    public String supersededBy;
+
+    /** Caller-supplied importance score. */
+    @JsonProperty("importance")
+    public double importance;
+
+    /** Optional provenance label for the memory. */
+    @JsonProperty("source")
+    public String source;
+
+    /** Tamper-evidence hash of the stored content. */
+    @JsonProperty("content_hash")
+    public String contentHash;
+
+    /** Erasure timestamp, or {@code null} when the content remains available. */
+    @JsonProperty("erased_at")
+    public String erasedAt;
+
+    /** Structured metadata associated with the memory. */
+    @JsonProperty("metadata")
+    public JsonNode metadata;
+
+    /**
+     * Returns a concise diagnostic representation of this memory.
+     *
+     * @return a string containing the identifier, event time, and content state
+     */
     @Override
     public String toString() {
         return "MemoryOut{id=" + id + ", eventTime=" + eventTime

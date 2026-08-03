@@ -5,16 +5,15 @@ the caller's IdP group) scopes both writes (tagging) and reads (isolation).
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from types import SimpleNamespace
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-
-from httpx import AsyncClient, ASGITransport
-
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from httpx import ASGITransport, AsyncClient
+from lians.db import get_db
+from lians.main import app
+from lians.models import ApiKey
 
 NS = "sso-ns"
 AGENT = "sso-agent"
@@ -31,6 +30,10 @@ async def client(db):
     db.add(ApiKey(hashed_key=_sha("kA"), namespace=NS, scopes=["read", "write"], barrier_group="deskA"))
     db.add(ApiKey(hashed_key=_sha("kB"), namespace=NS, scopes=["read", "write"], barrier_group="deskB"))
     db.add(ApiKey(hashed_key=_sha("kC"), namespace=NS, scopes=["read", "write", "admin"]))  # unbarriered
+    db.add(ApiKey(hashed_key=_sha("kA-admin"), namespace=NS,
+                  scopes=["read", "write", "admin"], barrier_group="deskA"))
+    db.add(ApiKey(hashed_key=_sha("kB-admin"), namespace=NS,
+                  scopes=["read", "write", "admin"], barrier_group="deskB"))
     await db.commit()
 
     async def _override():
@@ -198,10 +201,14 @@ async def test_graph_cannot_cross_barrier(client):
 
 
 @pytest.mark.asyncio
-async def test_webhook_configuration_cannot_cross_barrier(client):
+async def test_webhook_configuration_cannot_cross_barrier(client, monkeypatch):
+    from lians.config import get_settings
+
+    monkeypatch.setenv("LEGACY_WEBHOOKS_ENABLED", "true")
+    get_settings.cache_clear()
     created = await client.post(
         "/v1/webhooks",
-        headers=_h("kB"),
+        headers=_h("kB-admin"),
         json={
             "url": "https://hooks.example.com/lians",
             "events": ["memory.conflict"],
@@ -210,7 +217,7 @@ async def test_webhook_configuration_cannot_cross_barrier(client):
     )
     assert created.status_code == 201, created.text
 
-    listed = await client.get("/v1/webhooks", headers=_h("kA"))
+    listed = await client.get("/v1/webhooks", headers=_h("kA-admin"))
     assert listed.status_code == 200, listed.text
     assert listed.json() == []
 
@@ -220,7 +227,7 @@ async def test_unbarriered_reviewer_preserves_held_items_barrier(
     client, monkeypatch
 ):
     monkeypatch.setattr(
-        "src.lians.api.routes_memory.get_settings",
+        "lians.api.routes_memory.get_settings",
         lambda: SimpleNamespace(
             admission_mode="enforce",
             admission_blocked_sources="",

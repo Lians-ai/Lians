@@ -22,14 +22,14 @@ and **access** (who can read what, and is it provably controlled?).
 | Dimension | mem0 | Lians |
 |---|---|---|
 | Stale-fact handling | ADD-only accumulation (v3) — versions coexist | Bitemporal supersession — stale versions excluded at the DB layer |
-| "What did we know on date X?" | No temporal reconstruction | `recall_at` / `snapshot` — exhaustive point-in-time state |
+| "What did we know on date X?" | No temporal reconstruction in the pinned adapter | `recall_at` / paged `snapshot` with exact total and completeness |
 | Tamper-evidence | Not documented | SHA-256 hash chain (SEC 17a-4), `verify_chain()` |
 | Right-to-erasure | Delete API; no audit-preserving proof | Per-subject AES-256-GCM crypto-shred; audit trail survives; erasure certificate |
 | Access control | `user_id` filtering | Scoped keys + **RBAC roles** + PostgreSQL RLS barriers (DB-layer, CI-proven against a non-superuser role) |
-| Lookahead-bias proof | None | `backtest_check` contamination report |
+| Recorded-data lookahead check | None in the pinned adapter | `backtest_check` contamination report with capture boundary |
 | Reranking | Hybrid search + reranker | Hybrid (BM25 + cosine + recency) + opt-in **MMR diversity** rerank |
 | Context assembly | Returns a memory list | `/v1/context` — token-budgeted, ready-to-inject block (point-in-time + MMR aware) |
-| Production hardening | Managed platform | **Idempotency keys** (exactly-once writes), SDK retry/backoff, `/livez`+`/readyz`, per-key rate limiting, **SIEM audit streaming** |
+| Production hardening | Managed platform | Transactional idempotency, SDK retry/backoff, `/livez`+`/readyz`, principal rate limiting, and a durable SIEM integration outbox |
 | Evaluation | Published LoCoMo/LongMemEval scores | Bundled judge-free harness (`answer_recall@k`) + the supersession invariant |
 | Regulatory export | None documented | `compliance_report`, audit export (SEC/FINRA/CFTC) |
 | Domain modeling | Generic | Finance / healthcare / legal adapters (entity normalization) |
@@ -80,9 +80,11 @@ agent know on 2025-03-14, ignoring everything learned since?" Lians answers it t
 ways:
 
 - `recall_at(query, as_of=T)` — ranked, point-in-time relevant recall
-- `snapshot(agent_id, as_of=T)` — **exhaustive**: every fact valid at T, no
-  relevance filter, ordered by event time. This is what an examiner actually asks
-  for — the complete state, not the top 5.
+- `snapshot(agent_id, as_of=T)` — **paged and explicit**: every successful page
+  reports an exact total and continuation state; follow the cursor for every
+  fact valid at T, with no relevance filter, ordered by event time. After all
+  pages are collected, the caller has the complete recorded state rather than
+  only the top 5.
 
 ### 1.3 Conflicts as first-class objects
 

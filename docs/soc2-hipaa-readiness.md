@@ -17,7 +17,7 @@ auditor's control narrative is mostly "configure + evidence," not "build."
 | CC6.6 Encryption in transit | TLS (deployment) |
 | CC6.7 Encryption at rest | Per-subject AES-256-GCM; KMS-wrapped DEKs |
 | CC7.1 Detection / monitoring | Prometheus metrics, Grafana, OTEL traces, JSON access logs |
-| CC7.2 Security event logging | SHA-256 audit chain + real-time SIEM streaming |
+| CC7.2 Security event logging | SHA-256 audit chain + durable SIEM integration outbox |
 | CC7.2 Integrity monitoring | `verify_chain` tamper detection; optional Merkle anchoring |
 | CC8.1 Change management | Alembic migrations; CI on every change (5 languages + Postgres) |
 | A1.2 Availability | `/livez`+`/readyz` probes; health checks; rate limiting; idempotency |
@@ -30,7 +30,7 @@ auditor's control narrative is mostly "configure + evidence," not "build."
 |-----------|---------------|
 | §164.312(a)(1) Access control | RLS isolation + barrier groups (care-team walls); RBAC |
 | §164.312(a)(2)(iv) Encryption | Per-subject AES-256-GCM |
-| §164.312(b) Audit controls | Tamper-evident hash chain + SIEM stream + export |
+| §164.312(b) Audit controls | Tamper-evident hash chain + durable SIEM delivery + export |
 | §164.312(c)(1) Integrity | Content hashes; chain detects alteration |
 | §164.312(d) Authentication | API keys / SSO; admin secret for privileged ops |
 | §164.312(e)(1) Transmission security | TLS; air-gap mode prevents external egress |
@@ -44,7 +44,7 @@ processing real PHI. See [hipaa.md](hipaa.md) for the full safeguard mapping.
 - [ ] `MASTER_ENCRYPTION_KEY` set; DEKs wrapped by a real KMS (`aws`/`azure`/`vault`)
 - [ ] `ADMIN_SECRET` set to a strong value; rotate on schedule
 - [ ] TLS terminated in front of the API; HSTS
-- [ ] `SIEM_URL` configured to your collector; alerting on `verify_chain` failures
+- [ ] A namespace-scoped durable `siem` integration destination is configured; the legacy `SIEM_URL` compatibility path remains disabled
 - [ ] Backups encrypted + point-in-time recovery enabled; restore tested
 - [ ] Retention policy set per namespace; erasure runbook documented
 - [ ] `AIRGAP_MODE=true` if data must not leave the perimeter

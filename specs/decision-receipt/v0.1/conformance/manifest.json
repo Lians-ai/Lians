@@ -1,0 +1,138 @@
+{
+  "$schema": "https://lians.ai/specs/decision-receipt/v0.1/conformance/manifest.schema.json",
+  "suite": "lians-decision-receipt-v0.1",
+  "manifest_version": "1",
+  "receipt_schema": "schema.json",
+  "receipt_schema_sha256": "55941ea8e2bba1db9a9e5420f613a015284b54a4539f9c9e7b468db01fd61d49",
+  "canonicalization": {
+    "id": "json-sort-keys-utf8-v1",
+    "protected_top_level_members": "all members except integrity",
+    "encoding": "utf-8",
+    "member_name_order": "unicode-code-point-ascending-recursive",
+    "whitespace": "none outside JSON strings",
+    "non_ascii": "preserve decoded characters; do not ASCII-escape",
+    "non_finite_numbers": "reject",
+    "signature_message": "raw-32-byte-sha256-digest",
+    "probe": {
+      "input": {
+        "z": "café",
+        "a": {
+          "Ω": "東京",
+          "line": "one\ntwo",
+          "list": [true, null, 0],
+          "quote": "\"",
+          "slash": "\\"
+        }
+      },
+      "expected_utf8_hex": "7b2261223a7b226c696e65223a226f6e655c6e74776f222c226c697374223a5b747275652c6e756c6c2c305d2c2271756f7465223a225c22222c22736c617368223a225c5c222c22cea9223a22e69db1e4baac227d2c227a223a22636166c3a9227d",
+      "expected_utf8_length": 98,
+      "expected_sha256": "9c0a2cd6b5e28889a8949cc0f5347a0b4527d91d9e5be09468b77a661c63d959"
+    }
+  },
+  "trust_material": {
+    "signed-fixture-public-key": {
+      "path": "conformance/trust/test-only-ed25519-public-key.base64",
+      "key_id": "TEST-ONLY-rfc8032-vector-1",
+      "encoding": "raw-ed25519-public-key-base64",
+      "raw_key_sha256": "21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9",
+      "purpose": "trusted-fixture-key"
+    },
+    "wrong-public-key": {
+      "path": "conformance/trust/wrong-test-only-ed25519-public-key.base64",
+      "key_id": "TEST-ONLY-rfc8032-vector-2-wrong",
+      "encoding": "raw-ed25519-public-key-base64",
+      "raw_key_sha256": "39f713d0a644253f04529421b9f51b9b08979d08295959c4f3990ee617f5139f",
+      "purpose": "intentional-wrong-key"
+    }
+  },
+  "cases": [
+    {
+      "id": "valid-unsigned",
+      "description": "A schema-valid receipt whose protected payload hash matches; no issuer authentication is claimed.",
+      "receipt_path": "conformance/fixtures/valid-unsigned.json",
+      "receipt_file_sha256": "85a50c597f59d18ec35cc7550f72f5178fd75a3e90387e9ec601f68276992783",
+      "mutation_path": null,
+      "mutation_file_sha256": null,
+      "trusted_key": null,
+      "require_signature": false,
+      "expected": {
+        "valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "hash_valid": true,
+        "signature_present": false,
+        "signature_valid": false,
+        "trusted_key": null,
+        "declared_receipt_hash": "76ccf9521267076303303023bbd4af10ad091fb358b3155a2379ae3f9b18369e",
+        "computed_protected_sha256": "76ccf9521267076303303023bbd4af10ad091fb358b3155a2379ae3f9b18369e",
+        "canonical_protected_utf8_length": 3704
+      }
+    },
+    {
+      "id": "valid-signed-trusted",
+      "description": "A schema-valid Ed25519 receipt signed by and pinned to the public test trust anchor.",
+      "receipt_path": "conformance/fixtures/valid-signed.json",
+      "receipt_file_sha256": "e1bb98e59fcd976e988956ad950e2781dfab7f50e158a7debc323feaf135df13",
+      "mutation_path": null,
+      "mutation_file_sha256": null,
+      "trusted_key": "signed-fixture-public-key",
+      "require_signature": true,
+      "expected": {
+        "valid": true,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "hash_valid": true,
+        "signature_present": true,
+        "signature_valid": true,
+        "trusted_key": true,
+        "declared_receipt_hash": "4403480cd0931b251c444bc567976e019d2b040a0a91a16d2e2826147aca949f",
+        "computed_protected_sha256": "4403480cd0931b251c444bc567976e019d2b040a0a91a16d2e2826147aca949f",
+        "canonical_protected_utf8_length": 3745
+      }
+    },
+    {
+      "id": "invalid-protected-payload-tamper",
+      "description": "A protected outcome is replaced while the original digest and signature remain attached.",
+      "receipt_path": "conformance/fixtures/valid-signed.json",
+      "receipt_file_sha256": "e1bb98e59fcd976e988956ad950e2781dfab7f50e158a7debc323feaf135df13",
+      "mutation_path": "conformance/mutations/protected-payload-tamper.json",
+      "mutation_file_sha256": "9ad4c1e1557b5ad93b5897fce5b6a26738170b6187cbfc82cd3f28f348c6db27",
+      "trusted_key": "signed-fixture-public-key",
+      "require_signature": true,
+      "expected": {
+        "valid": false,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "hash_valid": false,
+        "signature_present": true,
+        "signature_valid": false,
+        "trusted_key": true,
+        "declared_receipt_hash": "4403480cd0931b251c444bc567976e019d2b040a0a91a16d2e2826147aca949f",
+        "computed_protected_sha256": "7d6cfc126064e4a90c7575091485603277b599b656eec805ee3b375bb4db6588",
+        "canonical_protected_utf8_length": 3755
+      }
+    },
+    {
+      "id": "invalid-wrong-trust-anchor",
+      "description": "The signed receipt is internally valid but does not use the independently pinned public key.",
+      "receipt_path": "conformance/fixtures/valid-signed.json",
+      "receipt_file_sha256": "e1bb98e59fcd976e988956ad950e2781dfab7f50e158a7debc323feaf135df13",
+      "mutation_path": null,
+      "mutation_file_sha256": null,
+      "trusted_key": "wrong-public-key",
+      "require_signature": true,
+      "expected": {
+        "valid": false,
+        "schema_valid": true,
+        "semantic_valid": true,
+        "hash_valid": true,
+        "signature_present": true,
+        "signature_valid": true,
+        "trusted_key": false,
+        "declared_receipt_hash": "4403480cd0931b251c444bc567976e019d2b040a0a91a16d2e2826147aca949f",
+        "computed_protected_sha256": "4403480cd0931b251c444bc567976e019d2b040a0a91a16d2e2826147aca949f",
+        "canonical_protected_utf8_length": 3745
+      }
+    }
+  ]
+}

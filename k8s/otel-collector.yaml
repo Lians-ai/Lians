@@ -1,0 +1,332 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lians-otel-collector
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: lians-otel-collector
+    app.kubernetes.io/component: recorder-gateway
+data:
+  collector.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      file_storage:
+        directory: /var/lib/otelcol/storage
+        create_directory: true
+
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 384
+        spike_limit_mib: 96
+      batch:
+        timeout: 1s
+        send_batch_size: 512
+        send_batch_max_size: 1024
+
+    exporters:
+      otlphttp/lians:
+        endpoint: http://agentmem.agentmem.svc.cluster.local
+        headers:
+          X-API-Key: ${env:LIANS_INGEST_API_KEY}
+        compression: gzip
+        timeout: 15s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          # The disk-backed queue is the outage boundary; keep retrying until
+          # an operator restores the API instead of silently aging data out.
+          max_elapsed_time: 0s
+        sending_queue:
+          enabled: true
+          num_consumers: 8
+          queue_size: 10000
+          storage: file_storage
+
+    service:
+      extensions: [health_check, file_storage]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/lians]
+      telemetry:
+        metrics:
+          level: detailed
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+                    without_type_suffix: true
+                    without_units: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lians-otel-collector-headless
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: lians-otel-collector
+    app.kubernetes.io/component: recorder-gateway
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: lians-otel-collector
+    app.kubernetes.io/component: recorder-gateway
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lians-otel-collector
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: lians-otel-collector
+    app.kubernetes.io/component: recorder-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: lians-otel-collector
+    app.kubernetes.io/component: recorder-gateway
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: lians-otel-collector
+  namespace: agentmem
+  labels:
+    app.kubernetes.io/name: lians-otel-collector
+    app.kubernetes.io/component: recorder-gateway
+  annotations:
+    # This queue precedes application minimization and can contain raw OTLP.
+    lians.ai/raw-pre-minimization-queue: "true"
+    lians.ai/encrypted-at-rest-required: "true"
+    lians.ai/raw-payload-custody-acknowledgement-required: "true"
+    lians.ai/queue-custody-policy-ref: "CHANGE_ME"
+spec:
+  serviceName: lians-otel-collector-headless
+  replicas: 2
+  minReadySeconds: 10
+  podManagementPolicy: Parallel
+  # Claims may be temporarily authoritative for spans not yet accepted. Retain
+  # them for reviewed drain/hold/deletion, not as an indefinite archive.
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lians-otel-collector
+      app.kubernetes.io/component: recorder-gateway
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lians-otel-collector
+        app.kubernetes.io/component: recorder-gateway
+    spec:
+      serviceAccountName: lians-otel-collector
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: lians-otel-collector
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: lians-otel-collector
+                    app.kubernetes.io/component: recorder-gateway
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: collector
+          image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.157.0@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6
+          imagePullPolicy: IfNotPresent
+          args: ["--config=/etc/otelcol/collector.yaml"]
+          env:
+            - name: LIANS_INGEST_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-recorder-ingest
+                  key: LIANS_INGEST_API_KEY
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: metrics
+              containerPort: 8888
+            - name: health
+              containerPort: 13133
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          startupProbe:
+            httpGet:
+              path: /
+              port: health
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+            - name: queue
+              mountPath: /var/lib/otelcol/storage
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: lians-otel-collector
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: queue
+        annotations:
+          lians.ai/raw-pre-minimization-queue: "true"
+          lians.ai/encrypted-at-rest-required: "true"
+          lians.ai/raw-payload-custody-acknowledgement-required: "true"
+          lians.ai/queue-custody-policy-ref: "CHANGE_ME"
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # Replace with a reviewed CSI/StorageClass that encrypts PVs, snapshots,
+        # replicas, and backups under approved key custody. The placeholder keeps
+        # this readable reference from silently binding cluster-default storage.
+        storageClassName: CHANGE_ME_ENCRYPTED_STORAGE_CLASS
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: lians-otel-collector
+  namespace: agentmem
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lians-otel-collector
+      app.kubernetes.io/component: recorder-gateway
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: lians-otel-collector
+  namespace: agentmem
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: lians-otel-collector
+      app.kubernetes.io/component: recorder-gateway
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Telemetry producers opt in by labeling their namespace. This avoids a
+    # cluster-wide unauthenticated receiver while keeping the gateway neutral.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              lians.ai/telemetry-access: "true"
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8888
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: agentmem
+              app.kubernetes.io/component: api
+      ports:
+        - port: 8000
+          protocol: TCP

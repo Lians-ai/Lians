@@ -1,7 +1,7 @@
 """
 Healthcare domain adapter — patient ID, condition, medication normalization.
 
-This adapter is the ONLY place in AgentMem where healthcare-specific concepts
+This adapter is the ONLY place in Lians where healthcare-specific concepts
 (patient identifiers, ICD-10 codes, NPI numbers, medication names) exist.
 
 PHI scope
@@ -11,7 +11,7 @@ The following structured keys frequently contain PHI under HIPAA:
   encounter_id — hospital visit / admission reference
   provider_id  — NPI-formatted clinician identifier
 
-AgentMem's per-subject AES-256-GCM encryption and crypto-shred erasure
+Lians' per-subject AES-256-GCM encryption and crypto-shred erasure
 (POST /v1/erase with subject_id=<patient_id>) satisfy:
   HIPAA §164.312(a)(2)(iv) — Encryption
   HIPAA §164.312(c)(1)     — Integrity (hash chain; content cannot be altered)

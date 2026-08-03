@@ -39,7 +39,7 @@ review.
 - Domain adapters for finance, healthcare, and legal
 - Audit log and memory lineage
 - Conflict detection
-- Webhooks
+- Durable integration destinations
 - Metrics and health checks
 - Standard support
 
@@ -57,7 +57,7 @@ review.
 - Compliance reports
 - Audit-chain verification and export
 - Backtest contamination detection
-- SIEM streaming
+- Durable SIEM integration delivery
 - Custom KMS support: AWS, Azure, Vault
 - Go, Java, and C SDK support
 - Deployment review and hardening checklist
@@ -98,3 +98,9 @@ based and tied to deployment boundary, support, compliance obligations, and
 connector scope. Do not position the enterprise product as a $200/month SaaS
 tier; that undersells the risk reduction Lians provides and misaligns with how
 regulated buyers procure infrastructure.
+
+When a usage component is appropriate, price the product-native protected units:
+authoritative decisions recorded with their evidence boundary and successful
+single-use Gate permit consumptions. Memory writes and recalls remain compatibility
+units for existing memory-product contracts, not the primary measure of delivered
+decision-evidence infrastructure.

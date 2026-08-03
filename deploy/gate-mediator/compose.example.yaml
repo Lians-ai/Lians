@@ -1,0 +1,27 @@
+services:
+  gate-mediator:
+    image: ${LIANS_IMAGE:?set LIANS_IMAGE to a signature-verified image@sha256 digest}
+    command:
+      - lians-gate-mediator
+      - serve
+      - --config
+      - /etc/lians-mediator/mediator.json
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    user: "10001:10001"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./mediator-config.example.json:/etc/lians-mediator/mediator.json:ro
+      - ./secrets:/var/run/secrets/lians-mediator:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m

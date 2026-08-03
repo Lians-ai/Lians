@@ -12,6 +12,8 @@ metadata:
     deployment.kubernetes.io/revision: "1"
 spec:
   replicas: 2
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
   selector:
     matchLabels:
       app.kubernetes.io/name: agentmem
@@ -27,18 +29,22 @@ spec:
         app.kubernetes.io/name: agentmem
         app.kubernetes.io/component: api
       annotations:
-        # Force pod recreation when secrets/configmaps change (checksum rollout pattern).
-        # Populate with: kubectl get secret agentmem-secret -o json | jq -r '.data | to_entries | map("\(.key)=\(.value)") | join(",")' | sha256sum
+        # Force recreation after the external-secret controller atomically
+        # rotates any split runtime Secret. Record only an opaque aggregate
+        # revision here; never render secret bytes into an annotation or log.
         checksum/secret: "UPDATE_WITH_SECRET_CHECKSUM"
         checksum/config: "UPDATE_WITH_CONFIGMAP_CHECKSUM"
     spec:
       # ── Security ──────────────────────────────────────────────────────────────
       automountServiceAccountToken: false
+      serviceAccountName: agentmem-api
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
 
@@ -51,56 +57,60 @@ spec:
             matchLabels:
               app.kubernetes.io/name: agentmem
               app.kubernetes.io/component: api
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: agentmem
+                    app.kubernetes.io/component: api
+                topologyKey: kubernetes.io/hostname
 
-      # ── Init: wait for Postgres to be ready ───────────────────────────────────
-      # Prevents CrashLoopBackOff when the DB pod is still starting.
       initContainers:
-        - name: wait-for-postgres
-          image: postgres:16-alpine
-          command:
-            - sh
-            - -c
-            - |
-              until pg_isready -h "${PG_HOST}" -p 5432; do
-                echo "Waiting for Postgres…"
-                sleep 2
-              done
-          env:
-            - name: PG_HOST
-              value: "postgres.agentmem.svc.cluster.local"
-          resources:
-            requests:
-              cpu: "10m"
-              memory: "32Mi"
-            limits:
-              cpu: "100m"
-              memory: "64Mi"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-
         # ── Init: wait for migrations to reach head ───────────────────────────
-        # Blocks the app pod until `alembic check` exits 0 (DB == head).
-        # This prevents startup against a schema that is behind the current code.
+        # Blocks the app pod until the database revision exactly equals the
+        # single packaged Alembic head. `alembic check` is intentionally not
+        # used: it checks model-diff coverage, not whether a database is at head.
         # Run `kubectl apply -f k8s/migrate-job.yaml` before applying this
         # deployment; this initContainer will retry until the Job completes.
         - name: wait-for-migrations
-          image: agentmem:latest
+          image: agentmem@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
             - |
-              until alembic -c agentmem/alembic.ini check; do
-                echo "Migrations not yet at head — retrying in 5s…"
+              set -eu
+              attempts=0
+              until python -m lians.migration_contract; do
+                attempts=$((attempts + 1))
+                if [ "$attempts" -ge 120 ]; then
+                  echo "Database did not reach the packaged migration contract within the rollout budget." >&2
+                  exit 1
+                fi
+                echo "Database revision does not match the packaged Alembic head; retrying in 5s..."
                 sleep 5
               done
-          workingDir: /app
-          envFrom:
-            - secretRef:
-                name: agentmem-secret
+              echo "Database revision matches the packaged Alembic head."
+          workingDir: /app/agentmem
+          env:
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: production
+            - name: PRODUCTION_ALLOW_LOCAL_DATA_SERVICE_SOCKETS
+              value: "false"
+            - name: DATABASE_STATEMENT_TIMEOUT_MS
+              value: "30000"
+            - name: DATABASE_LOCK_TIMEOUT_MS
+              value: "5000"
+            - name: DATABASE_IDLE_TRANSACTION_TIMEOUT_MS
+              value: "60000"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-database-runtime
+                  key: DATABASE_URL
           resources:
             requests:
               cpu: "50m"
@@ -121,8 +131,12 @@ spec:
 
       containers:
         - name: agentmem
-          # Replace with your registry/image:tag — e.g. ghcr.io/your-org/agentmem:v0.2.0
-          image: agentmem:latest
+          # Replace only with the verified release subject digest. Mutable tags
+          # are discovery aliases and are never a deployment identity.
+          # The shipped image uses --no-proxy-headers so TRUSTED_PROXY_CIDRS is
+          # the sole forwarding trust boundary. Preserve that flag if overriding
+          # the command or args in an overlay.
+          image: agentmem@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -133,14 +147,153 @@ spec:
           envFrom:
             - configMapRef:
                 name: agentmem-config
-            - secretRef:
-                name: agentmem-secret
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-database-runtime
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-redis
+                  key: REDIS_URL
+            - name: SUBJECT_REFERENCE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-application
+                  key: SUBJECT_REFERENCE_KEY
+            - name: METRICS_BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-application
+                  key: METRICS_BEARER_TOKEN
+            - name: VOYAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-application
+                  key: VOYAGE_API_KEY
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-application
+                  key: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-application
+                  key: ANTHROPIC_API_KEY
+            - name: STRIPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-application
+                  key: STRIPE_API_KEY
+            - name: RECEIPT_SIGNING_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-receipt-signing
+                  key: RECEIPT_SIGNING_PRIVATE_KEY
+            - name: KMS_AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AWS_REGION
+            - name: KMS_AWS_ENCRYPTED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AWS_ENCRYPTED_KEY
+            - name: KMS_AWS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AWS_KEY_ID
+            - name: KMS_AWS_PREVIOUS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AWS_PREVIOUS_REGION
+            - name: KMS_AWS_PREVIOUS_ENCRYPTED_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AWS_PREVIOUS_ENCRYPTED_KEY
+            - name: KMS_AWS_PREVIOUS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AWS_PREVIOUS_KEY_ID
+            - name: KMS_AZURE_VAULT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AZURE_VAULT_URL
+            - name: KMS_AZURE_SECRET_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AZURE_SECRET_NAME
+            - name: KMS_AZURE_PREVIOUS_VAULT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AZURE_PREVIOUS_VAULT_URL
+            - name: KMS_AZURE_PREVIOUS_SECRET_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_AZURE_PREVIOUS_SECRET_NAME
+            - name: KMS_VAULT_ADDR
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_ADDR
+            - name: KMS_VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_TOKEN
+            - name: KMS_VAULT_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_PATH
+            - name: KMS_VAULT_MOUNT_POINT
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_MOUNT_POINT
+            - name: KMS_VAULT_PREVIOUS_ADDR
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_PREVIOUS_ADDR
+            - name: KMS_VAULT_PREVIOUS_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_PREVIOUS_PATH
+            - name: KMS_VAULT_PREVIOUS_MOUNT_POINT
+              valueFrom:
+                secretKeyRef:
+                  name: agentmem-kms
+                  key: KMS_VAULT_PREVIOUS_MOUNT_POINT
 
           # ── Health probes ────────────────────────────────────────────────────
-          # /health checks DB + Redis connectivity, not just process liveness.
+          # Readiness checks dependencies; liveness checks only the process.
+          # A database or Redis incident must drain traffic without causing a
+          # restart storm that destroys otherwise healthy application state.
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+            timeoutSeconds: 3
+
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -150,7 +303,7 @@ spec:
 
           livenessProbe:
             httpGet:
-              path: /health
+              path: /livez
               port: http
             initialDelaySeconds: 30
             periodSeconds: 20
@@ -175,6 +328,11 @@ spec:
             capabilities:
               drop: ["ALL"]
 
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
+
           # ── Volumes ──────────────────────────────────────────────────────────
           volumeMounts:
             # /tmp is writable for uvicorn's access log buffer and any OS temp writes
@@ -186,10 +344,12 @@ spec:
 
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 1Gi
         - name: app-cache
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
 
       # ── Graceful shutdown ────────────────────────────────────────────────────
-      # Give in-flight requests up to 30 s to complete before the pod is killed.
-      terminationGracePeriodSeconds: 30
+      # Give in-flight requests up to 60 s to complete before the pod is killed.
+      terminationGracePeriodSeconds: 60

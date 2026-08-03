@@ -18,7 +18,14 @@ CAPTURE_STATUS = "lians.capture.status"
 WORKSPACE_ID = "lians.workspace.id"
 GRAFANA_TRACE_URL = "lians.grafana.trace_url"
 
-CAPTURE_STATUSES = {"complete", "complete_with_exclusions", "partial", "failed", "unverifiable"}
+CAPTURE_STATUSES = {
+    "complete",
+    "complete_with_exclusions",
+    "partial",
+    "delayed",
+    "failed",
+    "unverifiable",
+}
 
 ALL_ATTRIBUTES = {
     DECISION_ID,

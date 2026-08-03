@@ -27,7 +27,7 @@ import os
 import re
 from functools import lru_cache
 
-logger = logging.getLogger("agentmem.entity_normalizer")
+logger = logging.getLogger("lians.entity_normalizer")
 
 # ── Equity catalogue ──────────────────────────────────────────────────────────
 # Format: canonical_ticker → (frozenset_of_name_aliases, isin, cusip)
@@ -140,9 +140,6 @@ _EQUITY_DATA: dict[str, tuple[frozenset[str], str, str]] = {
              "US8552441094", "855244109"),
     "TGT":  (frozenset({"target", "target corp", "target corporation"}),
              "US8745371025", "874537102"),
-    "AMZN": (frozenset({"amazon", "amazon.com", "amazon com", "amazon inc"}),
-             "US0231351067", "023135106"),
-
     # ── Industrial / energy ──────────────────────────────────────────────────
     "XOM":  (frozenset({"exxon", "exxonmobil", "exxon mobil", "exxon mobil corporation"}),
              "US30231G1022", "30231G102"),
@@ -283,9 +280,10 @@ def _load_overrides() -> None:
             _TICKER_MAP[can.lower()] = can
             for alias in aliases:
                 _TICKER_MAP[alias.lower()] = can
-        logger.info("Loaded %d entity overrides from %s", len(overrides), path)
-    except Exception as exc:
-        logger.warning("Could not load entity overrides from %s: %s", path, exc)
+        logger.info("Loaded %d entity overrides", len(overrides))
+    except Exception:
+        # Local paths and parser errors can reveal deployment configuration.
+        logger.warning("Could not load entity overrides")
 
 
 _load_overrides()

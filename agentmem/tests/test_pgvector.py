@@ -170,8 +170,8 @@ class TestEndToEnd:
     """Full add_memory â†’ recall_memories round-trip on Postgres."""
 
     async def test_add_memory_stores_vector(self, pg_session_factory):
-        from src.lians.memory_service import add_memory
-        from src.lians.schemas import MemoryAdd
+        from lians.memory_service import add_memory
+        from lians.schemas import MemoryAdd
 
         req = MemoryAdd(
             agent_id=AGENT,
@@ -189,8 +189,8 @@ class TestEndToEnd:
         assert result.namespace == TEST_NS
 
     async def test_recall_finds_added_memory(self, pg_session_factory):
-        from src.lians.memory_service import add_memory, recall_memories
-        from src.lians.schemas import MemoryAdd, RecallRequest
+        from lians.memory_service import add_memory, recall_memories
+        from lians.schemas import MemoryAdd, RecallRequest
 
         async with pg_session_factory() as db:
             await add_memory(db, TEST_NS, MemoryAdd(
@@ -214,9 +214,9 @@ class TestEndToEnd:
         index rather than a Seq Scan â€” proves the index is actually used.
         """
         from sqlalchemy import text
-        from src.lians.memory_service import add_memory
-        from src.lians.schemas import MemoryAdd
-        from src.lians.embeddings import get_embedding_provider
+        from lians.memory_service import add_memory
+        from lians.schemas import MemoryAdd
+        from lians.embeddings import get_embedding_provider
 
         # Seed 30 rows so the planner prefers the HNSW index over a seq scan
         seed_agent = f"ann-seed-{uuid.uuid4().hex[:6]}"
@@ -253,8 +253,8 @@ class TestEndToEnd:
 
     async def test_point_in_time_recall(self, pg_session_factory):
         """as_of filter works on Postgres â€” validates bitemporal model end-to-end."""
-        from src.lians.memory_service import add_memory, recall_memories
-        from src.lians.schemas import MemoryAdd, RecallRequest
+        from lians.memory_service import add_memory, recall_memories
+        from lians.schemas import MemoryAdd, RecallRequest
         from datetime import timedelta
 
         agent = f"pit-{uuid.uuid4().hex[:6]}"

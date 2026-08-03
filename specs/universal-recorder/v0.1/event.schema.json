@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/universal-recorder/v0.1/event.schema.json",
+  "title": "Lians Universal Recorder Event v0.1",
+  "description": "A normalized, append-only Recorder event returned by the Lians API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "run_id",
+    "protocol",
+    "event_kind",
+    "event_name",
+    "phase",
+    "status",
+    "occurred_at",
+    "recorded_at",
+    "agent_id",
+    "actor_attribution",
+    "ingested_by_principal_ref",
+    "ingested_by_auth_method",
+    "ingested_by_credential_id",
+    "trace_id",
+    "span_id",
+    "task_id",
+    "decision_id",
+    "model_id",
+    "input_hash",
+    "output_hash",
+    "capture_mode",
+    "capture_gaps",
+    "diagnostics",
+    "event_hash",
+    "event_hash_version"
+  ],
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "run_id": {"type": "string", "format": "uuid"},
+    "protocol": {"enum": ["lians", "otlp.genai", "mcp", "a2a"]},
+    "event_kind": {"type": "string"},
+    "event_name": {"type": ["string", "null"]},
+    "phase": {"type": "string"},
+    "status": {"type": ["string", "null"]},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "agent_id": {
+      "description": "Caller-reported agent label; never authenticated identity.",
+      "type": ["string", "null"]
+    },
+    "actor_attribution": {
+      "description": "Whether the envelope supplied an unverified actor claim.",
+      "enum": ["claimed_unverified", "not_supplied"]
+    },
+    "ingested_by_principal_ref": {
+      "description": "Canonical server-derived ingestion principal. The legacy sentinel is explicitly unverified.",
+      "type": "string",
+      "pattern": "^lians:principal:v1:"
+    },
+    "ingested_by_auth_method": {
+      "description": "Server-observed authentication method, or legacy_unverified for migrated history.",
+      "type": "string"
+    },
+    "ingested_by_credential_id": {
+      "description": "Opaque server-side credential identifier, never the credential secret.",
+      "type": ["string", "null"],
+      "maxLength": 128
+    },
+    "trace_id": {"type": ["string", "null"]},
+    "span_id": {"type": ["string", "null"]},
+    "task_id": {"type": ["string", "null"]},
+    "decision_id": {
+      "anyOf": [
+        {"type": "string", "format": "uuid"},
+        {"type": "null"}
+      ]
+    },
+    "model_id": {"type": ["string", "null"]},
+    "input_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "output_hash": {
+      "anyOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "capture_mode": {"enum": ["metadata_only", "hash_only", "full"]},
+    "capture_gaps": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": true}
+    },
+    "event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "event_hash_version": {
+      "description": "Version 1 is pre-authenticity legacy history; all new events use version 2.",
+      "enum": [1, 2]
+    }
+  }
+}

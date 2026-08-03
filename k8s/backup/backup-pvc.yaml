@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lians-logical-backups
+  labels:
+    app.kubernetes.io/name: agentmem
+    app.kubernetes.io/component: backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  # Set to an encrypted storage class with snapshot protection before enabling.
+  storageClassName: CHANGE_ME_ENCRYPTED_STORAGE_CLASS

@@ -9,17 +9,15 @@ from __future__ import annotations
 import base64
 import os
 import pytest
-import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import src.lians.kms as kms
-from src.lians.kms import (
+from lians.kms import (
     get_master_key,
     load_master_key,
     _reset_cache,
     _env_key,
 )
-from src.lians.config import get_settings
+from lians.config import get_settings
 
 
 # Helpers
@@ -317,7 +315,7 @@ class TestKmsIntegration:
 
     async def test_aws_key_used_in_crypto_wrap_unwrap(self, monkeypatch):
         """End-to-end: key fetched from (mocked) AWS KMS â†’ wraps/unwraps a subject key."""
-        from src.lians.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
+        from lians.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
 
         monkeypatch.setenv("KMS_PROVIDER", "aws")
         monkeypatch.setenv("KMS_AWS_ENCRYPTED_KEY", base64.b64encode(b"ct").decode())
@@ -341,7 +339,7 @@ class TestKmsIntegration:
     async def test_key_change_invalidates_wrapped_keys(self, monkeypatch):
         """Wrapping with key A and unwrapping with key B raises an error (crypto shred)."""
         from cryptography.exceptions import InvalidTag
-        from src.lians.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
+        from lians.crypto import wrap_subject_key, unwrap_subject_key, generate_subject_key
 
         key_a = os.urandom(32)
         key_b = os.urandom(32)

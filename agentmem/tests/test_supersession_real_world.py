@@ -36,15 +36,15 @@ These tests cover the messy patterns that trip up naive supersession engines:
    the original.  The revision must NOT supersede the original (time-ordering invariant).
 """
 import hashlib
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from src.lians.main import app
-from src.lians.db import get_db
-from src.lians.models import ApiKey
+from lians.main import app
+from lians.db import get_db
+from lians.models import ApiKey
 
 TEST_NS = "real-world-bench-ns"
 TEST_KEY = "real-world-bench-key"
@@ -174,14 +174,14 @@ async def test_cross_source_confirms_not_supersedes(client):
     announcement = _ts(2026, 2, 21)
     await _add(client, "NVDA FY2026 guidance: $40B", announcement,
                {"ticker": "NVDA", "metric": "guidance", "period": "FY2026"}, source="bloomberg")
-    second = await _add(client, "NVDA FY2026 guidance: $40B", announcement,
-                        {"ticker": "NVDA", "metric": "guidance", "period": "FY2026"}, source="reuters")
+    await _add(client, "NVDA FY2026 guidance: $40B", announcement,
+               {"ticker": "NVDA", "metric": "guidance", "period": "FY2026"}, source="reuters")
 
     # CONFIRMS should not set valid_to on either memory â€” both are additive sources
     # (In practice the second may be superseded with relation=CONFIRMS; check it's not flagged as conflict)
     r = await client.get("/v1/conflicts", params={"status": "open"}, headers=_h())
     open_conflicts = r.json()["total"]
-    assert open_conflicts == 0, f"Same-value cross-source confirmation should not open a conflict"
+    assert open_conflicts == 0, "Same-value cross-source confirmation should not open a conflict"
 
 
 # â”€â”€ Benchmark 4: Cascading supersession chain â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -315,7 +315,8 @@ async def test_benchmark_scorecard_all_pass(client):
     'works on messy real-world data' claim in SCALE.md Â§2.
     """
     # Run a compact version of each benchmark pattern in one agent namespace
-    t = lambda m, d=1: _ts(2026, m, d)
+    def t(month: int, day: int = 1):
+        return _ts(2026, month, day)
 
     # Pattern: cascading chain (5 revisions)
     for i, v in enumerate([28, 32, 36, 38, 40]):
