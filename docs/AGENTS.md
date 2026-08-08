@@ -5,11 +5,14 @@ Lians without weakening its evidence, security, or tenancy boundaries.
 
 ## What Lians is
 
-Lians is provider-neutral decision-evidence and runtime-control infrastructure
-for consequential AI systems. It records what an agent observed, was permitted
-to use, decided, and did; reconstructs the recorded historical boundary; finds
-decisions affected by later source, policy, model, tool, or permission changes;
-and mediates protected actions through evidence-aware policy gates.
+Lians is provider-neutral memory, governed-improvement, decision-evidence, and
+runtime-control infrastructure for consequential AI systems. It keeps current
+and historical agent knowledge, compiles exact-token-budgeted context, evaluates
+candidate agent versions against protected quality and safety constraints, and
+records what an agent observed, was permitted to use, decided, and did. It also
+reconstructs the recorded historical boundary, finds decisions affected by later
+source, policy, model, tool, or permission changes, and mediates protected actions
+through evidence-aware policy gates.
 
 The primary product primitives are:
 
@@ -26,10 +29,15 @@ The primary product primitives are:
   and records human-attested closure.
 - **Bitemporal memory** — preserves event time and system-recorded time, suppresses
   superseded facts, and supports exact point-in-time recall boundaries.
+- **Governed improvement plane** — binds immutable agent versions to exact-token
+  context/tool optimization, repeated evaluations, protected constraints, signed
+  attestations, staged release evidence, outcomes, drift, and review-only proposals.
 
-Lians proves the integrity and completeness of what it captured. It never claims
-access to hidden model reasoning, universal deterministic replay, or regulatory
-compliance merely because the software is installed.
+Lians proves the integrity and completeness of what it captured. Quality, token,
+latency, and cost improvements are workload-specific measured outcomes, never
+universal installation guarantees. Lians also never claims access to hidden model
+reasoning, universal deterministic replay, or regulatory compliance merely
+because the software is installed.
 
 ## Repository layout
 

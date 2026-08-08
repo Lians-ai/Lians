@@ -83,6 +83,30 @@ def _ensure_src_importable() -> None:
 _ensure_src_importable()
 
 
+def _resolve_embedding_provider(explicit: Optional[str]) -> str:
+    if explicit:
+        return explicit
+    configured = os.environ.get("EMBEDDING_PROVIDER", "").strip()
+    if configured:
+        # MCP and other hosts frequently pin this before constructing the
+        # client. Respect it without importing sentence-transformers merely to
+        # rediscover a decision the operator already made; that import is a
+        # material cold-start cost on Windows.
+        return configured
+    try:
+        import sentence_transformers  # noqa: F401
+        return "sentence-transformers"
+    except ImportError:
+        import warnings
+        warnings.warn(
+            "lians: sentence-transformers is not installed, so local "
+            "mode is using the deterministic TEST-GRADE embedding "
+            "stub. Install lians-sdk[local] for real semantic recall.",
+            stacklevel=3,
+        )
+        return "local"
+
+
 class LocalLiansClient:
     """
     Synchronous Lians client backed by local SQLite â€” no server required.
@@ -112,22 +136,11 @@ class LocalLiansClient:
         self._namespace = namespace
         self._loop = asyncio.new_event_loop()
 
-        if embedding_provider is None:
-            # Defaulting to the test stub cost real users 24%-grade recall
-            # (LOCOMO: stub 24% vs real local model 82% evidence hit@10);
-            # prefer the real model whenever the [local] extra is present.
-            try:
-                import sentence_transformers  # noqa: F401
-                embedding_provider = "sentence-transformers"
-            except ImportError:
-                import warnings
-                warnings.warn(
-                    "lians: sentence-transformers is not installed, so local "
-                    "mode is using the deterministic TEST-GRADE embedding "
-                    "stub. Install lians-sdk[local] for real semantic recall.",
-                    stacklevel=2,
-                )
-                embedding_provider = "local"
+        # Defaulting to the test stub cost real users 24%-grade recall
+        # (LOCOMO: stub 24% vs real local model 82% evidence hit@10); prefer the
+        # real model whenever the [local] extra is present. An operator-pinned
+        # environment value takes precedence and avoids an unnecessary import.
+        embedding_provider = _resolve_embedding_provider(embedding_provider)
 
         # Point the settings at the local embedding provider before any import
         os.environ.setdefault("EMBEDDING_PROVIDER", embedding_provider)

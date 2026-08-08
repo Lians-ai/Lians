@@ -48,6 +48,8 @@ async def test_discovery_links_every_machine_readable_public_contract():
     assert links["decision_receipt_mappings"].endswith("/mappings/manifest.json")
     assert links["recorder_schema"].endswith("/envelope.schema.json")
     assert links["recorder_event_schema"].endswith("/event.schema.json")
+    assert links["evaluation_attestation_schema"].endswith("/schema.json")
+    assert links["release_attestation_schema"].endswith("/schema.json")
 
 
 @pytest.mark.asyncio
@@ -64,6 +66,10 @@ async def test_discovery_links_every_machine_readable_public_contract():
         "/specs/decision-receipt/v0.1/mappings/a2a.md",
         "/specs/universal-recorder/v0.1/envelope.schema.json",
         "/specs/universal-recorder/v0.1/event.schema.json",
+        "/specs/universal-recorder/v0.2/envelope.schema.json",
+        "/specs/universal-recorder/v0.2/event.schema.json",
+        "/specs/evaluation-attestation/v0.1/schema.json",
+        "/specs/release-attestation/v0.1/schema.json",
     ),
 )
 async def test_public_spec_artifacts_are_immutable_and_support_etags(path: str):

@@ -46,7 +46,26 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is **decision evidence infrastructure**: the independent system of record for consequential AI actions. It records what an agent saw, was permitted to use, and did, then reconstructs that boundary when sources, policies, permissions, tools, or models change.
+[Lians](https://github.com/Lians-ai/Lians) is **provider-neutral memory and
+governed improvement infrastructure for production AI agents**. Connect it
+through MCP, HTTP, Python/TypeScript SDKs, or OpenTelemetry to systems built on
+Codex, Claude, Gemini, and other model or agent runtimes. Lians keeps recalled
+facts current, assembles context inside exact token budgets, measures quality,
+latency, tokens, cost, and outcomes, and requires protected-quality gates before
+an optimized agent version can advance toward production.
+
+The measurable claim is workflow-specific: Lians can reduce the context an
+agent reads while preserving a defined quality threshold. In the published
+1,540-question LOCOMO run, top-50 recall scored 90.0% with 2,656 mean context
+tokens versus 18,218 for the full-conversation baseline (85.4% fewer). At
+top-200, it scored 92.9% with 43.6% fewer context tokens. These are benchmark
+results, not a guarantee for every model, prompt, or deployment. See the
+[token-efficiency report](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md)
+and the [Codex/PostgreSQL validation](docs/benchmarks/codex-mcp-local-2026-08-08.md).
+
+Decision evidence remains the trust boundary: Lians records what an agent saw,
+was permitted to use, and did, then reconstructs that boundary when sources,
+policies, permissions, tools, or models change.
 
 The platform closes one control loop on a shared, append-only record layer:
 
@@ -93,7 +112,8 @@ The receipt proves the integrity and provenance of the recorded evidence boundar
 
 ## Recorder → Receipt → Gate → Investigator
 
-Lians is provider-neutral at the evidence boundary. Applications can send the
+Lians is provider-neutral at the memory, optimization, and evidence boundaries.
+Applications can send the
 native Recorder envelope, OTLP/HTTP JSON or protobuf spans using GenAI semantic
 attributes, MCP JSON-RPC messages, and A2A task/message/artifact events. Correlated
 events update a first-receipt readiness score and automatically back-link to the
@@ -119,7 +139,8 @@ queue. Embedded report collections are deterministically bounded and carry expli
 completeness metadata; see [Investigator report completeness](docs/investigator-read-model.md).
 
 - [Universal Recorder + Gate quickstart](docs/quickstart-recorder.md)
-- [Universal Recorder specification](specs/universal-recorder/v0.1/README.md)
+- [Universal Recorder v0.2 specification](specs/universal-recorder/v0.2/README.md)
+- [Governed agent improvement plane](docs/agent-improvement-plane.md)
 - [Native Recorder hooks and exact coverage](docs/recorder-native-hooks.md)
 - [Immutable approval and review semantics](docs/immutable-attestations.md)
 - [Mediated Gate execution permits](docs/gate-execution-permits.md)
@@ -194,7 +215,10 @@ Procurement and technical review materials:
 
 Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers/io.github.ebeirne%2Flians/versions/latest). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can use local persistent memory immediately or connect to a hosted Lians server. No SDK code, custom adapter, Docker service, URL, or API key is required for local mode.
 
-Your agents get eight tools automatically:
+The server provides eight tools. For everyday memory use, expose only
+`remember`, `recall`, and `recall_at` so the host does not inject five audit-tool
+schemas into ordinary turns; enable the full evidence profile when reconstruction
+or investigation is in scope.
 
 | Tool | What it does |
 |------|-------------|

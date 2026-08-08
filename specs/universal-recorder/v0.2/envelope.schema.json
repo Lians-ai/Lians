@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/universal-recorder/v0.2/envelope.schema.json",
+  "title": "Lians Universal Recorder Envelope v0.2",
+  "description": "Provider-neutral AI execution evidence with explicit operational measurement provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol"],
+  "properties": {
+    "schema_version": {"const": "0.2", "default": "0.2"},
+    "protocol": {"enum": ["lians", "otlp.genai", "mcp", "a2a"]},
+    "event_type": {"type": "string", "minLength": 1, "maxLength": 128},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 512},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "subject_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "actor": {"$ref": "#/$defs/actor"},
+    "correlation": {"$ref": "#/$defs/correlation"},
+    "capture": {"$ref": "#/$defs/capture"},
+    "operational": {"$ref": "#/$defs/operational"},
+    "payload": {"type": "object", "additionalProperties": true, "maxProperties": 1000},
+    "extensions": {"type": "object", "additionalProperties": true, "maxProperties": 256}
+  },
+  "$defs": {
+    "actor": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "agent_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "principal_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "roles": {"type": "array", "maxItems": 100, "items": {"type": "string"}},
+        "authentication_context": {"type": "object", "additionalProperties": true, "maxProperties": 100},
+        "extensions": {"type": "object", "additionalProperties": true, "maxProperties": 256}
+      }
+    },
+    "correlation": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "trace_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "span_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "parent_span_id": {"type": "string", "minLength": 1, "maxLength": 64},
+        "session_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "task_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "context_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "message_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "tool_call_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "decision_id": {"type": "string", "format": "uuid"},
+        "extensions": {"type": "object", "additionalProperties": true, "maxProperties": 256}
+      }
+    },
+    "capture": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["metadata_only", "hash_only", "full"], "default": "hash_only"},
+        "sensitive_fields": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "measurement": {
+      "type": "object", "additionalProperties": false, "required": ["value", "provenance"],
+      "properties": {
+        "value": {"type": "number", "minimum": 0},
+        "provenance": {"enum": ["provider-reported", "workload-reported", "client-measured", "deterministic", "human-authored", "model-judged", "estimated"]}
+      }
+    },
+    "token_usage": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "input": {"$ref": "#/$defs/measurement"},
+        "output": {"$ref": "#/$defs/measurement"},
+        "cached": {"$ref": "#/$defs/measurement"}
+      }
+    },
+    "cost": {
+      "type": "object", "additionalProperties": false, "required": ["amount", "currency"],
+      "properties": {
+        "amount": {"$ref": "#/$defs/measurement"},
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "attribution": {"type": "string", "minLength": 1, "maxLength": 255}
+      }
+    },
+    "operational": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "provider": {"type": "string", "minLength": 1, "maxLength": 255},
+        "runtime_framework": {"type": "string", "minLength": 1, "maxLength": 255},
+        "operation": {"type": "string", "minLength": 1, "maxLength": 255},
+        "prompt_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "toolset_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "request_configuration_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "agent_version_id": {"type": "string", "format": "uuid"},
+        "release_reference": {"type": "string", "minLength": 1, "maxLength": 512},
+        "tokens": {"$ref": "#/$defs/token_usage"},
+        "latency_ms": {"$ref": "#/$defs/measurement"},
+        "finish_reason": {"type": "string", "minLength": 1, "maxLength": 128},
+        "error_code": {"type": "string", "minLength": 1, "maxLength": 128},
+        "cost": {"$ref": "#/$defs/cost"},
+        "outcome_correlation": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    }
+  }
+}

@@ -76,7 +76,7 @@ def _discovery() -> LiansDiscoveryDocument:
     return LiansDiscoveryDocument(
         api_version="1",
         decision_receipt_version="0.1",
-        universal_recorder_version="0.1",
+        universal_recorder_version="0.2",
         protocols=["lians.native", "otlp.genai", "mcp", "a2a"],
         authentication=["api_key", "oidc_bearer"],
         links={
@@ -86,14 +86,14 @@ def _discovery() -> LiansDiscoveryDocument:
             "decision_receipt_conformance": (
                 "/specs/decision-receipt/v0.1/conformance/manifest.json"
             ),
-            "decision_receipt_mappings": (
-                "/specs/decision-receipt/v0.1/mappings/manifest.json"
-            ),
-            "recorder_schema": "/specs/universal-recorder/v0.1/envelope.schema.json",
-            "recorder_event_schema": "/specs/universal-recorder/v0.1/event.schema.json",
+            "decision_receipt_mappings": ("/specs/decision-receipt/v0.1/mappings/manifest.json"),
+            "recorder_schema": "/specs/universal-recorder/v0.2/envelope.schema.json",
+            "recorder_event_schema": "/specs/universal-recorder/v0.2/event.schema.json",
             "recorder_index_job_schema": (
                 "/specs/universal-recorder/v0.1/evidence-index-job.schema.json"
             ),
+            "evaluation_attestation_schema": ("/specs/evaluation-attestation/v0.1/schema.json"),
+            "release_attestation_schema": ("/specs/release-attestation/v0.1/schema.json"),
             "capabilities": "/v1/platform/capabilities",
             "readiness": "/v1/platform/readiness",
         },
@@ -111,9 +111,7 @@ async def lians_discovery() -> LiansDiscoveryDocument:
 
 
 def _spec_bytes(relative_path: str) -> bytes:
-    package_candidate = resources.files("lians").joinpath(
-        "specs", *relative_path.split("/")
-    )
+    package_candidate = resources.files("lians").joinpath("specs", *relative_path.split("/"))
     if package_candidate.is_file():
         return package_candidate.read_bytes()
     source_candidate = Path(__file__).resolve().parents[4] / "specs" / relative_path
@@ -158,6 +156,26 @@ async def universal_recorder_event_schema(request: Request) -> Response:
     return _spec_response(request, "universal-recorder/v0.1/event.schema.json")
 
 
+@router.get("/specs/universal-recorder/v0.2/envelope.schema.json", include_in_schema=False)
+async def universal_recorder_v02_schema(request: Request) -> Response:
+    return _spec_response(request, "universal-recorder/v0.2/envelope.schema.json")
+
+
+@router.get("/specs/universal-recorder/v0.2/event.schema.json", include_in_schema=False)
+async def universal_recorder_v02_event_schema(request: Request) -> Response:
+    return _spec_response(request, "universal-recorder/v0.2/event.schema.json")
+
+
+@router.get("/specs/evaluation-attestation/v0.1/schema.json", include_in_schema=False)
+async def evaluation_attestation_schema(request: Request) -> Response:
+    return _spec_response(request, "evaluation-attestation/v0.1/schema.json")
+
+
+@router.get("/specs/release-attestation/v0.1/schema.json", include_in_schema=False)
+async def release_attestation_schema(request: Request) -> Response:
+    return _spec_response(request, "release-attestation/v0.1/schema.json")
+
+
 @router.get(
     "/specs/universal-recorder/v0.1/evidence-index-job.schema.json",
     include_in_schema=False,
@@ -182,9 +200,7 @@ async def decision_receipt_conformance_artifact(
     if artifact_path not in _DECISION_RECEIPT_CONFORMANCE_ARTIFACTS:
         raise HTTPException(status_code=404, detail="Conformance artifact not published")
     media_type = (
-        "application/json"
-        if artifact_path.endswith(".json")
-        else "text/plain; charset=utf-8"
+        "application/json" if artifact_path.endswith(".json") else "text/plain; charset=utf-8"
     )
     return _spec_response(
         request,
@@ -209,9 +225,7 @@ async def decision_receipt_mapping(
         request,
         f"decision-receipt/v0.1/mappings/{mapping_name}",
         media_type=(
-            "application/json"
-            if mapping_name.endswith(".json")
-            else "text/markdown; charset=utf-8"
+            "application/json" if mapping_name.endswith(".json") else "text/markdown; charset=utf-8"
         ),
     )
 
@@ -241,7 +255,7 @@ async def platform_capabilities(
         information_barrier_scoped=auth.barrier_group is not None,
         components={
             "recorder": {
-                "version": "0.1",
+                "version": "0.2",
                 "protocols": ["lians.native", "otlp.genai", "mcp", "a2a"],
                 "native_sdk_hooks": [
                     "anthropic",
@@ -260,6 +274,21 @@ async def platform_capabilities(
                 "deferred_coverage_fail_closed": True,
                 "run_event_exact_keyset_pagination": True,
                 "run_event_bulk_audit_verification": True,
+                "operational_measurement_provenance": True,
+            },
+            "agent_improvement": {
+                "immutable_agent_versions": True,
+                "repeated_trial_evaluations": True,
+                "signed_evaluation_attestations": True,
+                "exact_context_accounting": True,
+                "permission_aware_tool_selection": True,
+                "constrained_routing": True,
+                "exact_cache_only": True,
+                "advisory_optimization_only": True,
+                "signed_release_attestations": True,
+                "shadow_canary_rollback_evidence": True,
+                "outcome_drift_learning_proposals": True,
+                "automatic_production_change": False,
             },
             "decision_receipts": {
                 "version": "0.1",
@@ -279,9 +308,7 @@ async def platform_capabilities(
                 "caller_advance_compatibility": True,
                 "durable_leases_and_poison_job_bounds": True,
                 "atomic_candidate_limit": settings.decision_evidence_candidate_limit,
-                "atomic_candidate_bytes_limit": (
-                    settings.decision_evidence_candidate_bytes_limit
-                ),
+                "atomic_candidate_bytes_limit": (settings.decision_evidence_candidate_bytes_limit),
             },
             "gate": {
                 "versioned_policies": True,
@@ -375,20 +402,16 @@ async def platform_capabilities(
             "decision_receipt_conformance": (
                 "/specs/decision-receipt/v0.1/conformance/manifest.json"
             ),
-            "decision_receipt_mappings": (
-                "/specs/decision-receipt/v0.1/mappings/manifest.json"
-            ),
+            "decision_receipt_mappings": ("/specs/decision-receipt/v0.1/mappings/manifest.json"),
+            "evaluation_attestation_schema": ("/specs/evaluation-attestation/v0.1/schema.json"),
+            "release_attestation_schema": ("/specs/release-attestation/v0.1/schema.json"),
         },
     )
 
 
 async def _count(db: AsyncSession, model, *conditions) -> int:
     return int(
-        (
-            await db.execute(
-                select(func.count()).select_from(model).where(*conditions)
-            )
-        ).scalar_one()
+        (await db.execute(select(func.count()).select_from(model).where(*conditions))).scalar_one()
     )
 
 
@@ -486,8 +509,7 @@ async def platform_readiness(
         namespace=auth.namespace,
     )
     governance_active = bool(
-        namespace_policy is not None
-        and namespace_policy.governance_status == "active"
+        namespace_policy is not None and namespace_policy.governance_status == "active"
     )
     deployment_region = settings.deployment_region.strip().lower()
     explicit_region = deployment_region not in {
@@ -521,20 +543,15 @@ async def platform_readiness(
     if settings.recorder_allow_full_capture:
         global_capture_modes.add("full")
     effective_capture_modes = (
-        global_capture_modes.intersection(
-            namespace_policy.allowed_recorder_capture_modes
-        )
-        if governance_active
-        and namespace_policy.allowed_recorder_capture_modes is not None
+        global_capture_modes.intersection(namespace_policy.allowed_recorder_capture_modes)
+        if governance_active and namespace_policy.allowed_recorder_capture_modes is not None
         else global_capture_modes
     )
     from ..kms import get_master_keyring, validate_keyring_configuration
 
     keyring_configuration_error: str | None = None
     try:
-        configured_current_id, configured_previous_id = validate_keyring_configuration(
-            settings
-        )
+        configured_current_id, configured_previous_id = validate_keyring_configuration(settings)
         keyring = get_master_keyring()
         if keyring.current.key_id != configured_current_id:
             raise ValueError("Loaded current key id differs from validated configuration")
@@ -550,23 +567,31 @@ async def platform_readiness(
         ControlClosureAttestation.statement.is_not(None),
     )
     rotation_state = (
-        await db.execute(
-            text(
-                "SELECT current_key_id, previous_key_id, status, "
-                "legacy_values_remaining, previous_values_remaining, "
-                "unknown_values_remaining, plaintext_closures_remaining "
-                "FROM master_key_rotation_state WHERE singleton_id = 1"
+        (
+            await db.execute(
+                text(
+                    "SELECT current_key_id, previous_key_id, status, "
+                    "legacy_values_remaining, previous_values_remaining, "
+                    "unknown_values_remaining, plaintext_closures_remaining "
+                    "FROM master_key_rotation_state WHERE singleton_id = 1"
+                )
             )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     write_fence = (
-        await db.execute(
-            text(
-                "SELECT phase, current_key_id, previous_key_id, generation "
-                "FROM master_key_write_fence_state WHERE singleton_id = 1"
+        (
+            await db.execute(
+                text(
+                    "SELECT phase, current_key_id, previous_key_id, generation "
+                    "FROM master_key_write_fence_state WHERE singleton_id = 1"
+                )
             )
         )
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     fence_prepared_matches = bool(
         write_fence is not None
         and write_fence["phase"] == "prepared"
@@ -598,7 +623,9 @@ async def platform_readiness(
 
     checks: list[ReadinessCheck] = []
 
-    def check(check_id: str, passed: bool, message: str, required_for: list[str], *, warning: bool = False):
+    def check(
+        check_id: str, passed: bool, message: str, required_for: list[str], *, warning: bool = False
+    ):
         checks.append(
             ReadinessCheck(
                 id=check_id,
@@ -891,15 +918,11 @@ async def platform_readiness(
     )
     check(
         "recorder.durable_index_worker",
-        bool(
-            recorder_index_state["worker_enabled"]
-            and recorder_index_state["worker_healthy"]
-        ),
+        bool(recorder_index_state["worker_enabled"] and recorder_index_state["worker_healthy"]),
         (
             "The leased Recorder evidence worker is healthy and advances exact "
             "fixed snapshots without partial completeness claims."
-            if recorder_index_state["worker_enabled"]
-            and recorder_index_state["worker_healthy"]
+            if recorder_index_state["worker_enabled"] and recorder_index_state["worker_healthy"]
             else "Durable Recorder evidence indexing is disabled or unhealthy."
         ),
         ["production_baseline", "universal_recorder", "operations"],
@@ -939,8 +962,7 @@ async def platform_readiness(
             ),
             (
                 "The durable integration worker is healthy and has no dead-letter deliveries."
-                if integration_worker_healthy
-                and integration_state["dead_letter_deliveries"] == 0
+                if integration_worker_healthy and integration_state["dead_letter_deliveries"] == 0
                 else "Configured integration delivery is disabled, unhealthy, or has dead letters."
             ),
             ["enterprise_integrations"],
@@ -1029,9 +1051,7 @@ async def platform_readiness(
         "kms.key_version",
         "deployment.region",
     }
-    production_ready = all(
-        item.status == "pass" for item in checks if item.id in baseline_ids
-    )
+    production_ready = all(item.status == "pass" for item in checks if item.id in baseline_ids)
     control_ready = active_gate_policies > 0
     identity_ready = identity_providers > 0
     hard_failures = [item for item in checks if item.status == "fail"]
@@ -1060,9 +1080,7 @@ async def platform_readiness(
             "integration_pending_deliveries": integration_state["pending_deliveries"],
             "integration_retry_deliveries": integration_state["retry_deliveries"],
             "integration_leased_deliveries": integration_state["leased_deliveries"],
-            "integration_dead_letter_deliveries": integration_state[
-                "dead_letter_deliveries"
-            ],
+            "integration_dead_letter_deliveries": integration_state["dead_letter_deliveries"],
             "metering_pending_events": metering_state["pending_events"],
             "metering_retry_events": metering_state["retry_events"],
             "metering_leased_events": metering_state["leased_events"],
@@ -1073,24 +1091,14 @@ async def platform_readiness(
             "impact_failed_jobs": impact_state["failed_jobs"],
             "impact_active_leases": impact_state["active_leases"],
             "impact_retry_wait_jobs": impact_state["retry_wait_jobs"],
-            "recorder_index_pending_jobs": int(
-                recorder_index_state["counts"].get("pending", 0)
-            ),
-            "recorder_index_running_jobs": int(
-                recorder_index_state["counts"].get("running", 0)
-            ),
+            "recorder_index_pending_jobs": int(recorder_index_state["counts"].get("pending", 0)),
+            "recorder_index_running_jobs": int(recorder_index_state["counts"].get("running", 0)),
             "recorder_index_completed_jobs": int(
                 recorder_index_state["counts"].get("completed", 0)
             ),
-            "recorder_index_failed_jobs": int(
-                recorder_index_state["counts"].get("failed", 0)
-            ),
-            "recorder_index_events_indexed": int(
-                recorder_index_state["events_indexed"]
-            ),
-            "recorder_index_snapshot_events": int(
-                recorder_index_state["snapshot_events"]
-            ),
+            "recorder_index_failed_jobs": int(recorder_index_state["counts"].get("failed", 0)),
+            "recorder_index_events_indexed": int(recorder_index_state["events_indexed"]),
+            "recorder_index_snapshot_events": int(recorder_index_state["snapshot_events"]),
             "scim_reconciliation_pending_jobs": int(
                 scim_reconciliation_state["counts"].get("pending", 0)
             ),
@@ -1109,9 +1117,7 @@ async def platform_readiness(
             "scim_reconciliation_users_reconciled": int(
                 scim_reconciliation_state["users_reconciled"]
             ),
-            "scim_reconciliation_snapshot_users": int(
-                scim_reconciliation_state["snapshot_users"]
-            ),
+            "scim_reconciliation_snapshot_users": int(scim_reconciliation_state["snapshot_users"]),
             "active_namespace_governance_policies": int(governance_active),
             "configured_namespace_daily_quota_dimensions": configured_quota_count,
             "effective_namespace_recorder_capture_modes": len(effective_capture_modes),

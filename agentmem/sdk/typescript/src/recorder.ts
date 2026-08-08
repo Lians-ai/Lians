@@ -3,6 +3,7 @@
 import type {
   RecorderCaptureMode,
   RecorderEnvelope,
+  RecorderOperational,
   RecorderProtocol,
 } from "./types.js";
 import { secureRecorderEventId } from "./recorder-sink.js";
@@ -28,6 +29,7 @@ export interface RecorderBuilderOptions {
   decisionId?: string;
   captureMode?: RecorderCaptureMode;
   sensitiveFields?: string[];
+  operational?: RecorderOperational;
   extensions?: Record<string, unknown>;
 }
 
@@ -57,7 +59,7 @@ function envelope(
 ): RecorderEnvelope {
   const stableEventId = options.eventId ?? eventId();
   return {
-    schema_version: "0.1",
+    schema_version: "0.2",
     protocol,
     event_type: options.eventType,
     event_id: stableEventId,
@@ -89,6 +91,7 @@ function envelope(
       mode: options.captureMode ?? "hash_only",
       sensitive_fields: options.sensitiveFields ?? [],
     },
+    operational: options.operational,
     payload,
     extensions: options.extensions ?? {},
   };

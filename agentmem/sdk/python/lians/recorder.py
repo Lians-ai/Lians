@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
-from .platform_types import CaptureMode, RecorderEnvelope
+from .platform_types import CaptureMode, RecorderEnvelope, RecorderOperational
 
 
 def _time(value: datetime | str | None) -> str | None:
@@ -50,12 +50,13 @@ def _envelope(
     decision_id: str | None = None,
     capture_mode: CaptureMode = "hash_only",
     sensitive_fields: Sequence[str] = (),
+    operational: RecorderOperational | None = None,
     extensions: Mapping[str, Any] | None = None,
 ) -> RecorderEnvelope:
     stable_event_id = event_id or str(uuid4())
     return _clean(
         {
-            "schema_version": "0.1",
+            "schema_version": "0.2",
             "protocol": protocol,
             "event_type": event_type,
             "event_id": stable_event_id,
@@ -85,6 +86,7 @@ def _envelope(
                 "mode": capture_mode,
                 "sensitive_fields": list(sensitive_fields),
             },
+            "operational": operational,
             "payload": dict(payload),
             "extensions": dict(extensions or {}),
         }

@@ -34,17 +34,26 @@ from .api.routes_graph import router as graph_router
 from .api.routes_identity import (
     admin_router as identity_admin_router,
 )
+from .api.routes_improvement import (
+    agents_router,
+    eval_router,
+    optimization_router,
+)
 from .api.routes_identity import (
     router as identity_router,
 )
 from .api.routes_integrations import router as integrations_router
 from .api.routes_investigator import router as investigator_router
+from .api.routes_learning import drift_router, feedback_router, learning_router, outcomes_router
 from .api.routes_memory import router as memory_router
 from .api.routes_metrics import router as metrics_router
 from .api.routes_otlp import router as otlp_router
+from .api.routes_optimization import context_router, tools_router
 from .api.routes_platform import router as platform_router
 from .api.routes_privacy import router as privacy_router
 from .api.routes_recorder import router as recorder_router
+from .api.routes_release import deployments_router, releases_router, rollback_router
+from .api.routes_runtime import cache_router, routing_router, runtime_router
 from .api.routes_scim import admin_router as scim_admin_router
 from .api.routes_scim import router as scim_router
 from .api.routes_snapshot import router as snapshot_router
@@ -157,6 +166,7 @@ def _warn_insecure_secrets(settings) -> None:
         ReceiptSignerConfigurationError,
         validate_receipt_signer_configuration,
     )
+
     try:
         signer_config = validate_receipt_signer_configuration(settings)
     except ReceiptSignerConfigurationError:
@@ -240,13 +250,9 @@ def _validate_production_secrets(settings) -> None:
     elif embedding_provider == "openai" and not settings.openai_api_key.strip():
         errors.append("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai")
     if (
-        settings.supersession_llm_stage
-        or settings.graph_extract_llm
-        or settings.auto_metadata_llm
+        settings.supersession_llm_stage or settings.graph_extract_llm or settings.auto_metadata_llm
     ) and not settings.anthropic_api_key.strip():
-        errors.append(
-            "ANTHROPIC_API_KEY is required when an Anthropic-backed LLM stage is enabled"
-        )
+        errors.append("ANTHROPIC_API_KEY is required when an Anthropic-backed LLM stage is enabled")
     origins = {o.strip() for o in settings.cors_origins.split(",") if o.strip()}
     if "*" in origins:
         errors.append("CORS_ORIGINS must list trusted origins instead of '*'")
@@ -265,37 +271,25 @@ def _validate_production_secrets(settings) -> None:
     if not 10 <= settings.supersession_candidate_limit <= 5_000:
         errors.append("SUPERSESSION_CANDIDATE_LIMIT must be between 10 and 5000")
     if not 1_048_576 <= settings.supersession_candidate_bytes_limit <= 268_435_456:
-        errors.append(
-            "SUPERSESSION_CANDIDATE_BYTES_LIMIT must be between 1048576 and 268435456"
-        )
+        errors.append("SUPERSESSION_CANDIDATE_BYTES_LIMIT must be between 1048576 and 268435456")
     if not 1 <= settings.graph_exclusive_invalidation_limit <= 5_000:
-        errors.append(
-            "GRAPH_EXCLUSIVE_INVALIDATION_LIMIT must be between 1 and 5000"
-        )
+        errors.append("GRAPH_EXCLUSIVE_INVALIDATION_LIMIT must be between 1 and 5000")
     if not 1 <= settings.graph_extract_candidate_limit <= 5_000:
-        errors.append(
-            "GRAPH_EXTRACT_CANDIDATE_LIMIT must be between 1 and 5000"
-        )
+        errors.append("GRAPH_EXTRACT_CANDIDATE_LIMIT must be between 1 and 5000")
     if not 65_536 <= settings.graph_extract_candidate_bytes_limit <= 67_108_864:
-        errors.append(
-            "GRAPH_EXTRACT_CANDIDATE_BYTES_LIMIT must be between 65536 and 67108864"
-        )
+        errors.append("GRAPH_EXTRACT_CANDIDATE_BYTES_LIMIT must be between 65536 and 67108864")
     if not 1_000 <= settings.database_statement_timeout_ms <= 300_000:
         errors.append("DATABASE_STATEMENT_TIMEOUT_MS must be between 1000 and 300000")
     if not 100 <= settings.database_lock_timeout_ms <= 60_000:
         errors.append("DATABASE_LOCK_TIMEOUT_MS must be between 100 and 60000")
     if not 1_000 <= settings.database_idle_transaction_timeout_ms <= 300_000:
-        errors.append(
-            "DATABASE_IDLE_TRANSACTION_TIMEOUT_MS must be between 1000 and 300000"
-        )
+        errors.append("DATABASE_IDLE_TRANSACTION_TIMEOUT_MS must be between 1000 and 300000")
     if not 1_000 <= settings.migration_statement_timeout_ms <= 3_600_000:
         errors.append("MIGRATION_STATEMENT_TIMEOUT_MS must be between 1000 and 3600000")
     if not 100 <= settings.migration_lock_timeout_ms <= 60_000:
         errors.append("MIGRATION_LOCK_TIMEOUT_MS must be between 100 and 60000")
     if not 1_000 <= settings.migration_idle_transaction_timeout_ms <= 600_000:
-        errors.append(
-            "MIGRATION_IDLE_TRANSACTION_TIMEOUT_MS must be between 1000 and 600000"
-        )
+        errors.append("MIGRATION_IDLE_TRANSACTION_TIMEOUT_MS must be between 1000 and 600000")
     if not 1 <= settings.embedding_provider_timeout_seconds <= 120:
         errors.append("EMBEDDING_PROVIDER_TIMEOUT_SECONDS must be between 1 and 120")
     if not 1 <= settings.llm_provider_timeout_seconds <= 120:
@@ -310,9 +304,7 @@ def _validate_production_secrets(settings) -> None:
     except (TypeError, ValueError) as exc:
         errors.append(str(exc))
     if not 60 <= settings.workload_credential_min_ttl_seconds <= 31_536_000:
-        errors.append(
-            "WORKLOAD_CREDENTIAL_MIN_TTL_SECONDS must be between 60 and 31536000"
-        )
+        errors.append("WORKLOAD_CREDENTIAL_MIN_TTL_SECONDS must be between 60 and 31536000")
     if not (
         settings.workload_credential_min_ttl_seconds
         <= settings.workload_credential_max_ttl_seconds
@@ -335,9 +327,7 @@ def _validate_production_secrets(settings) -> None:
         settings.otlp_capture_mode.strip().lower() == "full"
         and not settings.recorder_allow_full_capture
     ):
-        errors.append(
-            "OTLP_CAPTURE_MODE=full requires RECORDER_ALLOW_FULL_CAPTURE=true"
-        )
+        errors.append("OTLP_CAPTURE_MODE=full requires RECORDER_ALLOW_FULL_CAPTURE=true")
     if settings.metrics_enabled and len(settings.metrics_bearer_token) < 32:
         errors.append(
             "METRICS_BEARER_TOKEN must be at least 32 characters when metrics are enabled"
@@ -345,37 +335,23 @@ def _validate_production_secrets(settings) -> None:
     if not 5 <= settings.observability_refresh_seconds <= 300:
         errors.append("OBSERVABILITY_REFRESH_SECONDS must be between 5 and 300")
     if not 100 <= settings.decision_evidence_candidate_limit <= 10_000:
-        errors.append(
-            "DECISION_EVIDENCE_CANDIDATE_LIMIT must be between 100 and 10000"
-        )
-    if not (
-        1_048_576
-        <= settings.decision_evidence_candidate_bytes_limit
-        <= 134_217_728
-    ):
-        errors.append(
-            "DECISION_EVIDENCE_CANDIDATE_BYTES_LIMIT must be between 1MiB and 128MiB"
-        )
+        errors.append("DECISION_EVIDENCE_CANDIDATE_LIMIT must be between 100 and 10000")
+    if not (1_048_576 <= settings.decision_evidence_candidate_bytes_limit <= 134_217_728):
+        errors.append("DECISION_EVIDENCE_CANDIDATE_BYTES_LIMIT must be between 1MiB and 128MiB")
     if not 1 / 60 <= settings.retention_prune_interval_hours <= 168:
         errors.append(
-            "RETENTION_PRUNE_INTERVAL_HOURS must be between one minute and 168 hours "
-            "in production"
+            "RETENTION_PRUNE_INTERVAL_HOURS must be between one minute and 168 hours in production"
         )
     region = settings.deployment_region.strip().lower()
     if region in {"", "local", "unknown", "unset", "configure-me"}:
-        errors.append(
-            "DEPLOYMENT_REGION must explicitly identify the server processing region"
-        )
+        errors.append("DEPLOYMENT_REGION must explicitly identify the server processing region")
     elif not all(character.isalnum() or character in {"-", "_", "."} for character in region):
-        errors.append(
-            "DEPLOYMENT_REGION may contain only letters, numbers, '-', '_', and '.'"
-        )
+        errors.append("DEPLOYMENT_REGION may contain only letters, numbers, '-', '_', and '.'")
     if settings.integration_allow_insecure_http:
         errors.append("INTEGRATION_ALLOW_INSECURE_HTTP is forbidden in production")
     if settings.legacy_webhooks_enabled:
         errors.append(
-            "LEGACY_WEBHOOKS_ENABLED is forbidden in production; use the durable "
-            "integration outbox"
+            "LEGACY_WEBHOOKS_ENABLED is forbidden in production; use the durable integration outbox"
         )
     if settings.siem_url.strip():
         errors.append(
@@ -399,9 +375,7 @@ def _validate_production_secrets(settings) -> None:
     if not 0.1 <= settings.integration_retry_base_seconds <= 3_600:
         errors.append("INTEGRATION_RETRY_BASE_SECONDS must be between 0.1 and 3600")
     if not (
-        settings.integration_retry_base_seconds
-        <= settings.integration_retry_max_seconds
-        <= 3_600
+        settings.integration_retry_base_seconds <= settings.integration_retry_max_seconds <= 3_600
     ):
         errors.append(
             "INTEGRATION_RETRY_MAX_SECONDS must be at least the base and no more than 3600"
@@ -409,16 +383,12 @@ def _validate_production_secrets(settings) -> None:
     if not 1_024 <= settings.integration_max_payload_bytes <= 10_000_000:
         errors.append("INTEGRATION_MAX_PAYLOAD_BYTES must be between 1024 and 10000000")
     if not 0 <= settings.integration_max_response_digest_bytes <= 1_000_000:
-        errors.append(
-            "INTEGRATION_MAX_RESPONSE_DIGEST_BYTES must be between 0 and 1000000"
-        )
+        errors.append("INTEGRATION_MAX_RESPONSE_DIGEST_BYTES must be between 0 and 1000000")
     kms_provider = settings.kms_provider.strip().lower()
     if kms_provider not in {"env", "aws", "azure", "vault"}:
         errors.append("KMS_PROVIDER must be env, aws, azure, or vault")
     elif kms_provider == "env":
-        errors.append(
-            "KMS_PROVIDER=env is forbidden in production; use aws, azure, or vault"
-        )
+        errors.append("KMS_PROVIDER=env is forbidden in production; use aws, azure, or vault")
     elif kms_provider == "aws" and not settings.kms_aws_encrypted_key:
         errors.append("KMS_AWS_ENCRYPTED_KEY is required when KMS_PROVIDER=aws")
     elif kms_provider == "azure" and not settings.kms_azure_vault_url:
@@ -514,6 +484,7 @@ async def lifespan(app: FastAPI):
         run_subject_erasure_worker,
         validate_subject_erasure_worker_configuration,
     )
+
     settings = get_settings()
     # A worker that terminates is observed by its done callback immediately,
     # rather than being discovered only when the process eventually shuts down.
@@ -534,13 +505,11 @@ async def lifespan(app: FastAPI):
     )
     if metering_configuration_errors:
         raise RuntimeError(
-            "Invalid durable metering configuration: "
-            + "; ".join(metering_configuration_errors)
+            "Invalid durable metering configuration: " + "; ".join(metering_configuration_errors)
         )
     impact_worker_configuration_errors = validate_impact_worker_configuration(
         settings,
-        production=settings.deployment_environment.strip().lower()
-        in {"prod", "production"},
+        production=settings.deployment_environment.strip().lower() in {"prod", "production"},
     )
     if impact_worker_configuration_errors:
         raise RuntimeError(
@@ -556,22 +525,18 @@ async def lifespan(app: FastAPI):
             "Invalid Recorder evidence indexing configuration: "
             + "; ".join(recorder_index_configuration_errors)
         )
-    subject_erasure_configuration_errors = (
-        validate_subject_erasure_worker_configuration(
-            settings,
-            production=production,
-        )
+    subject_erasure_configuration_errors = validate_subject_erasure_worker_configuration(
+        settings,
+        production=production,
     )
     if subject_erasure_configuration_errors:
         raise RuntimeError(
             "Invalid subject-erasure worker configuration: "
             + "; ".join(subject_erasure_configuration_errors)
         )
-    scim_reconciliation_configuration_errors = (
-        validate_scim_reconciliation_worker_configuration(
-            settings,
-            production=production,
-        )
+    scim_reconciliation_configuration_errors = validate_scim_reconciliation_worker_configuration(
+        settings,
+        production=production,
     )
     if scim_reconciliation_configuration_errors:
         raise RuntimeError(
@@ -608,8 +573,7 @@ async def lifespan(app: FastAPI):
         if not role_posture["enforced"]:
             failed_checks = failed_database_role_checks(role_posture)
             raise RuntimeError(
-                "Database runtime role posture is not enforced: "
-                + ", ".join(failed_checks)
+                "Database runtime role posture is not enforced: " + ", ".join(failed_checks)
             )
 
     await load_master_key()
@@ -619,13 +583,10 @@ async def lifespan(app: FastAPI):
         audit_boundary = await audit_append_boundary_status(boundary_db)
     if not audit_boundary["enforced"]:
         failed_boundary_checks = sorted(
-            name
-            for name, passed in audit_boundary["checks"].items()
-            if not passed
+            name for name, passed in audit_boundary["checks"].items() if not passed
         )
-        message = (
-            "Database audit append boundary is not enforced: "
-            + ", ".join(failed_boundary_checks)
+        message = "Database audit append boundary is not enforced: " + ", ".join(
+            failed_boundary_checks
         )
         if settings.deployment_environment.strip().lower() in {"prod", "production"}:
             raise RuntimeError(message)
@@ -635,18 +596,23 @@ async def lifespan(app: FastAPI):
     # service accepts traffic. The admin sentinel is transaction-local and is
     # cleared immediately after this one-time, idempotent upgrade pass.
     from .secret_storage import protect_legacy_sensitive_rows
+
     set_current_namespace("__admin__")
     set_current_barrier_group(None)
     try:
         async with AsyncSessionLocal() as migration_db:
             write_fence = (
-                await migration_db.execute(
-                    text(
-                        "SELECT phase, current_key_id, previous_key_id, generation "
-                        "FROM master_key_write_fence_state WHERE singleton_id = 1"
+                (
+                    await migration_db.execute(
+                        text(
+                            "SELECT phase, current_key_id, previous_key_id, generation "
+                            "FROM master_key_write_fence_state WHERE singleton_id = 1"
+                        )
                     )
                 )
-            ).mappings().one_or_none()
+                .mappings()
+                .one_or_none()
+            )
             if write_fence is not None:
                 fence_phase = str(write_fence["phase"])
                 fence_current_id = str(write_fence["current_key_id"])
@@ -673,15 +639,19 @@ async def lifespan(app: FastAPI):
                         "Master-key configuration is rejected by the persistent database write fence"
                     )
             rotation_checkpoint = (
-                await migration_db.execute(
-                    text(
-                        "SELECT current_key_id, status, legacy_values_remaining, "
-                        "previous_values_remaining, unknown_values_remaining, "
-                        "plaintext_closures_remaining "
-                        "FROM master_key_rotation_state WHERE singleton_id = 1"
+                (
+                    await migration_db.execute(
+                        text(
+                            "SELECT current_key_id, status, legacy_values_remaining, "
+                            "previous_values_remaining, unknown_values_remaining, "
+                            "plaintext_closures_remaining "
+                            "FROM master_key_rotation_state WHERE singleton_id = 1"
+                        )
                     )
                 )
-            ).mappings().one_or_none()
+                .mappings()
+                .one_or_none()
+            )
             if rotation_checkpoint is not None:
                 loaded_ids = {master_keyring.current.key_id}
                 if master_keyring.previous is not None:
@@ -713,6 +683,7 @@ async def lifespan(app: FastAPI):
     # the model-load penalty.  For sentence-transformers this blocks briefly in a
     # thread-pool executor; for API providers it is a no-op.
     from .embeddings import get_embedding_provider
+
     _provider = get_embedding_provider()
     try:
         _warmup_vec = await _provider.embed_one("warmup")
@@ -736,17 +707,20 @@ async def lifespan(app: FastAPI):
             "Set CORS_ORIGINS to a comma-separated list of trusted origins in production."
         )
 
-    logger.info("Lians starting", extra={
-        "embedding_provider": settings.embedding_provider,
-        "airgap_mode": settings.airgap_mode,
-        "llm_stage": settings.supersession_llm_stage,
-        "kms_provider": settings.kms_provider,
-        "master_key_id": master_keyring.current.key_id,
-        "previous_master_key_configured": master_keyring.previous is not None,
-        "deployment_region": settings.deployment_region.strip().lower(),
-        "merkle_batch_enabled": settings.merkle_batch_enabled,
-        "llm_adjudication_async": settings.llm_adjudication_async,
-    })
+    logger.info(
+        "Lians starting",
+        extra={
+            "embedding_provider": settings.embedding_provider,
+            "airgap_mode": settings.airgap_mode,
+            "llm_stage": settings.supersession_llm_stage,
+            "kms_provider": settings.kms_provider,
+            "master_key_id": master_keyring.current.key_id,
+            "previous_master_key_configured": master_keyring.previous is not None,
+            "deployment_region": settings.deployment_region.strip().lower(),
+            "merkle_batch_enabled": settings.merkle_batch_enabled,
+            "llm_adjudication_async": settings.llm_adjudication_async,
+        },
+    )
 
     instrument_sqlalchemy(engine)
 
@@ -937,9 +911,7 @@ async def _shredded_subject_handler(request: Request, exc: SubjectKeyDestroyedEr
 
 
 @app.exception_handler(SubjectReferenceError)
-async def _invalid_subject_reference_handler(
-    request: Request, exc: SubjectReferenceError
-):
+async def _invalid_subject_reference_handler(request: Request, exc: SubjectReferenceError):
     return JSONResponse(
         status_code=400,
         content={
@@ -1062,6 +1034,21 @@ if _api_surface in {"public", "all"}:
     app.include_router(platform_router)
     app.include_router(integrations_router)
     app.include_router(workload_credentials_router)
+    app.include_router(agents_router)
+    app.include_router(eval_router)
+    app.include_router(optimization_router)
+    app.include_router(context_router)
+    app.include_router(tools_router)
+    app.include_router(runtime_router)
+    app.include_router(routing_router)
+    app.include_router(cache_router)
+    app.include_router(outcomes_router)
+    app.include_router(feedback_router)
+    app.include_router(drift_router)
+    app.include_router(learning_router)
+    app.include_router(releases_router)
+    app.include_router(deployments_router)
+    app.include_router(rollback_router)
 if _api_surface in {"admin", "all"}:
     app.include_router(admin_router)
     app.include_router(identity_admin_router)
@@ -1126,12 +1113,8 @@ async def health(db: AsyncSession = Depends(_get_db)):
         try:
             from .database_role_posture import database_role_posture_status
 
-            role_posture = await asyncio.wait_for(
-                database_role_posture_status(db), timeout=2.0
-            )
-            checks["database_role"] = (
-                "ok" if role_posture["enforced"] else "error: unsafe_posture"
-            )
+            role_posture = await asyncio.wait_for(database_role_posture_status(db), timeout=2.0)
+            checks["database_role"] = "ok" if role_posture["enforced"] else "error: unsafe_posture"
         except Exception:
             checks["database_role"] = "error: unavailable"
     elif production:
@@ -1195,9 +1178,7 @@ async def health(db: AsyncSession = Depends(_get_db)):
         from .recorder_index_service import recorder_index_worker_status
 
         worker_healthy, _ = recorder_index_worker_status()
-        checks["recorder_evidence_index_worker"] = _worker_readiness_status(
-            worker_healthy
-        )
+        checks["recorder_evidence_index_worker"] = _worker_readiness_status(worker_healthy)
     else:
         checks["recorder_evidence_index_worker"] = "not_required"
 

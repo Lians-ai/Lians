@@ -1,7 +1,8 @@
 """Unit coverage for zero-config MCP routing into LocalLiansClient."""
+import asyncio
 from datetime import datetime
 
-from lians import mcp_server
+from lians import local_client, mcp_server
 
 
 class _FakeLocalClient:
@@ -23,6 +24,14 @@ class _FakeLocalClient:
     def fact_history(self, **kwargs):
         self.calls.append(("fact_history", kwargs))
         return []
+
+
+def test_local_client_respects_pinned_embedding_provider(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_PROVIDER", "local")
+    assert local_client._resolve_embedding_provider(None) == "local"
+    assert local_client._resolve_embedding_provider("sentence-transformers") == (
+        "sentence-transformers"
+    )
 
 
 def test_local_remember_parses_iso_timestamp(monkeypatch):
@@ -77,3 +86,22 @@ def test_local_query_routes_parse_query_strings(monkeypatch):
         "limit": 12,
     })
     assert history == {"ticker": "NVDA", "items": []}
+
+
+def test_mcp_tools_advertise_safe_approval_hints():
+    server = mcp_server._build_server()
+    handler = next(
+        callback
+        for request_type, callback in server.request_handlers.items()
+        if request_type.__name__ == "ListToolsRequest"
+    )
+
+    result = asyncio.run(handler(type("Request", (), {"params": None})()))
+    tools = {tool.name: tool for tool in result.root.tools}
+
+    assert tools["remember"].annotations.readOnlyHint is False
+    assert tools["remember"].annotations.idempotentHint is False
+    for name in set(tools) - {"remember"}:
+        assert tools[name].annotations.readOnlyHint is True
+        assert tools[name].annotations.destructiveHint is False
+        assert tools[name].annotations.idempotentHint is True

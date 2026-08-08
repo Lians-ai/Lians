@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lians.ai/specs/release-attestation/v0.1/schema.json",
+  "title": "Lians Release Attestation v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "namespace", "barrier_group", "schema_version", "release_candidate_id", "evaluation_attestation_id", "approval_attestation_ids", "payload", "payload_hash", "signature_algorithm", "signing_key_id", "signing_public_key", "signature", "attested_by_principal_ref", "attested_at"],
+  "properties": {
+    "id": {"type": "string", "format": "uuid"},
+    "namespace": {"type": "string", "minLength": 1},
+    "barrier_group": {"type": ["string", "null"]},
+    "schema_version": {"const": "0.1"},
+    "release_candidate_id": {"type": "string", "format": "uuid"},
+    "evaluation_attestation_id": {"type": "string", "format": "uuid"},
+    "approval_attestation_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "format": "uuid"}},
+    "payload": {"type": "object", "additionalProperties": true},
+    "payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "signature_algorithm": {"const": "ed25519"},
+    "signing_key_id": {"type": "string", "minLength": 1},
+    "signing_public_key": {"type": "string", "minLength": 1},
+    "signature": {"type": "string", "minLength": 1},
+    "attested_by_principal_ref": {"type": "string", "minLength": 1},
+    "attested_at": {"type": "string", "format": "date-time"}
+  }
+}

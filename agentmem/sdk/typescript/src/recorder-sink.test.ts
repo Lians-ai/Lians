@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 
 import { LiansError } from "./client.js";
+import { liansEvent } from "./recorder.js";
 import {
   RecorderClosedError,
   RecorderFlushError,
@@ -46,6 +47,25 @@ function batch(events: RecorderEnvelope[]): RecorderBatchResult {
 }
 
 describe("RecorderSink delivery contract", () => {
+  it("accepts v0.2 builder events with provenance-bearing operational measurements", async () => {
+    const built = liansEvent("agent.completed", { status: "ok" }, {
+      operational: {
+        provider: "openai",
+        tokens: { input: { value: 120, provenance: "provider-reported" } },
+        latency_ms: { value: 250, provenance: "client-measured" },
+      },
+    });
+    expect(built.schema_version).toBe("0.2");
+    expect(built.operational?.tokens?.input?.value).toBe(120);
+
+    const sink = new RecorderSink(
+      { ingestRecorderBatch: async (events) => batch(events) },
+      { maxBatchDelayMs: 0 },
+    );
+    await expect(sink.record(built)).resolves.toMatchObject({ status: "accepted" });
+    await sink.close();
+  });
+
   it("replays the identical frozen envelope and identity after a retry", async () => {
     const attempts: string[] = [];
     const transport = {

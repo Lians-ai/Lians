@@ -36,8 +36,13 @@ from lians import (  # noqa: E402, F401
     evidence_models,
     governance_models,
     identity_models,
+    improvement_models,
     integration_models,
+    learning_models,
+    optimization_models,
     recorder_models,
+    release_models,
+    runtime_models,
     subject_erasure_models,
 )
 from lians.config import get_settings  # noqa: E402

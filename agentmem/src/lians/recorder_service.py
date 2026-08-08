@@ -34,6 +34,7 @@ from .recorder_schemas import (
     RecorderEnvelope,
     RecorderEventOut,
     RecorderIngestResult,
+    RecorderOperational,
     RecorderRunReadiness,
 )
 from .subject_privacy import replace_subject_identifier
@@ -249,14 +250,17 @@ def _semantic_base(envelope: RecorderEnvelope) -> dict[str, Any]:
         "policy_version": _first(
             payload.get("policy_version"), envelope.extensions.get("lians.policy.version")
         ),
+        "provider": _first(payload.get("provider"), envelope.extensions.get("gen_ai.system")),
+        "runtime_framework": _first(
+            payload.get("runtime_framework"), envelope.extensions.get("lians.runtime.framework")
+        ),
+        "operation": _first(payload.get("operation"), payload.get("operation_name")),
         "input": _first(payload.get("input"), payload.get("prompt"), payload.get("arguments")),
         "output": _first(payload.get("output"), payload.get("result"), payload.get("completion")),
         "input_hash": payload.get("input_hash"),
         "output_hash": payload.get("output_hash"),
         "has_evidence": bool(
-            payload.get("evidence")
-            or payload.get("evidence_memory_ids")
-            or payload.get("sources")
+            payload.get("evidence") or payload.get("evidence_memory_ids") or payload.get("sources")
         ),
         "occurred_at": envelope.occurred_at,
     }
@@ -301,6 +305,17 @@ def _normalize_otlp(envelope: RecorderEnvelope) -> dict[str, Any]:
                 "genai.span",
             ),
             "event_name": _first(payload.get("name"), operation, "unnamed-genai-span"),
+            "provider": _first(
+                attrs.get("gen_ai.provider.name"),
+                attrs.get("gen_ai.system"),
+                data.get("provider"),
+            ),
+            "runtime_framework": _first(
+                attrs.get("lians.runtime.framework"),
+                resource.get("telemetry.sdk.name"),
+                data.get("runtime_framework"),
+            ),
+            "operation": _first(operation, data.get("operation")),
             "phase": "completed" if end_timestamp is not None else "started",
             "agent_id": _first(
                 data["agent_id"],
@@ -366,7 +381,124 @@ def _normalize_otlp(envelope: RecorderEnvelope) -> dict[str, Any]:
     data["status"] = "error" if str(status_code) in {"2", "ERROR", "error"} else "ok"
     data["attributes"] = attrs
     data["resource_attributes"] = resource
+    data["start_timestamp"] = _datetime_from_nanos(
+        _first(payload.get("start_time_unix_nano"), payload.get("startTimeUnixNano"))
+    )
+    data["end_timestamp"] = end_timestamp
     return data
+
+
+def _nonnegative_number(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0 or parsed != parsed or parsed in {float("inf"), float("-inf")}:
+        return None
+    return parsed
+
+
+def _observed_measurement(value: Any, provenance: str) -> dict[str, Any] | None:
+    parsed = _nonnegative_number(value)
+    if parsed is None:
+        return None
+    return {"value": parsed, "provenance": provenance}
+
+
+def _finish_reason(value: Any) -> str | None:
+    if isinstance(value, list):
+        value = next((item for item in value if isinstance(item, str) and item), None)
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value[:128] if value else None
+
+
+def _operational_fields(
+    envelope: RecorderEnvelope,
+    data: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge explicit v0.2 values with conservative protocol observations."""
+
+    explicit = envelope.operational.model_dump(mode="json", exclude_none=True)
+    attrs = _dict(data.get("attributes"))
+    tokens = dict(explicit.get("tokens") or {})
+    tokens.setdefault(
+        "input",
+        _observed_measurement(
+            _first(
+                attrs.get("gen_ai.usage.input_tokens"),
+                attrs.get("gen_ai.usage.prompt_tokens"),
+            ),
+            "provider-reported",
+        ),
+    )
+    tokens.setdefault(
+        "output",
+        _observed_measurement(
+            _first(
+                attrs.get("gen_ai.usage.output_tokens"),
+                attrs.get("gen_ai.usage.completion_tokens"),
+            ),
+            "provider-reported",
+        ),
+    )
+    tokens.setdefault(
+        "cached",
+        _observed_measurement(
+            _first(
+                attrs.get("gen_ai.usage.input_tokens.cached"),
+                attrs.get("gen_ai.usage.cached_tokens"),
+            ),
+            "provider-reported",
+        ),
+    )
+    explicit["tokens"] = {key: value for key, value in tokens.items() if value is not None}
+
+    explicit.setdefault("provider", data.get("provider"))
+    explicit.setdefault("runtime_framework", data.get("runtime_framework"))
+    explicit.setdefault("operation", data.get("operation"))
+    for field_name, extension_name in (
+        ("prompt_hash", "lians.prompt.hash"),
+        ("toolset_hash", "lians.toolset.hash"),
+        ("request_configuration_hash", "lians.request.configuration.hash"),
+        ("agent_version_id", "lians.agent.version.id"),
+        ("release_reference", "lians.release.ref"),
+        ("outcome_correlation", "lians.outcome.correlation"),
+    ):
+        explicit.setdefault(field_name, envelope.extensions.get(extension_name))
+
+    start = data.get("start_timestamp")
+    end = data.get("end_timestamp")
+    if "latency_ms" not in explicit and start is not None and end is not None and end >= start:
+        explicit["latency_ms"] = {
+            "value": (end - start).total_seconds() * 1000,
+            "provenance": "client-measured",
+        }
+    explicit.setdefault(
+        "finish_reason",
+        _finish_reason(
+            _first(
+                attrs.get("gen_ai.response.finish_reasons"),
+                attrs.get("gen_ai.response.finish_reason"),
+            )
+        ),
+    )
+    explicit.setdefault(
+        "error_code",
+        _first(attrs.get("error.type"), attrs.get("error.code")),
+    )
+    if "cost" not in explicit:
+        amount = _observed_measurement(
+            _first(attrs.get("gen_ai.usage.cost"), attrs.get("lians.cost.amount")),
+            "provider-reported",
+        )
+        currency = _first(attrs.get("gen_ai.usage.cost.currency"), attrs.get("lians.cost.currency"))
+        if amount is not None and isinstance(currency, str):
+            explicit["cost"] = {"amount": amount, "currency": currency.upper()}
+
+    # setdefault can retain None; validation/output should expose only observed fields.
+    return {key: value for key, value in explicit.items() if value is not None}
 
 
 def _normalize_mcp(envelope: RecorderEnvelope) -> dict[str, Any]:
@@ -588,8 +720,7 @@ def normalize_recorder_envelope(
     )
     for name, value in (("input_hash", input_hash), ("output_hash", output_hash)):
         invalid = value is not None and (
-            len(str(value)) != 64
-            or any(c not in "0123456789abcdefABCDEF" for c in str(value))
+            len(str(value)) != 64 or any(c not in "0123456789abcdefABCDEF" for c in str(value))
         )
         if invalid:
             raise RecorderNormalizationError("invalid_hash", f"{name} must be a SHA-256 hex digest")
@@ -602,9 +733,7 @@ def normalize_recorder_envelope(
     event_kind = str(data.get("event_kind") or "agent.event")[:128]
     phase = str(data.get("phase") or "event")[:32]
     boundary_kind = (
-        "decision"
-        if data.get("decision_id") or "decision" in event_kind.casefold()
-        else "run"
+        "decision" if data.get("decision_id") or "decision" in event_kind.casefold() else "run"
     )
 
     capture_gaps: list[str] = []
@@ -637,8 +766,7 @@ def normalize_recorder_envelope(
                 "code": "occurred_at_defaulted",
                 "severity": "warning",
                 "message": (
-                    "No source timestamp was captured; receipt time defaults "
-                    "to ingestion time."
+                    "No source timestamp was captured; receipt time defaults to ingestion time."
                 ),
             }
         )
@@ -687,14 +815,12 @@ def normalize_recorder_envelope(
                 sensitive_fields=sensitive_fields,
             ),
         },
+        "operational": _operational_fields(envelope, data),
     }
     raw_extensions = {
         **envelope.extensions,
         **{f"actor.{key}": value for key, value in envelope.actor.extensions.items()},
-        **{
-            f"correlation.{key}": value
-            for key, value in envelope.correlation.extensions.items()
-        },
+        **{f"correlation.{key}": value for key, value in envelope.correlation.extensions.items()},
     }
     extensions = _sanitize(
         raw_extensions,
@@ -717,23 +843,15 @@ def normalize_recorder_envelope(
         session_id=str(data["session_id"])[:512] if data.get("session_id") else None,
         trace_id=str(data["trace_id"])[:64] if data.get("trace_id") else None,
         span_id=str(data["span_id"])[:64] if data.get("span_id") else None,
-        parent_span_id=(
-            str(data["parent_span_id"])[:64] if data.get("parent_span_id") else None
-        ),
+        parent_span_id=(str(data["parent_span_id"])[:64] if data.get("parent_span_id") else None),
         task_id=str(data["task_id"])[:512] if data.get("task_id") else None,
         context_id=str(data["context_id"])[:512] if data.get("context_id") else None,
         message_id=str(data["message_id"])[:512] if data.get("message_id") else None,
-        tool_call_id=(
-            str(data["tool_call_id"])[:512] if data.get("tool_call_id") else None
-        ),
+        tool_call_id=(str(data["tool_call_id"])[:512] if data.get("tool_call_id") else None),
         decision_id=data.get("decision_id"),
         model_id=str(data["model_id"])[:512] if data.get("model_id") else None,
-        model_version=(
-            str(data["model_version"])[:512] if data.get("model_version") else None
-        ),
-        policy_version=(
-            str(data["policy_version"])[:512] if data.get("policy_version") else None
-        ),
+        model_version=(str(data["model_version"])[:512] if data.get("model_version") else None),
+        policy_version=(str(data["policy_version"])[:512] if data.get("policy_version") else None),
         input_hash=str(input_hash).lower() if input_hash else None,
         output_hash=str(output_hash).lower() if output_hash else None,
         has_evidence=bool(data.get("has_evidence")),
@@ -779,8 +897,7 @@ def _merge_diagnostics(
     existing: list[dict[str, Any]], incoming: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     by_code = {
-        str(item.get("code", _hash(item))): item
-        for item in [*(existing or []), *(incoming or [])]
+        str(item.get("code", _hash(item))): item for item in [*(existing or []), *(incoming or [])]
     }
     return list(by_code.values())[:100]
 
@@ -861,9 +978,7 @@ def _recorder_event_hash_document(row: RecorderEvent) -> dict[str, Any]:
     if version == 1:
         return legacy
     if version != 2:
-        raise RecorderIntegrityError(
-            f"Recorder event {row.id} uses unknown hash version {version}"
-        )
+        raise RecorderIntegrityError(f"Recorder event {row.id} uses unknown hash version {version}")
     return {
         "event_hash_version": 2,
         "id": str(row.id),
@@ -980,9 +1095,7 @@ async def assert_recorder_event_integrity(
                     "event_hash_version": 2,
                 }
             )
-        query = query.where(
-            cast(EventLog.payload, JSONB).contains(binding_identity)
-        )
+        query = query.where(cast(EventLog.payload, JSONB).contains(binding_identity))
     elif dialect == "sqlite":
         # JSON1 predicates make the corruption check cardinality-bounded without
         # hydrating every audit row that happens to share the same content hash.
@@ -1062,9 +1175,7 @@ async def assert_recorder_events_integrity(
                 and not 1 <= len(row.ingested_by_credential_id) <= 128
             )
         ):
-            raise RecorderIntegrityError(
-                "Recorder event has invalid authenticated provenance"
-            )
+            raise RecorderIntegrityError("Recorder event has invalid authenticated provenance")
     event_ids = [str(row.id) for row in rows]
     query = select(EventLog).where(
         EventLog.namespace == rows[0].namespace,
@@ -1084,9 +1195,7 @@ async def assert_recorder_events_integrity(
     candidates = list(
         (
             await db.execute(
-                query.order_by(EventLog.chain_position, EventLog.id).limit(
-                    len(rows) * 2 + 1
-                )
+                query.order_by(EventLog.chain_position, EventLog.id).limit(len(rows) * 2 + 1)
             )
         ).scalars()
     )
@@ -1114,9 +1223,7 @@ async def assert_recorder_events_integrity(
             )
         ]
         if len(bindings) != 1:
-            raise RecorderIntegrityError(
-                "Recorder evidence page contains an invalid audit binding"
-            )
+            raise RecorderIntegrityError("Recorder evidence page contains an invalid audit binding")
 
 
 def _event_out(row: RecorderEvent) -> RecorderEventOut:
@@ -1143,6 +1250,9 @@ def _event_out(row: RecorderEvent) -> RecorderEventOut:
         model_id=row.model_id,
         input_hash=row.input_hash,
         output_hash=row.output_hash,
+        operational=RecorderOperational.model_validate(
+            (row.normalized_payload or {}).get("operational") or {}
+        ),
         capture_mode=row.capture_mode,
         capture_gaps=list(row.capture_gaps or []),
         diagnostics=list(row.diagnostics or []),
@@ -1259,20 +1369,14 @@ async def _acquire_decision_recorder_fence(
     # this namespace fence. Taking it first gives multi-decision OTLP batches,
     # live Recorder inserts, and worker pages one deadlock-free lock order.
     await db.execute(
-        text(
-            "SELECT pg_advisory_xact_lock(hashtextextended("
-            ":namespace, :hash_seed))"
-        ),
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:namespace, :hash_seed))"),
         {
             "namespace": namespace,
             "hash_seed": _EVIDENCE_REGISTRATION_FENCE_HASH_SEED,
         },
     )
     await db.execute(
-        text(
-            "SELECT pg_advisory_xact_lock(hashtextextended("
-            ":identity, :hash_seed))"
-        ),
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:identity, :hash_seed))"),
         {
             "identity": f"{namespace}:{decision_id}",
             "hash_seed": _DECISION_RECORDER_FENCE_HASH_SEED,
@@ -1305,9 +1409,7 @@ async def _update_recorder_kind_coverage(
     )
     by_kind = {row.kind: row for row in rows}
     if set(kinds) != set(by_kind):
-        raise RecorderIntegrityError(
-            "Decision evidence coverage registration is incomplete"
-        )
+        raise RecorderIntegrityError("Decision evidence coverage registration is incomplete")
     now = datetime.now(timezone.utc)
     for kind in kinds:
         row = by_kind[kind]
@@ -1353,18 +1455,16 @@ async def index_recorder_rows_batch(
         decision_id=decision.id,
     )
     await assert_recorder_events_integrity(db, rows)
-    artifact_candidates: list[
-        tuple[str | None, ArtifactSpec, str | None, datetime | None]
-    ] = []
+    artifact_candidates: list[tuple[str | None, ArtifactSpec, str | None, datetime | None]] = []
     descriptors: list[tuple[RecorderEvent, ArtifactSpec, list[str], str]] = []
     event_summaries: dict[str, list[dict[str, str]]] = {}
     for row in rows:
         if row.namespace != decision.namespace or row.decision_id != decision.id:
             raise RecorderIntegrityError("Recorder evidence page crosses its decision")
-        if (
-            decision.barrier_group is not None
-            and row.barrier_group not in {None, decision.barrier_group}
-        ):
+        if decision.barrier_group is not None and row.barrier_group not in {
+            None,
+            decision.barrier_group,
+        }:
             raise RecorderIntegrityError("Recorder evidence page crosses its barrier")
         seen_kinds: set[str] = set()
         for spec, basis in _recorder_artifact_specs(row):
@@ -1400,9 +1500,7 @@ async def index_recorder_rows_batch(
         page_artifacts, page_created = await ensure_artifacts_bulk(
             db,
             namespace=decision.namespace,
-            candidates=artifact_candidates[
-                offset : offset + _RECORDER_EVIDENCE_BULK_PAGE_SIZE
-            ],
+            candidates=artifact_candidates[offset : offset + _RECORDER_EVIDENCE_BULK_PAGE_SIZE],
         )
         artifacts.update(page_artifacts)
         artifacts_created += page_created
@@ -1425,16 +1523,12 @@ async def index_recorder_rows_batch(
             db,
             namespace=decision.namespace,
             decision=decision,
-            candidates=link_candidates[
-                offset : offset + _RECORDER_EVIDENCE_BULK_PAGE_SIZE
-            ],
+            candidates=link_candidates[offset : offset + _RECORDER_EVIDENCE_BULK_PAGE_SIZE],
         )
         links_created += page_created
         new_artifact_ids.update(page_artifact_ids)
     new_links_by_kind: Counter[str] = Counter(
-        artifact.kind
-        for artifact in artifacts.values()
-        if artifact.id in new_artifact_ids
+        artifact.kind for artifact in artifacts.values() if artifact.id in new_artifact_ids
     )
     await _update_recorder_kind_coverage(
         db,
@@ -1485,9 +1579,7 @@ async def _mark_recorder_job_coverage(
         ).scalars()
     )
     if len(rows) != len(_RECORDER_COVERAGE_KINDS):
-        raise RecorderIntegrityError(
-            "Decision evidence coverage registration is incomplete"
-        )
+        raise RecorderIntegrityError("Decision evidence coverage registration is incomplete")
     now = datetime.now(timezone.utc)
     for row in rows:
         gaps = set(row.gap_codes or [])
@@ -1505,9 +1597,7 @@ async def _mark_recorder_job_coverage(
                 "prior_watermark": row.source_watermark,
                 "job_id": str(job.id),
                 "state": state,
-                "snapshot_max_recorded_at": _utc(
-                    job.snapshot_max_recorded_at
-                ).isoformat(),
+                "snapshot_max_recorded_at": _utc(job.snapshot_max_recorded_at).isoformat(),
                 "snapshot_max_event_id": str(job.snapshot_max_event_id),
                 "snapshot_event_count": int(job.snapshot_event_count),
                 "events_indexed": int(job.events_indexed),
@@ -1540,8 +1630,7 @@ async def _enqueue_recorder_evidence_index_job(
     if existing is not None:
         if (
             int(existing.snapshot_event_count) != total
-            or _utc(existing.snapshot_max_recorded_at)
-            != _utc(snapshot_max_recorded_at)
+            or _utc(existing.snapshot_max_recorded_at) != _utc(snapshot_max_recorded_at)
             or existing.snapshot_max_event_id != snapshot_max_event_id
         ):
             raise RecorderIntegrityError(
@@ -1613,10 +1702,7 @@ async def index_recorder_evidence_for_decision(
     )
     filters = _decision_recorder_filters(decision)
     total = int(
-        (
-            await db.execute(select(func.count(RecorderEvent.id)).where(*filters))
-        ).scalar_one()
-        or 0
+        (await db.execute(select(func.count(RecorderEvent.id)).where(*filters))).scalar_one() or 0
     )
     if total > _DECISION_RECORDER_INDEX_LIMIT:
         boundary = (
@@ -1647,7 +1733,9 @@ async def index_recorder_evidence_for_decision(
                 .order_by(RecorderEvent.recorded_at.asc(), RecorderEvent.id.asc())
                 .limit(_DECISION_RECORDER_INDEX_LIMIT + 1)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     if len(rows) > _DECISION_RECORDER_INDEX_LIMIT:
         raise RecorderIntegrityError(
@@ -1757,9 +1845,7 @@ async def ingest_recorder_event(
     event = normalized or normalize_recorder_envelope(envelope, received_at=recorded_at)
     raw_subject_id = event.subject_id
     persisted_subject_ref = (
-        await assert_subject_not_erased(db, raw_subject_id, namespace)
-        if raw_subject_id
-        else None
+        await assert_subject_not_erased(db, raw_subject_id, namespace) if raw_subject_id else None
     )
     if raw_subject_id and persisted_subject_ref:
         event.subject_id = persisted_subject_ref
@@ -1778,9 +1864,7 @@ async def ingest_recorder_event(
                 }
             )
     event.capture_gaps = [
-        gap
-        for gap in event.capture_gaps
-        if gap not in {"agent_identity", "principal_context"}
+        gap for gap in event.capture_gaps if gap not in {"agent_identity", "principal_context"}
     ]
     event.diagnostics = _merge_diagnostics(
         event.diagnostics,
@@ -1851,9 +1935,7 @@ async def ingest_recorder_event(
     # the read/merge/write of the denormalized readiness aggregate so no event
     # count, protocol, diagnostic, or evidence dimension is lost.
     locked_run = (
-        await db.execute(
-            select(RecorderRun).where(RecorderRun.id == run.id).with_for_update()
-        )
+        await db.execute(select(RecorderRun).where(RecorderRun.id == run.id).with_for_update())
     ).scalar_one_or_none()
     if locked_run is None:
         raise RuntimeError("Recorder run disappeared during ingestion")
@@ -2032,10 +2114,7 @@ async def list_run_events(
             )
         )
     total_subquery = (
-        select(func.count())
-        .select_from(RecorderEvent)
-        .where(*filters)
-        .scalar_subquery()
+        select(func.count()).select_from(RecorderEvent).where(*filters).scalar_subquery()
     )
     page_result = list(
         (
@@ -2061,9 +2140,7 @@ async def list_run_events(
         if page_result
         else int(
             (
-                await db.execute(
-                    select(func.count()).select_from(RecorderEvent).where(*filters)
-                )
+                await db.execute(select(func.count()).select_from(RecorderEvent).where(*filters))
             ).scalar_one()
         )
     )
@@ -2077,21 +2154,15 @@ async def list_run_events(
                         func.coalesce(
                             func.sum(
                                 func.coalesce(
-                                    func.length(
-                                        cast(RecorderEvent.normalized_payload, Text)
-                                    ),
+                                    func.length(cast(RecorderEvent.normalized_payload, Text)),
                                     0,
                                 )
                                 + func.coalesce(
-                                    func.length(
-                                        cast(RecorderEvent.extension_attributes, Text)
-                                    ),
+                                    func.length(cast(RecorderEvent.extension_attributes, Text)),
                                     0,
                                 )
                                 + func.coalesce(
-                                    func.length(
-                                        cast(RecorderEvent.capture_gaps, Text)
-                                    ),
+                                    func.length(cast(RecorderEvent.capture_gaps, Text)),
                                     0,
                                 )
                                 + func.coalesce(
@@ -2133,9 +2204,7 @@ async def list_run_events(
         )
         hydrated_by_id.update((row.id, row) for row in hydrated)
     if set(hydrated_by_id) != set(page_ids):
-        raise RecorderIntegrityError(
-            "Recorder event page changed between inventory and hydration"
-        )
+        raise RecorderIntegrityError("Recorder event page changed between inventory and hydration")
     page_rows = [hydrated_by_id[event_id] for event_id in page_ids]
     for offset in range(0, len(page_rows), _DECISION_RECORDER_INDEX_LIMIT):
         await assert_recorder_events_integrity(
@@ -2178,16 +2247,12 @@ async def first_receipt_readiness(
     if agent_id:
         filters.append(RecorderRun.agent_id == agent_id)
 
-    total_result = await db.execute(
-        select(func.count()).select_from(RecorderRun).where(*filters)
-    )
+    total_result = await db.execute(select(func.count()).select_from(RecorderRun).where(*filters))
     total = int(total_result.scalar_one())
     ready_filters = [*filters, RecorderRun.receipt_ready.is_(True)]
     ready_count = int(
         (
-            await db.execute(
-                select(func.count()).select_from(RecorderRun).where(*ready_filters)
-            )
+            await db.execute(select(func.count()).select_from(RecorderRun).where(*ready_filters))
         ).scalar_one()
     )
     first_ready = (
@@ -2210,13 +2275,9 @@ async def first_receipt_readiness(
         .scalars()
         .all()
     )
-    missing_counts = Counter(
-        gap for row in rows for gap in (row.completeness_gaps or [])
-    )
+    missing_counts = Counter(gap for row in rows for gap in (row.completeness_gaps or []))
     actions = [
-        _ACTION_TEXT[name]
-        for name, _count in missing_counts.most_common(5)
-        if name in _ACTION_TEXT
+        _ACTION_TEXT[name] for name, _count in missing_counts.most_common(5) if name in _ACTION_TEXT
     ]
     return FirstReceiptReadinessSummary(
         namespace=namespace,

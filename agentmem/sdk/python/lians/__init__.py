@@ -1,4 +1,4 @@
-﻿"""
+"""
 Lians Python SDK — financial-grade AI memory with compliance built in.
 
 Three client modes for core memory workflows:
@@ -46,6 +46,7 @@ Install with extras::
     pip install lians-sdk[local]           # LocalLiansClient (SQLite)
     pip install lians-sdk[all]             # Everything
 """
+
 from .anthropic_recorder import (
     anthropic_managed_agents_webhook_event,
     build_anthropic_recorder_middleware,
@@ -117,6 +118,8 @@ from .platform_types import (
     ReceiptIssuer,
     RecorderEvidenceIndexJob,
     RecorderEnvelope,
+    RecorderMeasurement,
+    RecorderOperational,
     RemediationTask,
     RemediationTaskCreate,
     RemediationTaskUpdate,
@@ -168,8 +171,10 @@ def __getattr__(name: str):
     # dependency is httpx — can `import lians` without crashing.
     if name in ("LocalLiansClient", "LocalAgentMemClient"):
         from .local_client import LocalLiansClient
+
         return LocalLiansClient
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [  # noqa: RUF022 -- grouped by public capability, not alphabetically
     "__version__",
@@ -188,6 +193,8 @@ __all__ = [  # noqa: RUF022 -- grouped by public capability, not alphabetically
     "mcp_jsonrpc_event",
     "a2a_event",
     "RecorderEnvelope",
+    "RecorderMeasurement",
+    "RecorderOperational",
     "RecorderEvidenceIndexJob",
     "AsyncRecorderClient",
     "AsyncRecorderSink",

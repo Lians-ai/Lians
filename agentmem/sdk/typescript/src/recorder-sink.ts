@@ -983,7 +983,11 @@ function validateEnvelopeSnapshot(
 ): asserts value is RecorderEnvelope {
   if (!isRecord(value)) invalidRecorderEvent(identity);
   if (!includes(PROTOCOLS, value.protocol)) invalidRecorderEvent(identity);
-  if (value.schema_version !== undefined && value.schema_version !== "0.1") {
+  if (
+    value.schema_version !== undefined
+    && value.schema_version !== "0.1"
+    && value.schema_version !== "0.2"
+  ) {
     invalidRecorderEvent(identity);
   }
   optionalBoundedText(value, "event_type", 128, identity);
@@ -1006,6 +1010,36 @@ function validateEnvelopeSnapshot(
   validateActor(value.actor, identity);
   validateCorrelation(value.correlation, identity);
   validateCapture(value.capture, identity);
+  validateOperational(value.operational, identity);
+}
+
+function validateOperational(
+  value: unknown,
+  identity: Omit<PreparedEvent, "serialized" | "bytes">,
+): void {
+  if (value === undefined) return;
+  if (!isRecord(value) || Object.keys(value).length > 16) invalidRecorderEvent(identity);
+  for (const key of [
+    "provider",
+    "runtime_framework",
+    "operation",
+    "prompt_hash",
+    "toolset_hash",
+    "request_configuration_hash",
+    "agent_version_id",
+    "release_reference",
+    "finish_reason",
+    "error_code",
+    "outcome_correlation",
+  ] as const) {
+    optionalBoundedText(value, key, 512, identity);
+  }
+  for (const key of ["tokens", "latency_ms", "cost"] as const) {
+    const field = value[key];
+    if (field !== undefined && (!isRecord(field) || Object.keys(field).length > 8)) {
+      invalidRecorderEvent(identity);
+    }
+  }
 }
 
 function validateActor(

@@ -1,8 +1,8 @@
 # Lians for Codex
 
-Persistent, financial-grade memory for the [Codex](https://github.com/openai/codex)
-agent — with the compliance guarantees regulated teams need (bitemporal recall,
-SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information barriers).
+Provider-neutral, persistent memory for Codex, backed by bitemporal recall,
+provenance, exact-token optimization, and the evidence controls consequential
+workflows need.
 
 ## Two ways to wire it in
 
@@ -23,9 +23,17 @@ key at [api.lians.dev](https://api.lians.dev)). Local mode needs no env vars.
 ### 2. MCP server (native tools)
 
 Add the block from [`config.example.toml`](./config.example.toml) to
-`~/.codex/config.toml`. Codex gains eight native memory tools (`remember`,
-`recall`, `recall_at`, `reconstruct`, `list_conflicts`, `memory_lineage`,
-`fact_history`, `backtest_check`) with no SDK code in your project.
+`~/.codex/config.toml`, then restart Codex. The recommended core profile exposes
+three native tools (`remember`, `recall`, `recall_at`) with no SDK code in your
+project. The same server also provides five audit tools (`reconstruct`,
+`list_conflicts`, `memory_lineage`, `fact_history`, `backtest_check`) that can be
+enabled for evidence-heavy tasks.
+
+The smaller core profile is deliberate: its three canonical MCP schemas are 514
+`o200k_base` tokens in the 2026-08-08 checkout, while exposing all eight schemas
+would add avoidable context to ordinary turns. Codex's internal prompt framing may
+differ, so treat this as schema accounting rather than a per-message billing
+measurement. See the [Codex validation report](../../docs/benchmarks/codex-mcp-local-2026-08-08.md).
 
 ## Install via the skills standard
 
@@ -47,3 +55,8 @@ vector store returns every version with equal rank and contaminates your context
 Lians excludes superseded facts at the database layer and can reconstruct exactly
 what the agent knew at any past date. See the
 [mem0 comparison](../../docs/compare-mem0.md).
+
+Lians can reduce context tokens on measured workflows; it does not guarantee
+lower total credits, latency, or higher answer quality for every prompt. Model,
+reasoning effort, cached input, tool use, and output length also affect Codex
+usage.

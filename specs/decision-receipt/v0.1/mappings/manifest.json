@@ -6,17 +6,17 @@
     {
       "standard": "opentelemetry_genai",
       "path": "opentelemetry-genai.md",
-      "sha256": "5652b7a1cf639cfaa731388ee08cc390722d56ccea74501611e6a3c593638664"
+      "sha256": "eb1f93ccc1e47d0597d6c486d8dcd149302fa7cc24a8de450283623aff265b57"
     },
     {
       "standard": "mcp",
       "path": "mcp.md",
-      "sha256": "bdf0a59bda5b1a3896d0c1f85c713c5513271b6efe531638200d2ea7d763d0d1"
+      "sha256": "983933560c27709e59666a61a6de9c8b383d762a6151ca174116a67a294488ef"
     },
     {
       "standard": "a2a",
       "path": "a2a.md",
-      "sha256": "7ee692fe44cfaa90176492de68d7515a4ab3575a02ceec05da57c33a98471e11"
+      "sha256": "f3c926e56020c8562a675206bf781ddec7a42ffd04fa79a33c20f4b759680785"
     }
   ]
 }

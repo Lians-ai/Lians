@@ -6,10 +6,75 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 RecorderProtocol = Literal["lians", "otlp.genai", "mcp", "a2a"]
 CaptureMode = Literal["metadata_only", "hash_only", "full"]
+MeasurementProvenance = Literal[
+    "provider-reported",
+    "workload-reported",
+    "client-measured",
+    "deterministic",
+    "human-authored",
+    "model-judged",
+    "estimated",
+]
+
+
+class RecorderMeasurement(BaseModel):
+    """A numeric observation whose origin is never implicit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: float = Field(ge=0)
+    provenance: MeasurementProvenance
+
+
+class RecorderTokenUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input: RecorderMeasurement | None = None
+    output: RecorderMeasurement | None = None
+    cached: RecorderMeasurement | None = None
+
+
+class RecorderCost(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount: RecorderMeasurement
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
+    attribution: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class RecorderOperational(BaseModel):
+    """Universal Recorder v0.2 provider/runtime efficiency fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str | None = Field(default=None, min_length=1, max_length=255)
+    runtime_framework: str | None = Field(default=None, min_length=1, max_length=255)
+    operation: str | None = Field(default=None, min_length=1, max_length=255)
+    prompt_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    toolset_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    request_configuration_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    agent_version_id: UUID | None = None
+    release_reference: str | None = Field(default=None, min_length=1, max_length=512)
+    tokens: RecorderTokenUsage = Field(default_factory=RecorderTokenUsage)
+    latency_ms: RecorderMeasurement | None = None
+    finish_reason: str | None = Field(default=None, min_length=1, max_length=128)
+    error_code: str | None = Field(default=None, min_length=1, max_length=128)
+    cost: RecorderCost | None = None
+    outcome_correlation: str | None = Field(default=None, min_length=1, max_length=512)
+
+    @model_validator(mode="after")
+    def cached_tokens_do_not_exceed_input(self):
+        if (
+            self.tokens.input is not None
+            and self.tokens.cached is not None
+            and self.tokens.cached.value > self.tokens.input.value
+        ):
+            raise ValueError("cached tokens cannot exceed input tokens")
+        return self
 
 
 class RecorderActor(BaseModel):
@@ -66,7 +131,7 @@ class RecorderEnvelope(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["0.1"] = "0.1"
+    schema_version: Literal["0.1", "0.2"] = "0.2"
     protocol: RecorderProtocol
     event_type: str | None = Field(None, min_length=1, max_length=128)
     event_id: str | None = Field(None, min_length=1, max_length=512)
@@ -76,6 +141,7 @@ class RecorderEnvelope(BaseModel):
     actor: RecorderActor = Field(default_factory=RecorderActor)
     correlation: RecorderCorrelation = Field(default_factory=RecorderCorrelation)
     capture: RecorderCapturePolicy = Field(default_factory=RecorderCapturePolicy)
+    operational: RecorderOperational = Field(default_factory=RecorderOperational)
     payload: dict[str, Any] = Field(default_factory=dict, max_length=1000)
     extensions: dict[str, Any] = Field(default_factory=dict, max_length=256)
 
@@ -109,6 +175,7 @@ class RecorderEventOut(BaseModel):
     model_id: str | None
     input_hash: str | None
     output_hash: str | None
+    operational: RecorderOperational
     capture_mode: CaptureMode
     capture_gaps: list[str]
     diagnostics: list[dict[str, Any]]

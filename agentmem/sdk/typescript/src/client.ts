@@ -665,6 +665,125 @@ export class LiansClient {
     );
   }
 
+  // ── Governed agent improvement ─────────────────────────────────────────
+
+  createAgentDefinition(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/agents", { json: body });
+  }
+
+  agentDefinition(agentId: string): Promise<Record<string, unknown>> {
+    return this._req("GET", `/v1/agents/${agentId}`);
+  }
+
+  createAgentVersion(
+    agentId: string,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return this._req("POST", `/v1/agents/${agentId}/versions`, { json: body });
+  }
+
+  createEvalCaseFromDecision(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/eval/cases/from-decision", { json: body });
+  }
+
+  createEvalSuite(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/eval/suites", { json: body });
+  }
+
+  createEvalRun(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/eval/runs", { json: body });
+  }
+
+  createEvalComparison(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/eval/comparisons", { json: body });
+  }
+
+  createEvaluationAttestation(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/eval/attestations", { json: body });
+  }
+
+  verifyEvaluationAttestation(
+    attestation: Record<string, unknown>,
+    trustedPublicKey?: string,
+  ): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/eval/attestations/verify", {
+      json: { attestation, trusted_public_key: trustedPublicKey },
+    });
+  }
+
+  createOptimizationStudy(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/optimization/studies", { json: body });
+  }
+
+  compileContext(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/context/compile", { json: body });
+  }
+
+  createToolRegistry(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/tools/registries", { json: body });
+  }
+
+  selectTools(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/tools/select", { json: body });
+  }
+
+  createRuntimePolicy(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/runtime/policies", { json: body });
+  }
+
+  decideRoute(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/routing/decide", { json: body });
+  }
+
+  decideCache(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/cache/decide", { json: body });
+  }
+
+  createConcurrencyPlan(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/runtime/concurrency/plan", { json: body });
+  }
+
+  recordOutcome(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/outcomes", { json: body });
+  }
+
+  recordFeedback(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/feedback", { json: body });
+  }
+
+  analyzeDrift(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/drift/analyze", { json: body });
+  }
+
+  learningProposals(limit = 100): Promise<Array<Record<string, unknown>>> {
+    return this._req("GET", "/v1/learning/proposals", { params: { limit } });
+  }
+
+  createReleaseCandidate(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/releases", { json: body });
+  }
+
+  createReleaseAttestation(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/releases/attestations", { json: body });
+  }
+
+  verifyReleaseAttestation(
+    attestation: Record<string, unknown>,
+    trustedPublicKey?: string,
+  ): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/releases/attestations/verify", {
+      json: { attestation, trusted_public_key: trustedPublicKey },
+    });
+  }
+
+  recordDeployment(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/deployments", { json: body });
+  }
+
+  recordRollback(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this._req("POST", "/v1/rollback", { json: body });
+  }
+
   // ── Runtime Gate and investigations ─────────────────────────────────────
 
   createReceiptIssuer(issuer: ReceiptIssuerCreate): Promise<ReceiptIssuer> {

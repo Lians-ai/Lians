@@ -96,7 +96,8 @@ answer = harness.run_turn(user_query, generate=call_model)   # recall → model 
 
 ## MCP alternative
 
-If you prefer native tools over the SDK, run Lians as an MCP server and Codex gets
-eight memory tools automatically (`remember`, `recall`, `recall_at`, `reconstruct`,
-`list_conflicts`, `memory_lineage`, `fact_history`, `backtest_check`). See
-`config.example.toml` in this folder.
+If you prefer native tools over the SDK, run Lians as an MCP server. The
+recommended low-overhead Codex profile enables `remember`, `recall`, and
+`recall_at`; the server also provides `reconstruct`, `list_conflicts`,
+`memory_lineage`, `fact_history`, and `backtest_check` for an evidence profile.
+See `config.example.toml` in this folder.

@@ -16,6 +16,7 @@ Environment variables:
     LIANS_AGENT_ID   Agent identifier / memory namespace (default: mcp-agent)
     LIANS_LOCAL_DB   Local SQLite path (default: ~/.lians/mcp.db)
     LIANS_NAMESPACE  Local tenant namespace (default: mcp)
+    LIANS_MCP_PREWARM Load the local runtime before accepting MCP traffic (default: true)
 
 Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json):
     {
@@ -34,6 +35,7 @@ Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -46,6 +48,9 @@ LIANS_API_KEY = os.environ.get("LIANS_API_KEY", "")
 LIANS_AGENT_ID = os.environ.get("LIANS_AGENT_ID", "mcp-agent")
 LIANS_LOCAL_DB = os.environ.get("LIANS_LOCAL_DB", str(Path.home() / ".lians" / "mcp.db"))
 LIANS_NAMESPACE = os.environ.get("LIANS_NAMESPACE", "mcp")
+LIANS_MCP_PREWARM = os.environ.get("LIANS_MCP_PREWARM", "true").lower() not in {
+    "0", "false", "no", "off",
+}
 
 _LOCAL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lians-mcp-local")
 _LOCAL_CLIENT: Any = None
@@ -165,7 +170,7 @@ def _fmt_memories(memories: list[dict]) -> str:
 
 def _build_server() -> Any:
     from mcp.server import Server
-    from mcp.types import TextContent, Tool
+    from mcp.types import TextContent, Tool, ToolAnnotations
 
     server = Server("lians")
 
@@ -199,6 +204,13 @@ def _build_server() -> Any:
                         },
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Remember in Lians",
+                    readOnlyHint=False,
+                    destructiveHint=False,
+                    idempotentHint=False,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="recall",
@@ -220,6 +232,13 @@ def _build_server() -> Any:
                         },
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Recall current Lians memory",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="recall_at",
@@ -241,6 +260,13 @@ def _build_server() -> Any:
                         "k": {"type": "integer", "default": 5},
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Recall Lians memory at a point in time",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="reconstruct",
@@ -260,6 +286,13 @@ def _build_server() -> Any:
                         },
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Reconstruct Lians memory state",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="list_conflicts",
@@ -279,6 +312,13 @@ def _build_server() -> Any:
                         },
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="List Lians memory conflicts",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="memory_lineage",
@@ -298,6 +338,13 @@ def _build_server() -> Any:
                         },
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Inspect Lians memory lineage",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="fact_history",
@@ -324,6 +371,13 @@ def _build_server() -> Any:
                         "limit": {"type": "integer", "default": 50},
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Inspect Lians fact history",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
             Tool(
                 name="backtest_check",
@@ -348,6 +402,13 @@ def _build_server() -> Any:
                         "after_id": {"type": "string"},
                     },
                 },
+                annotations=ToolAnnotations(
+                    title="Check recorded memory for backtest contamination",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=False,
+                ),
             ),
         ]
 
@@ -516,6 +577,35 @@ def _build_server() -> Any:
     return server
 
 
+def _prewarm_local_runtime() -> None:
+    """Initialize local memory on its owning worker before AnyIO starts.
+
+    Importing NumPy/PyTorch and creating the embedded schema for the first time
+    can be dramatically slower from a worker after an MCP host has started its
+    own AnyIO threads on Windows. Prewarming here makes that cost a bounded MCP
+    startup cost and keeps the first real memory tool call responsive.
+    """
+    if LIANS_URL or not LIANS_MCP_PREWARM:
+        return
+    try:
+        future = _LOCAL_EXECUTOR.submit(
+            _local_api,
+            "POST",
+            "/v1/recall",
+            {
+                "agent_id": LIANS_AGENT_ID,
+                "query": "__lians_mcp_startup_probe__",
+                "k": 1,
+                "filters": {},
+            },
+        )
+        future.result()
+    except Exception:
+        logging.getLogger("lians.mcp").exception(
+            "local MCP prewarm failed; the server will start in degraded mode"
+        )
+
+
 async def _main() -> None:
     try:
         from mcp.server.stdio import stdio_server
@@ -525,15 +615,25 @@ async def _main() -> None:
         )
 
     server = _build_server()
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options(),
-        )
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                server.create_initialization_options(),
+            )
+    finally:
+        # ThreadPoolExecutor workers are non-daemon threads. Once local mode has
+        # served a tool call, failing to close the client and executor prevents
+        # stdio hosts from stopping or restarting the MCP process cleanly.
+        if _LOCAL_CLIENT is not None:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(_LOCAL_EXECUTOR, _LOCAL_CLIENT.close)
+        _LOCAL_EXECUTOR.shutdown(wait=True, cancel_futures=True)
 
 
 def main() -> None:
+    _prewarm_local_runtime()
     asyncio.run(_main())
 
 

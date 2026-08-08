@@ -1,6 +1,7 @@
 """
 Lians Python SDK — async HTTP client for the REST API.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -236,9 +237,7 @@ class AsyncLiansClient:
             or not math.isfinite(max_retry_delay)
             or not 0 < max_retry_delay <= 300
         ):
-            raise ValueError(
-                "max_retry_delay must be greater than zero and at most 300 seconds"
-            )
+            raise ValueError("max_retry_delay must be greater than zero and at most 300 seconds")
         self._base = base_url.rstrip("/")
         self._headers = {
             "Content-Type": "application/json",
@@ -330,9 +329,7 @@ class AsyncLiansClient:
         # A response can be lost after a successful commit, so HTTP status alone
         # cannot make an arbitrary POST/PATCH safe to replay.
         may_retry = (
-            method.upper() in {"GET", "HEAD", "OPTIONS"}
-            if retry_safe is None
-            else retry_safe
+            method.upper() in {"GET", "HEAD", "OPTIONS"} if retry_safe is None else retry_safe
         )
 
         attempt = 0
@@ -397,16 +394,23 @@ class AsyncLiansClient:
         the resource and its body-bound completion claim atomically.
         """
         import uuid as _uuid
+
         key = idempotency_key or str(_uuid.uuid4())
-        return await self._req("POST", "/v1/memories", json={
-            "agent_id": agent_id,
-            "content": content,
-            "event_time": event_time.isoformat(),
-            "source": source,
-            "subject_id": subject_id,
-            "metadata": metadata or {},
-            "importance": importance,
-        }, extra_headers={"Idempotency-Key": key}, retry_safe=True)
+        return await self._req(
+            "POST",
+            "/v1/memories",
+            json={
+                "agent_id": agent_id,
+                "content": content,
+                "event_time": event_time.isoformat(),
+                "source": source,
+                "subject_id": subject_id,
+                "metadata": metadata or {},
+                "importance": importance,
+            },
+            extra_headers={"Idempotency-Key": key},
+            retry_safe=True,
+        )
 
     async def batch_add(
         self,
@@ -508,6 +512,7 @@ class AsyncLiansClient:
             # result["added"] == 2  (two assistant turns stored)
         """
         from datetime import timezone as _tz
+
         _roles = set(roles) if roles is not None else {"assistant"}
         _event_time = event_time or datetime.now(_tz.utc)
         _meta_base = dict(metadata or {})
@@ -519,15 +524,17 @@ class AsyncLiansClient:
             if role not in _roles or not content:
                 continue
             item_meta = {**_meta_base, "role": role, "message_index": i}
-            batch.append({
-                "agent_id":   agent_id,
-                "content":    content,
-                "event_time": _event_time.isoformat(),
-                "source":     source,
-                "subject_id": subject_id,
-                "metadata":   item_meta,
-                "importance": importance,
-            })
+            batch.append(
+                {
+                    "agent_id": agent_id,
+                    "content": content,
+                    "event_time": _event_time.isoformat(),
+                    "source": source,
+                    "subject_id": subject_id,
+                    "metadata": item_meta,
+                    "importance": importance,
+                }
+            )
 
         if not batch:
             return {"added": 0, "memories": []}
@@ -549,13 +556,17 @@ class AsyncLiansClient:
         Superseded facts are excluded at the database level — only the latest
         valid value is returned.  Pass ``as_of`` for point-in-time recall.
         """
-        return await self._req("POST", "/v1/recall", json={
-            "agent_id": agent_id,
-            "query": query,
-            "k": k,
-            "as_of": as_of.isoformat() if as_of else None,
-            "filters": filters or {},
-        })
+        return await self._req(
+            "POST",
+            "/v1/recall",
+            json={
+                "agent_id": agent_id,
+                "query": query,
+                "k": k,
+                "as_of": as_of.isoformat() if as_of else None,
+                "filters": filters or {},
+            },
+        )
 
     async def context(
         self,
@@ -580,9 +591,13 @@ class AsyncLiansClient:
         "+N more" line).
         """
         body: dict[str, Any] = {
-            "agent_id": agent_id, "query": query, "k": k,
-            "max_tokens": max_tokens, "mmr": mmr,
-            "surface_conflicts": surface_conflicts, "max_conflicts": max_conflicts,
+            "agent_id": agent_id,
+            "query": query,
+            "k": k,
+            "max_tokens": max_tokens,
+            "mmr": mmr,
+            "surface_conflicts": surface_conflicts,
+            "max_conflicts": max_conflicts,
         }
         if as_of:
             body["as_of"] = as_of.isoformat()
@@ -643,10 +658,14 @@ class AsyncLiansClient:
         memories become permanently unreadable.  The audit trail (content hashes,
         timestamps) is preserved to prove the erasure occurred.
         """
-        return await self._req("POST", "/v1/erase", json={
-            "subject_id": subject_id,
-            "request_ref": request_ref,
-        })
+        return await self._req(
+            "POST",
+            "/v1/erase",
+            json={
+                "subject_id": subject_id,
+                "request_ref": request_ref,
+            },
+        )
 
     # ── Supersession review ───────────────────────────────────────────────────
 
@@ -666,11 +685,15 @@ class AsyncLiansClient:
         Returns exact ``total`` plus explicit page completeness and the next
         chain-position cursor when more unresolved items remain.
         """
-        return await self._req("GET", "/v1/supersessions/review", params={
-            "threshold": threshold,
-            "limit": limit,
-            "before_chain_position": before_chain_position,
-        })
+        return await self._req(
+            "GET",
+            "/v1/supersessions/review",
+            params={
+                "threshold": threshold,
+                "limit": limit,
+                "before_chain_position": before_chain_position,
+            },
+        )
 
     async def confirm_supersession(
         self,
@@ -739,7 +762,8 @@ class AsyncLiansClient:
         Requires ``admin_secret`` to be set on the client.
         """
         return await self._req(
-            "GET", "/v1/admin/audit/verify",
+            "GET",
+            "/v1/admin/audit/verify",
             params={"namespace": namespace},
             admin=True,
         )
@@ -766,7 +790,8 @@ class AsyncLiansClient:
         Requires ``admin_secret`` to be set on the client.
         """
         return await self._req(
-            "GET", "/v1/admin/audit/export",
+            "GET",
+            "/v1/admin/audit/export",
             params={
                 "namespace": namespace,
                 "from": from_dt.isoformat() if from_dt else None,
@@ -796,18 +821,15 @@ class AsyncLiansClient:
         Retain the returned ``recorded_as_of`` on every continuation call.
         """
         return await self._req(
-            "GET", "/v1/snapshot",
+            "GET",
+            "/v1/snapshot",
             params={
                 "agent_id": agent_id,
                 "as_of": as_of.isoformat(),
                 "limit": limit,
-                "after_event_time": (
-                    after_event_time.isoformat() if after_event_time else None
-                ),
+                "after_event_time": (after_event_time.isoformat() if after_event_time else None),
                 "after_id": after_id,
-                "recorded_as_of": (
-                    recorded_as_of.isoformat() if recorded_as_of else None
-                ),
+                "recorded_as_of": (recorded_as_of.isoformat() if recorded_as_of else None),
             },
         )
 
@@ -838,15 +860,17 @@ class AsyncLiansClient:
         Returns a ContaminationReport dict:
         ``{is_clean, flags_total, flags_complete, memories_checked, flags}``.
         """
-        return await self._req("POST", "/v1/backtest/check", json={
-            "agent_id": agent_id,
-            "simulation_as_of": simulation_as_of.isoformat(),
-            "flag_limit": flag_limit,
-            "after_event_time": (
-                after_event_time.isoformat() if after_event_time else None
-            ),
-            "after_id": after_id,
-        })
+        return await self._req(
+            "POST",
+            "/v1/backtest/check",
+            json={
+                "agent_id": agent_id,
+                "simulation_as_of": simulation_as_of.isoformat(),
+                "flag_limit": flag_limit,
+                "after_event_time": (after_event_time.isoformat() if after_event_time else None),
+                "after_id": after_id,
+            },
+        )
 
     # ── Relationship graph ──────────────────────────────────────────────────────
 
@@ -864,12 +888,22 @@ class AsyncLiansClient:
         normalize: bool = False,
     ) -> dict:
         """Assert a relationship edge ``src_entity --rel_type--> dst_entity``."""
-        return await self._req("POST", "/v1/graph/relate", json={
-            "agent_id": agent_id, "src_entity": src_entity, "rel_type": rel_type,
-            "dst_entity": dst_entity, "event_time": event_time.isoformat(),
-            "exclusive": exclusive, "subject_id": subject_id, "source": source,
-            "metadata": metadata or {}, "normalize": normalize,
-        })
+        return await self._req(
+            "POST",
+            "/v1/graph/relate",
+            json={
+                "agent_id": agent_id,
+                "src_entity": src_entity,
+                "rel_type": rel_type,
+                "dst_entity": dst_entity,
+                "event_time": event_time.isoformat(),
+                "exclusive": exclusive,
+                "subject_id": subject_id,
+                "source": source,
+                "metadata": metadata or {},
+                "normalize": normalize,
+            },
+        )
 
     async def unrelate(
         self,
@@ -881,12 +915,18 @@ class AsyncLiansClient:
         normalize: bool = False,
     ) -> dict:
         """Invalidate a live edge (sets ``valid_to``). Returns ``{"invalidated": N}``."""
-        return await self._req("POST", "/v1/graph/unrelate", json={
-            "agent_id": agent_id, "src_entity": src_entity, "rel_type": rel_type,
-            "dst_entity": dst_entity,
-            "event_time": event_time.isoformat() if event_time else None,
-            "normalize": normalize,
-        })
+        return await self._req(
+            "POST",
+            "/v1/graph/unrelate",
+            json={
+                "agent_id": agent_id,
+                "src_entity": src_entity,
+                "rel_type": rel_type,
+                "dst_entity": dst_entity,
+                "event_time": event_time.isoformat() if event_time else None,
+                "normalize": normalize,
+            },
+        )
 
     async def neighbors(
         self,
@@ -901,13 +941,21 @@ class AsyncLiansClient:
         max_edges: int = 20000,
     ) -> dict:
         """Entities within ``depth`` hops of ``entity`` (optional point-in-time ``as_of``)."""
-        return await self._req("GET", "/v1/graph/neighbors", params={
-            "entity": entity, "agent_id": agent_id, "depth": depth,
-            "direction": direction, "normalize": normalize,
-            "as_of": as_of.isoformat() if as_of else None,
-            "rel_type": rel_types,
-            "max_nodes": max_nodes, "max_edges": max_edges,
-        })
+        return await self._req(
+            "GET",
+            "/v1/graph/neighbors",
+            params={
+                "entity": entity,
+                "agent_id": agent_id,
+                "depth": depth,
+                "direction": direction,
+                "normalize": normalize,
+                "as_of": as_of.isoformat() if as_of else None,
+                "rel_type": rel_types,
+                "max_nodes": max_nodes,
+                "max_edges": max_edges,
+            },
+        )
 
     async def path(
         self,
@@ -922,13 +970,21 @@ class AsyncLiansClient:
         max_edges: int = 20000,
     ) -> dict:
         """Shortest connection between two entities — the COI / related-party query."""
-        return await self._req("GET", "/v1/graph/path", params={
-            "src": src_entity, "dst": dst_entity, "agent_id": agent_id,
-            "max_depth": max_depth, "normalize": normalize,
-            "as_of": as_of.isoformat() if as_of else None,
-            "rel_type": rel_types,
-            "max_nodes": max_nodes, "max_edges": max_edges,
-        })
+        return await self._req(
+            "GET",
+            "/v1/graph/path",
+            params={
+                "src": src_entity,
+                "dst": dst_entity,
+                "agent_id": agent_id,
+                "max_depth": max_depth,
+                "normalize": normalize,
+                "as_of": as_of.isoformat() if as_of else None,
+                "rel_type": rel_types,
+                "max_nodes": max_nodes,
+                "max_edges": max_edges,
+            },
+        )
 
     async def recall_near(
         self,
@@ -967,12 +1023,16 @@ class AsyncLiansClient:
 
         Returns exact total and explicit keyset continuation fields.
         """
-        return await self._req("GET", "/v1/conflicts", params={
-            "status": status,
-            "limit": limit,
-            "after_detected_at": after_detected_at,
-            "after_id": after_id,
-        })
+        return await self._req(
+            "GET",
+            "/v1/conflicts",
+            params={
+                "status": status,
+                "limit": limit,
+                "after_detected_at": after_detected_at,
+                "after_id": after_id,
+            },
+        )
 
     async def resolve_conflict(
         self,
@@ -993,7 +1053,8 @@ class AsyncLiansClient:
         audit chain.  Returns a ConflictResolveResult dict.
         """
         return await self._req(
-            "POST", f"/v1/conflicts/{conflict_id}/resolve",
+            "POST",
+            f"/v1/conflicts/{conflict_id}/resolve",
             json={"resolution": resolution, "note": note},
         )
 
@@ -1018,12 +1079,16 @@ class AsyncLiansClient:
 
         Returns a FactHistoryResult dict: ``{ticker, metric, agent_id, namespace, total, items}``.
         """
-        return await self._req("GET", "/v1/facts/history", params={
-            "agent_id": agent_id,
-            "ticker": ticker,
-            "metric": metric,
-            "limit": limit,
-        })
+        return await self._req(
+            "GET",
+            "/v1/facts/history",
+            params={
+                "agent_id": agent_id,
+                "ticker": ticker,
+                "metric": metric,
+                "limit": limit,
+            },
+        )
 
     # ── Compliance report ──────────────────────────────────────────────────────
 
@@ -1045,12 +1110,16 @@ class AsyncLiansClient:
 
         Returns a ComplianceReport dict covering the requested window.
         """
-        return await self._req("GET", "/v1/compliance/report", params={
-            "from": from_dt.isoformat() if from_dt else None,
-            "to": to_dt.isoformat() if to_dt else None,
-            "verify": verify_chain,
-            "subject_id_limit": subject_id_limit,
-        })
+        return await self._req(
+            "GET",
+            "/v1/compliance/report",
+            params={
+                "from": from_dt.isoformat() if from_dt else None,
+                "to": to_dt.isoformat() if to_dt else None,
+                "verify": verify_chain,
+                "subject_id_limit": subject_id_limit,
+            },
+        )
 
     async def record_decision(
         self,
@@ -1071,20 +1140,24 @@ class AsyncLiansClient:
         key = idempotency_key or str(_uuid.uuid4())
         return cast(
             DecisionOut,
-            await self._req("POST", "/v1/decisions", json={
-                "agent_id": agent_id,
-                "decision_type": decision_type,
-                "outcome": outcome,
-                "decided_at": decided_at.isoformat(),
-                "reason_codes": reason_codes or [],
-                "knowledge_as_of": knowledge_as_of.isoformat() if knowledge_as_of else None,
-                "knowledge_recorded_as_of": (
-                    knowledge_recorded_as_of.isoformat()
-                    if knowledge_recorded_as_of
-                    else None
-                ),
-                **fields,
-            }, extra_headers={"Idempotency-Key": key}, retry_safe=True),
+            await self._req(
+                "POST",
+                "/v1/decisions",
+                json={
+                    "agent_id": agent_id,
+                    "decision_type": decision_type,
+                    "outcome": outcome,
+                    "decided_at": decided_at.isoformat(),
+                    "reason_codes": reason_codes or [],
+                    "knowledge_as_of": knowledge_as_of.isoformat() if knowledge_as_of else None,
+                    "knowledge_recorded_as_of": (
+                        knowledge_recorded_as_of.isoformat() if knowledge_recorded_as_of else None
+                    ),
+                    **fields,
+                },
+                extra_headers={"Idempotency-Key": key},
+                retry_safe=True,
+            ),
         )
 
     async def decisions(self, **filters: Any) -> list[dict]:
@@ -1182,8 +1255,9 @@ class AsyncLiansClient:
 
     async def evidence_pack(self, decision_id: str, verify: bool = True) -> dict:
         """Export a hash-anchored Evidence Pack v1 for a decision."""
-        return await self._req("GET", f"/v1/decisions/{decision_id}/evidence-pack",
-                               params={"verify": verify})
+        return await self._req(
+            "GET", f"/v1/decisions/{decision_id}/evidence-pack", params={"verify": verify}
+        )
 
     async def decision_evidence_graph(
         self,
@@ -1247,11 +1321,15 @@ class AsyncLiansClient:
         require_signature: bool = False,
     ) -> dict:
         """Verify a portable receipt through the deployment's verifier endpoint."""
-        return await self._req("POST", "/v1/receipts/verify", json={
-            "receipt": receipt,
-            "trusted_public_key": trusted_public_key,
-            "require_signature": require_signature,
-        })
+        return await self._req(
+            "POST",
+            "/v1/receipts/verify",
+            json={
+                "receipt": receipt,
+                "trusted_public_key": trusted_public_key,
+                "require_signature": require_signature,
+            },
+        )
 
     async def assess_decision_impact(
         self,
@@ -1274,9 +1352,7 @@ class AsyncLiansClient:
                 "dependency_value": dependency_value,
                 "change_type": change_type,
                 "occurred_at": (
-                    occurred_at.isoformat()
-                    if isinstance(occurred_at, datetime)
-                    else occurred_at
+                    occurred_at.isoformat() if isinstance(occurred_at, datetime) else occurred_at
                 ),
                 "note": note,
                 "agent_id": agent_id,
@@ -1307,9 +1383,7 @@ class AsyncLiansClient:
                 "dependency_value": dependency_value,
                 "change_type": change_type,
                 "occurred_at": (
-                    occurred_at.isoformat()
-                    if isinstance(occurred_at, datetime)
-                    else occurred_at
+                    occurred_at.isoformat() if isinstance(occurred_at, datetime) else occurred_at
                 ),
                 "note": note,
                 "record_event": record_event,
@@ -1395,17 +1469,11 @@ class AsyncLiansClient:
 
     async def recorder_run_readiness(self, run_id: str) -> RecorderRunReadiness:
         """Return Decision Receipt readiness for one correlated run boundary."""
-        return await self._req(
-            "GET", f"/v1/recorder/runs/{run_id}/readiness"
-        )  # type: ignore[return-value]
+        return await self._req("GET", f"/v1/recorder/runs/{run_id}/readiness")  # type: ignore[return-value]
 
-    async def recorder_run_events(
-        self, run_id: str, *, limit: int = 500
-    ) -> list[RecorderEvent]:
+    async def recorder_run_events(self, run_id: str, *, limit: int = 500) -> list[RecorderEvent]:
         """List normalized events for one correlated run boundary."""
-        return await self._req(
-            "GET", f"/v1/recorder/runs/{run_id}/events", params={"limit": limit}
-        )  # type: ignore[return-value]
+        return await self._req("GET", f"/v1/recorder/runs/{run_id}/events", params={"limit": limit})  # type: ignore[return-value]
 
     async def recorder_run_events_page(
         self,
@@ -1471,12 +1539,102 @@ class AsyncLiansClient:
             retry_safe=False,
         )  # type: ignore[return-value]
 
+    # -- Governed agent improvement ---------------------------------------
+
+    async def create_agent_definition(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/agents", json=body)
+
+    async def agent_definition(self, agent_id: str) -> dict[str, Any]:
+        return await self._req("GET", f"/v1/agents/{agent_id}")
+
+    async def create_agent_version(self, agent_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", f"/v1/agents/{agent_id}/versions", json=body)
+
+    async def create_eval_case_from_decision(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/eval/cases/from-decision", json=body)
+
+    async def create_eval_suite(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/eval/suites", json=body)
+
+    async def create_eval_run(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/eval/runs", json=body)
+
+    async def create_eval_comparison(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/eval/comparisons", json=body)
+
+    async def create_evaluation_attestation(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/eval/attestations", json=body)
+
+    async def verify_evaluation_attestation(
+        self, attestation: dict[str, Any], *, trusted_public_key: str | None = None
+    ) -> dict[str, Any]:
+        return await self._req(
+            "POST",
+            "/v1/eval/attestations/verify",
+            json={"attestation": attestation, "trusted_public_key": trusted_public_key},
+        )
+
+    async def create_optimization_study(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/optimization/studies", json=body)
+
+    async def compile_context(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/context/compile", json=body)
+
+    async def create_tool_registry(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/tools/registries", json=body)
+
+    async def select_tools(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/tools/select", json=body)
+
+    async def create_runtime_policy(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/runtime/policies", json=body)
+
+    async def decide_route(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/routing/decide", json=body)
+
+    async def decide_cache(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/cache/decide", json=body)
+
+    async def create_concurrency_plan(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/runtime/concurrency/plan", json=body)
+
+    async def record_outcome(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/outcomes", json=body)
+
+    async def record_feedback(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/feedback", json=body)
+
+    async def analyze_drift(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/drift/analyze", json=body)
+
+    async def learning_proposals(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        return await self._req("GET", "/v1/learning/proposals", params={"limit": limit})
+
+    async def create_release_candidate(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/releases", json=body)
+
+    async def create_release_attestation(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/releases/attestations", json=body)
+
+    async def verify_release_attestation(
+        self, attestation: dict[str, Any], *, trusted_public_key: str | None = None
+    ) -> dict[str, Any]:
+        return await self._req(
+            "POST",
+            "/v1/releases/attestations/verify",
+            json={"attestation": attestation, "trusted_public_key": trusted_public_key},
+        )
+
+    async def record_deployment(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/deployments", json=body)
+
+    async def record_rollback(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._req("POST", "/v1/rollback", json=body)
+
     # -- Runtime Gate and investigations -----------------------------------
 
     async def create_receipt_issuer(self, issuer: IssuerCreate) -> ReceiptIssuer:
-        return await self._req(
-            "POST", "/v1/control/trust/issuers", json=issuer
-        )  # type: ignore[return-value]
+        return await self._req("POST", "/v1/control/trust/issuers", json=issuer)  # type: ignore[return-value]
 
     async def receipt_issuers(
         self,
@@ -1511,9 +1669,7 @@ class AsyncLiansClient:
     async def register_trusted_receipt_key(
         self, issuer_id: str, key: TrustedKeyCreate
     ) -> TrustedReceiptKey:
-        return await self._req(
-            "POST", f"/v1/control/trust/issuers/{issuer_id}/keys", json=key
-        )  # type: ignore[return-value]
+        return await self._req("POST", f"/v1/control/trust/issuers/{issuer_id}/keys", json=key)  # type: ignore[return-value]
 
     async def trusted_receipt_keys(
         self,
@@ -1566,9 +1722,7 @@ class AsyncLiansClient:
         )  # type: ignore[return-value]
 
     async def create_gate_policy(self, policy: GatePolicySetCreate) -> GatePolicySet:
-        return await self._req(
-            "POST", "/v1/control/gate/policies", json=policy
-        )  # type: ignore[return-value]
+        return await self._req("POST", "/v1/control/gate/policies", json=policy)  # type: ignore[return-value]
 
     async def gate_policies(
         self,
@@ -1592,9 +1746,7 @@ class AsyncLiansClient:
         )  # type: ignore[return-value]
 
     async def gate_policy(self, policy_id: str) -> GatePolicySet:
-        return await self._req(
-            "GET", f"/v1/control/gate/policies/{policy_id}"
-        )  # type: ignore[return-value]
+        return await self._req("GET", f"/v1/control/gate/policies/{policy_id}")  # type: ignore[return-value]
 
     async def activate_gate_policy(
         self, policy_id: str, *, actor_id: Optional[str] = None
@@ -1609,9 +1761,7 @@ class AsyncLiansClient:
         self, attestation: GateApprovalAttestationCreate
     ) -> GateApprovalAttestation:
         """Append a role-bound approval for one exact Gate boundary."""
-        return await self._req(
-            "POST", "/v1/control/gate/approvals", json=attestation
-        )  # type: ignore[return-value]
+        return await self._req("POST", "/v1/control/gate/approvals", json=attestation)  # type: ignore[return-value]
 
     async def supersede_gate_approval(
         self,
@@ -1703,16 +1853,10 @@ class AsyncLiansClient:
         )  # type: ignore[return-value]
 
     async def gate_evaluation(self, evaluation_id: str) -> GateDecision:
-        return await self._req(
-            "GET", f"/v1/control/gate/evaluations/{evaluation_id}"
-        )  # type: ignore[return-value]
+        return await self._req("GET", f"/v1/control/gate/evaluations/{evaluation_id}")  # type: ignore[return-value]
 
-    async def create_investigation_case(
-        self, case: InvestigationCaseCreate
-    ) -> InvestigationCase:
-        return await self._req(
-            "POST", "/v1/control/investigations/cases", json=case
-        )  # type: ignore[return-value]
+    async def create_investigation_case(self, case: InvestigationCaseCreate) -> InvestigationCase:
+        return await self._req("POST", "/v1/control/investigations/cases", json=case)  # type: ignore[return-value]
 
     async def investigation_cases(
         self,
@@ -1734,16 +1878,12 @@ class AsyncLiansClient:
         )  # type: ignore[return-value]
 
     async def investigation_case(self, case_id: str) -> InvestigationCase:
-        return await self._req(
-            "GET", f"/v1/control/investigations/cases/{case_id}"
-        )  # type: ignore[return-value]
+        return await self._req("GET", f"/v1/control/investigations/cases/{case_id}")  # type: ignore[return-value]
 
     async def update_investigation_case(
         self, case_id: str, update: InvestigationCaseUpdate
     ) -> InvestigationCase:
-        return await self._req(
-            "PATCH", f"/v1/control/investigations/cases/{case_id}", json=update
-        )  # type: ignore[return-value]
+        return await self._req("PATCH", f"/v1/control/investigations/cases/{case_id}", json=update)  # type: ignore[return-value]
 
     async def create_remediation_task(
         self, case_id: str, task: RemediationTaskCreate
@@ -1769,9 +1909,7 @@ class AsyncLiansClient:
     async def update_remediation_task(
         self, task_id: str, update: RemediationTaskUpdate
     ) -> RemediationTask:
-        return await self._req(
-            "PATCH", f"/v1/control/investigations/tasks/{task_id}", json=update
-        )  # type: ignore[return-value]
+        return await self._req("PATCH", f"/v1/control/investigations/tasks/{task_id}", json=update)  # type: ignore[return-value]
 
     async def close_remediation_task(
         self, task_id: str, attestation: ClosureAttestationCreate
@@ -1814,9 +1952,7 @@ class AsyncLiansClient:
         self, request: WorkloadCredentialCreate
     ) -> WorkloadCredentialCreated:
         """Issue one expiring credential; its plaintext secret is returned once."""
-        return await self._req(
-            "POST", "/v1/identity/workload-credentials", json=request
-        )  # type: ignore[return-value]
+        return await self._req("POST", "/v1/identity/workload-credentials", json=request)  # type: ignore[return-value]
 
     async def workload_credentials(
         self,
@@ -1912,8 +2048,7 @@ class AsyncLiansClient:
         """Inspect exact progress for one tenant-version SCIM User snapshot."""
         return await self._req(
             "GET",
-            f"/v1/admin/enterprise/scim/tenants/{tenant_id}/"
-            f"binding-reconciliations/{job_id}",
+            f"/v1/admin/enterprise/scim/tenants/{tenant_id}/binding-reconciliations/{job_id}",
             admin=True,
         )  # type: ignore[return-value]
 
@@ -1924,8 +2059,7 @@ class AsyncLiansClient:
     ) -> ScimTenantReconciliation:
         return await self._req(
             "POST",
-            f"/v1/admin/enterprise/scim/tenants/{tenant_id}/"
-            f"binding-reconciliations/{job_id}/retry",
+            f"/v1/admin/enterprise/scim/tenants/{tenant_id}/binding-reconciliations/{job_id}/retry",
             admin=True,
         )  # type: ignore[return-value]
 
@@ -1943,9 +2077,7 @@ class AsyncLiansClient:
         )  # type: ignore[return-value]
 
     async def workload_credential(self, credential_id: str) -> WorkloadCredential:
-        return await self._req(
-            "GET", f"/v1/identity/workload-credentials/{credential_id}"
-        )  # type: ignore[return-value]
+        return await self._req("GET", f"/v1/identity/workload-credentials/{credential_id}")  # type: ignore[return-value]
 
     async def rotate_workload_credential(
         self, credential_id: str, request: WorkloadCredentialRotate
@@ -1971,15 +2103,11 @@ class AsyncLiansClient:
 
     async def platform_capabilities(self) -> PlatformCapabilities:
         """Negotiate authenticated tenant capabilities and privacy defaults."""
-        return await self._req(
-            "GET", "/v1/platform/capabilities"
-        )  # type: ignore[return-value]
+        return await self._req("GET", "/v1/platform/capabilities")  # type: ignore[return-value]
 
     async def platform_readiness(self) -> PlatformReadiness:
         """Inspect deployment configuration readiness; requires admin scope."""
-        return await self._req(
-            "GET", "/v1/platform/readiness"
-        )  # type: ignore[return-value]
+        return await self._req("GET", "/v1/platform/readiness")  # type: ignore[return-value]
 
     async def investigator_queue(
         self, *, limit: int = 100, scan_limit: int = 500
@@ -2035,10 +2163,18 @@ class AsyncLiansClient:
         import uuid as _uuid
 
         key = idempotency_key or str(_uuid.uuid4())
-        return await self._req("POST", "/v1/records/events", json={
-            "event_type": event_type, "agent_id": agent_id,
-            "occurred_at": occurred_at.isoformat(), **fields,
-        }, extra_headers={"Idempotency-Key": key}, retry_safe=True)
+        return await self._req(
+            "POST",
+            "/v1/records/events",
+            json={
+                "event_type": event_type,
+                "agent_id": agent_id,
+                "occurred_at": occurred_at.isoformat(),
+                **fields,
+            },
+            extra_headers={"Idempotency-Key": key},
+            retry_safe=True,
+        )
 
     async def record_events(self, **filters: Any) -> list[dict]:
         return await self._req("GET", "/v1/records/events", params=filters)
@@ -2192,6 +2328,7 @@ class AsyncLiansClient:
                 }
             )
         return await self._req(
-            "GET", f"/v1/webhooks/{endpoint_id}/deliveries",
+            "GET",
+            f"/v1/webhooks/{endpoint_id}/deliveries",
             params=params,
         )

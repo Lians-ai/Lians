@@ -954,8 +954,47 @@ export interface RecorderCapturePolicy {
   sensitive_fields?: string[];
 }
 
+export type RecorderMeasurementProvenance =
+  | "provider-reported"
+  | "workload-reported"
+  | "client-measured"
+  | "deterministic"
+  | "human-authored"
+  | "model-judged"
+  | "estimated";
+
+export interface RecorderMeasurement {
+  value: number;
+  provenance: RecorderMeasurementProvenance;
+}
+
+export interface RecorderOperational {
+  provider?: string;
+  runtime_framework?: string;
+  operation?: string;
+  prompt_hash?: string;
+  toolset_hash?: string;
+  request_configuration_hash?: string;
+  agent_version_id?: string;
+  release_reference?: string;
+  tokens?: {
+    input?: RecorderMeasurement;
+    output?: RecorderMeasurement;
+    cached?: RecorderMeasurement;
+  };
+  latency_ms?: RecorderMeasurement;
+  finish_reason?: string;
+  error_code?: string;
+  cost?: {
+    amount?: RecorderMeasurement;
+    currency?: string;
+    attribution?: string;
+  };
+  outcome_correlation?: string;
+}
+
 export interface RecorderEnvelope {
-  schema_version?: "0.1";
+  schema_version?: "0.1" | "0.2";
   protocol: RecorderProtocol;
   event_type?: string;
   event_id?: string;
@@ -965,6 +1004,7 @@ export interface RecorderEnvelope {
   actor?: RecorderActor;
   correlation?: RecorderCorrelation;
   capture?: RecorderCapturePolicy;
+  operational?: RecorderOperational;
   payload: Record<string, unknown>;
   extensions?: Record<string, unknown>;
 }
@@ -997,6 +1037,7 @@ export interface RecorderEvent {
   capture_mode: RecorderCaptureMode;
   capture_gaps: string[];
   diagnostics: Array<Record<string, unknown>>;
+  operational: RecorderOperational;
   event_hash: string;
   /** v1 denotes explicitly unverified legacy history; new writes use v2. */
   event_hash_version: 1 | 2;

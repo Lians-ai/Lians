@@ -272,13 +272,58 @@ class RecorderCapturePolicy(TypedDict, total=False):
     sensitive_fields: list[str]
 
 
+MeasurementProvenance = Literal[
+    "provider-reported",
+    "workload-reported",
+    "client-measured",
+    "deterministic",
+    "human-authored",
+    "model-judged",
+    "estimated",
+]
+
+
+class RecorderMeasurement(TypedDict):
+    value: float
+    provenance: MeasurementProvenance
+
+
+class RecorderTokenUsage(TypedDict, total=False):
+    input: RecorderMeasurement
+    output: RecorderMeasurement
+    cached: RecorderMeasurement
+
+
+class RecorderCost(TypedDict, total=False):
+    amount: RecorderMeasurement
+    currency: str
+    attribution: str
+
+
+class RecorderOperational(TypedDict, total=False):
+    provider: str
+    runtime_framework: str
+    operation: str
+    prompt_hash: str
+    toolset_hash: str
+    request_configuration_hash: str
+    agent_version_id: str
+    release_reference: str
+    tokens: RecorderTokenUsage
+    latency_ms: RecorderMeasurement
+    finish_reason: str
+    error_code: str
+    cost: RecorderCost
+    outcome_correlation: str
+
+
 class RecorderEnvelopeRequired(TypedDict):
     protocol: RecorderProtocol
     payload: dict[str, Any]
 
 
 class RecorderEnvelope(RecorderEnvelopeRequired, total=False):
-    schema_version: Literal["0.1"]
+    schema_version: Literal["0.1", "0.2"]
     event_type: str
     event_id: str
     idempotency_key: str
@@ -287,6 +332,7 @@ class RecorderEnvelope(RecorderEnvelopeRequired, total=False):
     actor: RecorderActor
     correlation: RecorderCorrelation
     capture: RecorderCapturePolicy
+    operational: RecorderOperational
     extensions: dict[str, Any]
 
 
@@ -315,6 +361,7 @@ class RecorderEvent(TypedDict):
     capture_mode: CaptureMode
     capture_gaps: list[str]
     diagnostics: list[dict[str, Any]]
+    operational: RecorderOperational
     event_hash: str
     event_hash_version: Literal[1, 2]
 
@@ -473,9 +520,7 @@ class GateApprovalAttestationCreateRequired(TypedDict):
     target_ref: str
 
 
-class GateApprovalAttestationCreate(
-    GateApprovalAttestationCreateRequired, total=False
-):
+class GateApprovalAttestationCreate(GateApprovalAttestationCreateRequired, total=False):
     change_event_id: str
     target_barrier_group: str | None
     receipt_hash: str
@@ -489,9 +534,7 @@ class GateApprovalAttestationSupersedeRequired(TypedDict):
     status: Literal["approved", "rejected", "revoked"]
 
 
-class GateApprovalAttestationSupersede(
-    GateApprovalAttestationSupersedeRequired, total=False
-):
+class GateApprovalAttestationSupersede(GateApprovalAttestationSupersedeRequired, total=False):
     statement: str
     evidence_refs: list[str]
     expires_at: str

@@ -98,6 +98,26 @@ def test_stabilize_envelope_is_deterministic_and_does_not_mutate_input() -> None
     assert first["idempotency_key"] == first["event_id"]
 
 
+def test_builder_emits_recorder_v02_operational_measurements() -> None:
+    event = lians_event(
+        "agent.completed",
+        {"status": "ok"},
+        operational={
+            "provider": "openai",
+            "agent_version_id": str(uuid4()),
+            "tokens": {
+                "input": {"value": 120, "provenance": "provider-reported"},
+                "output": {"value": 30, "provenance": "provider-reported"},
+            },
+            "latency_ms": {"value": 250, "provenance": "client-measured"},
+        },
+    )
+
+    assert event["schema_version"] == "0.2"
+    assert event["operational"]["tokens"]["input"]["value"] == 120
+    validate_recorder_envelope(event)
+
+
 def test_content_commitment_can_hide_low_entropy_values_with_hmac() -> None:
     key = b"deployment-held-recorder-key-0001"
     plain = recorder_content_hash("yes")
@@ -142,9 +162,7 @@ async def test_invalid_envelope_isolated_before_non_atomic_batch() -> None:
     client = FakeRecorderClient()
     config = RecorderSinkConfig(batch_size=2, flush_interval_seconds=0.01)
     async with AsyncRecorderSink(client, config=config) as sink:
-        invalid = await sink.submit(
-            lians_event("bad", {"not_json": object()})
-        )
+        invalid = await sink.submit(lians_event("bad", {"not_json": object()}))
         schema_invalid = await sink.submit(  # type: ignore[arg-type]
             {"protocol": "unsupported", "payload": {}}
         )
@@ -169,8 +187,7 @@ async def test_cross_thread_ready_callbacks_share_the_total_admission_bound() ->
 
     def submit_many() -> None:
         submissions.extend(
-            sink.submit_threadsafe(lians_event(f"thread-{index}", {}))
-            for index in range(20)
+            sink.submit_threadsafe(lians_event(f"thread-{index}", {})) for index in range(20)
         )
 
     thread = threading.Thread(target=submit_many)
@@ -437,9 +454,7 @@ async def test_langchain_run_state_is_locked_and_bounded() -> None:
             )
         await sink.flush()
         assert handler.active_run_count == 2
-        assert any(
-            gap.reason == "langchain_state_evicted" for gap in sink.capture_gaps()
-        )
+        assert any(gap.reason == "langchain_state_evicted" for gap in sink.capture_gaps())
 
 
 def test_openai_install_is_process_lifetime_and_idempotent(
@@ -496,10 +511,7 @@ async def test_openai_owner_loop_force_flush_is_explicitly_deferred(
     await sink.start()
     processor = build_openai_agents_recorder_processor(sink)
     processor.force_flush()
-    assert any(
-        gap.reason == "openai_agents_force_flush_deferred"
-        for gap in sink.capture_gaps()
-    )
+    assert any(gap.reason == "openai_agents_force_flush_deferred" for gap in sink.capture_gaps())
     await processor.aflush()
     await sink.close()
 

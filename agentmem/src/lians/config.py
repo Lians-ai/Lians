@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
+    runtime_cache_enabled: bool = False
     # Narrow production exception for colocated Unix-domain sockets. Network
     # TCP connections still require peer-verifying TLS.
     production_allow_local_data_service_sockets: bool = False

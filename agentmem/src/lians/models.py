@@ -1416,4 +1416,9 @@ class MasterKeyWriteFenceState(Base):
 # ``lians.models.Base`` entry point (notably lightweight SQLite fixtures).
 # Alembic imports these explicitly as well.
 from . import integration_models as _integration_models  # noqa: E402,F401
+from . import improvement_models as _improvement_models  # noqa: E402,F401
+from . import learning_models as _learning_models  # noqa: E402,F401
 from . import metering_models as _metering_models  # noqa: E402,F401
+from . import optimization_models as _optimization_models  # noqa: E402,F401
+from . import release_models as _release_models  # noqa: E402,F401
+from . import runtime_models as _runtime_models  # noqa: E402,F401

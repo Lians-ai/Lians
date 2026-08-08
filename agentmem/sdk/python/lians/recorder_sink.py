@@ -46,6 +46,7 @@ _TOP_LEVEL_FIELDS = {
     "actor",
     "correlation",
     "capture",
+    "operational",
     "payload",
     "extensions",
 }
@@ -100,7 +101,7 @@ class RecorderIdentityError(RecorderSinkError):
 
 
 class RecorderEnvelopeValidationError(RecorderSinkError):
-    """Raised when an envelope cannot satisfy the Recorder v0.1 JSON contract."""
+    """Raised when an envelope cannot satisfy the Recorder v0.1/v0.2 JSON contract."""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -350,14 +351,14 @@ def validate_recorder_envelope(
     max_items: int = 20_000,
     max_bytes: int = 1_048_576,
 ) -> None:
-    """Validate the dependency-free wire subset of Recorder envelope v0.1."""
+    """Validate the dependency-free wire subset of Recorder envelope v0.1/v0.2."""
 
     if not isinstance(envelope, dict):
         _invalid("invalid_object", "Recorder envelope must be a JSON object")
     data = cast(dict[str, Any], envelope)
     _forbid_extra("envelope", data, _TOP_LEVEL_FIELDS)
-    if data.get("schema_version", "0.1") != "0.1":
-        _invalid("schema_version", "schema_version must be '0.1'")
+    if data.get("schema_version", "0.1") not in {"0.1", "0.2"}:
+        _invalid("schema_version", "schema_version must be '0.1' or '0.2'")
     if data.get("protocol") not in _RECORDER_PROTOCOLS:
         _invalid("protocol", "protocol is not a supported Recorder protocol")
     _required_mapping("payload", data.get("payload"), maximum=1_000)
@@ -369,11 +370,7 @@ def validate_recorder_envelope(
     _optional_text("subject_id", data.get("subject_id"), 512)
     _optional_datetime(data.get("occurred_at"))
 
-    actor = (
-        _required_mapping("actor", data["actor"], maximum=5)
-        if "actor" in data
-        else None
-    )
+    actor = _required_mapping("actor", data["actor"], maximum=5) if "actor" in data else None
     if actor is not None:
         _forbid_extra("actor", actor, _ACTOR_FIELDS)
         _optional_text("actor.agent_id", actor.get("agent_id"), 255)
@@ -389,9 +386,7 @@ def validate_recorder_envelope(
             _required_mapping("actor.extensions", actor["extensions"], maximum=256)
 
     correlation = (
-        _required_mapping(
-            "correlation", data["correlation"], maximum=len(_CORRELATION_FIELDS)
-        )
+        _required_mapping("correlation", data["correlation"], maximum=len(_CORRELATION_FIELDS))
         if "correlation" in data
         else None
     )
@@ -416,14 +411,10 @@ def validate_recorder_envelope(
             except (TypeError, ValueError, AttributeError):
                 _invalid("decision_id", "correlation.decision_id must be a UUID string")
         if "extensions" in correlation:
-            _required_mapping(
-                "correlation.extensions", correlation["extensions"], maximum=256
-            )
+            _required_mapping("correlation.extensions", correlation["extensions"], maximum=256)
 
     capture = (
-        _required_mapping("capture", data["capture"], maximum=2)
-        if "capture" in data
-        else None
+        _required_mapping("capture", data["capture"], maximum=2) if "capture" in data else None
     )
     if capture is not None:
         _forbid_extra("capture", capture, _CAPTURE_FIELDS)
@@ -435,6 +426,30 @@ def validate_recorder_envelope(
             maximum=100,
             text_maximum=512,
         )
+
+    operational = (
+        _required_mapping("operational", data["operational"], maximum=16)
+        if "operational" in data
+        else None
+    )
+    if operational is not None:
+        for field in (
+            "provider",
+            "runtime_framework",
+            "operation",
+            "prompt_hash",
+            "toolset_hash",
+            "request_configuration_hash",
+            "agent_version_id",
+            "release_reference",
+            "finish_reason",
+            "error_code",
+            "outcome_correlation",
+        ):
+            _optional_text(f"operational.{field}", operational.get(field), 512)
+        for field in ("tokens", "latency_ms", "cost"):
+            if field in operational:
+                _required_mapping(f"operational.{field}", operational[field], maximum=8)
 
     _validate_json_value(
         data,
@@ -645,9 +660,7 @@ class AsyncRecorderSink:
                 with self._state_lock:
                     still_owned = self._state in {"running", "stopping"}
                 if not still_owned:
-                    result.set_result(
-                        self._drop_reserved(frozen, "sink_stopped_before_enqueue")
-                    )
+                    result.set_result(self._drop_reserved(frozen, "sink_stopped_before_enqueue"))
                     return
                 result.set_result(self._enqueue_reserved(frozen))
             except BaseException as exc:  # noqa: BLE001 -- preserve Future cancellation/error
@@ -923,9 +936,7 @@ class AsyncRecorderSink:
         )
         return submission
 
-    def _reject_unreserved(
-        self, envelope: RecorderEnvelope, reason: str
-    ) -> RecorderSubmission:
+    def _reject_unreserved(self, envelope: RecorderEnvelope, reason: str) -> RecorderSubmission:
         submission = self._submission(envelope, accepted=False, reason=reason)
         self._increment("rejected")
         self._increment("dropped")
@@ -936,9 +947,7 @@ class AsyncRecorderSink:
         )
         return submission
 
-    def _drop_reserved(
-        self, envelope: RecorderEnvelope, reason: str
-    ) -> RecorderSubmission:
+    def _drop_reserved(self, envelope: RecorderEnvelope, reason: str) -> RecorderSubmission:
         submission = self._submission(envelope, accepted=False, reason=reason)
         self._increment("rejected")
         self._increment("dropped")
@@ -999,16 +1008,12 @@ class AsyncRecorderSink:
                             type(exc).__name__,
                         )
             except Exception as exc:  # noqa: BLE001 -- protect lifecycle accounting
-                wrapped = RecorderDeliveryError(
-                    f"Recorder worker failed: {type(exc).__name__}"
-                )
+                wrapped = RecorderDeliveryError(f"Recorder worker failed: {type(exc).__name__}")
                 wrapped.__cause__ = exc
                 self._increment("delivery_failures")
                 self._increment("dropped", len(batch))
                 for event in batch:
-                    self._delivery_gap(
-                        event, "delivery_halted_unconfirmed", type(exc).__name__
-                    )
+                    self._delivery_gap(event, "delivery_halted_unconfirmed", type(exc).__name__)
                 with self._state_lock:
                     self._terminal_error = wrapped
                     self._state = "halted"
@@ -1091,9 +1096,8 @@ class AsyncRecorderSink:
                 raise
             except Exception as exc:  # noqa: BLE001 -- transport/client failures are retryable
                 last_error = exc
-                if (
-                    attempt == self.config.max_delivery_attempts
-                    or not _is_retryable_delivery_error(exc)
+                if attempt == self.config.max_delivery_attempts or not _is_retryable_delivery_error(
+                    exc
                 ):
                     break
                 await asyncio.sleep(self._retry_delay(attempt, exc))
@@ -1146,9 +1150,8 @@ class AsyncRecorderSink:
                 return
             except Exception as exc:  # noqa: BLE001 -- malformed responses follow retry policy
                 last_error = exc
-                if (
-                    attempt == self.config.max_delivery_attempts
-                    or not _is_retryable_delivery_error(exc)
+                if attempt == self.config.max_delivery_attempts or not _is_retryable_delivery_error(
+                    exc
                 ):
                     break
                 await asyncio.sleep(self._retry_delay(attempt, exc))
@@ -1209,10 +1212,7 @@ class AsyncRecorderSink:
 
     def _reserve(self) -> bool:
         with self._state_lock:
-            if (
-                self._state != "running"
-                or self._admitted >= self.config.max_buffered_events
-            ):
+            if self._state != "running" or self._admitted >= self.config.max_buffered_events:
                 return False
             self._reserve_locked()
             return True
@@ -1266,9 +1266,7 @@ class AsyncRecorderSink:
         terminal = self._require_event(self._terminal)
         capacity_available.clear()
         with self._state_lock:
-            if self._state != "running" or (
-                self._admitted < self.config.max_buffered_events
-            ):
+            if self._state != "running" or (self._admitted < self.config.max_buffered_events):
                 capacity_available.set()
                 self._raise_if_not_accepting_locked()
                 return
@@ -1393,10 +1391,7 @@ def _safe_gap_code(value: Any) -> str:
     if not isinstance(value, str) or not 1 <= len(value) <= 128:
         return "rejected"
     if any(
-        not (
-            character.isascii()
-            and (character.isalnum() or character in "_.-")
-        )
+        not (character.isascii() and (character.isalnum() or character in "_.-"))
         for character in value
     ):
         return "rejected"
@@ -1593,9 +1588,7 @@ def _freeze_json_node(
             frozen: dict[str, Any] = {}
             for key, item in value.items():
                 if not isinstance(key, str):
-                    _invalid(
-                        "non_string_key", "Recorder envelope object keys must be strings"
-                    )
+                    _invalid("non_string_key", "Recorder envelope object keys must be strings")
                 traversal.text(key, identity=False)
                 frozen[key] = _freeze_json_node(item, traversal, depth + 1, active)
             return frozen
@@ -1607,9 +1600,7 @@ def _freeze_json_node(
             _invalid("cyclic_value", "Recorder envelopes cannot contain cyclic values")
         active.add(marker)
         try:
-            return [
-                _freeze_json_node(item, traversal, depth + 1, active) for item in value
-            ]
+            return [_freeze_json_node(item, traversal, depth + 1, active) for item in value]
         finally:
             active.remove(marker)
     _invalid("non_json_value", "Recorder envelopes must contain JSON values only")
@@ -1662,9 +1653,7 @@ def _json_node(
         return value
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise RecorderIdentityError(
-                "Recorder commitment input cannot contain NaN or infinity"
-            )
+            raise RecorderIdentityError("Recorder commitment input cannot contain NaN or infinity")
         return value
     if isinstance(value, Enum):
         return _json_node(value.value, traversal, depth + 1, active)
@@ -1705,9 +1694,7 @@ def _json_node(
                     raise RecorderIdentityError(
                         "Recorder commitment mapping keys are not unique after normalization"
                     )
-                normalized[normalized_key] = _json_node(
-                    item, traversal, depth + 1, active
-                )
+                normalized[normalized_key] = _json_node(item, traversal, depth + 1, active)
             return normalized
         finally:
             active.remove(marker)
@@ -1717,9 +1704,7 @@ def _json_node(
             raise RecorderIdentityError("Recorder commitment input cannot be cyclic")
         active.add(marker)
         try:
-            items = [
-                _json_node(item, traversal, depth + 1, active) for item in value
-            ]
+            items = [_json_node(item, traversal, depth + 1, active) for item in value]
         finally:
             active.remove(marker)
         if isinstance(value, (set, frozenset)):

@@ -10,6 +10,12 @@
 [mcp_servers.lians]
 command = "uvx"
 args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
+startup_timeout_sec = 300
+tool_timeout_sec = 120
+enabled = true
+required = false
+enabled_tools = ["remember", "recall", "recall_at"]
+default_tools_approval_mode = "writes"
 
 [mcp_servers.lians.env]
 # Point at the managed cloud (free tier) or your self-hosted server.
@@ -25,7 +31,21 @@ LIANS_AGENT_ID = "codex-session"
 #
 #   [mcp_servers.lians]
 #   command = "uvx"
-#   args = ["--from", "lians-sdk[mcp,local]", "lians-mcp"]
+#   args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
+#   startup_timeout_sec = 300
+#   tool_timeout_sec = 120
+#   enabled_tools = ["remember", "recall", "recall_at"]
+#   default_tools_approval_mode = "writes"
 #   [mcp_servers.lians.env]
-#   LIANS_LOCAL = "1"
 #   LIANS_AGENT_ID = "codex-session"
+#   LIANS_NAMESPACE = "codex-personal"
+#   LIANS_LOCAL_DB = "/absolute/path/to/.lians/codex.db"
+#   EMBEDDING_PROVIDER = "sentence-transformers"
+#
+# The local MCP server prewarms before accepting traffic. The longer startup
+# timeout covers the first model download; warm tool calls use tool_timeout_sec.
+# If the model is already cached for an air-gapped host, add HF_HUB_OFFLINE = "1".
+#
+# Evidence profile: replace enabled_tools above with all eight server tools:
+# ["remember", "recall", "recall_at", "reconstruct", "list_conflicts",
+#  "memory_lineage", "fact_history", "backtest_check"]
