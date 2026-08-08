@@ -491,6 +491,45 @@ async def test_context_tools_and_concurrency_are_exact_bounded_and_advisory(db) 
 
 
 @pytest.mark.asyncio
+async def test_context_compiler_enforces_same_budget_usage_extension_target(db) -> None:
+    bundle = await compile_context(
+        db,
+        namespace=NAMESPACE,
+        barrier_group=None,
+        principal_ref=PRINCIPAL,
+        body=ContextCompileRequest(
+            provider="provider-neutral",
+            model="integration-test",
+            tokenizer=TokenizerSpec(engine="tiktoken", name="cl100k_base"),
+            max_tokens=10_000,
+            target_usage_extension_ratio=1.85,
+            items=[
+                ContextItem(
+                    id=f"memory-{index}",
+                    content=(
+                        f"Memory item {index}: quarterly revenue guidance detail "
+                        f"and supporting evidence reference {index}."
+                    ),
+                    relevance=1.0 - (index / 100),
+                    freshness=1.0,
+                    evidence_refs=[f"urn:lians:test:{index}"],
+                )
+                for index in range(10)
+            ],
+        ),
+    )
+
+    output = context_bundle_out(bundle)
+    assert output.target_usage_extension_ratio == 1.85
+    assert output.max_tokens <= int(output.original_tokens / 1.85)
+    assert output.compiled_tokens <= output.max_tokens
+    assert output.estimated_context_usage_extension_ratio is not None
+    assert output.estimated_context_usage_extension_ratio >= 1.85
+    assert output.usage_extension_target_met is True
+    assert output.analysis["requested_max_tokens"] == 10_000
+
+
+@pytest.mark.asyncio
 async def test_evaluation_routing_release_outcomes_and_learning_form_one_evidence_chain(db) -> None:
     decision = await _recorded_decision(db)
     definition = await create_agent_definition(

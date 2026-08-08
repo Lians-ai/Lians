@@ -1,0 +1,106 @@
+{
+  "question_id": "conv0_q0",
+  "question": "When did Caroline go to the LGBTQ support group?",
+  "ground_truth_answer": "7 May 2023",
+  "model": "fable",
+  "top_k": 20,
+  "benchmark_scope": "manual_context_isolation_no_tools_or_mcp",
+  "mcp_tools_enabled": false,
+  "tokenizer": "o200k_base (cross-model context accounting)",
+  "semantic_context": {
+    "full_tokens": 14084,
+    "lians_tokens": 1297,
+    "reduction": 0.90791,
+    "target": 0.85,
+    "target_met": true
+  },
+  "dry_run": false,
+  "recorded_lians_cutoff_result": {
+    "judgment": "CORRECT",
+    "score": 1.0,
+    "generated_answer": "May 7, 2023.",
+    "memories_evaluated": 20,
+    "reason": "The generated answer exactly matches the gold date (May 7, 2023)."
+  },
+  "claude": {
+    "full_conversation": {
+      "answer": "7 May, 2023",
+      "duration_ms": 3314,
+      "duration_api_ms": 4583,
+      "num_turns": 1,
+      "total_cost_usd": 0.29670100000000005,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 22380,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 9,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 22380
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 9,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 22380,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 22380,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "total_input_tokens": 22382
+    },
+    "lians_top_k": {
+      "answer": "May 7, 2023",
+      "duration_ms": 5423,
+      "duration_api_ms": 6911,
+      "num_turns": 1,
+      "total_cost_usd": 0.029339999999999998,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 2142,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 9,
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 2142
+        },
+        "inference_geo": "global",
+        "iterations": [
+          {
+            "input_tokens": 2,
+            "output_tokens": 9,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 2142,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 2142,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "type": "message"
+          }
+        ],
+        "speed": "standard"
+      },
+      "total_input_tokens": 2144
+    },
+    "total_input_reduction": 0.904209,
+    "total_cost_reduction": 0.901113,
+    "answers_require_review": true
+  }
+}

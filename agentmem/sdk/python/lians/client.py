@@ -579,6 +579,7 @@ class AsyncLiansClient:
         mmr: bool = False,
         surface_conflicts: bool = True,
         max_conflicts: int = 5,
+        filters: Optional[dict[str, Any]] = None,
     ) -> dict:
         """
         Build a token-budgeted, ready-to-inject context block from recall.
@@ -594,6 +595,7 @@ class AsyncLiansClient:
             "agent_id": agent_id,
             "query": query,
             "k": k,
+            "filters": filters or {},
             "max_tokens": max_tokens,
             "mmr": mmr,
             "surface_conflicts": surface_conflicts,

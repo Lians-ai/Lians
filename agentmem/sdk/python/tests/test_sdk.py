@@ -202,6 +202,62 @@ class TestSyncHTTPClient:
         assert result == expected
         client.close()
 
+    def test_context_delegates_filters_and_budget_to_async_client(self):
+        from unittest.mock import AsyncMock
+
+        client = LiansClient(base_url="http://fake", api_key="key")
+        expected = {"context": "Relevant facts", "memories": [], "truncated": False}
+        client._async.context = AsyncMock(return_value=expected)
+
+        result = client.context(
+            agent_id="a",
+            query="guidance",
+            k=50,
+            as_of=T1,
+            filters={"ticker": "NVDA"},
+            max_tokens=2650,
+            mmr=True,
+        )
+
+        client._async.context.assert_called_once_with(
+            agent_id="a",
+            query="guidance",
+            k=50,
+            as_of=T1,
+            filters={"ticker": "NVDA"},
+            max_tokens=2650,
+            header=None,
+            mmr=True,
+            surface_conflicts=True,
+            max_conflicts=5,
+        )
+        assert result == expected
+        client.close()
+
+    def test_context_preserves_existing_positional_argument_order(self):
+        from unittest.mock import AsyncMock
+
+        client = LiansClient(base_url="http://fake", api_key="key")
+        expected = {"context": "Relevant facts", "memories": []}
+        client._async.context = AsyncMock(return_value=expected)
+
+        result = client.context("a", "guidance", 7, T1, 3000, "Header", True, False, 2)
+
+        client._async.context.assert_called_once_with(
+            agent_id="a",
+            query="guidance",
+            k=7,
+            as_of=T1,
+            filters=None,
+            max_tokens=3000,
+            header="Header",
+            mmr=True,
+            surface_conflicts=False,
+            max_conflicts=2,
+        )
+        assert result == expected
+        client.close()
+
     def test_context_manager_closes_loop(self):
         """Exiting the context manager closes the event loop."""
         client = LiansClient(base_url="http://fake", api_key="key")

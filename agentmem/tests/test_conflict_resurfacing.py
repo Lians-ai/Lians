@@ -84,6 +84,22 @@ async def test_surfacing_can_be_opted_out_per_call(db):
 
 
 @pytest.mark.asyncio
+async def test_historical_context_never_surfaces_current_conflict_state(db):
+    await _seed_conflict(db)
+
+    ctx = await assemble_context(db, NS, ContextRequest(
+        agent_id=AGENT,
+        query="NVDA earnings",
+        as_of=datetime(2026, 3, 14, tzinfo=timezone.utc),
+        surface_conflicts=True,
+    ))
+
+    assert ctx.open_conflicts == []
+    assert ctx.open_conflicts_total == 0
+    assert "UNRESOLVED MEMORY CONFLICTS" not in ctx.context
+
+
+@pytest.mark.asyncio
 async def test_conflicts_of_other_agents_do_not_leak(db):
     await _seed_conflict(db)
 
@@ -119,3 +135,32 @@ async def test_conflict_overflow_is_counted_not_dropped_silently(db):
     assert "+1 more open conflicts not shown" in ctx.context
     # Oldest first: the longest-unresolved conflict is the most overdue.
     assert ctx.open_conflicts[0].detected_at <= ctx.open_conflicts[1].detected_at
+
+
+@pytest.mark.asyncio
+async def test_conflict_resurfacing_respects_context_budget(db):
+    long_value = "x" * 600
+    for content, source in [
+        (f"NVDA guidance is {long_value}", "vendor-feed-A"),
+        (f"NVDA guidance is not {long_value}", "vendor-feed-B"),
+    ]:
+        await add_memory(db, NS, MemoryAdd(
+            agent_id=AGENT,
+            content=content,
+            event_time=T_SAME,
+            source=source,
+            metadata={"ticker": "NVDA", "metric": "guidance"},
+        ))
+
+    ctx = await assemble_context(db, NS, ContextRequest(
+        agent_id=AGENT,
+        query="NVDA guidance",
+        max_tokens=64,
+    ))
+
+    assert ctx.token_estimate <= 64
+    assert ctx.truncated is True
+    assert ctx.open_conflicts_total == 1
+    assert ctx.open_conflicts == []
+    assert "UNRESOLVED MEMORY CONFLICTS" in ctx.context
+    assert "+1 more open conflicts not shown" in ctx.context

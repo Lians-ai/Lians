@@ -50,9 +50,10 @@
 governed improvement infrastructure for production AI agents**. Connect it
 through MCP, HTTP, Python/TypeScript SDKs, or OpenTelemetry to systems built on
 Codex, Claude, Gemini, and other model or agent runtimes. Lians keeps recalled
-facts current, assembles context inside exact token budgets, measures quality,
-latency, tokens, cost, and outcomes, and requires protected-quality gates before
-an optimized agent version can advance toward production.
+facts current, bounds ordinary recall context, supports exact-token context
+compilation, measures quality, latency, tokens, cost, and outcomes, and requires
+protected-quality gates before an optimized agent version can advance toward
+production.
 
 The measurable claim is workflow-specific: Lians can reduce the context an
 agent reads while preserving a defined quality threshold. In the published
@@ -62,6 +63,16 @@ top-200, it scored 92.9% with 43.6% fewer context tokens. These are benchmark
 results, not a guarantee for every model, prompt, or deployment. See the
 [token-efficiency report](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md)
 and the [Codex/PostgreSQL validation](docs/benchmarks/codex-mcp-local-2026-08-08.md).
+
+For the product target of 85% more same-budget usage, the economic threshold is
+1.85x comparable tasks, which requires at least 45.95% lower measured per-task
+cost after protected quality passes. One signed-in Codex end-to-end repeat
+reached 2.10x same-budget usage. A signed-in Claude manual context-isolation
+repeat reached 10.11x with tools and MCP disabled, so it is an upper bound on
+context savings rather than installed-plugin evidence; both answer pairs were
+correct. Gemini's MCP/configuration path is validated but its model A/B remains
+pending credentials. See the
+[cross-provider usage-extension report](docs/benchmarks/provider-usage-extension-2026-08-08.md).
 
 Decision evidence remains the trust boundary: Lians records what an agent saw,
 was permitted to use, and did, then reconstructs that boundary when sources,

@@ -1,0 +1,33 @@
+{
+  "provider": "Claude Code fable alias",
+  "workload": "single LOCOMO manual context isolation, full history versus stored top-20 artifact, tools and MCP disabled",
+  "target_usage_extension_percent": 85,
+  "quality_gate": {
+    "protected_checks": [
+      {
+        "name": "same_question_and_model",
+        "passed": true
+      },
+      {
+        "name": "baseline_answer_correct",
+        "passed": true
+      },
+      {
+        "name": "lians_answer_correct",
+        "passed": true
+      }
+    ]
+  },
+  "baseline": {
+    "raw_input_tokens": 22382,
+    "output_tokens": 9,
+    "reported_cost": 0.296701,
+    "reported_cost_unit": "usd"
+  },
+  "candidate": {
+    "raw_input_tokens": 2144,
+    "output_tokens": 9,
+    "reported_cost": 0.02934,
+    "reported_cost_unit": "usd"
+  }
+}

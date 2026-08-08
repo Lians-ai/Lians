@@ -1423,7 +1423,7 @@ async def assemble_context(
     than confidently using whichever version recall happened to rank higher.
     """
     from .schemas import ContextResult
-    filters: dict[str, Any] = {}
+    filters: dict[str, Any] = dict(req.filters)
     if req.mmr:
         filters["_rerank"] = "mmr"
     recall_req = RecallRequest(
@@ -1433,10 +1433,30 @@ async def assemble_context(
 
     lines = [req.header]
     used = _estimate_tokens(req.header)
+    truncated = False
+    if used > req.max_tokens:
+        # A caller-controlled header must not be able to violate the same
+        # budget that constrains conflicts and recalled memories.
+        lines = [req.header[: req.max_tokens * 4]]
+        used = _estimate_tokens(lines[0])
+        truncated = True
+
+    def append_if_fits(line: str) -> bool:
+        nonlocal used
+        candidate = "\n".join((*lines, line))
+        candidate_tokens = _estimate_tokens(candidate)
+        if candidate_tokens > req.max_tokens:
+            return False
+        lines.append(line)
+        used = candidate_tokens
+        return True
 
     open_conflicts: list[ConflictFlagOut] = []
     open_conflicts_total = 0
-    if req.surface_conflicts and req.max_conflicts > 0:
+    # Conflict flags represent the current adjudication backlog. Until conflict
+    # state itself is reconstructed bitemporally, never mix it into an as-of
+    # context where it could reveal facts detected after the requested cutoff.
+    if req.surface_conflicts and req.max_conflicts > 0 and req.as_of is None:
         open_conflicts, open_conflicts_total = await _agent_open_conflicts(
             db,
             namespace,
@@ -1445,38 +1465,42 @@ async def assemble_context(
             barrier_override,
         )
     if open_conflicts:
+        surfaced_conflicts: list[ConflictFlagOut] = []
         banner = "⚠ UNRESOLVED MEMORY CONFLICTS — contested facts, pending adjudication:"
-        lines.append(banner)
-        used += _estimate_tokens(banner)
-        for c in open_conflicts:
-            a_stamp = c.memory_a_event_time.isoformat()[:16].replace("T", " ")
-            b_stamp = c.memory_b_event_time.isoformat()[:16].replace("T", " ")
-            a_src = f" [{c.memory_a_source}]" if c.memory_a_source else ""
-            b_src = f" [{c.memory_b_source}]" if c.memory_b_source else ""
-            line = (
-                f"- ({a_stamp}){a_src} \"{c.memory_a_content}\" DISAGREES WITH "
-                f"({b_stamp}){b_src} \"{c.memory_b_content}\""
-            )
-            lines.append(line)
-            used += _estimate_tokens(line)
-        if open_conflicts_total > len(open_conflicts):
-            more = f"  (+{open_conflicts_total - len(open_conflicts)} more open conflicts not shown)"
-            lines.append(more)
-            used += _estimate_tokens(more)
+        if append_if_fits(banner):
+            for c in open_conflicts:
+                a_stamp = c.memory_a_event_time.isoformat()[:16].replace("T", " ")
+                b_stamp = c.memory_b_event_time.isoformat()[:16].replace("T", " ")
+                a_src = f" [{c.memory_a_source}]" if c.memory_a_source else ""
+                b_src = f" [{c.memory_b_source}]" if c.memory_b_source else ""
+                line = (
+                    f"- ({a_stamp}){a_src} \"{c.memory_a_content}\" DISAGREES WITH "
+                    f"({b_stamp}){b_src} \"{c.memory_b_content}\""
+                )
+                if not append_if_fits(line):
+                    truncated = True
+                    break
+                surfaced_conflicts.append(c)
+            omitted = open_conflicts_total - len(surfaced_conflicts)
+            if omitted > 0:
+                more = f"  (+{omitted} more open conflicts not shown)"
+                if not append_if_fits(more):
+                    truncated = True
+        else:
+            truncated = True
+        # This field is documented as the conflicts actually surfaced in the
+        # context block. The total still reports the full open backlog.
+        open_conflicts = surfaced_conflicts
     included: list = []
-    truncated = False
     for m in result.memories:
         if not m.content:
             continue  # erased — content unrecoverable
         stamp = m.event_time.isoformat()[:16].replace("T", " ") if m.event_time else "undated"
         prov = f" [{m.source}]" if m.source else ""
         line = f"- ({stamp}){prov} {m.content}"
-        t = _estimate_tokens(line)
-        if used + t > req.max_tokens:
+        if not append_if_fits(line):
             truncated = True
             break
-        lines.append(line)
-        used += t
         included.append(m)
 
     return ContextResult(

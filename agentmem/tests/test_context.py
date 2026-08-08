@@ -115,6 +115,23 @@ async def test_context_respects_token_budget(client):
 
 
 @pytest.mark.asyncio
+async def test_context_applies_metadata_filters(client):
+    await _add(client, "NVDA raised revenue guidance", ticker="NVDA")
+    await _add(client, "AAPL raised revenue guidance", ticker="AAPL")
+    r = await client.post("/v1/context", headers=_h(), json={
+        "agent_id": AGENT,
+        "query": "raised revenue guidance",
+        "k": 10,
+        "filters": {"ticker": "AAPL"},
+    })
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "AAPL raised revenue guidance" in body["context"]
+    assert "NVDA raised revenue guidance" not in body["context"]
+
+
+@pytest.mark.asyncio
 async def test_context_mmr_flag_ok(client):
     await _add(client, "AAPL gross margin expanded to 46%", ticker="AAPL")
     r = await client.post("/v1/context", headers=_h(), json={

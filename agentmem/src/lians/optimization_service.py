@@ -121,6 +121,16 @@ def _context_out(row: ContextBundle) -> ContextCompileOut:
         context=_context_storage_context(row.id, row.namespace, row.compiled_context_hash),
     )
     tokenizer = dict(row.analysis.get("tokenizer") or {})
+    target_ratio = float(row.analysis.get("target_usage_extension_ratio", 1.0))
+    estimated_ratio = row.analysis.get("estimated_context_usage_extension_ratio")
+    if estimated_ratio is None and row.compiled_tokens:
+        estimated_ratio = row.original_tokens / row.compiled_tokens
+    target_met = bool(
+        row.analysis.get(
+            "usage_extension_target_met",
+            estimated_ratio is not None and estimated_ratio >= target_ratio,
+        )
+    )
     return ContextCompileOut(
         id=row.id,
         provider=row.provider,
@@ -137,6 +147,9 @@ def _context_out(row: ContextBundle) -> ContextCompileOut:
             if row.original_tokens
             else 0.0
         ),
+        target_usage_extension_ratio=target_ratio,
+        estimated_context_usage_extension_ratio=estimated_ratio,
+        usage_extension_target_met=target_met,
         compiled_context=context,
         compiled_context_hash=row.compiled_context_hash,
         lineage=row.lineage,
@@ -154,6 +167,14 @@ async def compile_context(
     body: ContextCompileRequest,
 ) -> ContextBundle:
     tokenizer = load_exact_tokenizer(body.tokenizer)
+    original_context = body.separator.join(item.content for item in body.items)
+    original_tokens = tokenizer.count(original_context)
+    target_max_tokens = max(1, int(original_tokens / body.target_usage_extension_ratio))
+    effective_max_tokens = (
+        min(body.max_tokens, target_max_tokens)
+        if body.target_usage_extension_ratio > 1.0
+        else body.max_tokens
+    )
     prepared: list[dict[str, Any]] = []
     seen_hashes: dict[str, str] = {}
     redundant: list[dict[str, str]] = []
@@ -229,7 +250,7 @@ async def compile_context(
             [*[selected_entry["content"] for selected_entry in selected], entry["content"]]
         )
         candidate_tokens = tokenizer.count(candidate_context)
-        if candidate_tokens > body.max_tokens:
+        if candidate_tokens > effective_max_tokens:
             if item.mandatory:
                 raise OptimizationContractError(
                     f"mandatory context item {item.id} cannot fit the exact token budget"
@@ -241,8 +262,13 @@ async def compile_context(
 
     compiled_context = body.separator.join(entry["content"] for entry in selected)
     compiled_tokens = tokenizer.count(compiled_context)
-    original_context = body.separator.join(item.content for item in body.items)
-    original_tokens = tokenizer.count(original_context)
+    estimated_usage_extension_ratio = (
+        original_tokens / compiled_tokens if compiled_tokens else None
+    )
+    usage_extension_target_met = bool(
+        estimated_usage_extension_ratio is not None
+        and estimated_usage_extension_ratio >= body.target_usage_extension_ratio
+    )
     content_hash = hashlib.sha256(compiled_context.encode("utf-8")).hexdigest()
     lineage = [
         ContextLineageItem(
@@ -272,6 +298,12 @@ async def compile_context(
         "redundancy": redundant,
         "compression_rejected": compression_rejected,
         "unresolved_contradictions": unresolved_contradictions,
+        "requested_max_tokens": body.max_tokens,
+        "effective_max_tokens": effective_max_tokens,
+        "target_context_max_tokens": target_max_tokens,
+        "target_usage_extension_ratio": body.target_usage_extension_ratio,
+        "estimated_context_usage_extension_ratio": estimated_usage_extension_ratio,
+        "usage_extension_target_met": usage_extension_target_met,
         "evidence_coverage": (
             len(evidence_refs_selected) / len(evidence_refs_available)
             if evidence_refs_available
@@ -288,7 +320,7 @@ async def compile_context(
         "provider": body.provider,
         "model": body.model,
         "tokenizer_hash": tokenizer.definition_hash,
-        "max_tokens": body.max_tokens,
+        "max_tokens": effective_max_tokens,
         "original_tokens": original_tokens,
         "compiled_tokens": compiled_tokens,
         "compiled_context_hash": content_hash,
@@ -305,7 +337,7 @@ async def compile_context(
         tokenizer_engine=body.tokenizer.engine,
         tokenizer_name=body.tokenizer.name,
         tokenizer_hash=tokenizer.definition_hash,
-        max_tokens=body.max_tokens,
+        max_tokens=effective_max_tokens,
         original_tokens=original_tokens,
         compiled_tokens=compiled_tokens,
         compiled_context_encrypted=seal_text(

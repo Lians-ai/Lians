@@ -64,6 +64,15 @@ class ContextCompileRequest(BaseModel):
     model: str = Field(min_length=1, max_length=255)
     tokenizer: TokenizerSpec
     max_tokens: int = Field(ge=1, le=10_000_000)
+    target_usage_extension_ratio: float = Field(
+        default=1.0,
+        ge=1.0,
+        le=100.0,
+        description=(
+            "Context-only same-budget capacity target; 1.85 requests an 85% "
+            "extension by limiting compiled context to 1/1.85 of original tokens."
+        ),
+    )
     separator: str = Field(default="\n\n", max_length=100)
     items: list[ContextItem] = Field(min_length=1, max_length=10_000)
 
@@ -109,6 +118,9 @@ class ContextCompileOut(BaseModel):
     compiled_tokens: int
     token_reduction: int
     reduction_ratio: float
+    target_usage_extension_ratio: float
+    estimated_context_usage_extension_ratio: float | None
+    usage_extension_target_met: bool
     compiled_context: str
     compiled_context_hash: str
     lineage: list[ContextLineageItem]

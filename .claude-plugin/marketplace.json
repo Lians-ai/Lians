@@ -11,8 +11,8 @@
     {
       "name": "lians",
       "source": "./integrations/lians-plugin",
-      "description": "Bitemporal memory for AI agents with deterministic supersession, point-in-time recall, local MCP, erasure proofs, and tamper-evident history.",
-      "version": "0.4.1"
+      "description": "Bitemporal memory for Claude with deterministic supersession, point-in-time recall, and an opt-in bounded profile for compatible SDK releases.",
+      "version": "0.5.0"
     }
   ]
 }

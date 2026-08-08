@@ -934,6 +934,7 @@ class ContextRequest(BaseModel):
     query: str = Field(min_length=1, max_length=20_000)
     k: int = Field(default=10, ge=1, le=100)
     as_of: Optional[datetime] = None
+    filters: dict[str, Any] = Field(default_factory=dict, max_length=100)
     max_tokens: int = Field(default=1500, ge=64, le=32000)
     header: str = Field(
         default="Relevant facts from memory (most recent, non-stale):",
@@ -943,6 +944,7 @@ class ContextRequest(BaseModel):
     # Active resurfacing: open conflicts push to the top of every context block
     # until adjudicated — an unresolved conflict must not silently age out.
     # Opt out per-call for surfaces where contested facts are handled elsewhere.
+    # Historical ``as_of`` contexts always suppress current conflict state.
     surface_conflicts: bool = True
     max_conflicts: int = Field(default=5, ge=0, le=50)
 

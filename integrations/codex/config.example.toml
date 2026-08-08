@@ -1,11 +1,14 @@
 # Lians MCP server for Codex CLI
 #
 # Add this block to your Codex config (~/.codex/config.toml) to expose Lians as a
-# native MCP tool server. Codex will gain the eight Lians memory tools without any
-# SDK code in your project.
+# native MCP tool server. The ordinary profile exposes three bounded memory tools
+# without any SDK code in your project.
 #
 # Requires `uvx` (ships with `uv`): https://docs.astral.sh/uv/
 # Install uv, then Codex launches the server on demand via the command below.
+# Public lians-sdk 0.5.0 predates the bounded server path. Until the updated SDK
+# is published, replace the --from value with this checkout reference:
+# "lians-sdk[mcp] @ file:///absolute/path/to/Lians/agentmem/sdk/python"
 
 [mcp_servers.lians]
 command = "uvx"
@@ -18,14 +21,19 @@ enabled = true
 required = true
 enabled_tools = ["remember", "recall", "recall_at"]
 default_tools_approval_mode = "writes"
+env_vars = ["LIANS_URL", "LIANS_API_KEY", "LIANS_AGENT_ID", "LIANS_NAMESPACE"]
 
 [mcp_servers.lians.env]
-# Point at the managed cloud (free tier) or your self-hosted server.
-LIANS_URL = "https://api.lians.dev"
-# Get a free key at api.lians.dev, or use your self-hosted key.
-LIANS_API_KEY = "lians_..."
-# Memory namespace for this agent/session.
-LIANS_AGENT_ID = "codex-session"
+# REQUIRED: replace with this project's absolute root. Lians hashes it into the
+# default agent and local namespace so unrelated projects do not share recall.
+LIANS_MCP_PROJECT_ROOT = "/absolute/path/to/this/project"
+# Empty values make legacy SDKs fail closed; the updated SDK derives them from
+# the project root. Replace both only for intentional cross-project sharing.
+LIANS_AGENT_ID = ""
+LIANS_NAMESPACE = ""
+LIANS_MCP_ENABLED_TOOLS = "remember,recall,recall_at"
+LIANS_MCP_RECALL_K = "50"
+LIANS_MCP_CONTEXT_MAX_TOKENS = "2650"
 
 # ── Local mode (no server, no API key) ─────────────────────────────────────────
 # For prototyping you can omit LIANS_URL / LIANS_API_KEY and run the local SQLite
@@ -40,13 +48,19 @@ LIANS_AGENT_ID = "codex-session"
 #   enabled_tools = ["remember", "recall", "recall_at"]
 #   default_tools_approval_mode = "writes"
 #   [mcp_servers.lians.env]
-#   LIANS_AGENT_ID = "codex-session"
-#   LIANS_NAMESPACE = "codex-personal"
+#   LIANS_MCP_PROJECT_ROOT = "/absolute/path/to/this/project"
+#   LIANS_AGENT_ID = ""
+#   LIANS_NAMESPACE = ""
 #   LIANS_LOCAL_DB = "/absolute/path/to/.lians/codex.db"
+#   LIANS_MCP_ENABLED_TOOLS = "remember,recall,recall_at"
+#   LIANS_MCP_RECALL_K = "50"
+#   LIANS_MCP_CONTEXT_MAX_TOKENS = "2650"
+#   LIANS_MCP_PREWARM = "background"
 #   EMBEDDING_PROVIDER = "sentence-transformers"
 #
-# The local MCP server prewarms before accepting traffic. The longer startup
-# timeout covers the first model download; warm tool calls use tool_timeout_sec.
+# The local MCP server completes bounded imports before the handshake, then loads
+# the model and runs a probe in the background. The longer startup timeout also
+# covers a first uvx install or model download; warm calls use tool_timeout_sec.
 # If the model is already cached for an air-gapped host, add HF_HUB_OFFLINE = "1".
 #
 # Evidence profile: replace enabled_tools above with all eight server tools:

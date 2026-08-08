@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/google-gemini/gemini-cli/main/schemas/settings.schema.json",
+  "mcpServers": {
+    "lians": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "lians-sdk[mcp]",
+        "lians-mcp"
+      ],
+      "cwd": ".",
+      "env": {
+        "LIANS_URL": "https://api.lians.dev",
+        "LIANS_API_KEY": "$LIANS_API_KEY",
+        "LIANS_MCP_PROJECT_ROOT": ".",
+        "LIANS_AGENT_ID": "$LIANS_AGENT_ID",
+        "LIANS_NAMESPACE": "$LIANS_NAMESPACE",
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,recall_at",
+        "LIANS_MCP_RECALL_K": "50",
+        "LIANS_MCP_CONTEXT_MAX_TOKENS": "2650",
+        "LIANS_MCP_PREWARM": "background"
+      },
+      "timeout": 300000,
+      "trust": false,
+      "description": "Current and point-in-time memory from Lians",
+      "includeTools": [
+        "remember",
+        "recall",
+        "recall_at"
+      ]
+    }
+  }
+}

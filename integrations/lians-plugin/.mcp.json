@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "lians": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "${LIANS_MCP_PACKAGE:-lians-sdk[mcp]}",
+        "lians-mcp"
+      ],
+      "env": {
+        "LIANS_MCP_PROJECT_ROOT": "${CLAUDE_PROJECT_DIR}",
+        "LIANS_AGENT_ID": "${LIANS_AGENT_ID:-}",
+        "LIANS_NAMESPACE": "${LIANS_NAMESPACE:-}",
+        "LIANS_LOCAL_DB": "${LIANS_LOCAL_DB:-${CLAUDE_PLUGIN_DATA}/lians.db}",
+        "LIANS_MCP_PREWARM": "background",
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,recall_at",
+        "LIANS_MCP_RECALL_K": "50",
+        "LIANS_MCP_CONTEXT_MAX_TOKENS": "2650"
+      },
+      "timeout": 120000
+    }
+  }
+}

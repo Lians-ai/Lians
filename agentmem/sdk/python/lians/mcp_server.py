@@ -16,7 +16,11 @@ Environment variables:
     LIANS_AGENT_ID   Agent identifier / memory namespace (default: mcp-agent)
     LIANS_LOCAL_DB   Local SQLite path (default: ~/.lians/mcp.db)
     LIANS_NAMESPACE  Local tenant namespace (default: mcp)
-    LIANS_MCP_PREWARM Load the local runtime before accepting MCP traffic (default: true)
+    LIANS_MCP_PROJECT_ROOT Optional project root used to derive isolated defaults
+    LIANS_MCP_PREWARM Runtime warmup: background (default), true/sync, or false/off
+    LIANS_MCP_ENABLED_TOOLS Optional comma-separated tool allowlist
+    LIANS_MCP_RECALL_K Number of candidates considered for recall (default: 50)
+    LIANS_MCP_CONTEXT_MAX_TOKENS Maximum returned recall context (default: 2650)
 
 Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop_config.json):
     {
@@ -35,25 +39,115 @@ Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
+import re
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+def _parse_project_scope(raw: str | None) -> str | None:
+    """Derive a stable, non-secret project identifier from an absolute root."""
+    if raw is None:
+        return None
+    if not raw.strip():
+        raise ValueError("LIANS_MCP_PROJECT_ROOT must not be blank when set")
+    root = Path(raw).expanduser().resolve()
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", root.name).strip("-_.").lower()
+    slug = slug[:40] or "project"
+    digest = hashlib.sha256(os.path.normcase(str(root)).encode("utf-8")).hexdigest()[:12]
+    return f"{slug}-{digest}"
+
+
 LIANS_URL = os.environ.get("LIANS_URL", "").rstrip("/")
 LIANS_API_KEY = os.environ.get("LIANS_API_KEY", "")
-LIANS_AGENT_ID = os.environ.get("LIANS_AGENT_ID", "mcp-agent")
+LIANS_MCP_PROJECT_SCOPE = _parse_project_scope(os.environ.get("LIANS_MCP_PROJECT_ROOT"))
+LIANS_AGENT_ID = os.environ.get("LIANS_AGENT_ID") or (
+    f"mcp-{LIANS_MCP_PROJECT_SCOPE}" if LIANS_MCP_PROJECT_SCOPE else "mcp-agent"
+)
 LIANS_LOCAL_DB = os.environ.get("LIANS_LOCAL_DB", str(Path.home() / ".lians" / "mcp.db"))
-LIANS_NAMESPACE = os.environ.get("LIANS_NAMESPACE", "mcp")
-LIANS_MCP_PREWARM = os.environ.get("LIANS_MCP_PREWARM", "true").lower() not in {
-    "0", "false", "no", "off",
-}
+LIANS_NAMESPACE = os.environ.get("LIANS_NAMESPACE") or (
+    f"mcp-{LIANS_MCP_PROJECT_SCOPE}" if LIANS_MCP_PROJECT_SCOPE else "mcp"
+)
+
+
+def _parse_prewarm_mode(raw: str) -> str:
+    value = raw.strip().lower()
+    if value in {"background", "async"}:
+        return "background"
+    if value in {"1", "true", "yes", "on", "sync", "synchronous"}:
+        return "sync"
+    if value in {"0", "false", "no", "off"}:
+        return "off"
+    raise ValueError(
+        "LIANS_MCP_PREWARM must be background, sync/true, or off/false"
+    )
+
+
+LIANS_MCP_PREWARM = _parse_prewarm_mode(
+    os.environ.get("LIANS_MCP_PREWARM", "background")
+)
+
+
+def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+# The defaults consider top-50 candidates and cap the rendered response near
+# the recorded LOCOMO top-50 mean. The exact capped renderer still needs its
+# own representative quality run and implies no universal usage or latency gain.
+LIANS_MCP_RECALL_K = _bounded_int_env("LIANS_MCP_RECALL_K", 50, 1, 100)
+LIANS_MCP_CONTEXT_MAX_TOKENS = _bounded_int_env(
+    "LIANS_MCP_CONTEXT_MAX_TOKENS", 2650, 64, 32000
+)
+
+_TOOL_NAMES = frozenset({
+    "remember",
+    "recall",
+    "recall_at",
+    "reconstruct",
+    "list_conflicts",
+    "memory_lineage",
+    "fact_history",
+    "backtest_check",
+})
+
+
+def _parse_enabled_tools(raw: str | None) -> frozenset[str] | None:
+    """Parse the optional provider-neutral MCP tool allowlist.
+
+    An unset value preserves the historical behavior and exposes every tool.
+    An explicitly blank value is rejected so a failed host interpolation cannot
+    silently turn a restrictive profile into the full tool surface.
+    """
+    if raw is None:
+        return None
+    if not raw.strip():
+        raise ValueError("LIANS_MCP_ENABLED_TOOLS must not be blank when set")
+    enabled = frozenset(part.strip() for part in raw.split(",") if part.strip())
+    unknown = sorted(enabled - _TOOL_NAMES)
+    if unknown:
+        raise ValueError(
+            "LIANS_MCP_ENABLED_TOOLS contains unknown tool(s): " + ", ".join(unknown)
+        )
+    return enabled
+
+
+LIANS_MCP_ENABLED_TOOLS = _parse_enabled_tools(os.environ.get("LIANS_MCP_ENABLED_TOOLS"))
 
 _LOCAL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lians-mcp-local")
 _LOCAL_CLIENT: Any = None
+_LOCAL_PREWARM_FUTURE: Future[Any] | None = None
 
 
 def _iso(value: str) -> datetime:
@@ -95,6 +189,20 @@ def _local_api(method: str, path: str, body: dict | None = None) -> dict:
             k=body.get("k", 5),
             as_of=as_of,
             filters=body.get("filters", {}),
+        )
+    if method == "POST" and parsed.path == "/v1/context":
+        as_of = _iso(body["as_of"]) if body.get("as_of") else None
+        return client.context(
+            agent_id=body["agent_id"],
+            query=body["query"],
+            k=body.get("k", LIANS_MCP_RECALL_K),
+            as_of=as_of,
+            filters=body.get("filters", {}),
+            max_tokens=body.get("max_tokens", LIANS_MCP_CONTEXT_MAX_TOKENS),
+            header=body.get("header"),
+            mmr=body.get("mmr", False),
+            surface_conflicts=body.get("surface_conflicts", True),
+            max_conflicts=body.get("max_conflicts", 5),
         )
     if method == "POST" and parsed.path == "/v1/audit/reconstruct":
         return client.reconstruct(
@@ -168,6 +276,16 @@ def _fmt_memories(memories: list[dict]) -> str:
     )
 
 
+def _fmt_context(result: dict) -> str:
+    has_conflicts = bool(
+        result.get("open_conflicts") or result.get("open_conflicts_total", 0)
+    )
+    if not result.get("memories") and not has_conflicts:
+        return "No relevant memories found."
+    context = str(result.get("context", "")).strip()
+    return context or "No relevant memories found."
+
+
 def _build_server() -> Any:
     from mcp.server import Server
     from mcp.types import TextContent, Tool, ToolAnnotations
@@ -176,7 +294,7 @@ def _build_server() -> Any:
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
-        return [
+        tools = [
             Tool(
                 name="remember",
                 description=(
@@ -215,7 +333,7 @@ def _build_server() -> Any:
             Tool(
                 name="recall",
                 description=(
-                    "Retrieve the most relevant CURRENT memories for a query. "
+                    "Retrieve token-bounded context from the most relevant CURRENT memories. "
                     "Returns only presently-valid facts — superseded facts are excluded at the DB layer. "
                     "Call this before answering any question that may be in memory. "
                     "Use filters={ticker: NVDA} to narrow to a specific instrument."
@@ -225,7 +343,14 @@ def _build_server() -> Any:
                     "required": ["query"],
                     "properties": {
                         "query": {"type": "string"},
-                        "k": {"type": "integer", "default": 5},
+                        "k": {"type": "integer", "default": LIANS_MCP_RECALL_K},
+                        "max_tokens": {
+                            "type": "integer",
+                            "minimum": 64,
+                            "maximum": 32000,
+                            "default": LIANS_MCP_CONTEXT_MAX_TOKENS,
+                            "description": "Maximum estimated tokens returned to the model.",
+                        },
                         "filters": {
                             "type": "object",
                             "description": "Metadata equality filters, e.g. {ticker: NVDA}",
@@ -257,7 +382,14 @@ def _build_server() -> Any:
                             "type": "string",
                             "description": "ISO 8601 timestamp for the point-in-time snapshot.",
                         },
-                        "k": {"type": "integer", "default": 5},
+                        "k": {"type": "integer", "default": LIANS_MCP_RECALL_K},
+                        "max_tokens": {
+                            "type": "integer",
+                            "minimum": 64,
+                            "maximum": 32000,
+                            "default": LIANS_MCP_CONTEXT_MAX_TOKENS,
+                            "description": "Maximum estimated tokens returned to the model.",
+                        },
                     },
                 },
                 annotations=ToolAnnotations(
@@ -411,10 +543,15 @@ def _build_server() -> Any:
                 ),
             ),
         ]
+        if LIANS_MCP_ENABLED_TOOLS is None:
+            return tools
+        return [tool for tool in tools if tool.name in LIANS_MCP_ENABLED_TOOLS]
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         try:
+            if LIANS_MCP_ENABLED_TOOLS is not None and name not in LIANS_MCP_ENABLED_TOOLS:
+                return [TextContent(type="text", text=f"Lians tool disabled: {name}")]
             if name == "remember":
                 body = {
                     "agent_id": LIANS_AGENT_ID,
@@ -431,25 +568,36 @@ def _build_server() -> Any:
                 body = {
                     "agent_id": LIANS_AGENT_ID,
                     "query": arguments["query"],
-                    "k": arguments.get("k", 5),
+                    "k": arguments.get("k", LIANS_MCP_RECALL_K),
+                    "max_tokens": arguments.get(
+                        "max_tokens", LIANS_MCP_CONTEXT_MAX_TOKENS
+                    ),
                     "filters": arguments.get("filters", {}),
+                    "mmr": False,
+                    "surface_conflicts": True,
+                    "max_conflicts": 5,
                 }
-                result = await _api("POST", "/v1/recall", body)
-                return [TextContent(type="text", text=_fmt_memories(result.get("memories", [])))]
+                result = await _api("POST", "/v1/context", body)
+                return [TextContent(type="text", text=_fmt_context(result))]
 
             elif name == "recall_at":
                 body = {
                     "agent_id": LIANS_AGENT_ID,
                     "query": arguments["query"],
-                    "k": arguments.get("k", 5),
+                    "k": arguments.get("k", LIANS_MCP_RECALL_K),
+                    "max_tokens": arguments.get(
+                        "max_tokens", LIANS_MCP_CONTEXT_MAX_TOKENS
+                    ),
                     "as_of": arguments["as_of_iso"],
+                    "header": f"Memories valid as of {arguments['as_of_iso'][:10]}:",
+                    "mmr": False,
+                    # Open conflict flags describe current adjudication state,
+                    # not state at the requested bitemporal cutoff.
+                    "surface_conflicts": False,
+                    "max_conflicts": 5,
                 }
-                result = await _api("POST", "/v1/recall", body)
-                header = f"Memories valid as of {arguments['as_of_iso'][:10]}:"
-                return [TextContent(
-                    type="text",
-                    text=header + "\n" + _fmt_memories(result.get("memories", [])),
-                )]
+                result = await _api("POST", "/v1/context", body)
+                return [TextContent(type="text", text=_fmt_context(result))]
 
             elif name == "reconstruct":
                 body_r: dict = {
@@ -577,44 +725,75 @@ def _build_server() -> Any:
     return server
 
 
-def _prewarm_local_runtime() -> None:
-    """Initialize local memory on its owning worker before AnyIO starts.
+def _report_background_prewarm(future: Future[Any]) -> None:
+    try:
+        future.result()
+    except Exception:
+        logging.getLogger("lians.mcp").exception(
+            "background local MCP prewarm failed; recall may start in degraded mode"
+        )
 
-    Importing NumPy/PyTorch and creating the embedded schema for the first time
-    can be dramatically slower from a worker after an MCP host has started its
-    own AnyIO threads on Windows. Prewarming here makes that cost a bounded MCP
-    startup cost and keeps the first real memory tool call responsive.
+
+def _run_local_prewarm() -> dict:
+    return _local_api(
+        "POST",
+        "/v1/recall",
+        {
+            "agent_id": LIANS_AGENT_ID,
+            "query": "__lians_mcp_startup_probe__",
+            "k": 1,
+            "filters": {},
+        },
+    )
+
+
+def _prepare_local_runtime_imports() -> None:
+    """Load import-heavy local dependencies before asyncio/AnyIO starts.
+
+    On Windows, importing the ML stack for the first time from a worker after
+    AnyIO has started can stall indefinitely. Client/schema construction and
+    the sentence-transformers package import are bounded startup work; model
+    loading and the probe query remain on the dedicated background worker.
     """
-    if LIANS_URL or not LIANS_MCP_PREWARM:
+    if LIANS_URL or LIANS_MCP_PREWARM == "off":
         return
     try:
-        future = _LOCAL_EXECUTOR.submit(
-            _local_api,
-            "POST",
-            "/v1/recall",
-            {
-                "agent_id": LIANS_AGENT_ID,
-                "query": "__lians_mcp_startup_probe__",
-                "k": 1,
-                "filters": {},
-            },
+        _get_local_client()
+        if os.environ.get("EMBEDDING_PROVIDER", "").strip().lower() == (
+            "sentence-transformers"
+        ):
+            import sentence_transformers  # noqa: F401
+    except Exception:
+        logging.getLogger("lians.mcp").exception(
+            "local MCP runtime import preparation failed; continuing without warmup"
         )
-        future.result()
+
+
+def _prewarm_local_runtime() -> None:
+    """Start local initialization on its owning worker before AnyIO starts.
+
+    Background mode lets the MCP handshake complete after bounded import
+    preparation while the first tool call queues behind model/query warmup on
+    the same single-thread executor. Sync mode preserves the older fully
+    startup-blocking behavior for hosts with long startup timeouts.
+    """
+    global _LOCAL_PREWARM_FUTURE
+    if LIANS_URL or LIANS_MCP_PREWARM == "off":
+        return
+    try:
+        if LIANS_MCP_PREWARM == "sync":
+            _LOCAL_PREWARM_FUTURE = _LOCAL_EXECUTOR.submit(_run_local_prewarm)
+            _LOCAL_PREWARM_FUTURE.result()
+        else:
+            _LOCAL_PREWARM_FUTURE = _LOCAL_EXECUTOR.submit(_run_local_prewarm)
+            _LOCAL_PREWARM_FUTURE.add_done_callback(_report_background_prewarm)
     except Exception:
         logging.getLogger("lians.mcp").exception(
             "local MCP prewarm failed; the server will start in degraded mode"
         )
 
 
-async def _main() -> None:
-    try:
-        from mcp.server.stdio import stdio_server
-    except ImportError:
-        raise SystemExit(
-            "MCP package not installed. Run: pip install 'lians-sdk[mcp]'"
-        )
-
-    server = _build_server()
+async def _main(server: Any, stdio_server: Any) -> None:
     try:
         async with stdio_server() as (read_stream, write_stream):
             await server.run(
@@ -633,8 +812,20 @@ async def _main() -> None:
 
 
 def main() -> None:
+    try:
+        from mcp.server.stdio import stdio_server
+    except ImportError:
+        raise SystemExit(
+            "MCP package not installed. Run: pip install 'lians-sdk[mcp]'"
+        )
+
+    # Construct MCP first, then import the local runtime synchronously. The
+    # remaining model/query warmup can safely run on its owning worker before
+    # AnyIO creates worker threads.
+    server = _build_server()
+    _prepare_local_runtime_imports()
     _prewarm_local_runtime()
-    asyncio.run(_main())
+    asyncio.run(_main(server, stdio_server))
 
 
 if __name__ == "__main__":

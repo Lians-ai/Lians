@@ -17,10 +17,11 @@ environment, database, agent ID, and namespace that Codex will use after restart
 
 | Measurement | Result |
 | --- | ---: |
-| Cold MCP initialize + local runtime prewarm + tool discovery | 22.4 s |
+| Cold MCP initialize + tool discovery after bounded import preparation | 11.6 s |
+| First bounded recall while background model warmup completed | 4.53 s |
 | Warm semantic recall tool call | 246 ms |
 | Core tools exposed to Codex | 3 |
-| Canonical JSON size of the three core tool schemas | 514 tokens |
+| Canonical JSON size of the three core tool schemas | 589 tokens |
 | Recalled persisted product-direction fact | pass |
 | Codex app-server discovery and direct `lians.recall` | pass |
 | GPT-5.6 Luna selected `lians.recall` and answered from it | pass |
@@ -34,10 +35,11 @@ policy.
 
 During the test, Windows revealed that lazy embedded-runtime imports after the
 MCP host started its AnyIO workers could make the first tool call exceed its
-timeout. The server now prewarms local memory before accepting protocol traffic
-and shuts down its local executor cleanly. A deterministic test embedder was used
-only to isolate that defect; the final recorded result above used the benchmarked
-Snowflake model.
+timeout. The server now constructs the client and imports the ML package before
+AnyIO starts, then loads the model and runs a probe on its dedicated background
+worker. It also shuts down that worker cleanly. A deterministic test embedder was
+used only to isolate the defect; the final recorded result above used the
+benchmarked Snowflake model and a real persisted recall.
 
 The restart test also exposed a host-readiness race: with the server marked
 optional, a fresh Luna turn completed before the roughly 16-second local prewarm
@@ -59,11 +61,17 @@ full conversation baseline.
 | Lians top-50 | 90.0% | 2,656 | 14.6% |
 | Lians top-200 | 92.9% | 10,283 | 56.4% |
 
-Adding the 514-token canonical core-tool schema payload gives a conservative
-context-component comparison of 1,063 tokens at top-10, 3,170 at top-50, and
-10,797 at top-200: respectively 94.2%, 82.6%, and 40.7% below the full-context
+Adding the 589-token canonical core-tool schema payload gives a conservative
+context-component comparison of 1,138 tokens at top-10, 3,245 at top-50, and
+10,872 at top-200: respectively 93.8%, 82.2%, and 40.3% below the full-context
 baseline. Codex may serialize tools differently, so these totals are not asserted
 as its private internal prompt counts.
+
+The recorded top-50 quality run supplied all 50 retrieved memories; it did not
+use the production `/v1/context` renderer or its new per-query cap. Its exact
+retrieval-context distribution was 2,656 mean tokens, 2,660 median, and 3,150
+p95. The 2,650 `chars/4` MCP budget is therefore a bounded default chosen near
+that mean, not a quality-validated reproduction of the 90.0% operating point.
 
 ## Signed-in Codex credit A/B
 
@@ -71,7 +79,9 @@ A signed-in GPT-5.6 Luna test asked the same LOCOMO question in two modes. The
 baseline injected the complete conversation. The Lians mode supplied no
 conversation and called `recall(k=10)` against the persisted conversation. Both
 returned the gold date, **7 May 2023**. Each row below is the second identical run
-so both paths had an opportunity to use prompt caching.
+so both paths had an opportunity to use prompt caching. This A/B predates the
+new bounded default of `k=50` with a 2,650-estimated-token return cap; that exact
+production profile still needs a representative quality rerun.
 
 | Mode | Total input | Cached input | Uncached input | Output | Estimated credits | Result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -83,6 +93,16 @@ At the documented Luna rates of 5 credits per million uncached input tokens,
 run used **52.4% fewer estimated credits** and **67.9% fewer uncached input
 tokens** for this answered prompt. The calculation treats reasoning tokens as
 part of the reported output-token total.
+
+An 85% same-budget usage extension means 1.85 times as many comparable tasks; it
+requires candidate per-task cost to be no more than 54.05% of baseline, or a
+45.95% reduction. This measured candidate was 47.62% of baseline cost, equivalent
+to **2.10x same-budget usage (+110.0%)**, so it clears that target for this one
+quality-passing repeat. The machine-readable input is
+[`codex-usage-extension-case-2026-08-08.json`](codex-usage-extension-case-2026-08-08.json)
+and is evaluated by `agentmem/benchmarks/provider_usage_extension.py`.
+The case records these locally calculated values as `estimated_credits`, with
+the pricing source and rates, rather than labeling them provider-reported.
 
 This is promising but deliberately narrow evidence. Total reported input tokens
 were 3.4% higher on the Lians path because Codex also sent a larger cached tool
