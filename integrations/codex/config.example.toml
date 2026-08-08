@@ -13,7 +13,9 @@ args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
 startup_timeout_sec = 300
 tool_timeout_sec = 120
 enabled = true
-required = false
+# Wait for tool discovery before starting a turn. Local embedding prewarm can
+# otherwise race a fast model response on a fresh Codex process.
+required = true
 enabled_tools = ["remember", "recall", "recall_at"]
 default_tools_approval_mode = "writes"
 
@@ -34,6 +36,7 @@ LIANS_AGENT_ID = "codex-session"
 #   args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
 #   startup_timeout_sec = 300
 #   tool_timeout_sec = 120
+#   required = true
 #   enabled_tools = ["remember", "recall", "recall_at"]
 #   default_tools_approval_mode = "writes"
 #   [mcp_servers.lians.env]

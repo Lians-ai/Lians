@@ -29,6 +29,10 @@ project. The same server also provides five audit tools (`reconstruct`,
 `list_conflicts`, `memory_lineage`, `fact_history`, `backtest_check`) that can be
 enabled for evidence-heavy tasks.
 
+Keep `required = true` for the core server. A local embedding model prewarms
+before the MCP handshake; without the readiness gate, a fresh fast-model turn
+can finish before Codex has discovered the Lians tools.
+
 The smaller core profile is deliberate: its three canonical MCP schemas are 514
 `o200k_base` tokens in the 2026-08-08 checkout, while exposing all eight schemas
 would add avoidable context to ordinary turns. Codex's internal prompt framing may
