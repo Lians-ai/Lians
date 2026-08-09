@@ -27,7 +27,7 @@ def test_retries_machine_exec_and_preserves_exact_command(capsys: pytest.Capture
     responses = iter(
         [
             result(1, stderr="temporary Fly SSH error\n"),
-            result(0, stdout="0028_decision_envelopes (head)\n"),
+            result(0, stdout="0030_force_hosted_mcp_rls (head)\n"),
         ]
     )
     delays: list[float] = []
@@ -63,7 +63,7 @@ def test_retries_machine_exec_and_preserves_exact_command(capsys: pytest.Capture
     assert "attempt 1/3; status=1" in captured.out
     assert "temporary Fly SSH error" in captured.out
     assert "attempt 2/3; status=0" in captured.out
-    assert "Production schema revision: 0028_decision_envelopes" in captured.out
+    assert "Production schema revision: 0030_force_hosted_mcp_rls" in captured.out
 
 
 def test_reports_every_failed_attempt_before_exiting(capsys: pytest.CaptureFixture[str]) -> None:
@@ -97,7 +97,7 @@ def test_reports_local_timeout_capture_and_retries(capsys: pytest.CaptureFixture
                 output=b"partial stdout\n",
                 stderr=b"partial stderr\n",
             )
-        return result(0, stdout="0028_decision_envelopes (head)\n")
+        return result(0, stdout="0030_force_hosted_mcp_rls (head)\n")
 
     assert MODULE.verify_schema(MACHINE_ID, runner=runner, sleeper=lambda _: None) == MODULE.EXPECTED_REVISION
 

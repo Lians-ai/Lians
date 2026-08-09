@@ -81,7 +81,7 @@ jobs:
           python scripts/check_staging_database.py \
             --host 127.0.0.1 \
             --port 15432 \
-            --expected-revision 0028_decision_envelopes
+            --expected-revision 0030_force_hosted_mcp_rls
 
   deploy:
     name: Snapshot and deploy production

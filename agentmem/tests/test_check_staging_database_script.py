@@ -43,3 +43,11 @@ def test_parse_connection_settings_for_fly_proxy() -> None:
 def test_parse_connection_settings_rejects_invalid_urls(database_url: str) -> None:
     with pytest.raises(ValueError):
         MODULE.parse_connection_settings(database_url)
+
+
+def test_expected_revision_defaults_to_current_alembic_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT_PATH)])
+
+    assert MODULE.parse_args().expected_revision == "0030_force_hosted_mcp_rls"
