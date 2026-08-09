@@ -1325,7 +1325,7 @@ async def _assemble_context_legacy(
     than confidently using whichever version recall happened to rank higher.
     """
     from .schemas import ContextResult
-    filters: dict[str, Any] = {}
+    filters: dict[str, Any] = dict(req.filters)
     if req.mmr:
         filters["_rerank"] = "mmr"
     recall_req = RecallRequest(
@@ -1410,7 +1410,9 @@ async def assemble_context(
     from .experience_service import learning_adjustments
     from .schemas import ContextResult
 
-    filters: dict[str, Any] = {"_rerank": "mmr"} if req.mmr else {}
+    filters: dict[str, Any] = dict(req.filters)
+    if req.mmr:
+        filters["_rerank"] = "mmr"
     result = await recall_memories(
         db,
         namespace,

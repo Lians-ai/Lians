@@ -1012,6 +1012,7 @@ class ContextRequest(BaseModel):
     query: str = Field(min_length=1, max_length=20_000)
     k: int = Field(default=10, ge=1, le=200)
     as_of: Optional[datetime] = None
+    filters: dict[str, Any] = Field(default_factory=dict, max_length=100)
     max_tokens: int = Field(default=1500, ge=64, le=32000)
     header: str = Field(
         default="Relevant facts from memory (most recent, non-stale):",

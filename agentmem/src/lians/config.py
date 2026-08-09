@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
     # old model via SENTENCE_TRANSFORMER_MODEL — embeddings from different
     # models never mix in one store.
     sentence_transformer_model: str = "Snowflake/snowflake-arctic-embed-l-v2.0"
+    # Exact, hash-pinned local BGE v1.5 ONNX artifact configuration.
+    bge_onnx_artifact_dir: str = ""
+    # Zero delegates thread selection to ONNX Runtime.
+    bge_onnx_intra_op_threads: int = Field(default=8, ge=0, le=256)
 
     # Crypto
     master_encryption_key: str = ""  # base64-encoded 32 bytes (used by kms_provider="env")
