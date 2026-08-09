@@ -36,6 +36,14 @@ from typing import Any, Iterator, Optional
 _redis_client: Any = None
 logger = logging.getLogger("agentmem.cache")
 _CACHE_SCHEMA_VERSION = "scoring-v2"
+_FIXED_WINDOW_INCREMENT_LUA = """
+local count = redis.call('INCRBY', KEYS[1], ARGV[1])
+local ttl = redis.call('TTL', KEYS[1])
+if ttl < 0 then
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return count
+"""
 _cache_bypass_pairs: set[str] = set()
 _cache_disabled: ContextVar[bool] = ContextVar(
     "lians_recall_cache_disabled", default=False
@@ -83,6 +91,25 @@ def _get_redis() -> Any:
             socket_timeout=1,
         )
     return _redis_client
+
+
+async def _redis_fixed_window_increment(
+    redis: Any,
+    key: str,
+    *,
+    amount: int,
+    window_seconds: int,
+) -> int:
+    """Atomically increment a fixed window and repair any missing TTL."""
+    return int(
+        await redis.eval(
+            _FIXED_WINDOW_INCREMENT_LUA,
+            1,
+            key,
+            amount,
+            window_seconds,
+        )
+    )
 
 
 def _h(value: str) -> str:

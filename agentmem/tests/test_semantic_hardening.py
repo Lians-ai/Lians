@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from src.lians.api.routes_admin import assign_barrier_group
 from src.lians.cache import get_agent_cache_generation
@@ -19,6 +20,7 @@ from src.lians.cache_invalidation import (
     pending_recall_invalidations,
 )
 from src.lians.memory_service import (
+    IdempotencyMemoryErasedError,
     _recall_receipt,
     add_memory,
     add_memory_idempotent,
@@ -507,6 +509,84 @@ async def test_idempotent_add_repairs_post_commit_invalidation_without_duplicate
         agent_id="agent",
         operation="memory.add",
     )
+
+
+@pytest.mark.asyncio
+async def test_idempotent_add_fails_closed_when_original_memory_was_erased(db):
+    namespace = "hardening-idempotent-erased"
+    idempotency_key = "private-client-retry-key"
+    content = "Confidential lending decision"
+    request = MemoryAdd(
+        agent_id="agent",
+        content=content,
+        event_time=_now() - timedelta(minutes=1),
+    )
+    created = await add_memory_idempotent(
+        db,
+        namespace,
+        request,
+        idempotency_key,
+    )
+    memory = await db.get(Memory, created.id)
+    memory.content_encrypted = None
+    memory.erased_at = _now()
+    await db.commit()
+
+    with pytest.raises(IdempotencyMemoryErasedError) as exc_info:
+        await add_memory_idempotent(
+            db,
+            namespace,
+            request,
+            idempotency_key,
+        )
+
+    assert idempotency_key not in str(exc_info.value)
+    assert content not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_idempotent_add_race_winner_fails_closed_when_erased(monkeypatch):
+    erased_memory = SimpleNamespace(
+        id=uuid4(),
+        erased_at=_now(),
+    )
+    mapping = SimpleNamespace(memory_id=erased_memory.id)
+
+    class RaceDatabase:
+        def __init__(self):
+            self.mapping_reads = 0
+            self.rolled_back = False
+
+        async def get(self, model, _key):
+            if model is IdempotencyKey:
+                self.mapping_reads += 1
+                return None if self.mapping_reads == 1 else mapping
+            if model is Memory:
+                return erased_memory
+            raise AssertionError(f"unexpected model: {model}")
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    async def lose_insert_race(*_args, **_kwargs):
+        raise IntegrityError("INSERT", {}, RuntimeError("duplicate mapping"))
+
+    database = RaceDatabase()
+    monkeypatch.setattr("src.lians.memory_service.add_memory", lose_insert_race)
+
+    with pytest.raises(IdempotencyMemoryErasedError):
+        await add_memory_idempotent(
+            database,
+            "hardening-idempotent-race",
+            MemoryAdd(
+                agent_id="agent",
+                content="A retry must not resurrect this record",
+                event_time=_now(),
+            ),
+            "stable-race-key",
+        )
+
+    assert database.rolled_back is True
 
 
 @pytest.mark.asyncio

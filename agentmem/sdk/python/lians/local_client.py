@@ -83,6 +83,64 @@ def _ensure_src_importable() -> None:
 _ensure_src_importable()
 
 
+_LOCAL_RUNTIME_MODULES = (
+    "kms",
+    "models",
+    "session_cache",
+    "schemas",
+    "memory_service",
+)
+
+
+def prepare_runtime_imports() -> None:
+    """Import the current public local-engine graph on the caller's thread.
+
+    MCP hosts can otherwise pay the SQLAlchemy, Pydantic, and cryptography
+    import cost on their first worker-thread request.  This intentionally
+    lists only modules shipped by the current public engine.
+    """
+
+    import importlib
+
+    for module_name in _LOCAL_RUNTIME_MODULES:
+        importlib.import_module(f"src.lians.{module_name}")
+
+
+def _resolve_embedding_provider(explicit: Optional[str]) -> str:
+    if explicit:
+        return explicit
+    configured = os.environ.get("EMBEDDING_PROVIDER", "").strip()
+    if configured:
+        return configured
+    try:
+        import sentence_transformers  # noqa: F401
+
+        return "sentence-transformers"
+    except ImportError:
+        import warnings
+
+        warnings.warn(
+            "lians: sentence-transformers is not installed, so local "
+            "mode is using the deterministic TEST-GRADE embedding "
+            "stub. Install lians-sdk[local] for real semantic recall.",
+            stacklevel=3,
+        )
+        return "local"
+
+
+def _configure_embedding_runtime() -> None:
+    """Pin the process-global public engine provider for local SDK calls."""
+
+    from src.lians import embeddings
+    from src.lians.config import get_settings
+
+    # The public engine caches both settings and its embedding provider.  A
+    # LocalLiansClient is itself process-global with respect to those objects,
+    # so refresh both after applying the explicit/provider environment policy.
+    get_settings.cache_clear()
+    embeddings._provider = None
+
+
 class LocalLiansClient:
     """
     Synchronous Lians client backed by local SQLite â€” no server required.
@@ -97,10 +155,10 @@ class LocalLiansClient:
         multiple projects.  Defaults to ``"local"``.
     embedding_provider:
         Override the embedding provider (``"sentence-transformers"`` |
-        ``"local"`` | ``"voyage"`` | ``"openai"``). When omitted, uses the
-        real local model (``sentence-transformers``) if it is installed and
-        falls back to the deterministic test stub (``"local"``) otherwise.
-        Pass ``"local"`` explicitly for the zero-model test stub.
+        ``"bge-onnx"`` | ``"local"`` | ``"voyage"`` | ``"openai"``). The
+        exact BGE ONNX provider is opt-in and requires a validated
+        ``BGE_ONNX_ARTIFACT_DIR``. When omitted, an explicit environment value
+        is respected before the normal local-model fallback is considered.
     """
 
     def __init__(
@@ -112,30 +170,19 @@ class LocalLiansClient:
         self._namespace = namespace
         self._loop = asyncio.new_event_loop()
 
-        if embedding_provider is None:
-            # Defaulting to the test stub cost real users 24%-grade recall
-            # (LOCOMO: stub 24% vs real local model 82% evidence hit@10);
-            # prefer the real model whenever the [local] extra is present.
-            try:
-                import sentence_transformers  # noqa: F401
-                embedding_provider = "sentence-transformers"
-            except ImportError:
-                import warnings
-                warnings.warn(
-                    "lians: sentence-transformers is not installed, so local "
-                    "mode is using the deterministic TEST-GRADE embedding "
-                    "stub. Install lians-sdk[local] for real semantic recall.",
-                    stacklevel=2,
-                )
-                embedding_provider = "local"
+        embedding_provider = _resolve_embedding_provider(embedding_provider)
 
         # Point the settings at the local embedding provider before any import
-        os.environ.setdefault("EMBEDDING_PROVIDER", embedding_provider)
+        os.environ["EMBEDDING_PROVIDER"] = embedding_provider
         # LocalAgentMemClient is a dev/test tool â€” allow running without a real key.
         # Production deployments use AgentMemClient (HTTP) against a server that
         # enforces MASTER_ENCRYPTION_KEY at startup.
         os.environ.setdefault("MASTER_ENCRYPTION_KEY", "")
         os.environ.setdefault("AGENTMEM_ALLOW_UNENCRYPTED", "true")
+        # Local mode has no Redis. Avoid connection timeouts on every request;
+        # callers can opt back in before constructing the client.
+        os.environ.setdefault("RECALL_CACHE_ENABLED", "false")
+        _configure_embedding_runtime()
         # Build the async engine
         if db_path is None:
             url = "sqlite+aiosqlite:///:memory:"
@@ -160,6 +207,7 @@ class LocalLiansClient:
     # ------------------------------------------------------------------
 
     async def _init_db(self) -> None:
+        prepare_runtime_imports()
         from src.lians.models import Base  # lazy import; avoids circular refs
         from src.lians.kms import load_master_key
         # In-process recall caches are keyed by (namespace, agent); a fresh
@@ -360,6 +408,7 @@ class LocalLiansClient:
         query: str,
         k: int = 10,
         as_of: Optional[datetime] = None,
+        filters: Optional[dict[str, Any]] = None,
         max_tokens: int = 1500,
         header: Optional[str] = None,
         mmr: bool = False,
@@ -372,6 +421,7 @@ class LocalLiansClient:
         """Build model-ready, token-budgeted adaptive memory context locally."""
         return self._run(self._async_context(
             agent_id=agent_id, query=query, k=k, as_of=as_of,
+            filters=filters or {},
             max_tokens=max_tokens, header=header, mmr=mmr,
             surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
             strategy=strategy, max_query_variants=max_query_variants,

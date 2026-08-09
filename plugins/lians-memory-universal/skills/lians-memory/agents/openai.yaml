@@ -1,0 +1,16 @@
+interface:
+  display_name: "Lians Memory"
+  short_description: "More memory, less repetition"
+  default_prompt: "Use $lians-memory to remember this approved project decision for future work."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "lians-memory"
+      description: "Store, recall, and explicitly forget user-approved project memory"
+      transport: "streamable_http"
+      # Planned canonical endpoint. It is not asserted live yet; do not substitute another host.
+      url: "https://mcp.lians.ai/mcp"
+
+policy:
+  allow_implicit_invocation: true

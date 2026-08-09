@@ -1,0 +1,155 @@
+{
+  "schema": "lians.codex-sol-ultra-checkout-hook-usage-evidence.v1",
+  "report_date": "2026-08-08",
+  "measurement": {
+    "surface": "controlled checkout-hook ABBA",
+    "provider": "OpenAI Codex",
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "ultra",
+    "service_tier": "default",
+    "normal_installed_plugin_loader_exercised": false,
+    "model_facing_tools_enabled": false,
+    "execution_order": [
+      "baseline",
+      "candidate",
+      "candidate",
+      "baseline"
+    ]
+  },
+  "public_locomo_item": {
+    "question": "When did Caroline go to the LGBTQ support group?",
+    "gold_answer": "7 May 2023",
+    "quality_rule": "trim outer whitespace, then require exact gold string"
+  },
+  "estimated_credit_accounting": {
+    "label": "estimated Sol credits; not a provider-reported per-turn debit",
+    "token_source": "Codex turn.completed usage fields",
+    "as_of": "2026-08-08",
+    "rate_source": {
+      "title": "Codex pricing",
+      "url": "https://learn.chatgpt.com/docs/pricing",
+      "accessed": "2026-08-08"
+    },
+    "rates_per_million_tokens": {
+      "uncached_input_tokens": 125.0,
+      "cached_input_tokens": 12.5,
+      "output_tokens": 750.0
+    },
+    "reasoning_output_treatment": "reasoning_output_tokens is disclosed but already included in output_tokens"
+  },
+  "runs": [
+    {
+      "sequence": 1,
+      "arm": "baseline",
+      "repetition": 1,
+      "answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 3148.002,
+      "usage": {
+        "input_tokens": 25938,
+        "cached_input_tokens": 0,
+        "cache_write_input_tokens": 0,
+        "uncached_input_tokens": 25938,
+        "output_tokens": 9,
+        "reasoning_output_tokens": 0
+      },
+      "estimated_sol_credits": 3.249,
+      "hook_receipt": null
+    },
+    {
+      "sequence": 2,
+      "arm": "candidate",
+      "repetition": 1,
+      "answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 23613.335,
+      "usage": {
+        "input_tokens": 12718,
+        "cached_input_tokens": 0,
+        "cache_write_input_tokens": 0,
+        "uncached_input_tokens": 12718,
+        "output_tokens": 9,
+        "reasoning_output_tokens": 0
+      },
+      "estimated_sol_credits": 1.5965,
+      "hook_receipt": {
+        "injected": true,
+        "retrieval_degraded": false,
+        "elapsed_ms": 18834
+      }
+    },
+    {
+      "sequence": 3,
+      "arm": "candidate",
+      "repetition": 2,
+      "answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 20458.282,
+      "usage": {
+        "input_tokens": 12718,
+        "cached_input_tokens": 0,
+        "cache_write_input_tokens": 0,
+        "uncached_input_tokens": 12718,
+        "output_tokens": 9,
+        "reasoning_output_tokens": 0
+      },
+      "estimated_sol_credits": 1.5965,
+      "hook_receipt": {
+        "injected": true,
+        "retrieval_degraded": false,
+        "elapsed_ms": 15474
+      }
+    },
+    {
+      "sequence": 4,
+      "arm": "baseline",
+      "repetition": 2,
+      "answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 3466.147,
+      "usage": {
+        "input_tokens": 25938,
+        "cached_input_tokens": 0,
+        "cache_write_input_tokens": 0,
+        "uncached_input_tokens": 25938,
+        "output_tokens": 9,
+        "reasoning_output_tokens": 0
+      },
+      "estimated_sol_credits": 3.249,
+      "hook_receipt": null
+    }
+  ],
+  "quality_gate": {
+    "exact_matches": 4,
+    "runs": 4,
+    "passed": true,
+    "candidate_receipts_injected": true
+  },
+  "economics": {
+    "baseline_pooled_estimated_sol_credits": 6.498,
+    "candidate_pooled_estimated_sol_credits": 3.193,
+    "same_budget_usage_multiplier": 2.03507673,
+    "same_budget_usage_extension_percent": 103.507673035,
+    "publication_display": "2.035x / +103.51%"
+  },
+  "selected_second_repeat_wall": {
+    "baseline_ms": 3466.147,
+    "candidate_ms": 20458.282,
+    "candidate_over_baseline_ratio": 5.902312279,
+    "candidate_end_to_end_wall_slower": true
+  },
+  "current_installed_plugin_paid_ab": {
+    "accepted": false,
+    "status": "rejected before baseline",
+    "reason": "the host failed to dispatch the trusted installed-plugin hook",
+    "accepted_installed_plugin_economics_result_exists": false
+  },
+  "claim_boundary": {
+    "supported": "The 2.035x same-budget result and +103.51% extension apply only to this four-run Sol Ultra LOCOMO checkout-hook workload using estimated credits.",
+    "estimated_credits_not_provider_debits": true,
+    "installed_public_plugin_end_to_end_result": false,
+    "universal_usage_extension_supported": false,
+    "candidate_end_to_end_wall_was_slower": true,
+    "other_prompts_models_machines_and_concurrency_not_measured": true
+  }
+}

@@ -206,11 +206,33 @@ class TestJSONFormatter:
 
 class TestRateLimitMiddleware:
 
+    async def test_redis_window_increment_is_one_atomic_ttl_repair(self):
+        from src.lians.cache import _redis_fixed_window_increment
+
+        redis = AsyncMock()
+        redis.eval = AsyncMock(return_value=3)
+
+        count = await _redis_fixed_window_increment(
+            redis,
+            "agentmem:rl:test",
+            amount=2,
+            window_seconds=60,
+        )
+
+        assert count == 3
+        redis.eval.assert_awaited_once()
+        script, key_count, key, amount, window = redis.eval.await_args.args
+        assert key_count == 1
+        assert key == "agentmem:rl:test"
+        assert amount == 2
+        assert window == 60
+        assert all(command in script for command in ("INCRBY", "TTL", "EXPIRE"))
+
     async def test_under_limit_passes(self, client):
         """Requests within the limit return the normal response."""
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=1)
+            r.eval = AsyncMock(return_value=1)
             r.expire = AsyncMock()
             r.ping = AsyncMock(return_value=True)
             mock_redis.return_value = r
@@ -226,7 +248,7 @@ class TestRateLimitMiddleware:
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
             # One past the configured limit — independent of the ambient value.
-            r.incr = AsyncMock(return_value=limit + 1)
+            r.eval = AsyncMock(return_value=limit + 1)
             r.expire = AsyncMock()
             mock_redis.return_value = r
 
@@ -248,7 +270,7 @@ class TestRateLimitMiddleware:
         limit = get_settings().rate_limit_per_minute
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=limit + 699)
+            r.eval = AsyncMock(return_value=limit + 699)
             r.expire = AsyncMock()
             mock_redis.return_value = r
 
@@ -267,7 +289,9 @@ class TestRateLimitMiddleware:
     async def test_redis_down_fails_open(self, client):
         """The first local-fallback request passes when Redis is unreachable."""
         with patch("src.lians.cache._get_redis") as mock_redis:
-            mock_redis.return_value.incr = AsyncMock(side_effect=ConnectionError("Redis down"))
+            mock_redis.return_value.eval = AsyncMock(
+                side_effect=ConnectionError("Redis down")
+            )
             resp = await client.post(
                 "/v1/recall",
                 json={"agent_id": "a", "query": "test"},
@@ -293,7 +317,7 @@ class TestRateLimitMiddleware:
             fingerprint_secret="test-rate-limit-fingerprint-secret",
         )
         with patch("src.lians.cache._get_redis") as mock_redis:
-            mock_redis.return_value.incr = AsyncMock(
+            mock_redis.return_value.eval = AsyncMock(
                 side_effect=ConnectionError("Redis down")
             )
             async with AsyncClient(
@@ -347,7 +371,7 @@ class TestRateLimitMiddleware:
         """Health checks must never be rate-limited regardless of Redis state."""
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=9999)  # way over limit
+            r.eval = AsyncMock(return_value=9999)  # way over limit
             r.expire = AsyncMock()
             r.ping = AsyncMock(return_value=True)
             mock_redis.return_value = r
@@ -358,7 +382,7 @@ class TestRateLimitMiddleware:
         """Unauthenticated requests are handled by auth, not rate limiting."""
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=9999)
+            r.eval = AsyncMock(return_value=9999)
             r.expire = AsyncMock()
             mock_redis.return_value = r
             resp = await client.post(
@@ -375,7 +399,7 @@ class TestRateLimitMiddleware:
         limit = get_settings().rate_limit_per_minute
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            r.incr = AsyncMock(return_value=limit + 1)
+            r.eval = AsyncMock(return_value=limit + 1)
             r.expire = AsyncMock()
             mock_redis.return_value = r
 
@@ -385,9 +409,82 @@ class TestRateLimitMiddleware:
             )
 
         assert resp.status_code == 429
-        redis_key = r.incr.await_args.args[0]
+        redis_key = r.eval.await_args.args[2]
         assert redis_key.startswith("agentmem:rl:admin:")
         assert "a-different-wrong-guess" not in redis_key
+
+    @pytest.mark.parametrize("path", ["/mcp", "/mcp/"])
+    async def test_hosted_mcp_bearer_requests_are_rate_limited(self, path):
+        """Both canonical and slash-normalized MCP paths share bearer throttling."""
+        from fastapi import FastAPI
+        from src.lians.middleware import RateLimitMiddleware
+
+        limited_app = FastAPI()
+
+        @limited_app.post("/mcp")
+        @limited_app.post("/mcp/")
+        async def mcp_endpoint():
+            return {"ok": True}
+
+        limited_app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_minute=1,
+            fingerprint_secret="test-rate-limit-fingerprint-secret",
+        )
+        with patch("src.lians.cache._get_redis") as mock_redis:
+            redis = AsyncMock()
+            redis.eval = AsyncMock(return_value=2)
+            redis.expire = AsyncMock()
+            mock_redis.return_value = redis
+            async with AsyncClient(
+                transport=ASGITransport(app=limited_app),
+                base_url="http://test",
+            ) as local_client:
+                response = await local_client.post(
+                    path,
+                    headers={"Authorization": "Bearer test-oauth-token"},
+                )
+
+        assert response.status_code == 429
+        redis_key = redis.eval.await_args.args[2]
+        assert redis_key.startswith("agentmem:rl:mcp-client:")
+        assert "test-oauth-token" not in redis_key
+
+    async def test_rotating_invalid_mcp_tokens_cannot_create_fresh_rate_buckets(self):
+        from fastapi import FastAPI
+        from src.lians.middleware import RateLimitMiddleware
+
+        limited_app = FastAPI()
+
+        @limited_app.post("/mcp")
+        async def mcp_endpoint():
+            return {"ok": True}
+
+        limited_app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_minute=10,
+            fingerprint_secret="test-rate-limit-fingerprint-secret",
+        )
+        with patch("src.lians.cache._get_redis") as mock_redis:
+            redis = AsyncMock()
+            redis.eval = AsyncMock(side_effect=[1, 2])
+            redis.expire = AsyncMock()
+            mock_redis.return_value = redis
+            async with AsyncClient(
+                transport=ASGITransport(app=limited_app),
+                base_url="http://test",
+            ) as local_client:
+                for token in ("first-invalid-token", "second-invalid-token"):
+                    response = await local_client.post(
+                        "/mcp",
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    assert response.status_code == 200
+
+        bucket_keys = [call.args[2] for call in redis.eval.await_args_list]
+        assert len(set(bucket_keys)) == 1
+        assert bucket_keys[0].startswith("agentmem:rl:mcp-client:")
+        assert all(token not in bucket_keys[0] for token in ("first", "second"))
 
     def test_configured_limit_is_wired_into_the_middleware(self):
         """RATE_LIMIT_PER_MINUTE must actually reach the middleware.

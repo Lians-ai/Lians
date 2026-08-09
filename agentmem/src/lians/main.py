@@ -4,17 +4,18 @@ import json
 import logging
 import os
 import re
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from functools import lru_cache
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import __version__
 from .config import get_settings
+from .openai_oauth import validate_openai_mcp_settings
 from .pii import SubjectKeyDestroyedError
 from .db import get_db as _get_db
 from .api.routes_memory import router as memory_router
@@ -54,6 +55,17 @@ logger = logging.getLogger("lians.startup")
 
 _AIRGAP_SAFE_PROVIDERS = {"sentence-transformers", "local"}
 _BUILD_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+_HOSTED_RLS_TABLES = (
+    "memories",
+    "live_facts",
+    "event_log",
+    "subject_keys",
+    "namespace_policies",
+    "agent_barrier_groups",
+    "conflict_flags",
+    "idempotency_keys",
+    "durable_jobs",
+)
 
 
 _DEV_SECRETS = {
@@ -88,6 +100,12 @@ def _validate_production_secrets(settings) -> None:
     if settings.deployment_environment.strip().lower() not in {"prod", "production"}:
         return
     errors = []
+    if os.getenv("AGENTMEM_ALLOW_UNENCRYPTED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        errors.append("AGENTMEM_ALLOW_UNENCRYPTED must be disabled in production")
     if settings.admin_secret in _DEV_SECRETS or len(settings.admin_secret) < 32:
         errors.append("ADMIN_SECRET must be a random value of at least 32 characters")
     origins = {o.strip() for o in settings.cors_origins.split(",") if o.strip()}
@@ -126,7 +144,7 @@ async def _warm_embedding_provider(
     *,
     expected_dim: int,
     provider_name: str,
-) -> None:
+) -> bool:
     """Warm embedding inference without delaying API startup."""
     try:
         warmup_vec = await provider.embed_one("warmup")
@@ -138,6 +156,7 @@ async def _warm_embedding_provider(
                 "Set EMBEDDING_DIM to match your model, or use a different model."
             )
         logger.info("Embedder warmed up", extra={"provider": provider_name})
+        return True
     except Exception as exc:  # noqa: BLE001 - providers expose heterogeneous failures
         # The API can still serve writes, evidence exports, and health checks
         # while a local model is warming or temporarily unavailable. Retrieval
@@ -146,6 +165,7 @@ async def _warm_embedding_provider(
 
         record_degradation("embedding_warmup", type(exc).__name__)
         logger.warning("Embedder warmup failed (non-fatal): %s", exc)
+        return False
 
 
 def _start_embedding_warmup(
@@ -188,6 +208,82 @@ async def _validate_database_role(engine, *, production: bool) -> None:
         )
 
 
+async def _validate_hosted_rls(engine, *, production: bool, enabled: bool) -> None:
+    """Require both ENABLE and FORCE RLS on hosted-memory storage tables."""
+    if not production or not enabled:
+        return
+    if engine.dialect.name != "postgresql":
+        raise RuntimeError("Production hosted MCP requires PostgreSQL tenant RLS")
+    table_names = ", ".join(f"'{table}'" for table in _HOSTED_RLS_TABLES)
+    async with engine.connect() as connection:
+        rows = (
+            await connection.execute(
+                text(
+                    f"""
+                    SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
+                    FROM pg_class AS c
+                    JOIN pg_namespace AS n ON n.oid = c.relnamespace
+                    WHERE n.nspname = current_schema()
+                      AND c.relname IN ({table_names})
+                    """
+                )
+            )
+        ).mappings().all()
+    status = {
+        row["relname"]: bool(row["relrowsecurity"] and row["relforcerowsecurity"])
+        for row in rows
+    }
+    unsafe = [table for table in _HOSTED_RLS_TABLES if not status.get(table, False)]
+    if unsafe:
+        raise RuntimeError(
+            "Hosted MCP requires ENABLE and FORCE ROW LEVEL SECURITY on: "
+            + ", ".join(unsafe)
+        )
+
+
+async def _cancel_and_gather_tasks(tasks: list[asyncio.Task]) -> None:
+    """Cancel every registered lifespan task and consume every outcome."""
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@asynccontextmanager
+async def _lifespan_task_scope(mcp_session_context=None):
+    """Enter MCP first, then protect all subsequently registered tasks."""
+    tasks: list[asyncio.Task] = []
+    async with AsyncExitStack() as stack:
+        if mcp_session_context is not None:
+            await stack.enter_async_context(mcp_session_context)
+        # Registered after the MCP context so LIFO shutdown drains tasks before
+        # stopping the session manager they may depend on.
+        stack.push_async_callback(_cancel_and_gather_tasks, tasks)
+        yield tasks
+
+
+async def _wait_for_hosted_dependencies(
+    runtime,
+    embedding_warmup_task: asyncio.Task,
+    *,
+    timeout_seconds: float,
+) -> None:
+    """Fail closed until the embedder and a forced JWKS refresh both pass."""
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            embedding_ready = await embedding_warmup_task
+            if not embedding_ready:
+                raise RuntimeError(
+                    "Hosted MCP requires a working embedding provider before "
+                    "accepting traffic"
+                )
+            await runtime.verifier.warm_jwks(force_refresh=True)
+    except TimeoutError as exc:
+        raise RuntimeError(
+            "Hosted MCP dependencies did not become ready before the startup deadline"
+        ) from exc
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from .db import (
@@ -206,6 +302,11 @@ async def lifespan(app: FastAPI):
     _warn_insecure_secrets(settings)
     _validate_production_secrets(settings)
     await _validate_database_role(engine, production=_is_production)
+    await _validate_hosted_rls(
+        engine,
+        production=_is_production,
+        enabled=settings.hosted_mcp_enabled,
+    )
 
     if settings.airgap_mode:
         _validate_airgap(settings)
@@ -230,83 +331,87 @@ async def lifespan(app: FastAPI):
             extra={"rows_updated": protected_rows},
         )
 
-    # Warm the embedder in the background. Local model inference can take
-    # minutes on shared CPUs, so it must not hold liveness and readiness
-    # endpoints hostage during a rolling deployment.
-    from .embeddings import get_embedding_provider
-    _provider = get_embedding_provider()
-    embedding_warmup_task = _start_embedding_warmup(
-        _provider,
-        expected_dim=settings.embedding_dim,
-        provider_name=settings.embedding_provider,
-    )
+    mcp_session_context = None
+    if _hosted_mcp_runtime is not None:
+        mcp_session_context = _hosted_mcp_runtime.server.session_manager.run()
 
-    if settings.cors_origins == "*":
-        logger.warning(
-            "SECURITY: CORS_ORIGINS=* allows any website to make cross-origin requests. "
-            "Set CORS_ORIGINS to a comma-separated list of trusted origins in production."
+    async with _lifespan_task_scope(mcp_session_context) as background_tasks:
+        # Non-hosted deployments warm in the background. Hosted MCP startup
+        # remains fail-closed, with its own cold-start deadline below.
+        from .embeddings import get_embedding_provider
+        _provider = get_embedding_provider()
+        embedding_warmup_task = _start_embedding_warmup(
+            _provider,
+            expected_dim=settings.embedding_dim,
+            provider_name=settings.embedding_provider,
         )
+        background_tasks.append(embedding_warmup_task)
+        if _hosted_mcp_runtime is not None:
+            await _wait_for_hosted_dependencies(
+                _hosted_mcp_runtime,
+                embedding_warmup_task,
+                timeout_seconds=settings.hosted_mcp_startup_timeout_seconds,
+            )
 
-    logger.info("Lians starting", extra={
-        "embedding_provider": settings.embedding_provider,
-        "airgap_mode": settings.airgap_mode,
-        "llm_stage": settings.supersession_llm_stage,
-        "kms_provider": settings.kms_provider,
-        "merkle_batch_enabled": settings.merkle_batch_enabled,
-        "llm_adjudication_async": settings.llm_adjudication_async,
-    })
+        if settings.cors_origins == "*":
+            logger.warning(
+                "SECURITY: CORS_ORIGINS=* allows any website to make cross-origin requests. "
+                "Set CORS_ORIGINS to a comma-separated list of trusted origins in production."
+            )
 
-    instrument_sqlalchemy(engine)
+        logger.info("Lians starting", extra={
+            "embedding_provider": settings.embedding_provider,
+            "airgap_mode": settings.airgap_mode,
+            "llm_stage": settings.supersession_llm_stage,
+            "kms_provider": settings.kms_provider,
+            "merkle_batch_enabled": settings.merkle_batch_enabled,
+            "llm_adjudication_async": settings.llm_adjudication_async,
+        })
 
-    scheduler_task: asyncio.Task | None = None
-    if settings.retention_prune_interval_hours > 0:
-        scheduler_task = asyncio.create_task(
-            run_retention_scheduler(AsyncSessionLocal, settings.retention_prune_interval_hours),
-            name="retention-scheduler",
-        )
+        instrument_sqlalchemy(engine)
 
-    learning_task: asyncio.Task | None = None
-    if settings.learning_maintenance_interval_hours > 0:
-        learning_task = asyncio.create_task(
-            run_learning_maintenance_scheduler(
-                AsyncSessionLocal,
-                settings.learning_maintenance_interval_hours,
-                settings.learning_maintenance_min_signals,
-            ),
-            name="learning-maintenance-scheduler",
-        )
+        if settings.retention_prune_interval_hours > 0:
+            background_tasks.append(
+                asyncio.create_task(
+                    run_retention_scheduler(
+                        AsyncSessionLocal,
+                        settings.retention_prune_interval_hours,
+                    ),
+                    name="retention-scheduler",
+                )
+            )
 
-    durable_job_task: asyncio.Task | None = None
-    if settings.durable_job_worker_mode == "embedded":
-        from .durable_jobs import run_durable_job_worker
-        from .job_handlers import default_job_handlers
-        durable_job_task = asyncio.create_task(
-            run_durable_job_worker(
-                AsyncSessionLocal,
-                default_job_handlers(),
-                poll_seconds=settings.durable_job_poll_seconds,
-            ),
-            name="durable-job-worker",
-        )
-    elif settings.durable_job_worker_mode not in {"external", "disabled"}:
-        raise RuntimeError(
-            "DURABLE_JOB_WORKER_MODE must be embedded, external, or disabled"
-        )
+        if settings.learning_maintenance_interval_hours > 0:
+            background_tasks.append(
+                asyncio.create_task(
+                    run_learning_maintenance_scheduler(
+                        AsyncSessionLocal,
+                        settings.learning_maintenance_interval_hours,
+                        settings.learning_maintenance_min_signals,
+                    ),
+                    name="learning-maintenance-scheduler",
+                )
+            )
 
-    yield
+        if settings.durable_job_worker_mode == "embedded":
+            from .durable_jobs import run_durable_job_worker
+            from .job_handlers import default_job_handlers
+            background_tasks.append(
+                asyncio.create_task(
+                    run_durable_job_worker(
+                        AsyncSessionLocal,
+                        default_job_handlers(),
+                        poll_seconds=settings.durable_job_poll_seconds,
+                    ),
+                    name="durable-job-worker",
+                )
+            )
+        elif settings.durable_job_worker_mode not in {"external", "disabled"}:
+            raise RuntimeError(
+                "DURABLE_JOB_WORKER_MODE must be embedded, external, or disabled"
+            )
 
-    for task in (
-        embedding_warmup_task,
-        scheduler_task,
-        learning_task,
-        durable_job_task,
-    ):
-        if task is not None:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        yield
 
     logger.info("Lians shutdown")
 
@@ -321,6 +426,13 @@ _docs_enabled = (
     if _runtime_settings.expose_api_docs is not None
     else not _is_production
 )
+
+_hosted_mcp_runtime = None
+validate_openai_mcp_settings(_runtime_settings)
+if _runtime_settings.hosted_mcp_enabled:
+    from .openai_mcp import build_openai_mcp_runtime
+
+    _hosted_mcp_runtime = build_openai_mcp_runtime(_runtime_settings)
 
 app = FastAPI(
     title="Lians",
@@ -364,16 +476,21 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
         "Content-Type",
+        "Authorization",
         "X-API-Key",
         "X-Admin-Secret",
         "Idempotency-Key",
         "X-Request-ID",
+        "MCP-Protocol-Version",
+        "Mcp-Session-Id",
+        "Last-Event-ID",
     ],
     expose_headers=[
         "X-Request-ID",
         "X-RateLimit-Limit",
         "X-RateLimit-Remaining",
         "Retry-After",
+        "Mcp-Session-Id",
     ],
 )
 
@@ -516,4 +633,25 @@ async def readyz(db: AsyncSession = Depends(_get_db)):
     Readiness probe — deep dependency check (same as /health). A 503 takes the
     instance out of rotation without killing the process. Use for readinessProbe.
     """
+    if _hosted_mcp_runtime is not None:
+        try:
+            async with asyncio.timeout(5):
+                await _hosted_mcp_runtime.verifier.warm_jwks(force_refresh=False)
+        except (TimeoutError, RuntimeError):
+            return JSONResponse(content={"status": "unready"}, status_code=503)
     return await health(db)
+
+
+@app.get("/.well-known/openai-apps-challenge", include_in_schema=False)
+async def openai_apps_challenge():
+    """Serve the exact domain-verification token issued by the OpenAI portal."""
+    token = _runtime_settings.openai_apps_challenge_token
+    if not token:
+        return PlainTextResponse("Not found", status_code=404)
+    return PlainTextResponse(token)
+
+
+# Mount last so the existing REST/health routes keep precedence while the MCP
+# sub-application owns /mcp and the OAuth protected-resource metadata route.
+if _hosted_mcp_runtime is not None:
+    app.mount("/", _hosted_mcp_runtime.app, name="openai-plugin-mcp")

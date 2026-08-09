@@ -2,10 +2,67 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import List
+from dataclasses import dataclass
+from typing import Any, List
 from .config import get_settings
+
+
+class EmbeddingWorkloadSaturatedError(RuntimeError):
+    """No bounded native-inference slot became available in time."""
+
+
+class _BoundedInferenceExecutor:
+    """Keep capacity occupied until native work actually finishes."""
+
+    def __init__(self, *, max_workers: int, queue_timeout: float | None) -> None:
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="lians-embedding",
+        )
+        self._slots = asyncio.BoundedSemaphore(max_workers)
+        self._queue_timeout = queue_timeout
+
+    async def run(self, function):
+        try:
+            if self._queue_timeout is None:
+                await self._slots.acquire()
+            else:
+                await asyncio.wait_for(
+                    self._slots.acquire(),
+                    timeout=self._queue_timeout,
+                )
+        except TimeoutError as exc:
+            raise EmbeddingWorkloadSaturatedError(
+                "Embedding capacity is temporarily saturated"
+            ) from exc
+
+        loop = asyncio.get_running_loop()
+        try:
+            concurrent_future = self._executor.submit(function)
+        except Exception:
+            self._slots.release()
+            raise
+
+        def release_slot(_future) -> None:
+            loop.call_soon_threadsafe(self._slots.release)
+
+        concurrent_future.add_done_callback(release_slot)
+        return await asyncio.shield(asyncio.wrap_future(concurrent_future))
+
+
+def _inference_executor(settings) -> _BoundedInferenceExecutor:
+    hosted = getattr(settings, "hosted_mcp_enabled", False) is True
+    workers = int(settings.hosted_mcp_max_concurrent_inference) if hosted else 4
+    queue_timeout = (
+        float(settings.hosted_mcp_inference_queue_timeout_seconds)
+        if hosted
+        else None
+    )
+    return _BoundedInferenceExecutor(max_workers=workers, queue_timeout=queue_timeout)
 
 
 class EmbeddingProvider(ABC):
@@ -89,12 +146,20 @@ class SentenceTransformerProvider(EmbeddingProvider):
     def __init__(self):
         settings = get_settings()
         self._model_name = settings.sentence_transformer_model
+        self._model_revision = settings.sentence_transformer_revision
         self._model = None
         self._load_lock = asyncio.Lock()
+        self._executor = _inference_executor(settings)
+        self._load_task: asyncio.Task | None = None
 
     def _load(self):
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer(self._model_name)
+        model_kwargs = (
+            {"revision": self._model_revision}
+            if self._model_revision
+            else {}
+        )
+        model = SentenceTransformer(self._model_name, **model_kwargs)
         # Cap the sequence length: long-context models (arctic: 8192) accept
         # pasted-document-sized inputs whose attention buffers OOM commodity
         # machines (one 8k-token text = ~1GB). 512 tokens is the standard
@@ -124,8 +189,9 @@ class SentenceTransformerProvider(EmbeddingProvider):
         async with self._load_lock:
             if self._model is not None:
                 return self._model
-            loop = asyncio.get_event_loop()
-            self._model = await loop.run_in_executor(None, self._load)
+            if self._load_task is None:
+                self._load_task = asyncio.create_task(self._executor.run(self._load))
+            self._model = await asyncio.shield(self._load_task)
             return self._model
 
     # Asymmetric retrieval models embed *queries* with a trained instruction
@@ -139,11 +205,8 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
         model = await self._get_model()
-        loop = asyncio.get_event_loop()
-        # Run blocking CPU inference off the event loop thread.
-        result = await loop.run_in_executor(
-            None,
-            lambda: model.encode(texts, normalize_embeddings=True).tolist(),
+        result = await self._executor.run(
+            lambda: model.encode(texts, normalize_embeddings=True).tolist()
         )
         return result
 
@@ -178,6 +241,144 @@ class SentenceTransformerProvider(EmbeddingProvider):
                 out.append([x / norm for x in merged])
             return out
         return await self.embed(texts)
+
+
+@dataclass
+class _BgeOnnxRuntime:
+    session: Any
+    tokenizer: Any
+    inference_lock: threading.Lock
+
+
+class BgeOnnxProvider(EmbeddingProvider):
+    """Exact, hash-pinned BGE v1.5 ONNX inference with no network fallback."""
+
+    dim = 1024
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self._artifact_dir = settings.bge_onnx_artifact_dir
+        self._intra_op_threads = settings.bge_onnx_intra_op_threads
+        self._configured_dimension = settings.embedding_dim
+        self._runtime: _BgeOnnxRuntime | None = None
+        self._load_lock = asyncio.Lock()
+        self._executor = _inference_executor(settings)
+        self._load_task: asyncio.Task | None = None
+
+    def _load(self) -> _BgeOnnxRuntime:
+        from .bge_onnx import (
+            BGE_ONNX_EMBEDDING_DIMENSION,
+            BGE_ONNX_MAX_SEQUENCE_LENGTH,
+            validate_bge_onnx_artifact,
+        )
+
+        if self._configured_dimension != BGE_ONNX_EMBEDDING_DIMENSION:
+            raise ValueError(
+                "Pinned BGE ONNX requires EMBEDDING_DIM=1024; "
+                f"configured value is {self._configured_dimension}"
+            )
+        if not self._artifact_dir.strip():
+            raise ValueError(
+                "BGE_ONNX_ARTIFACT_DIR is required when EMBEDDING_PROVIDER=bge-onnx"
+            )
+
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+
+        artifact = validate_bge_onnx_artifact(self._artifact_dir)
+        tokenizer = Tokenizer.from_file(str(artifact.tokenizer))
+        tokenizer.enable_truncation(max_length=BGE_ONNX_MAX_SEQUENCE_LENGTH)
+        tokenizer.enable_padding()
+
+        options = ort.SessionOptions()
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        options.add_session_config_entry("session.disable_prepacking", "1")
+        if self._intra_op_threads:
+            options.intra_op_num_threads = self._intra_op_threads
+            options.inter_op_num_threads = 1
+        session = ort.InferenceSession(
+            str(artifact.model),
+            sess_options=options,
+            providers=["CPUExecutionProvider"],
+        )
+        artifact.assert_unchanged()
+
+        inputs = {item.name: item for item in session.get_inputs()}
+        expected_inputs = {"input_ids", "attention_mask", "token_type_ids"}
+        if set(inputs) != expected_inputs or any(
+            item.type != "tensor(int64)" for item in inputs.values()
+        ):
+            raise ValueError("Pinned BGE ONNX model has an incompatible input contract")
+        outputs = session.get_outputs()
+        if len(outputs) != 1 or outputs[0].name != "last_hidden_state":
+            raise ValueError("Pinned BGE ONNX model has an incompatible output contract")
+        output_shape = outputs[0].shape
+        if len(output_shape) != 3 or output_shape[-1] != BGE_ONNX_EMBEDDING_DIMENSION:
+            raise ValueError(
+                "Pinned BGE ONNX model does not produce 1024-dimensional embeddings"
+            )
+        return _BgeOnnxRuntime(
+            session=session,
+            tokenizer=tokenizer,
+            inference_lock=threading.Lock(),
+        )
+
+    async def _get_runtime(self) -> _BgeOnnxRuntime:
+        if self._runtime is not None:
+            return self._runtime
+        async with self._load_lock:
+            if self._runtime is None:
+                if self._load_task is None:
+                    self._load_task = asyncio.create_task(self._executor.run(self._load))
+                self._runtime = await asyncio.shield(self._load_task)
+            return self._runtime
+
+    @staticmethod
+    def _encode_sync(runtime: _BgeOnnxRuntime, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        with runtime.inference_lock:
+            encoded = runtime.tokenizer.encode_batch(texts)
+            feed = {
+                "input_ids": np.asarray([row.ids for row in encoded], dtype=np.int64),
+                "attention_mask": np.asarray(
+                    [row.attention_mask for row in encoded], dtype=np.int64
+                ),
+                "token_type_ids": np.asarray(
+                    [row.type_ids for row in encoded], dtype=np.int64
+                ),
+            }
+            output = np.asarray(runtime.session.run(["last_hidden_state"], feed)[0])
+        if output.ndim != 3 or output.shape != (
+            len(texts),
+            feed["input_ids"].shape[1],
+            BgeOnnxProvider.dim,
+        ):
+            raise ValueError("Pinned BGE ONNX model returned an invalid embedding shape")
+        cls = output[:, 0, :].astype(np.float32, copy=False)
+        if not np.isfinite(cls).all():
+            raise ValueError("Pinned BGE ONNX model returned non-finite embeddings")
+        norms = np.linalg.norm(cls, axis=1, keepdims=True)
+        if np.any(norms <= 0):
+            raise ValueError("Pinned BGE ONNX model returned a zero-norm embedding")
+        return (cls / norms).tolist()
+
+    async def embed(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        runtime = await self._get_runtime()
+        return await self._executor.run(lambda: self._encode_sync(runtime, texts))
+
+    async def embed_query(self, text: str) -> List[float]:
+        from .bge_onnx import BGE_ONNX_QUERY_INSTRUCTION
+
+        instructed, raw = await self.embed([BGE_ONNX_QUERY_INSTRUCTION + text, text])
+        merged = (np.asarray(instructed) + np.asarray(raw)) / 2.0
+        norm = float(np.linalg.norm(merged))
+        if not np.isfinite(merged).all() or norm <= 0:
+            raise ValueError("Pinned BGE ONNX model returned an invalid query embedding")
+        return (merged / norm).tolist()
 
 
 class LocalProvider(EmbeddingProvider):
@@ -220,6 +421,8 @@ def get_provider() -> EmbeddingProvider:
             return OpenAIProvider()
         case "sentence-transformers":
             return SentenceTransformerProvider()
+        case "bge-onnx":
+            return BgeOnnxProvider()
         case _:
             # "local" is a deterministic token-hash stub for unit tests. On
             # LOCOMO it retrieves at 24% vs the real model's 82% — production

@@ -47,15 +47,22 @@ async def run_retention_scheduler(
     interval_hours: float,
 ) -> None:
     """
-    Loop: sleep *interval_hours* then prune all qualifying namespaces.
+    Prune all qualifying namespaces immediately, then sleep *interval_hours*.
 
     Cancelled cleanly by task.cancel() during lifespan shutdown.
     """
     logger.info("Retention scheduler started", extra={"interval_hours": interval_hours})
     try:
         while True:
+            try:
+                await _run_prune_cycle(session_factory)
+            except Exception:
+                # A transient database/Redis failure must not silently disable
+                # retention until the next process restart. Namespace-specific
+                # failures are handled inside the cycle; this boundary keeps the
+                # scheduler alive when discovery or lock acquisition fails.
+                logger.exception("Retention prune cycle failed; retrying next interval")
             await asyncio.sleep(interval_hours * 3600)
-            await _run_prune_cycle(session_factory)
     except asyncio.CancelledError:
         logger.info("Retention scheduler stopped")
         raise
@@ -63,6 +70,7 @@ async def run_retention_scheduler(
 
 async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """Prune one cycle across all namespaces with an active content TTL."""
+    from .db import current_barrier_group, current_namespace
     from .memory_service import prune_expired_content
 
     started_at = datetime.now(timezone.utc)
@@ -72,6 +80,8 @@ async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) ->
     async def prune_namespaces(namespaces: list[str]) -> None:
         nonlocal total_pruned, errors
         for namespace in namespaces:
+            namespace_token = current_namespace.set(namespace)
+            barrier_token = current_barrier_group.set(None)
             try:
                 async with session_factory() as db:
                     pruned = await prune_expired_content(db, namespace)
@@ -91,6 +101,9 @@ async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) ->
                     "Scheduler prune error",
                     extra={"namespace": namespace, "error": str(exc)},
                 )
+            finally:
+                current_barrier_group.reset(barrier_token)
+                current_namespace.reset(namespace_token)
 
     stmt = select(NamespacePolicy).where(
         NamespacePolicy.content_ttl_days.is_not(None),
@@ -100,22 +113,39 @@ async def _run_prune_cycle(session_factory: async_sessionmaker[AsyncSession]) ->
         is_postgres = probe_db.get_bind().dialect.name == "postgresql"
 
     if not is_postgres:
-        async with session_factory() as db:
-            result = await db.execute(stmt)
-            namespaces = [p.namespace for p in result.scalars().all()]
+        admin_namespace_token = current_namespace.set("__admin__")
+        admin_barrier_token = current_barrier_group.set(None)
+        try:
+            async with session_factory() as db:
+                result = await db.execute(stmt)
+                namespaces = [p.namespace for p in result.scalars().all()]
+        finally:
+            current_barrier_group.reset(admin_barrier_token)
+            current_namespace.reset(admin_namespace_token)
         await prune_namespaces(namespaces)
     else:
         lock_name = "lians:retention"
         async with session_factory() as lock_db:
-            if not await _try_scheduler_lock(lock_db, lock_name):
-                logger.info("Retention cycle skipped; another instance owns the lock")
-                return
+            lock_acquired = False
             try:
-                result = await lock_db.execute(stmt)
-                namespaces = [p.namespace for p in result.scalars().all()]
+                admin_namespace_token = current_namespace.set("__admin__")
+                admin_barrier_token = current_barrier_group.set(None)
+                try:
+                    lock_acquired = await _try_scheduler_lock(lock_db, lock_name)
+                    if not lock_acquired:
+                        logger.info(
+                            "Retention cycle skipped; another instance owns the lock"
+                        )
+                        return
+                    result = await lock_db.execute(stmt)
+                    namespaces = [p.namespace for p in result.scalars().all()]
+                finally:
+                    current_barrier_group.reset(admin_barrier_token)
+                    current_namespace.reset(admin_namespace_token)
                 await prune_namespaces(namespaces)
             finally:
-                await _release_scheduler_lock(lock_db, lock_name)
+                if lock_acquired:
+                    await _release_scheduler_lock(lock_db, lock_name)
 
     elapsed_ms = round((datetime.now(timezone.utc) - started_at).total_seconds() * 1000, 1)
     logger.info(

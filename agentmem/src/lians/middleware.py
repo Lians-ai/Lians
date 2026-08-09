@@ -210,9 +210,9 @@ class _RequestBodyTooLarge(Exception):
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Sliding-window rate limit keyed by API key hash (300 req/min default).
+    Sliding-window rate limit keyed by credential hash (300 req/min default).
 
-    Uses Redis INCR + EXPIRE for atomic counting across multiple workers. If
+    Uses one atomic Redis script for counting and TTL repair across workers. If
     Redis is unavailable, a bounded per-process fallback keeps throttling
     active instead of silently disabling the control.
 
@@ -281,8 +281,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         raw_key = request.headers.get("X-API-Key", "")
+        authorization = request.headers.get("Authorization", "")
+        is_mcp_request = request.url.path.rstrip("/") == "/mcp"
         if raw_key:
             discriminator = self._api_key_discriminator(raw_key)
+        elif is_mcp_request and authorization.lower().startswith("bearer "):
+            # Authentication runs after this middleware. Key the pre-auth
+            # abuse budget by network client rather than attacker-controlled
+            # token bytes: rotating malformed JWTs must not create unlimited
+            # buckets or force unbounded JWKS refresh work.
+            client_host = request.client.host if request.client else "unknown"
+            discriminator = (
+                "mcp-client:"
+                + hashlib.sha256(client_host.encode()).hexdigest()[:16]
+            )
+        elif is_mcp_request:
+            # Bound unauthenticated signature/protocol probes before the MCP
+            # authentication middleware rejects them.
+            client_host = request.client.host if request.client else "unknown"
+            discriminator = (
+                "mcp-anonymous:"
+                + hashlib.sha256(client_host.encode()).hexdigest()[:16]
+            )
         elif request.url.path.startswith("/v1/admin/"):
             # Admin auth uses a separate header. Keying this bucket by the
             # supplied secret would let an attacker evade throttling by changing
@@ -300,11 +320,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         redis_key = f"agentmem:rl:{discriminator}"
 
         try:
-            from .cache import _get_redis
+            from .cache import _get_redis, _redis_fixed_window_increment
             r = _get_redis()
-            count = await r.incr(redis_key)
-            if count == 1:
-                await r.expire(redis_key, self._window)
+            count = await _redis_fixed_window_increment(
+                r,
+                redis_key,
+                amount=1,
+                window_seconds=self._window,
+            )
 
             remaining = max(0, self._limit - count)
             if count > self._limit:

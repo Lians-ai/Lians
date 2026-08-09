@@ -5,6 +5,9 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "fly-deploy.yml"
+STAGING_WORKFLOW_PATH = (
+    REPOSITORY_ROOT / ".github" / "workflows" / "staging-database-check.yml"
+)
 FLY_CONFIG_PATH = REPOSITORY_ROOT / "fly.toml"
 
 
@@ -29,6 +32,18 @@ def test_bluegreen_prerequisites_remain_configured() -> None:
         for check in service["checks"]
     )
     assert "mounts" not in config
+
+
+def test_database_gates_require_current_alembic_head() -> None:
+    for workflow_path in (WORKFLOW_PATH, STAGING_WORKFLOW_PATH):
+        workflow = workflow_path.read_text(encoding="utf-8")
+
+        assert "--expected-revision 0030_force_hosted_mcp_rls" in workflow
+
+    production_workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    staging_workflow = STAGING_WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert production_workflow.count("--expected-revision") == 1
+    assert staging_workflow.count("--expected-revision 0030_force_hosted_mcp_rls") == 1
 
 
 def test_post_deploy_release_identity_and_smoke_gates_remain() -> None:

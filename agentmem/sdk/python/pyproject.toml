@@ -7,7 +7,7 @@ name = "lians-sdk"
 version = "0.5.0"
 description = "Correct, temporal, and auditable memory infrastructure for AI agents"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = { file = "LICENSE" }
 readme = "README.md"
 keywords = ["ai", "agent-memory", "long-term-memory", "llm", "mcp", "langchain", "langgraph", "crewai", "compliance", "audit-trail", "bitemporal", "gdpr"]
 classifiers = [
@@ -31,7 +31,7 @@ crewai        = ["crewai>=0.28"]
 openai-agents = ["openai-agents>=0.0.1"]
 autogen       = ["autogen-core>=0.4"]
 local         = [
-    "sqlalchemy>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
     "pydantic-settings>=2.14.2",
@@ -47,10 +47,23 @@ local         = [
     # deterministic test-grade embedding stub.
     "sentence-transformers>=3.0",
 ]
+bge-onnx      = [
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.19",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.14.2",
+    "cryptography>=48.0.1",
+    "pgvector>=0.2.5",
+    "numpy>=1.26",
+    "fastapi>=0.110",
+    "asyncpg>=0.29",
+    "onnxruntime>=1.20,<2",
+    "tokenizers>=0.20,<1",
+]
 mcp           = [
     "mcp>=1.0.0,<2",
     "httpx>=0.27.0",
-    "sqlalchemy>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
     "pydantic-settings>=2.14.2",
@@ -62,11 +75,13 @@ mcp           = [
     "sentence-transformers>=3.0",
 ]
 all           = [
-    "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,local,mcp]",
+    "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,local,bge-onnx,mcp]",
 ]
 
 [project.scripts]
 lians-mcp = "lians.mcp_server:main"
+lians-memory-mcp = "lians.memory_plugin_mcp:main"
+lians-bge-onnx-export = "lians.bge_onnx_export:main"
 
 [project.urls]
 Homepage      = "https://www.lians.ai"

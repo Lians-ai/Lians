@@ -4,15 +4,18 @@ Before 0019 the subject_keys PK was subject_id alone, so two namespaces sharing
 a subject_id shared one AES DEK — and one tenant's erase crypto-shredded the
 other tenant's data and 500'd their next write. These tests pin the isolation.
 """
+import asyncio
+import gc
+import weakref
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
-
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories, erase_subject
+from src.lians import dek_cache, memory_service
+from src.lians.memory_service import add_memory, erase_subject, recall_memories
 from src.lians.pii import get_or_create_subject_key
-from src.lians import dek_cache
+from src.lians.schemas import MemoryAdd, RecallRequest
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 SUBJECT = "customer-42"          # deliberately identical across the two tenants
 NS_A, NS_B = "tenant-a", "tenant-b"
 
@@ -22,6 +25,35 @@ def _clear_dek_cache():
     dek_cache._dek_cache.clear()
     yield
     dek_cache._dek_cache.clear()
+
+
+def test_dek_cache_can_be_bypassed_for_one_task():
+    namespace = "hosted-tenant"
+    subject_id = "hosted-memory"
+    cached_key = b"a" * 32
+    replacement_key = b"b" * 32
+    dek_cache.cache_dek(namespace, subject_id, cached_key)
+
+    with dek_cache.dek_cache_disabled():
+        assert dek_cache.get_cached_dek(namespace, subject_id) is None
+        dek_cache.cache_dek(namespace, subject_id, replacement_key)
+
+    assert dek_cache.get_cached_dek(namespace, subject_id) == cached_key
+
+
+@pytest.mark.asyncio
+async def test_idle_project_write_locks_are_not_retained():
+    loop = asyncio.get_running_loop()
+    key = (id(loop), "hosted-tenant", "caller-selected-project")
+    lock = await memory_service._get_in_process_lock(key[1], key[2])
+    lock_reference = weakref.ref(lock)
+    assert memory_service._write_locks[key] is lock
+
+    del lock
+    gc.collect()
+
+    assert lock_reference() is None
+    assert key not in memory_service._write_locks
 
 
 @pytest.mark.asyncio

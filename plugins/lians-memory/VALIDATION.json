@@ -1,0 +1,134 @@
+{
+  "schema": "lians.codex-memory-plugin-validation.v1",
+  "measured_at": "2026-08-09",
+  "host": {
+    "os": "Windows",
+    "codex_cli": "0.147.0-alpha.6.5"
+  },
+  "bundle": {
+    "sdk_version": "0.5.0",
+    "sdk_wheel_filename": "lians_sdk-0.5.0-py3-none-any.whl",
+    "sdk_wheel_sha256": "50fec88bd18d803eac7ba224c056e94e33fe9359a8d1331b8331678ec7beb038",
+    "sdk_wheel_bytes": 356742,
+    "sdk_source_commit": "151b8fa9d6ce4333dfe6e823d8d421e68a0dce42",
+    "sdk_source_tree_sha256": "2ed7df5c1f49edb76064e089871c171d82c44ff5281df166930f8025fb203cee",
+    "sdk_source_tree_file_count": 102,
+    "sdk_source_tree_algorithm": "sha256(sorted git-visible relative_path NUL file_sha256 LF)",
+    "license_embedded": true,
+    "license_sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5",
+    "frozen_plugin_runtime_lock_verified": true
+  },
+  "automated": {
+    "final_sdk_wheel_package": {
+      "isolated_direct_path_install": true,
+      "focused_tests_passed": 84,
+      "skipped_optional_platform": 2,
+      "wheel_record_rows": 99,
+      "wheel_record_hashes_verified": 98,
+      "direct_url_matches_bundled_wheel": true,
+      "pinned_bge_artifact_validated": true,
+      "encrypted_subject_write_and_recall": true,
+      "plaintext_marker_absent_from_sqlite": true,
+      "dynamic_mcp_check_passed": true,
+      "clean_frozen_plugin_runtime_sync_passed": true,
+      "greenlet_importable_from_frozen_runtime": true
+    },
+    "plugin_package": {
+      "passed": 75,
+      "skipped_optional_platform": 7
+    },
+    "release_contract_synchronized_at": "0.5.0"
+  },
+  "functional_boundary": {
+    "mcp_tools": [
+      "remember",
+      "recall"
+    ],
+    "codex_scope_capability_advertised": true,
+    "recall_has_untrusted_data_boundary": true,
+    "plugin_recall_controls_pinned": true,
+    "compact_tool_schema_pinned": true,
+    "pythonpath_shadow_blocked": true,
+    "hostile_ambient_engine_env_ignored": true,
+    "untrusted_project_env_ignored": true,
+    "private_mcp_runtime_env_absent": true,
+    "hook_inventory_present": true,
+    "app_server_hook_dispatch_observed_on_this_host": true,
+    "app_server_hook_completion_success_observed_for_current_windows_command": true,
+    "windows_hook_command_uses_default_powershell_contract": true,
+    "codex_exec_hook_dispatch_observed_on_this_host": false,
+    "paid_installed_plugin_candidates_reviewed": 1,
+    "paid_installed_plugin_candidates_accepted": 0,
+    "paid_installed_plugin_candidates_rejected": 1,
+    "paid_candidate_rejection_reason": "the prior Windows hook command used cmd syntax under Codex PowerShell and exited nonzero before the baseline; the candidate turn produced no terminal usage event",
+    "accepted_installed_plugin_economics_result_exists": false
+  },
+  "installed_app_server_hook_proof": {
+    "status": "passed",
+    "installed_cache_version": "0.1.0+codex.20260809062150",
+    "provider_boundary": "dead loopback at 127.0.0.1:9",
+    "hook_inventory_count": 2,
+    "all_enabled": true,
+    "all_trusted": true,
+    "exact_installed_cache_source": true,
+    "event_order": [
+      "SessionStart:started",
+      "SessionStart:completed",
+      "UserPromptSubmit:started",
+      "UserPromptSubmit:completed"
+    ],
+    "session_start_duration_ms": 6266,
+    "user_prompt_submit_duration_ms": 851,
+    "turn_interrupt_acknowledged": true,
+    "external_provider_responses": 0,
+    "model_messages": 0,
+    "usage_notifications": 0,
+    "paid_model_calls": 0
+  },
+  "controlled_usage_evidence": {
+    "status": "prior checkout-hook workload; pending packaged end-to-end reproduction",
+    "report": "docs/benchmarks/codex-sol-ultra-checkout-hook-usage-evidence-2026-08-08.json",
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "ultra",
+    "locomo_questions": 1,
+    "abba_runs": 4,
+    "exact_answers": 4,
+    "same_budget_usage_multiplier": 2.03507673,
+    "same_budget_usage_extension_percent": 103.507673035,
+    "credits_are_estimates_not_provider_debits": true,
+    "normal_installed_plugin_loader_exercised": false,
+    "candidate_end_to_end_wall_was_slower": true,
+    "universal_claim_supported": false
+  },
+  "installed_warm_latency": {
+    "status": "installed-cache direct-hook measurement of the runtime artifacts bundled here",
+    "report": "docs/benchmarks/codex-installed-plugin-latency-evidence-2026-08-09.json",
+    "measured_installed_cache_version": "0.1.0+codex.20260809040627",
+    "sdk_version": "0.5.0",
+    "runtime_artifact_identity": {
+      "python_files_byte_identical": true,
+      "windows_cmd_wrapper_code_equivalent_after_line_ending_normalization": true,
+      "measured_installed_cache_cmd_sha256": "2a7be63b4fdb6bb6d940411fdb2e3dbe26f7a83714b8739c32644e3cb900c568",
+      "repository_git_blob_cmd_sha256": "68e0e04a774e0f5440abba5623394873c5d142ee1f11e419fac7c311d5eae853"
+    },
+    "memory_rows": 419,
+    "session_start_prewarm_elapsed_ms": 6090.554,
+    "fresh_hook_processes": 20,
+    "injected": 20,
+    "retrieval_degraded": 0,
+    "hook_wall_p50_ms": 960.664,
+    "hook_wall_p95_ms": 1071.088,
+    "hook_wall_max_ms": 1109.455,
+    "warm_hook_p95_under_3500_ms": true,
+    "prewarm_under_3500_ms": false,
+    "overall_model_response_time_measured": false
+  },
+  "limitations": [
+    "The runtime code bundled here was installed and measured directly from the Codex cache at version 0.1.0+codex.20260809040627; this evidence refresh changes only package metadata and documentation. The Windows-installed .cmd wrapper uses CRLF while the Git blob uses LF, and both raw hashes are recorded.",
+    "The prior Windows command used cmd syntax under Codex's default PowerShell shell and exited with code 1. The replacement PowerShell command and raw-byte stdin forwarding passed installed post-trust App Server lifecycle proof.",
+    "The one reviewed paid installed-plugin candidate was rejected before the baseline and produced no terminal usage event, so no installed-plugin economics result was accepted.",
+    "The 2.035x result applies only to one four-run Sol Ultra checkout-hook workload using estimated credits; it does not establish universal prompt savings or a Codex quota increase.",
+    "The 6.091-second prewarm misses the 3.5-second cold-start target; only the prewarmed direct hook achieved a 1.071-second p95 on this sequential workload.",
+    "The dead-loopback App Server proof establishes installed hook dispatch and completion only; it does not establish overall response-time improvement, concurrent-task latency, or an every-prompt benefit."
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "description": "Prewarm Lians and inject bounded, score-gated project memory before Codex prompts.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh \"${PLUGIN_ROOT}/scripts/run_hook.sh\" prewarm",
+            "commandWindows": "& \"$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$env:PLUGIN_ROOT\\scripts\\run_hook.ps1\" -Action prewarm",
+            "timeout": 180,
+            "statusMessage": "Prewarming Lians project memory"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/bin/sh \"${PLUGIN_ROOT}/scripts/run_hook.sh\" hook",
+            "commandWindows": "& \"$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$env:PLUGIN_ROOT\\scripts\\run_hook.ps1\" -Action hook",
+            "timeout": 120,
+            "statusMessage": "Recalling Lians project memory",
+            "additionalContextLimit": 768
+          }
+        ]
+      }
+    ]
+  }
+}

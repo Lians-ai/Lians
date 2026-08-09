@@ -34,6 +34,8 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
   # bge-large-en-v1.5 is baked into the image; "local" (hash projection) makes
   # semantic scores pure noise. Needs the 2GB VM below — the model is ~1.3GB.
   EMBEDDING_PROVIDER            = "sentence-transformers"
+  SENTENCE_TRANSFORMER_MODEL    = "BAAI/bge-large-en-v1.5"
+  SENTENCE_TRANSFORMER_REVISION = "d4aa6901d3a41ba39fb536a557fa166f842b0e09"
   SUPERSESSION_LLM_STAGE        = "false"
   RECALL_CACHE_ENABLED          = "true"
   RECALL_CACHE_TTL_SECONDS      = "60"
@@ -45,6 +47,24 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
   CORS_ORIGINS                  = "https://lians.ai,https://www.lians.ai"
   AIRGAP_MODE                   = "false"
   RETENTION_PRUNE_INTERVAL_HOURS = "24"
+  # Universal plugin stays fail-closed until OAuth issuer/JWKS secrets and the
+  # stable mcp.lians.ai DNS/TLS route are provisioned.
+  HOSTED_MCP_ENABLED            = "false"
+  HOSTED_MCP_RESOURCE_URL       = "https://mcp.lians.ai"
+  HOSTED_MCP_SERVICE_DOCUMENTATION_URL = "https://www.lians.ai/privacy"
+  HOSTED_MCP_RETENTION_DAYS     = "365"
+  HOSTED_MCP_AUDIT_RETENTION_DAYS = "365"
+  HOSTED_MCP_STARTUP_TIMEOUT_SECONDS = "180"
+  HOSTED_MCP_TOOL_TIMEOUT_SECONDS = "30"
+  HOSTED_MCP_MAX_CONCURRENT_INFERENCE = "1"
+  HOSTED_MCP_INFERENCE_QUEUE_TIMEOUT_SECONDS = "0.1"
+  HOSTED_MCP_RATE_LIMIT_PER_MINUTE = "60"
+  HOSTED_MCP_MAX_MEMORIES_PER_TENANT = "10000"
+  HOSTED_MCP_MAX_STORED_BYTES_PER_TENANT = "40000000"
+  HOSTED_MCP_MAX_WRITE_BYTES_PER_DAY = "1000000"
+  HOSTED_MCP_MAX_AUDIT_EVENTS_PER_DAY = "5000"
+  HOSTED_MCP_TENANT_CLAIM       = "tenant_id"
+  HOSTED_MCP_MAX_TOKEN_LIFETIME_SECONDS = "3600"
 
 [[vm]]
   cpu_kind  = 'shared'

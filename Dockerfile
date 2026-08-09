@@ -45,15 +45,18 @@ RUN python -m pip install --no-cache-dir --upgrade pip==25.3 \
 
 # Pre-download the local embedding model for zero-network runtime startup.
 ARG PREDOWNLOAD_MODEL=BAAI/bge-large-en-v1.5
+ARG PREDOWNLOAD_MODEL_REVISION=d4aa6901d3a41ba39fb536a557fa166f842b0e09
 ENV SENTENCE_TRANSFORMERS_HOME=/app/.model_cache
 RUN mkdir -p "$SENTENCE_TRANSFORMERS_HOME" \
     && if [ -n "$PREDOWNLOAD_MODEL" ]; then \
       python -c "from sentence_transformers import SentenceTransformer; \
-                 SentenceTransformer('$PREDOWNLOAD_MODEL')"; \
+                 SentenceTransformer('$PREDOWNLOAD_MODEL', revision='$PREDOWNLOAD_MODEL_REVISION')"; \
     fi
 
 
 FROM python:3.12-slim AS runtime
+
+ARG PREDOWNLOAD_MODEL_REVISION=d4aa6901d3a41ba39fb536a557fa166f842b0e09
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
@@ -64,6 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     SENTENCE_TRANSFORMERS_HOME=/app/.model_cache \
+    SENTENCE_TRANSFORMER_REVISION="${PREDOWNLOAD_MODEL_REVISION}" \
     TRANSFORMERS_OFFLINE=1 \
     HF_DATASETS_OFFLINE=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -83,4 +87,4 @@ USER 10001:10001
 
 EXPOSE 8000
 
-CMD ["uvicorn", "lians.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "lians.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

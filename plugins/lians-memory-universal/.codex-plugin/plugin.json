@@ -1,0 +1,43 @@
+{
+  "name": "lians-memory-universal",
+  "version": "0.1.0",
+  "description": "Durable, user-controlled project memory with confirmed deletion.",
+  "author": {
+    "name": "Lians",
+    "url": "https://www.lians.ai"
+  },
+  "homepage": "https://www.lians.ai",
+  "repository": "https://github.com/Lians-ai/Lians",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agent memory",
+    "context",
+    "codex",
+    "mcp",
+    "retrieval"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Lians Memory",
+    "shortDescription": "More memory, less repetition",
+    "longDescription": "Lians Memory stores project facts and decisions that users explicitly choose to keep, recalls bounded context, and permanently forgets a selected memory only after confirmation. It does not increase OpenAI usage quotas or bypass rate limits.",
+    "developerName": "Lians",
+    "category": "Productivity",
+    "capabilities": [
+      "Recall approved project memory",
+      "Store explicit project facts",
+      "Permanently forget confirmed memories"
+    ],
+    "websiteURL": "https://www.lians.ai",
+    "privacyPolicyURL": "https://www.lians.ai/privacy",
+    "termsOfServiceURL": "https://www.lians.ai/terms",
+    "defaultPrompt": [
+      "Recall the durable decisions for this project.",
+      "Remember this approved project constraint for future work.",
+      "Forget a specific stored memory after I confirm."
+    ],
+    "brandColor": "#1B3A7E",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg"
+  }
+}

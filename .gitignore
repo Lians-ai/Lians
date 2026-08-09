@@ -10,6 +10,7 @@ env/
 dist/
 build/
 *.whl
+!plugins/lians-memory/vendor/*.whl
 
 # Java build output
 agentmem/sdk/java/target/
@@ -61,3 +62,5 @@ agentmem/sdk/typescript/live_smoke.mjs
 # Benchmark artifacts (regenerable; checkpoint DBs run to GBs)
 agentmem/results/
 agentmem/benchmarks/data/*.sqlite
+# Local MCP smoke databases are synthetic runtime state, never release assets.
+.artifacts/*.db
