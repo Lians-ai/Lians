@@ -1,0 +1,20 @@
+{
+  "name": "lians",
+  "interface": {
+    "displayName": "Lians"
+  },
+  "plugins": [
+    {
+      "name": "lians-memory",
+      "source": {
+        "source": "local",
+        "path": "./plugins/lians-memory"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "lians-memory",
+  "version": "0.1.0+codex.20260809034006",
+  "description": "Project-scoped, score-gated memory recall and durable memory tools for Codex.",
+  "author": {
+    "name": "Lians",
+    "url": "https://www.lians.ai"
+  },
+  "homepage": "https://www.lians.ai",
+  "repository": "https://github.com/Lians-ai/Lians",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agent memory",
+    "context optimization",
+    "codex",
+    "mcp",
+    "retrieval"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Lians Memory",
+    "shortDescription": "Extend usage. Improve memory.",
+    "longDescription": "Lians Memory recalls a small, score-gated slice of relevant project memory before a Codex prompt and exposes compact tools for durable writes and explicit recall.",
+    "developerName": "Lians",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://www.lians.ai",
+    "privacyPolicyURL": "https://www.lians.ai/privacy",
+    "termsOfServiceURL": "https://www.lians.ai/terms",
+    "brandColor": "#1B3A7E",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
+    "defaultPrompt": [
+      "Set up Lians Memory for this Codex installation.",
+      "Check whether Lians Memory is healthy in this project.",
+      "Remember this decision for future work in this project."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

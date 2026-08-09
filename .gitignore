@@ -10,6 +10,7 @@ env/
 dist/
 build/
 *.whl
+!plugins/lians-memory/vendor/*.whl
 
 # Java build output
 agentmem/sdk/java/target/

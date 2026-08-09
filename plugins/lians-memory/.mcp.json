@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "lians_memory": {
+      "command": "lians-memory-mcp",
+      "startup_timeout_sec": 300,
+      "tool_timeout_sec": 120,
+      "required": false,
+      "env_vars": [
+        "LIANS_API_KEY"
+      ],
+      "enabled_tools": [
+        "remember",
+        "recall"
+      ],
+      "default_tools_approval_mode": "writes",
+      "cwd": ".",
+      "env": {
+        "LIANS_MEMORY_HOME": "",
+        "PYTHONPATH": "",
+        "PYTHONHOME": "",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONSAFEPATH": "1",
+        "LIANS_MCP_CODEX_DYNAMIC_SCOPE": "true",
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall",
+        "LIANS_MCP_SCHEMA_PROFILE": "compact",
+        "LIANS_MCP_RECALL_K": "20",
+        "LIANS_MCP_CONTEXT_MAX_TOKENS": "768",
+        "LIANS_MCP_PREWARM": "off"
+      }
+    }
+  }
+}
