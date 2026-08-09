@@ -11,6 +11,7 @@ MACHINE_SELECTOR = (ROOT / "scripts" / "select_fly_production_machine.py").read_
 SCHEMA_VERIFIER = (ROOT / "scripts" / "verify_production_schema.py").read_text(
     encoding="utf-8"
 )
+FLY_CONFIG = (ROOT / "fly.toml").read_text(encoding="utf-8")
 
 
 def test_local_embedding_image_is_cpu_only_by_contract() -> None:
@@ -50,15 +51,32 @@ def test_runtime_artifacts_are_owned_during_copy() -> None:
     assert "chown -R" not in DOCKERFILE
     assert "USER 10001:10001" in DOCKERFILE
     assert "WORKDIR /app/agentmem" in DOCKERFILE
+    # The ~1.3 GB embedding model is process-local; two Uvicorn workers would
+    # duplicate it and exceed the production 2 GB Fly VM memory budget.
+    assert '"--workers", "1"' in DOCKERFILE
 
 
 def test_offline_model_and_deployment_identity_contracts_are_preserved() -> None:
     assert "ARG EXTRAS=local" in DOCKERFILE
     assert "ARG PREDOWNLOAD_MODEL=BAAI/bge-large-en-v1.5" in DOCKERFILE
+    assert (
+        "ARG PREDOWNLOAD_MODEL_REVISION="
+        "d4aa6901d3a41ba39fb536a557fa166f842b0e09"
+    ) in DOCKERFILE
     assert "SENTENCE_TRANSFORMERS_HOME=/app/.model_cache" in DOCKERFILE
     assert "TRANSFORMERS_OFFLINE=1" in DOCKERFILE
     assert "HF_DATASETS_OFFLINE=1" in DOCKERFILE
-    assert "SentenceTransformer('$PREDOWNLOAD_MODEL')" in DOCKERFILE
+    assert (
+        "SentenceTransformer('$PREDOWNLOAD_MODEL', "
+        "revision='$PREDOWNLOAD_MODEL_REVISION')"
+    ) in DOCKERFILE
+    assert (
+        'SENTENCE_TRANSFORMER_REVISION="${PREDOWNLOAD_MODEL_REVISION}"'
+    ) in DOCKERFILE
+    assert (
+        'SENTENCE_TRANSFORMER_REVISION = "d4aa6901d3a41ba39fb536a557fa166f842b0e09"'
+        in FLY_CONFIG
+    )
 
     # The runtime build identity must remain late enough that changing a commit
     # SHA does not invalidate the expensive venv and offline-model layers.

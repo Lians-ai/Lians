@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.x   | ✓ |
-| < 0.2   | ✗ |
+| 0.5.x   | Yes |
+| < 0.5   | No |
 
 ## Reporting a vulnerability
 
@@ -16,7 +16,7 @@ Report privately via **GitHub Security Advisories**:
 2. Click "Report a vulnerability"
 3. Fill in the details
 
-Alternatively email **security@lians.dev** with:
+Alternatively email **security@lians.ai** with:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -28,7 +28,7 @@ We will acknowledge receipt within **48 hours** and provide a remediation timeli
 
 In scope:
 - SQL injection or data isolation bypass in the API layer
-- Authentication/authorisation bypass (`X-API-Key`, `X-Admin-Secret`)
+- Authentication/authorisation bypass (OAuth bearer tokens, `X-API-Key`, `X-Admin-Secret`)
 - Information barrier (RLS) bypass allowing cross-namespace data access
 - Cryptographic weaknesses in the AES-256-GCM per-subject encryption
 - Audit chain (SHA-256 hash chain) tampering or bypass
@@ -43,7 +43,8 @@ Out of scope:
 
 Lians enforces isolation at multiple layers:
 
-- **API key authentication** — all data-plane routes require `X-API-Key`; keys are stored as SHA-256 HMAC hashes, never plaintext
+- **OAuth resource-server authentication** — the public MCP endpoint validates JWT signature, issuer, audience, expiry, and per-tool scopes on every request
+- **API key authentication** — REST data-plane routes require `X-API-Key`; keys are stored as SHA-256 hashes, never plaintext
 - **Admin secret** — a separate credential (`X-Admin-Secret`) gates all `/v1/admin/*` routes; it is not derivable from agent keys
 - **PostgreSQL RLS** — information barriers are enforced at the database layer with `FORCE ROW LEVEL SECURITY`, not the application layer
 - **AES-256-GCM encryption** — each subject's memories are encrypted under a unique data-encryption key (DEK); destroying the DEK makes the data cryptographically unrecoverable (GDPR crypto-shred)

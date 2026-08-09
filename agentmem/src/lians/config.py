@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # old model via SENTENCE_TRANSFORMER_MODEL — embeddings from different
     # models never mix in one store.
     sentence_transformer_model: str = "Snowflake/snowflake-arctic-embed-l-v2.0"
+    # Immutable Hugging Face commit for production builds. Blank remains useful
+    # for an absolute, operator-managed local model directory.
+    sentence_transformer_revision: str = ""
     # Exact, hash-pinned local BGE v1.5 ONNX artifact configuration.
     bge_onnx_artifact_dir: str = ""
     # Zero delegates thread selection to ONNX Runtime.
@@ -73,6 +76,52 @@ class Settings(BaseSettings):
     # None follows the environment: enabled in development, disabled in production.
     expose_api_docs: bool | None = None
     expose_health_details: bool | None = None
+
+    # Public OpenAI plugin MCP resource server. Disabled until a stable HTTPS
+    # origin and an OAuth 2.1 authorization server are configured.
+    hosted_mcp_enabled: bool = False
+    hosted_mcp_resource_url: str = "https://mcp.lians.ai"
+    hosted_mcp_issuer_url: str = ""
+    hosted_mcp_jwks_url: str = ""
+    hosted_mcp_service_documentation_url: str = "https://www.lians.ai/privacy"
+    hosted_mcp_jwt_algorithms: str = "RS256"
+    hosted_mcp_jwt_leeway_seconds: int = Field(default=30, ge=0, le=300)
+    hosted_mcp_max_token_lifetime_seconds: int = Field(default=3600, ge=60, le=86400)
+    # Verified JWT claim that identifies the account/workspace boundary. The
+    # issuer must emit it for every hosted MCP access token.
+    hosted_mcp_tenant_claim: str = "tenant_id"
+    hosted_mcp_allowed_hosts: str = ""
+    hosted_mcp_allowed_origins: str = "https://chatgpt.com"
+    hosted_mcp_retention_days: int = Field(default=365, ge=1, le=3650)
+    # Audit rows contain hashes and operation metadata, not memory plaintext.
+    hosted_mcp_audit_retention_days: int = Field(default=365, ge=1, le=3650)
+    # Cold local embedding models can take substantially longer to initialize
+    # than an individual MCP tool is allowed to run. Keep these deadlines
+    # independent so hosted startup remains fail-closed without weakening the
+    # per-call latency bound.
+    hosted_mcp_startup_timeout_seconds: int = Field(default=180, ge=1, le=900)
+    hosted_mcp_tool_timeout_seconds: int = Field(default=30, ge=1, le=120)
+    hosted_mcp_max_concurrent_inference: int = Field(default=1, ge=1, le=8)
+    hosted_mcp_inference_queue_timeout_seconds: float = Field(
+        default=0.1, ge=0.01, le=5.0
+    )
+    # Weighted, per-tenant work units per fixed minute (remember=5, recall=2,
+    # forget=1), enforced after OAuth in addition to the pre-auth IP budget.
+    hosted_mcp_rate_limit_per_minute: int = Field(default=60, ge=5, le=10_000)
+    hosted_mcp_max_memories_per_tenant: int = Field(default=10_000, ge=1, le=1_000_000)
+    hosted_mcp_max_stored_bytes_per_tenant: int = Field(
+        default=40_000_000, ge=4_096, le=10_000_000_000
+    )
+    hosted_mcp_max_write_bytes_per_day: int = Field(
+        default=1_000_000, ge=4_096, le=1_000_000_000
+    )
+    # Durable bound on append-only audit growth. Each hosted tool operation
+    # that can write an audit row reserves from this UTC-day tenant budget.
+    hosted_mcp_max_audit_events_per_day: int = Field(
+        default=5_000, ge=100, le=1_000_000
+    )
+    # Portal-issued domain proof. Empty keeps the challenge endpoint at 404.
+    openai_apps_challenge_token: str = ""
 
     # LLM adjudication (Stage 3 supersession)
     anthropic_api_key: str = ""          # falls back to ANTHROPIC_API_KEY env var

@@ -25,8 +25,6 @@ services:
           name: agentmem-redis
           type: redis
           property: connectionString
-      # local = hash-projection embeddings, no external API key required.
-      # Switch to "voyage" only if you also set VOYAGE_API_KEY (sync:false).
       - key: EMBEDDING_PROVIDER
         value: local
       - key: MASTER_ENCRYPTION_KEY
@@ -53,6 +51,40 @@ services:
         value: agentmem
       - key: PYTHONPATH
         value: agentmem/src
+      - key: HOSTED_MCP_ENABLED
+        value: "false"
+      - key: HOSTED_MCP_RESOURCE_URL
+        value: https://mcp.lians.ai
+      - key: HOSTED_MCP_SERVICE_DOCUMENTATION_URL
+        value: https://www.lians.ai/privacy
+      - key: HOSTED_MCP_STARTUP_TIMEOUT_SECONDS
+        value: "180"
+      - key: HOSTED_MCP_TOOL_TIMEOUT_SECONDS
+        value: "30"
+      - key: HOSTED_MCP_MAX_CONCURRENT_INFERENCE
+        value: "1"
+      - key: HOSTED_MCP_INFERENCE_QUEUE_TIMEOUT_SECONDS
+        value: "0.1"
+      - key: HOSTED_MCP_RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: HOSTED_MCP_MAX_MEMORIES_PER_TENANT
+        value: "10000"
+      - key: HOSTED_MCP_MAX_STORED_BYTES_PER_TENANT
+        value: "40000000"
+      - key: HOSTED_MCP_MAX_WRITE_BYTES_PER_DAY
+        value: "1000000"
+      - key: HOSTED_MCP_MAX_AUDIT_EVENTS_PER_DAY
+        value: "5000"
+      - key: HOSTED_MCP_TENANT_CLAIM
+        value: tenant_id
+      - key: HOSTED_MCP_MAX_TOKEN_LIFETIME_SECONDS
+        value: "3600"
+      - key: HOSTED_MCP_ISSUER_URL
+        sync: false
+      - key: HOSTED_MCP_JWKS_URL
+        sync: false
+      - key: OPENAI_APPS_CHALLENGE_TOKEN
+        sync: false
 
   # Redis is a service (type: redis), not a database entry.
   - type: redis

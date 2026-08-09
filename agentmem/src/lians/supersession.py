@@ -624,6 +624,8 @@ async def run_supersession(
     subject_key: Optional[bytes] = None,
     new_memory_id: Optional[UUID] = None,
     cue_hint: bool = False,
+    allow_llm: bool = True,
+    content_hash_override: Optional[str] = None,
 ) -> SupersessionResult:
     """Full supersession funnel.
 
@@ -632,6 +634,9 @@ async def run_supersession(
     cue often stays in the surrounding parent-turn chatter ("Oh wait — tell
     the caterer ...": the extracted clause is the payload, the cue was the
     lead-in).
+
+    ``allow_llm`` is an internal privacy boundary for surfaces that must not
+    send memory content to an external adjudication provider.
 
     Change 3 fast path: if the new memory has a full structured key match,
     supersede strictly by event_time (deterministic, zero LLM cost).
@@ -645,7 +650,7 @@ async def run_supersession(
 
     # Change 3: keyed fast path — structured keys from domain adapter, not hardcoded
     import hashlib as _hl
-    new_content_hash = _hl.sha256(new_content.encode()).hexdigest()
+    new_content_hash = content_hash_override or _hl.sha256(new_content.encode()).hexdigest()
     from .adapters import get_adapter as _get_adapter
     _sk = _get_adapter().structured_keys
     new_structured = {k: new_meta[k] for k in new_meta if k in _sk and new_meta.get(k)}
@@ -715,6 +720,7 @@ async def run_supersession(
         rationale: Optional[str] = None
         if (
             relation in ("SUPERSEDES", "REFINES")
+            and allow_llm
             and settings.supersession_llm_stage
             and old_content is not None
         ):
@@ -762,7 +768,7 @@ async def run_supersession(
     if cue_candidates:
         _, chosen, chosen_old = max(cue_candidates, key=lambda t: t[0])
         if chosen.id not in superseded_ids:
-            if settings.supersession_llm_stage:
+            if allow_llm and settings.supersession_llm_stage:
                 if settings.llm_adjudication_async and new_memory_id is not None:
                     try:
                         await _enqueue_adjudication(

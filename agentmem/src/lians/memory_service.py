@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import math
+import weakref
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -83,6 +85,15 @@ logger = logging.getLogger("agentmem.memory_service")
 
 _IMPORTANCE_RECENCY_HALF_LIFE_DAYS = 90.0
 _RRF_K = 60.0
+
+
+class IdempotencyMemoryErasedError(RuntimeError):
+    """An idempotency mapping points to a memory that is no longer available."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The idempotency key refers to a memory that was already erased."
+        )
 
 
 def _resolve_recall_policy(req: RecallRequest, settings) -> dict[str, Any]:
@@ -244,23 +255,49 @@ async def _commit_recall_evidence(
     retrieval_degraded: bool,
     router: str,
     filters: dict[str, Any],
+    privacy_minimal: bool = False,
+    privacy_hmac_secret: str | None = None,
 ) -> None:
     """Persist one recall receipt and usage event before returning any route."""
     payload = {
-        "query_hash": _content_hash(req.query),
         "k": req.k,
         "as_of": req.as_of.isoformat() if req.as_of else None,
-        "filters": filters,
         "strategy": execution["strategy"],
         "mode": execution["mode"],
         "policy_version": execution["policy_version"],
-        "query_variants": query_variants,
         "result_ids": [str(memory.id) for memory in memories],
         "router": router,
-        "receipt_sha256": receipt_sha256,
-        "receipt": receipt,
         "provenance_coverage": provenance_coverage,
     }
+    if privacy_minimal:
+        payload["receipt_hmac"] = _audit_hmac(
+            receipt_sha256,
+            privacy_hmac_secret,
+            namespace=namespace,
+            purpose="recall-receipt",
+        )
+        payload["query_hmac"] = _audit_hmac(
+            req.query,
+            privacy_hmac_secret,
+            namespace=namespace,
+            purpose="recall-query",
+        )
+        payload["query_variant_hmacs"] = [
+            _audit_hmac(
+                query_variant,
+                privacy_hmac_secret,
+                namespace=namespace,
+                purpose="recall-query-variant",
+            )
+            for query_variant in query_variants
+        ]
+        payload["privacy_minimal"] = True
+    else:
+        payload["receipt_sha256"] = receipt_sha256
+        payload["query_hash"] = _content_hash(req.query)
+        payload["query_variants"] = query_variants
+        payload["receipt"] = receipt
+        payload["filters"] = filters
     if retrieval_degraded:
         payload["retrieval_degraded"] = True
     recall_log = await chain_log(
@@ -270,19 +307,20 @@ async def _commit_recall_evidence(
         op="recall",
         payload=payload,
     )
-    from .metering import enqueue_usage_event, get_customer_id
+    if not privacy_minimal:
+        from .metering import enqueue_usage_event, get_customer_id
 
-    settings = get_settings()
-    customer_id = await get_customer_id(db, namespace)
-    if customer_id:
-        await enqueue_usage_event(
-            db,
-            namespace=namespace,
-            event_name=settings.stripe_meter_recall_event,
-            customer_id=customer_id,
-            quantity=1,
-            identifier=f"r:{recall_log.id}",
-        )
+        settings = get_settings()
+        customer_id = await get_customer_id(db, namespace)
+        if customer_id:
+            await enqueue_usage_event(
+                db,
+                namespace=namespace,
+                event_name=settings.stripe_meter_recall_event,
+                customer_id=customer_id,
+                quantity=1,
+                identifier=f"r:{recall_log.id}",
+            )
     await db.commit()
 
 
@@ -434,15 +472,22 @@ def _write_lock_keys(namespace: str, agent_id: str) -> tuple[int, int]:
     )
 
 
-_write_locks: dict[tuple[int, str, str], asyncio.Lock] = {}
+_write_locks: weakref.WeakValueDictionary[
+    tuple[int, str, str], asyncio.Lock
+] = weakref.WeakValueDictionary()
 
 
 async def _get_in_process_lock(namespace: str, agent_id: str) -> asyncio.Lock:
     loop = asyncio.get_running_loop()
     key = (id(loop), namespace, agent_id)
-    if key not in _write_locks:
-        _write_locks[key] = asyncio.Lock()
-    return _write_locks[key]
+    # There is no await in this lookup/create sequence, so it is atomic with
+    # respect to other tasks on the same event loop. Weak values let idle,
+    # caller-selected project locks disappear after their last waiter exits.
+    lock = _write_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _write_locks[key] = lock
+    return lock
 
 
 async def _acquire_pg_advisory_lock(db: AsyncSession, namespace: str, agent_id: str) -> None:
@@ -539,6 +584,21 @@ async def _load_namespace_subject_keys(db: AsyncSession, namespace: str) -> dict
 
 def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _audit_hmac(
+    text: str,
+    secret: str | None = None,
+    *,
+    namespace: str,
+    purpose: str,
+) -> str:
+    """Tenant- and purpose-separated digest for privacy-minimal audit records."""
+    secret = secret or get_settings().api_secret_seed
+    if len(secret) < 32:
+        raise RuntimeError("API_SECRET_SEED is too short for privacy-minimal audit HMACs")
+    message = f"lians-hosted-audit-v1\x00{namespace}\x00{purpose}\x00{text}"
+    return hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
 
 
 def _memory_to_out(mem: Memory, content: Optional[str]) -> MemoryOut:
@@ -736,6 +796,8 @@ async def add_memory(
     precomputed_embedding: Optional[list[float]] = None,
     _trusted_admission: Optional[AdmissionDecision] = None,
     idempotency_key: Optional[str] = None,
+    _audit_privacy_minimal: bool = False,
+    _audit_hmac_secret: str | None = None,
 ) -> MemoryOut:
     """``precomputed_embedding`` lets batch writers embed many contents in one
     model call (10-20x faster on local models) and pass each vector through;
@@ -778,7 +840,7 @@ async def add_memory(
         # (auto_metadata_enabled); caller keys are never overridden; provenance
         # is tagged under metadata._auto_meta. Fail-open — never blocks the write.
         settings = get_settings()
-        if settings.auto_metadata_enabled:
+        if settings.auto_metadata_enabled and not _audit_privacy_minimal:
             try:
                 from .auto_metadata import enrich_metadata
                 from .adapters import get_adapter
@@ -796,7 +858,7 @@ async def add_memory(
         # Compile a typed, versioned memory artifact into reserved metadata.
         # The raw content is never rewritten and the projection includes the
         # source content hash and event time, preserving lossless provenance.
-        if settings.memory_compiler_enabled:
+        if settings.memory_compiler_enabled and not _audit_privacy_minimal:
             from .memory_compiler import compile_memory_metadata
             req.metadata = compile_memory_metadata(
                 req.content,
@@ -810,7 +872,11 @@ async def add_memory(
         # raw turn. Extraction + embedding happen before the write lock; the
         # derived rows are ingested inside it. Fail-open, like auto-metadata.
         derived_clauses: list[tuple[str, list[float]]] = []
-        if settings.interjection_extraction_enabled and not (req.metadata or {}).get("_derived"):
+        if (
+            settings.interjection_extraction_enabled
+            and not _audit_privacy_minimal
+            and not (req.metadata or {}).get("_derived")
+        ):
             try:
                 from .interjection import extract_interjections
                 clauses = extract_interjections(req.content)
@@ -852,6 +918,17 @@ async def add_memory(
                 new_event_time=req.event_time,
                 subject_key=subject_key,
                 new_memory_id=new_id,
+                allow_llm=not _audit_privacy_minimal,
+                content_hash_override=(
+                    _audit_hmac(
+                        req.content,
+                        _audit_hmac_secret,
+                        namespace=namespace,
+                        purpose="memory-content",
+                    )
+                    if _audit_privacy_minimal
+                    else None
+                ),
             )
 
             now = datetime.now(timezone.utc)
@@ -869,7 +946,16 @@ async def add_memory(
                 valid_to=None,
                 importance=_compute_importance(req.event_time, req.importance),
                 source=req.source,
-                content_hash=_content_hash(req.content),
+                content_hash=(
+                    _audit_hmac(
+                        req.content,
+                        _audit_hmac_secret,
+                        namespace=namespace,
+                        purpose="memory-content",
+                    )
+                    if _audit_privacy_minimal
+                    else _content_hash(req.content)
+                ),
                 barrier_group=barrier_group,
             )
             db.add(mem)
@@ -969,7 +1055,16 @@ async def add_memory(
                 payload={
                     "source": req.source,
                     "event_time": req.event_time.isoformat(),
-                    "metadata": req.metadata,
+                    "metadata": (
+                        {"privacy_minimal": True}
+                        if _audit_privacy_minimal
+                        else req.metadata
+                    ),
+                    **(
+                        {"stored_bytes": len(stored_bytes)}
+                        if _audit_privacy_minimal
+                        else {}
+                    ),
                     "supersession_relation": supersession.relation,
                     "supersession_confidence": supersession.confidence,
                 },
@@ -989,34 +1084,37 @@ async def add_memory(
 
             # Fan out webhook events for the write outcome. dispatch_event is a
             # no-op when no endpoint subscribes, so this is safe on every write.
-            from .webhook_service import dispatch_event, MEMORY_SUPERSEDED, MEMORY_CONFLICT
-            if supersession.superseded_ids:
-                await dispatch_event(db, namespace, MEMORY_SUPERSEDED, {
-                    "agent_id": req.agent_id,
-                    "new_memory_id": str(mem.id),
-                    "superseded_ids": [str(i) for i in supersession.superseded_ids],
-                    "relation": supersession.relation,
-                    "confidence": supersession.confidence,
-                }, barrier_group=barrier_group)
-            if supersession.conflict_ids:
-                await dispatch_event(db, namespace, MEMORY_CONFLICT, {
-                    "agent_id": req.agent_id,
-                    "new_memory_id": str(mem.id),
-                    "conflict_ids": [str(i) for i in supersession.conflict_ids],
-                    "confidence": supersession.confidence,
-                }, barrier_group=barrier_group)
+            if not _audit_privacy_minimal:
+                from .webhook_service import dispatch_event, MEMORY_CONFLICT, MEMORY_SUPERSEDED
 
-            from .metering import enqueue_usage_event, get_customer_id
-            customer_id = await get_customer_id(db, namespace)
-            if customer_id:
-                await enqueue_usage_event(
-                    db,
-                    namespace=namespace,
-                    event_name=settings.stripe_meter_write_event,
-                    customer_id=customer_id,
-                    quantity=1,
-                    identifier=f"w:{mem.id}",
-                )
+                if supersession.superseded_ids:
+                    await dispatch_event(db, namespace, MEMORY_SUPERSEDED, {
+                        "agent_id": req.agent_id,
+                        "new_memory_id": str(mem.id),
+                        "superseded_ids": [str(i) for i in supersession.superseded_ids],
+                        "relation": supersession.relation,
+                        "confidence": supersession.confidence,
+                    }, barrier_group=barrier_group)
+                if supersession.conflict_ids:
+                    await dispatch_event(db, namespace, MEMORY_CONFLICT, {
+                        "agent_id": req.agent_id,
+                        "new_memory_id": str(mem.id),
+                        "conflict_ids": [str(i) for i in supersession.conflict_ids],
+                        "confidence": supersession.confidence,
+                    }, barrier_group=barrier_group)
+
+                from .metering import enqueue_usage_event, get_customer_id
+
+                customer_id = await get_customer_id(db, namespace)
+                if customer_id:
+                    await enqueue_usage_event(
+                        db,
+                        namespace=namespace,
+                        event_name=settings.stripe_meter_write_event,
+                        customer_id=customer_id,
+                        quantity=1,
+                        identifier=f"w:{mem.id}",
+                    )
 
             # Materialize the response while the instance is live. Supported
             # session factories use expire_on_commit=False, but avoiding a
@@ -1054,6 +1152,8 @@ async def add_memory_idempotent(
     idempotency_key: Optional[str],
     *,
     barrier_override: Optional[str] = None,
+    _audit_privacy_minimal: bool = False,
+    _audit_hmac_secret: str | None = None,
 ) -> MemoryOut:
     """
     Idempotent wrapper around :func:`add_memory`.
@@ -1067,12 +1167,21 @@ async def add_memory_idempotent(
     server-side but whose response was lost to a network blip is not duplicated.
     """
     if not idempotency_key:
-        return await add_memory(db, namespace, req, barrier_override=barrier_override)
+        return await add_memory(
+            db,
+            namespace,
+            req,
+            barrier_override=barrier_override,
+            _audit_privacy_minimal=_audit_privacy_minimal,
+            _audit_hmac_secret=_audit_hmac_secret,
+        )
 
     existing = await db.get(IdempotencyKey, (idempotency_key, namespace))
     if existing is not None:
         mem = await db.get(Memory, existing.memory_id)
         if mem is not None:
+            if mem.erased_at is not None:
+                raise IdempotencyMemoryErasedError
             await flush_pending_recall_invalidations(
                 db,
                 namespace,
@@ -1091,6 +1200,8 @@ async def add_memory_idempotent(
             req,
             barrier_override=barrier_override,
             idempotency_key=idempotency_key,
+            _audit_privacy_minimal=_audit_privacy_minimal,
+            _audit_hmac_secret=_audit_hmac_secret,
         )
     except IntegrityError:
         # Lost a race with a concurrent identical request — return the winner's row.
@@ -1099,6 +1210,8 @@ async def add_memory_idempotent(
         if existing is not None:
             mem = await db.get(Memory, existing.memory_id)
             if mem is not None:
+                if mem.erased_at is not None:
+                    raise IdempotencyMemoryErasedError
                 await flush_pending_recall_invalidations(
                     db,
                     namespace,
@@ -1405,6 +1518,8 @@ async def assemble_context(
     req: "ContextRequest",
     *,
     barrier_override: Optional[str] = None,
+    audit_privacy_minimal: bool = False,
+    audit_hmac_secret: str | None = None,
 ) -> "ContextResult":
     """Compile bounded, attributed, outcome-aware context inside the engine."""
     from .experience_service import learning_adjustments
@@ -1428,6 +1543,8 @@ async def assemble_context(
             mode=req.mode,
         ),
         barrier_override=barrier_override,
+        audit_privacy_minimal=audit_privacy_minimal,
+        audit_hmac_secret=audit_hmac_secret,
     )
     # recall evidence commits its own transaction. Re-establish the RLS/app
     # barrier before any context-only queries and fail closed if an assignment
@@ -1443,7 +1560,7 @@ async def assemble_context(
     # Recall committed its evidence before this transaction resumed. Rebuild
     # every neighbor attachment under the newly resolved barrier so a public
     # top-level hit cannot carry plaintext from an old barrier assignment.
-    if result.memories:
+    if result.memories and not audit_privacy_minimal:
         pinned_raw = result.receipt.get("reference_time")
         try:
             pinned_reference = datetime.fromisoformat(str(pinned_raw))
@@ -1459,11 +1576,15 @@ async def assemble_context(
             reference_time=pinned_reference,
             barrier_group=effective_barrier,
         )
-    adjustments = await learning_adjustments(
-        db,
-        namespace,
-        req.agent_id,
-        [memory.id for memory in result.memories],
+    adjustments = (
+        {}
+        if audit_privacy_minimal
+        else await learning_adjustments(
+            db,
+            namespace,
+            req.agent_id,
+            [memory.id for memory in result.memories],
+        )
     )
     for memory in result.memories:
         base_score = float(memory.score or 0.0)
@@ -1676,6 +1797,8 @@ async def recall_memories(
     req: RecallRequest,
     *,
     barrier_override: Optional[str] = None,
+    audit_privacy_minimal: bool = False,
+    audit_hmac_secret: str | None = None,
 ) -> RecallResult:
     _recall_t0 = _time.perf_counter()
     with tracer.start_as_current_span("memory.recall") as span:
@@ -1731,9 +1854,13 @@ async def recall_memories(
         # invalidation. Keep those agents off the shared result cache; their
         # bounded working set retains the row and re-applies the exact request
         # reference time on every recall.
-        cache_eligible = execution["mode"] == "fast" and len(plan.variants) == 1
+        cache_eligible = (
+            not audit_privacy_minimal
+            and execution["mode"] == "fast"
+            and len(plan.variants) == 1
+        )
         has_future_live_fact = False
-        if not req.as_of:
+        if not req.as_of and not audit_privacy_minimal:
             future_conditions = [
                 LiveFact.namespace == namespace,
                 LiveFact.agent_id == req.agent_id,
@@ -1801,6 +1928,8 @@ async def recall_memories(
                         retrieval_degraded=cached_result.retrieval_degraded,
                         router="cache",
                         filters=request_filters,
+                        privacy_minimal=audit_privacy_minimal,
+                        privacy_hmac_secret=audit_hmac_secret,
                     )
                     elapsed = _time.perf_counter() - _recall_t0
                     cached_result.latency_ms = round(elapsed * 1000, 3)
@@ -1914,6 +2043,8 @@ async def recall_memories(
                                 retrieval_degraded=False,
                                 router="keyed",
                                 filters=request_filters,
+                                privacy_minimal=audit_privacy_minimal,
+                                privacy_hmac_secret=audit_hmac_secret,
                             )
                             elapsed = _time.perf_counter() - _recall_t0
                             result.latency_ms = round(elapsed * 1000, 3)
@@ -1974,7 +2105,7 @@ async def recall_memories(
         # play to avoid serving one barrier's working set to another.
         live_facts_cache: Optional[list] = None
         working_set_admitted = False
-        if not req.as_of:
+        if not req.as_of and not audit_privacy_minimal:
             from .current_facts import fetch_working_set
             if (
                 effective_barrier is not None
@@ -2118,7 +2249,7 @@ async def recall_memories(
                     mem_out.metadata["_retrieval_scopes"] = scopes
                 memories_out.append(mem_out)
 
-        if execution["include_context"] and memories_out:
+        if execution["include_context"] and memories_out and not audit_privacy_minimal:
             with tracer.start_as_current_span("recall.context"):
                 await _attach_context(
                     db, namespace, req.agent_id, memories_out, subject_keys,
@@ -2147,6 +2278,8 @@ async def recall_memories(
             retrieval_degraded=retrieval_degraded,
             router="semantic",
             filters=request_filters,
+            privacy_minimal=audit_privacy_minimal,
+            privacy_hmac_secret=audit_hmac_secret,
         )
 
         latency_ms = round((_time.perf_counter() - _recall_t0) * 1000, 3)
@@ -2505,10 +2638,24 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
     result = await db.execute(stmt)
     memories = result.scalars().all()
 
+    hosted_mcp_namespace = namespace.startswith("openai-mcp-")
+    hosted_subject_candidates: set[str] = set()
     pruned_by_agent: dict[str, list[UUID]] = {}
     for mem in memories:
         mem.content_encrypted = None
         mem.embedding = None
+        hosted_mcp_memory = (
+            hosted_mcp_namespace
+            and mem.source == "openai-universal-mcp"
+            and (mem.subject_id or "").startswith("openai-mcp-memory:")
+        )
+        if hosted_mcp_memory:
+            # Hosted MCP metadata is user-selected memory data, not durable
+            # compliance metadata. Its per-memory subject key must be shredded
+            # as part of TTL expiry so neither ciphertext nor derived fields can
+            # be recovered after retention ends.
+            mem.metadata_ = {}
+            hosted_subject_candidates.add(mem.subject_id)
         mem.erased_at = now
         pruned_by_agent.setdefault(mem.agent_id, []).append(mem.id)
         await chain_log(
@@ -2517,6 +2664,32 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
             content_hash=mem.content_hash,
             payload={"cutoff_date": cutoff.isoformat(), "content_ttl_days": pol.content_ttl_days},
         )
+
+    hosted_subject_ids = set(hosted_subject_candidates)
+    if hosted_subject_candidates:
+        # Hosted writes currently allocate one subject per memory. Still fail
+        # safe if legacy or manually provisioned data reused a subject: an
+        # expired row must never shred a key needed by fresh content.
+        active_subjects = set(
+            (
+                await db.execute(
+                    select(Memory.subject_id).where(
+                        and_(
+                            Memory.namespace == namespace,
+                            Memory.subject_id.in_(hosted_subject_candidates),
+                            Memory.content_encrypted.is_not(None),
+                            Memory.erased_at.is_(None),
+                        )
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        hosted_subject_ids.difference_update(active_subjects)
+
+    for subject_id in sorted(hosted_subject_ids):
+        await destroy_subject_key(db, subject_id, namespace)
 
     # Same tombstone hazard as erase_subject: pruned content must leave the
     # present-time read model and caches, or recall returns empty husks.
@@ -2539,6 +2712,8 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
 
     await db.commit()
 
+    for subject_id in hosted_subject_ids:
+        evict_dek(namespace, subject_id)
     for aid in pruned_by_agent:
         invalidate_working_set(namespace, aid)
     for job in invalidation_jobs:
@@ -2552,6 +2727,8 @@ async def erase_subject(
     namespace: str,
     subject_id: str,
     request_ref: str,
+    *,
+    audit_privacy_minimal: bool = False,
 ) -> int:
     operation_ref = invalidation_reference(
         "privacy.erase", subject_id, request_ref,
@@ -2590,7 +2767,11 @@ async def erase_subject(
             db, namespace=namespace, agent_id=mem.agent_id,
             op="erase", memory_id=mem.id,
             content_hash=mem.content_hash,
-            payload={"subject_id": subject_id, "request_ref": request_ref},
+            payload=(
+                {"privacy_minimal": True}
+                if audit_privacy_minimal
+                else {"subject_id": subject_id, "request_ref": request_ref}
+            ),
         )
 
     # Purge the denormalized present-time read model. Without this the next
@@ -2612,7 +2793,7 @@ async def erase_subject(
         for agent_id in sorted(agent_ids)
     ]
 
-    if memories:
+    if memories and not audit_privacy_minimal:
         from .webhook_service import dispatch_event, MEMORY_ERASED
         await dispatch_event(db, namespace, MEMORY_ERASED, {
             "subject_id": subject_id,

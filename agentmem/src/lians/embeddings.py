@@ -3,11 +3,66 @@ import asyncio
 import hashlib
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, List
 from .config import get_settings
+
+
+class EmbeddingWorkloadSaturatedError(RuntimeError):
+    """No bounded native-inference slot became available in time."""
+
+
+class _BoundedInferenceExecutor:
+    """Keep capacity occupied until native work actually finishes."""
+
+    def __init__(self, *, max_workers: int, queue_timeout: float | None) -> None:
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="lians-embedding",
+        )
+        self._slots = asyncio.BoundedSemaphore(max_workers)
+        self._queue_timeout = queue_timeout
+
+    async def run(self, function):
+        try:
+            if self._queue_timeout is None:
+                await self._slots.acquire()
+            else:
+                await asyncio.wait_for(
+                    self._slots.acquire(),
+                    timeout=self._queue_timeout,
+                )
+        except TimeoutError as exc:
+            raise EmbeddingWorkloadSaturatedError(
+                "Embedding capacity is temporarily saturated"
+            ) from exc
+
+        loop = asyncio.get_running_loop()
+        try:
+            concurrent_future = self._executor.submit(function)
+        except Exception:
+            self._slots.release()
+            raise
+
+        def release_slot(_future) -> None:
+            loop.call_soon_threadsafe(self._slots.release)
+
+        concurrent_future.add_done_callback(release_slot)
+        return await asyncio.shield(asyncio.wrap_future(concurrent_future))
+
+
+def _inference_executor(settings) -> _BoundedInferenceExecutor:
+    hosted = getattr(settings, "hosted_mcp_enabled", False) is True
+    workers = int(settings.hosted_mcp_max_concurrent_inference) if hosted else 4
+    queue_timeout = (
+        float(settings.hosted_mcp_inference_queue_timeout_seconds)
+        if hosted
+        else None
+    )
+    return _BoundedInferenceExecutor(max_workers=workers, queue_timeout=queue_timeout)
 
 
 class EmbeddingProvider(ABC):
@@ -91,12 +146,20 @@ class SentenceTransformerProvider(EmbeddingProvider):
     def __init__(self):
         settings = get_settings()
         self._model_name = settings.sentence_transformer_model
+        self._model_revision = settings.sentence_transformer_revision
         self._model = None
         self._load_lock = asyncio.Lock()
+        self._executor = _inference_executor(settings)
+        self._load_task: asyncio.Task | None = None
 
     def _load(self):
         from sentence_transformers import SentenceTransformer
-        model = SentenceTransformer(self._model_name)
+        model_kwargs = (
+            {"revision": self._model_revision}
+            if self._model_revision
+            else {}
+        )
+        model = SentenceTransformer(self._model_name, **model_kwargs)
         # Cap the sequence length: long-context models (arctic: 8192) accept
         # pasted-document-sized inputs whose attention buffers OOM commodity
         # machines (one 8k-token text = ~1GB). 512 tokens is the standard
@@ -126,8 +189,9 @@ class SentenceTransformerProvider(EmbeddingProvider):
         async with self._load_lock:
             if self._model is not None:
                 return self._model
-            loop = asyncio.get_event_loop()
-            self._model = await loop.run_in_executor(None, self._load)
+            if self._load_task is None:
+                self._load_task = asyncio.create_task(self._executor.run(self._load))
+            self._model = await asyncio.shield(self._load_task)
             return self._model
 
     # Asymmetric retrieval models embed *queries* with a trained instruction
@@ -141,11 +205,8 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
     async def embed(self, texts: List[str]) -> List[List[float]]:
         model = await self._get_model()
-        loop = asyncio.get_event_loop()
-        # Run blocking CPU inference off the event loop thread.
-        result = await loop.run_in_executor(
-            None,
-            lambda: model.encode(texts, normalize_embeddings=True).tolist(),
+        result = await self._executor.run(
+            lambda: model.encode(texts, normalize_embeddings=True).tolist()
         )
         return result
 
@@ -201,6 +262,8 @@ class BgeOnnxProvider(EmbeddingProvider):
         self._configured_dimension = settings.embedding_dim
         self._runtime: _BgeOnnxRuntime | None = None
         self._load_lock = asyncio.Lock()
+        self._executor = _inference_executor(settings)
+        self._load_task: asyncio.Task | None = None
 
     def _load(self) -> _BgeOnnxRuntime:
         from .bge_onnx import (
@@ -266,8 +329,9 @@ class BgeOnnxProvider(EmbeddingProvider):
             return self._runtime
         async with self._load_lock:
             if self._runtime is None:
-                loop = asyncio.get_running_loop()
-                self._runtime = await loop.run_in_executor(None, self._load)
+                if self._load_task is None:
+                    self._load_task = asyncio.create_task(self._executor.run(self._load))
+                self._runtime = await asyncio.shield(self._load_task)
             return self._runtime
 
     @staticmethod
@@ -304,8 +368,7 @@ class BgeOnnxProvider(EmbeddingProvider):
         if not texts:
             return []
         runtime = await self._get_runtime()
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._encode_sync, runtime, texts)
+        return await self._executor.run(lambda: self._encode_sync(runtime, texts))
 
     async def embed_query(self, text: str) -> List[float]:
         from .bge_onnx import BGE_ONNX_QUERY_INSTRUCTION

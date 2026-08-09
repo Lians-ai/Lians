@@ -29,6 +29,7 @@ class TestSentenceTransformerProvider:
         with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model=model_name,
+                sentence_transformer_revision="",
                 embedding_dim=1024,
             )
             provider = SentenceTransformerProvider()
@@ -66,6 +67,7 @@ class TestSentenceTransformerProvider:
         with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model="BAAI/bge-large-en-v1.5",
+                sentence_transformer_revision="",
                 embedding_dim=1024,
             )
             provider = SentenceTransformerProvider()
@@ -80,6 +82,7 @@ class TestSentenceTransformerProvider:
         with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model="some-384-dim-model",
+                sentence_transformer_revision="",
                 embedding_dim=1024,
             )
             provider = SentenceTransformerProvider()
@@ -104,6 +107,7 @@ class TestSentenceTransformerProvider:
         with patch("src.lians.config.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(
                 sentence_transformer_model="BAAI/bge-large-en-v1.5",
+                sentence_transformer_revision="",
                 embedding_dim=1024,
             )
             provider = SentenceTransformerProvider()
@@ -116,6 +120,31 @@ class TestSentenceTransformerProvider:
         with patch.dict("sys.modules", {"sentence_transformers": fake_st_module}):
             assert provider._load() is model
         model.encode.assert_not_called()
+
+    def test_pinned_revision_is_forwarded_to_sentence_transformers(self):
+        from src.lians.embeddings import SentenceTransformerProvider
+
+        revision = "d4aa6901d3a41ba39fb536a557fa166f842b0e09"
+        with patch("src.lians.embeddings.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                sentence_transformer_model="BAAI/bge-large-en-v1.5",
+                sentence_transformer_revision=revision,
+                embedding_dim=1024,
+            )
+            provider = SentenceTransformerProvider()
+
+        fake_st_module = types.ModuleType("sentence_transformers")
+        model = MagicMock()
+        model.get_sentence_embedding_dimension.return_value = 1024
+        constructor = MagicMock(return_value=model)
+        fake_st_module.SentenceTransformer = constructor
+
+        with patch.dict("sys.modules", {"sentence_transformers": fake_st_module}):
+            assert provider._load() is model
+        constructor.assert_called_once_with(
+            "BAAI/bge-large-en-v1.5",
+            revision=revision,
+        )
 
     async def test_background_warmup_does_not_block_startup(self):
         """Scheduling warmup returns while a slow provider is still working."""
@@ -136,7 +165,45 @@ class TestSentenceTransformerProvider:
         await asyncio.sleep(0)
         assert not task.done()
         release.set()
-        await task
+        assert await task is True
+
+    async def test_cancelled_embedding_waiter_keeps_native_capacity_occupied(self):
+        """Cancellation must not admit new work while the native thread runs."""
+        import threading
+
+        from src.lians.embeddings import (
+            EmbeddingWorkloadSaturatedError,
+            _BoundedInferenceExecutor,
+        )
+
+        started = threading.Event()
+        release = threading.Event()
+        executor = _BoundedInferenceExecutor(max_workers=1, queue_timeout=0.02)
+
+        def blocking_work():
+            started.set()
+            release.wait(timeout=2)
+            return "done"
+
+        running = asyncio.create_task(executor.run(blocking_work))
+        while not started.is_set():
+            await asyncio.sleep(0)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        with pytest.raises(EmbeddingWorkloadSaturatedError):
+            await executor.run(lambda: "must-not-run")
+
+        release.set()
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            try:
+                assert await executor.run(lambda: "next") == "next"
+                break
+            except EmbeddingWorkloadSaturatedError:
+                continue
+        else:
+            pytest.fail("native inference slot was not released after completion")
 
     def test_provider_registered_in_get_provider(self):
         """get_provider() must return SentenceTransformerProvider for the right key."""
@@ -146,6 +213,7 @@ class TestSentenceTransformerProvider:
             mock_settings.return_value = MagicMock(
                 embedding_provider="sentence-transformers",
                 sentence_transformer_model="BAAI/bge-large-en-v1.5",
+                sentence_transformer_revision="",
             )
             from src.lians.embeddings import get_provider
             provider = get_provider()
