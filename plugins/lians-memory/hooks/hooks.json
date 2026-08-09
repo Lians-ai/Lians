@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "/bin/sh \"${PLUGIN_ROOT}/scripts/run_hook.sh\" prewarm",
-            "commandWindows": "\"%SystemRoot%\\System32\\cmd.exe\" /d /q /e:on /v:off /s /c \"\"%PLUGIN_ROOT%\\scripts\\run_hook.cmd\" prewarm\"",
+            "commandWindows": "& \"$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$env:PLUGIN_ROOT\\scripts\\run_hook.ps1\" -Action prewarm",
             "timeout": 180,
             "statusMessage": "Prewarming Lians project memory"
           }
@@ -21,7 +21,7 @@
           {
             "type": "command",
             "command": "/bin/sh \"${PLUGIN_ROOT}/scripts/run_hook.sh\" hook",
-            "commandWindows": "\"%SystemRoot%\\System32\\cmd.exe\" /d /q /e:on /v:off /s /c \"\"%PLUGIN_ROOT%\\scripts\\run_hook.cmd\" hook\"",
+            "commandWindows": "& \"$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$env:PLUGIN_ROOT\\scripts\\run_hook.ps1\" -Action hook",
             "timeout": 120,
             "statusMessage": "Recalling Lians project memory",
             "additionalContextLimit": 768

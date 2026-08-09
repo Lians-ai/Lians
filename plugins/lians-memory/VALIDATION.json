@@ -53,13 +53,37 @@
     "untrusted_project_env_ignored": true,
     "private_mcp_runtime_env_absent": true,
     "hook_inventory_present": true,
-    "app_server_hook_dispatch_observed_on_this_host": false,
+    "app_server_hook_dispatch_observed_on_this_host": true,
+    "app_server_hook_completion_success_observed_for_current_windows_command": true,
+    "windows_hook_command_uses_default_powershell_contract": true,
     "codex_exec_hook_dispatch_observed_on_this_host": false,
     "paid_installed_plugin_candidates_reviewed": 1,
     "paid_installed_plugin_candidates_accepted": 0,
     "paid_installed_plugin_candidates_rejected": 1,
-    "paid_candidate_rejection_reason": "the host did not dispatch the trusted installed-plugin hook",
+    "paid_candidate_rejection_reason": "the prior Windows hook command used cmd syntax under Codex PowerShell and exited nonzero before the baseline; the candidate turn produced no terminal usage event",
     "accepted_installed_plugin_economics_result_exists": false
+  },
+  "installed_app_server_hook_proof": {
+    "status": "passed",
+    "installed_cache_version": "0.1.0+codex.20260809062150",
+    "provider_boundary": "dead loopback at 127.0.0.1:9",
+    "hook_inventory_count": 2,
+    "all_enabled": true,
+    "all_trusted": true,
+    "exact_installed_cache_source": true,
+    "event_order": [
+      "SessionStart:started",
+      "SessionStart:completed",
+      "UserPromptSubmit:started",
+      "UserPromptSubmit:completed"
+    ],
+    "session_start_duration_ms": 6266,
+    "user_prompt_submit_duration_ms": 851,
+    "turn_interrupt_acknowledged": true,
+    "external_provider_responses": 0,
+    "model_messages": 0,
+    "usage_notifications": 0,
+    "paid_model_calls": 0
   },
   "controlled_usage_evidence": {
     "status": "prior checkout-hook workload; pending packaged end-to-end reproduction",
@@ -101,10 +125,10 @@
   },
   "limitations": [
     "The runtime code bundled here was installed and measured directly from the Codex cache at version 0.1.0+codex.20260809040627; this evidence refresh changes only package metadata and documentation. The Windows-installed .cmd wrapper uses CRLF while the Git blob uses LF, and both raw hashes are recorded.",
-    "Hook files are present and contract-tested, but neither app-server nor codex exec dispatched the installed-plugin hook on this host.",
-    "The one reviewed paid installed-plugin candidate was rejected, so no installed-plugin economics result was accepted.",
+    "The prior Windows command used cmd syntax under Codex's default PowerShell shell and exited with code 1. The replacement PowerShell command and raw-byte stdin forwarding passed installed post-trust App Server lifecycle proof.",
+    "The one reviewed paid installed-plugin candidate was rejected before the baseline and produced no terminal usage event, so no installed-plugin economics result was accepted.",
     "The 2.035x result applies only to one four-run Sol Ultra checkout-hook workload using estimated credits; it does not establish universal prompt savings or a Codex quota increase.",
     "The 6.091-second prewarm misses the 3.5-second cold-start target; only the prewarmed direct hook achieved a 1.071-second p95 on this sequential workload.",
-    "No evidence here establishes Codex host dispatch, overall response-time improvement, concurrent-task latency, or an every-prompt benefit."
+    "The dead-loopback App Server proof establishes installed hook dispatch and completion only; it does not establish overall response-time improvement, concurrent-task latency, or an every-prompt benefit."
   ]
 }

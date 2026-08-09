@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 
@@ -80,8 +79,9 @@ def test_hooks_use_bundled_launcher_and_bound_context() -> None:
     assert session_hook["command"].startswith('/bin/sh "${PLUGIN_ROOT}')
     assert "uv" not in session_hook["command"]
     assert session_hook["commandWindows"] == (
-        '"%SystemRoot%\\System32\\cmd.exe" /d /q /e:on /v:off /s /c '
-        '""%PLUGIN_ROOT%\\scripts\\run_hook.cmd" prewarm"'
+        '& "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
+        '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass '
+        '-File "$env:PLUGIN_ROOT\\scripts\\run_hook.ps1" -Action prewarm'
     )
 
     [prompt_group] = document["hooks"]["UserPromptSubmit"]
@@ -89,8 +89,9 @@ def test_hooks_use_bundled_launcher_and_bound_context() -> None:
     assert prompt_hook["command"].endswith('run_hook.sh" hook')
     assert "uv" not in prompt_hook["command"]
     assert prompt_hook["commandWindows"] == (
-        '"%SystemRoot%\\System32\\cmd.exe" /d /q /e:on /v:off /s /c '
-        '""%PLUGIN_ROOT%\\scripts\\run_hook.cmd" hook"'
+        '& "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
+        '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass '
+        '-File "$env:PLUGIN_ROOT\\scripts\\run_hook.ps1" -Action hook'
     )
     assert prompt_hook["additionalContextLimit"] == 768
     assert "matcher" not in prompt_group
@@ -98,8 +99,9 @@ def test_hooks_use_bundled_launcher_and_bound_context() -> None:
     assert (PLUGIN_ROOT / "scripts/run_hook.ps1").is_file()
     assert (PLUGIN_ROOT / "scripts/run_hook.cmd").is_file()
     powershell_wrapper = (PLUGIN_ROOT / "scripts/run_hook.ps1").read_text(encoding="utf-8")
-    assert "[Console]::In.ReadToEnd()" in powershell_wrapper
-    assert "$payload | & $python -B $launcher $Action" in powershell_wrapper
+    assert "[Console]::OpenStandardInput().CopyTo($payloadStream)" in powershell_wrapper
+    assert "$payloadStream.ToArray()" in powershell_wrapper
+    assert "$process.StandardInput.BaseStream.Write" in powershell_wrapper
     cmd_wrapper = (PLUGIN_ROOT / "scripts/run_hook.cmd").read_text(encoding="utf-8")
     assert "setlocal EnableExtensions DisableDelayedExpansion" in cmd_wrapper
     assert "setlocal EnableDelayedExpansion" in cmd_wrapper
@@ -120,19 +122,23 @@ def test_hooks_use_bundled_launcher_and_bound_context() -> None:
         assert variable in shell_wrapper
 
 
-def _windows_hook_command(plugin_root: Path, action: str) -> str:
+def _windows_hook_command(plugin_root: Path, action: str) -> list[str]:
     if os.name != "nt":
         pytest.skip("Windows hook wrapper contract")
     system_root = os.environ.get("SystemRoot", "")
     if not Path(system_root).is_absolute():
         pytest.skip("Windows SystemRoot is unavailable")
+    powershell = Path(system_root) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    if not powershell.is_file():
+        pytest.skip("trusted Windows PowerShell is unavailable")
     document = _json("hooks/hooks.json")
     event = "SessionStart" if action == "prewarm" else "UserPromptSubmit"
     [group] = document["hooks"][event]
     [hook] = group["hooks"]
-    return hook["commandWindows"].replace("%SystemRoot%", system_root).replace(
-        "%PLUGIN_ROOT%", str(plugin_root)
-    )
+    command = hook["commandWindows"]
+    command = command.replace("$env:SystemRoot", system_root)
+    command = command.replace("$env:PLUGIN_ROOT", str(plugin_root))
+    return [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
 
 
 def test_isolated_first_run_launcher_ignores_hostile_pythonpath(tmp_path: Path) -> None:
@@ -191,21 +197,13 @@ def test_posix_hook_uses_only_absolute_native_base_and_scrubs_python_import_env(
     marker = tmp_path / "trusted-marker"
     trusted_python.write_text(
         "#!/bin/sh\n"
-        "printf '%s\\n' \"${PYTHONPATH-unset}\" \"${PYTHONHOME-unset}\" "
-        "\"${PYTHONNOUSERSITE-unset}\" \"${PYTHONSAFEPATH-unset}\" > \"$MARKER\"\n",
+        'printf \'%s\\n\' "${PYTHONPATH-unset}" "${PYTHONHOME-unset}" '
+        '"${PYTHONNOUSERSITE-unset}" "${PYTHONSAFEPATH-unset}" > "$MARKER"\n',
         encoding="utf-8",
     )
     trusted_python.chmod(0o700)
     project = tmp_path / "project"
-    trap_python = (
-        project
-        / "relative-base"
-        / "lians"
-        / "codex-memory"
-        / "venv"
-        / "bin"
-        / "python"
-    )
+    trap_python = project / "relative-base" / "lians" / "codex-memory" / "venv" / "bin" / "python"
     trap_python.parent.mkdir(parents=True)
     trap_marker = tmp_path / "trap-marker"
     trap_python.write_text(
@@ -279,8 +277,8 @@ def test_windows_hook_rejects_relative_localappdata_project_trap(tmp_path: Path)
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows cmd hook wrapper contract")
-def test_windows_cmd_hook_fails_open_for_missing_or_hostile_native_configuration(
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell hook wrapper contract")
+def test_windows_hook_fails_open_for_missing_or_hostile_native_configuration(
     tmp_path: Path,
 ) -> None:
     project = tmp_path / "hostile-project"
@@ -292,10 +290,7 @@ def test_windows_cmd_hook_fails_open_for_missing_or_hostile_native_configuration
     )
     injected = tmp_path / "environment-injection-ran"
     hostile_absolute = (
-        str(tmp_path / "hostile-native")
-        + '" & echo injected>"'
-        + str(injected)
-        + '" & rem "'
+        str(tmp_path / "hostile-native") + '" & echo injected>"' + str(injected) + '" & rem "'
     )
     configurations: tuple[tuple[str | None, str | None], ...] = (
         (None, None),
@@ -340,9 +335,9 @@ def test_windows_cmd_hook_fails_open_for_missing_or_hostile_native_configuration
         assert not injected.exists()
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows cmd hook wrapper contract")
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell hook wrapper contract")
 @pytest.mark.parametrize("native_source", ["localappdata", "userprofile"])
-def test_windows_cmd_hook_inherits_stdin_and_scrubs_environment(
+def test_windows_hook_inherits_stdin_and_scrubs_environment(
     tmp_path: Path,
     native_source: str,
 ) -> None:
@@ -355,16 +350,14 @@ def test_windows_cmd_hook_inherits_stdin_and_scrubs_environment(
         native_base = profile / "AppData" / "Local"
         local_app_data = "relative-local-trap"
         user_profile = str(profile)
-    trusted_python = (
-        native_base / "Lians" / "CodexMemory" / "venv" / "Scripts" / "python.exe"
-    )
+    trusted_python = native_base / "Lians" / "CodexMemory" / "venv" / "Scripts" / "python.exe"
     if not native_base.is_absolute() or not trusted_python.is_file():
         pytest.skip("a configured native Lians Python is required for the wrapper integration")
 
     fake_plugin = tmp_path / "trusted plugin & root"
     scripts = fake_plugin / "scripts"
     scripts.mkdir(parents=True)
-    shutil.copy2(PLUGIN_ROOT / "scripts/run_hook.cmd", scripts / "run_hook.cmd")
+    shutil.copy2(PLUGIN_ROOT / "scripts/run_hook.ps1", scripts / "run_hook.ps1")
     (scripts / "lians_plugin.py").write_text(
         "import base64, json, os, sys\n"
         "print(json.dumps({\n"
@@ -386,7 +379,11 @@ def test_windows_cmd_hook_inherits_stdin_and_scrubs_environment(
         "raise RuntimeError('project launcher trap executed')\n",
         encoding="utf-8",
     )
-    payload = b'stdin bytes: & | < > ^ ! % "\r\nsecond line\x00tail'
+    payload = (
+        b'stdin bytes: & | < > ^ ! % "\r\nsecond line '
+        + "café λ 🪷".encode()
+        + b"\x00tail"
+    )
     environ = dict(os.environ)
     environ.update(
         {
@@ -441,9 +438,7 @@ def test_bundled_wheel_matches_provenance_and_metadata() -> None:
             name for name in names if name.endswith(".dist-info/entry_points.txt")
         )
         entry_points = archive.read(entry_points_name).decode("utf-8")
-        license_name = next(
-            name for name in names if name.endswith(".dist-info/licenses/LICENSE")
-        )
+        license_name = next(name for name in names if name.endswith(".dist-info/licenses/LICENSE"))
         license_bytes = archive.read(license_name)
     assert "Name: lians-sdk\n" in metadata
     assert f"Version: {artifact['sdk_version']}\n" in metadata

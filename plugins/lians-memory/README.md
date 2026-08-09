@@ -26,9 +26,14 @@ was recalled; the plaintext marker was absent from SQLite; dynamic MCP
 `--check` passed; and every hashed wheel RECORD entry plus the embedded license
 was verified. A separate clean frozen plugin-runtime sync imported `greenlet`
 successfully. The plugin package suite passed 75 tests with 7 optional-platform
-skips. Hook inventory is present, but this host did not dispatch the installed
-plugin hooks through either the app server or `codex exec`. One paid candidate
-was rejected for that reason, so there is no accepted installed-plugin
+skips. App Server did dispatch the installed hooks, but the prior Windows hook
+command used cmd syntax under Codex's default PowerShell shell and exited with
+code 1. This bundle replaces it with a contract-tested, absolute PowerShell
+launcher and raw-byte stdin forwarding. After upgrade and trust, a dead-loopback
+App Server proof completed exactly one SessionStart hook in 6.266 seconds and
+one UserPromptSubmit hook in 0.851 seconds, in order, with zero model messages,
+usage notifications, or provider responses. One earlier paid candidate was
+rejected before the baseline, so there is still no accepted installed-plugin
 economics result.
 
 The runtime artifacts bundled here were also measured from the installed cache.

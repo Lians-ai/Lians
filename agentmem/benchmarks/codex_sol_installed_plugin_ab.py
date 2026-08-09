@@ -4,17 +4,22 @@ This is deliberately an *installed-plugin* harness.  One persistent
 ``codex app-server --strict-config`` stdio process loads the normal user config
 and enabled plugins; it never uses ``--ignore-user-config`` or
 ``--dangerously-bypass-hook-trust``.  Before either paid turn, the harness
-initializes JSON-RPC and verifies the installed-cache Lians hooks for both arm
-working directories.  The baseline project has an empty project-scoped memory
-database and receives the complete LOCOMO conversation.  The candidate project
-is seeded through the installed plugin's frozen runtime and receives only the
-question.  A model-free, already-trusted ``UserPromptSubmit`` hook must inject
-non-degraded memory for the candidate.
+initializes JSON-RPC and verifies the exact trusted installed-cache Lians hook
+inventory for both arm working directories.  It does not claim that inventory
+discovery dispatched a hook.  The baseline project has an empty project-scoped
+memory database and receives the complete LOCOMO conversation.  The candidate
+project is seeded through the installed plugin's frozen runtime and receives
+only the question.  Each live turn must emit exactly one installed-cache
+``SessionStart`` and ``UserPromptSubmit`` started/completed lifecycle; the
+candidate ``UserPromptSubmit`` must also leave a non-degraded injection receipt.
 
 Live execution is opt-in.  The default is a paid-call-free dry run.  Use
 ``--live --order ba`` for the strict two-call candidate-then-baseline suite.
 Reported Sol credits are estimates derived from Codex token telemetry, not a
-provider-reported quota debit, and the verdict applies only to this workload.
+provider-reported quota debit.  The configured credit threshold is checked only
+after each completed turn because App Server exposes no per-turn token or credit
+ceiling; a completed turn can overshoot it.  The verdict applies only to this
+workload.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import queue
 import re
@@ -61,7 +67,6 @@ DEFAULT_SUITE_CREDIT_CAP = 10.0
 SOL_CREDIT_RATES = {
     "uncached_input_credits_per_million": 125.0,
     "cached_input_credits_per_million": 12.5,
-    "cache_write_input_credits_per_million": 156.25,
     "output_credits_per_million": 750.0,
 }
 
@@ -74,6 +79,7 @@ APP_SERVER_CLIENT_TITLE = "Lians Installed Plugin A/B"
 APP_SERVER_CLIENT_VERSION = "1.0.0"
 EXPECTED_MODEL_PROVIDER = "openai"
 EXPECTED_HOOK_EVENTS = ("sessionStart", "userPromptSubmit")
+TURN_INTERRUPT_METHOD = "turn/interrupt"
 _RPC_EOF = object()
 
 _DATE_FORMATS = (
@@ -86,6 +92,15 @@ _DATE_FORMATS = (
 class BenchmarkError(RuntimeError):
     """Raised when a run cannot produce trustworthy comparable accounting."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        evidence: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.evidence = dict(evidence) if evidence is not None else None
+
 
 @dataclass(frozen=True)
 class Invocation:
@@ -95,6 +110,7 @@ class Invocation:
     wall_time_ms: float
     thread_start_wall_time_ms: float | None = None
     turn_wall_time_ms: float | None = None
+    hook_lifecycle: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -227,11 +243,14 @@ def _parse_events(stdout: bytes, label: str) -> list[dict[str, Any]]:
 
 
 def estimate_sol_credits(usage: Mapping[str, int]) -> float:
+    if usage.get("cache_write_input_tokens", 0) != 0:
+        raise BenchmarkError(
+            "cannot estimate Sol credits with nonzero cache-write input: "
+            "the official Codex rate card does not publish that rate"
+        )
     total = (
         usage["uncached_input_tokens"] * SOL_CREDIT_RATES["uncached_input_credits_per_million"]
         + usage["cached_input_tokens"] * SOL_CREDIT_RATES["cached_input_credits_per_million"]
-        + usage["cache_write_input_tokens"]
-        * SOL_CREDIT_RATES["cache_write_input_credits_per_million"]
         + usage["output_tokens"] * SOL_CREDIT_RATES["output_credits_per_million"]
     ) / 1_000_000
     return round(total, 9)
@@ -392,24 +411,28 @@ def _plugin_from_document(document: Mapping[str, Any]) -> InstalledPlugin:
     root_value = source.get("path") if isinstance(source, Mapping) else None
     if not isinstance(root_value, str) or not root_value:
         raise BenchmarkError(f"{PLUGIN_ID} has no installed source path")
-    source_root = Path(root_value).expanduser().resolve()
-    root = source_root
     marketplace_name = item.get("marketplaceName")
     plugin_name = item.get("name")
     version = item.get("version")
-    if all(isinstance(value, str) and value for value in (marketplace_name, plugin_name, version)):
-        homes: list[Path] = []
-        configured_home = os.environ.get("CODEX_HOME")
-        if configured_home:
-            homes.append(Path(configured_home).expanduser())
-        homes.append(Path.home() / ".codex")
-        for home in homes:
-            candidate = (
-                home / "plugins" / "cache" / str(marketplace_name) / str(plugin_name) / str(version)
-            )
-            if (candidate / ".codex-plugin" / "plugin.json").is_file():
-                root = candidate.resolve()
-                break
+    if not all(
+        isinstance(value, str) and value for value in (marketplace_name, plugin_name, version)
+    ):
+        raise BenchmarkError(f"{PLUGIN_ID} inventory omitted versioned cache coordinates")
+    homes: list[Path] = []
+    configured_home = os.environ.get("CODEX_HOME")
+    if configured_home:
+        homes.append(Path(configured_home).expanduser())
+    homes.append(Path.home() / ".codex")
+    root: Path | None = None
+    for home in homes:
+        candidate = (
+            home / "plugins" / "cache" / str(marketplace_name) / str(plugin_name) / str(version)
+        )
+        if (candidate / ".codex-plugin" / "plugin.json").is_file():
+            root = candidate.resolve()
+            break
+    if root is None:
+        raise BenchmarkError(f"{PLUGIN_ID} versioned installed cache is missing")
     manifest = root / ".codex-plugin" / "plugin.json"
     bootstrap = root / "scripts" / "bootstrap.py"
     hook = root / "runtime" / "user_prompt_submit_recall.py"
@@ -554,6 +577,31 @@ def _classify_subject_reference(
     )
 
 
+def _bge_artifact_identity(bootstrap: Any, artifact_dir: Path) -> dict[str, Any]:
+    manifest_path = artifact_dir / "manifest.json"
+    try:
+        document = json.loads(manifest_path.read_text(encoding="utf-8"))
+        model = document["model"]
+        tokenizer = document["tokenizer"]
+    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise BenchmarkError("verified BGE artifact manifest could not be read") from exc
+    if (
+        document.get("schema") != "lians.bge-onnx-artifact.v1"
+        or model.get("repository") != "BAAI/bge-large-en-v1.5"
+        or model.get("revision") != bootstrap.BGE_REVISION
+        or model.get("sha256") != bootstrap.BGE_MODEL_SHA256
+        or tokenizer.get("sha256") != bootstrap.BGE_TOKENIZER_SHA256
+    ):
+        raise BenchmarkError("seeded BGE artifact identity did not match the installed profile")
+    return {
+        "bge_artifact_manifest_sha256": _sha256_file(manifest_path),
+        "bge_model_repository": model.get("repository"),
+        "bge_model_revision": model["revision"],
+        "bge_model_sha256": model["sha256"],
+        "bge_tokenizer_sha256": tokenizer["sha256"],
+    }
+
+
 def _seed_candidate(
     bootstrap: Any,
     data_home: Path,
@@ -602,6 +650,13 @@ def _seed_candidate(
         raise BenchmarkError("installed-runtime seed was not project-subject scoped")
     if reported.get("embedding_provider") != "bge-onnx":
         raise BenchmarkError("installed-runtime seed did not use BGE ONNX")
+    artifact_dir = Path(child["BGE_ONNX_ARTIFACT_DIR"])
+    reported_artifact_dir = reported.get("bge_artifact_dir")
+    if not isinstance(reported_artifact_dir, str) or _path_key(reported_artifact_dir) != _path_key(
+        artifact_dir
+    ):
+        raise BenchmarkError("installed-runtime seed reported a different BGE artifact")
+    artifact_identity = _bge_artifact_identity(bootstrap, artifact_dir)
     if reported.get("unencrypted_allowed") != "false":
         raise BenchmarkError("installed-runtime seed did not enforce encryption")
     with sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True) as connection:
@@ -634,9 +689,7 @@ def _seed_candidate(
         "encrypted_rows": len(records),
         "plaintext_absent": True,
         "embedding_provider": "bge-onnx",
-        "bge_artifact_sha256": hashlib.sha256(
-            str(reported["bge_artifact_dir"]).encode()
-        ).hexdigest(),
+        **artifact_identity,
         "seed_wall_time_ms": round((time.perf_counter() - started) * 1000, 3),
     }
 
@@ -999,7 +1052,7 @@ def _validate_hook_preflight(
 def _preflight_app_server(
     client: AppServerClient,
     *,
-    prepared: PreparedProjects,
+    cwds: Sequence[Path],
     plugin: InstalledPlugin,
     timeout_seconds: float,
 ) -> dict[str, Any]:
@@ -1023,62 +1076,213 @@ def _preflight_app_server(
     if not isinstance(initialized.get("userAgent"), str):
         raise BenchmarkError("Codex app-server initialize omitted its user agent")
     client.notify("initialized")
-    cwds = (prepared.baseline_root.resolve(), prepared.candidate_root.resolve())
+    resolved_cwds = tuple(path.resolve() for path in cwds)
     hooks = client.request(
         "hooks/list",
-        {"cwds": [str(path) for path in cwds]},
+        {"cwds": [str(path) for path in resolved_cwds]},
         timeout_seconds=timeout_seconds,
         events=ignored,
     )
-    result = _validate_hook_preflight(hooks, cwds=cwds, plugin=plugin)
-    session_dispatch: list[dict[str, Any]] = []
-    for index, cwd in enumerate(cwds, start=1):
-        events: list[dict[str, Any]] = []
-        probe = RunSpec(
-            sequence=index,
-            mode="baseline" if index == 1 else "candidate",
-            repetition=0,
-            cwd=cwd,
-            prompt="",
-            receipt_path=prepared.baseline_receipt,
-            receipt_offset=0,
-            timeout_seconds=timeout_seconds,
-        )
-        thread = client.request(
-            "thread/start",
-            _thread_start_params(probe),
-            timeout_seconds=timeout_seconds,
-            events=events,
-        )
-        thread_id = _validate_thread_start(thread, spec=probe)
-        session_dispatch.append(
-            _validate_session_start_dispatch(
-                events,
-                thread_id=thread_id,
-                plugin=plugin,
-            )
-        )
-    result["session_start_dispatch"] = session_dispatch
-    result["model_calls_during_preflight"] = 0
+    result = _validate_hook_preflight(hooks, cwds=resolved_cwds, plugin=plugin)
+    result["scope"] = "exact_trusted_inventory_only"
+    result["lifecycle_dispatch_checked"] = False
+    result["threads_started_during_inventory"] = 0
+    result["codex_model_calls_during_inventory"] = 0
     return result
 
 
-def _validate_session_start_dispatch(
+_HOOK_LIFECYCLE_SPECS = {
+    "sessionStart": ("SessionStart", "thread"),
+    "userPromptSubmit": ("UserPromptSubmit", "turn"),
+}
+
+
+@dataclass(frozen=True)
+class _HookLifecycleFailure:
+    event_name: str
+    kind: str
+    attribution: str
+
+
+class _HookLifecycleMonitor:
+    """Recognize only the measured installed hooks and fail on their completion."""
+
+    def __init__(self, *, thread_id: str, plugin: InstalledPlugin) -> None:
+        self._thread_id = thread_id
+        self._turn_id: str | None = None
+        self._expected_source = _path_key(plugin.root / "hooks" / "hooks.json")
+        self._started_runs: dict[str, str] = {}
+        self.provider_response_observed = False
+
+    def bind_turn(self, turn_id: str) -> None:
+        self._turn_id = turn_id
+
+    def _has_exact_source(self, run: Mapping[str, Any]) -> bool:
+        source_path = run.get("sourcePath")
+        if not isinstance(source_path, str):
+            return False
+        try:
+            return _path_key(source_path) == self._expected_source
+        except (OSError, RuntimeError, ValueError):
+            return False
+
+    @staticmethod
+    def _has_explicit_lians_identity(run: Mapping[str, Any]) -> bool:
+        key = run.get("key")
+        return run.get("pluginId") == PLUGIN_ID or (
+            isinstance(key, str) and key.startswith(f"{PLUGIN_ID}:hooks/hooks.json:")
+        )
+
+    def observe(self, message: Mapping[str, Any]) -> _HookLifecycleFailure | None:
+        method = message.get("method")
+        params = message.get("params")
+        if not isinstance(params, Mapping):
+            return None
+        if method == "rawResponse/completed":
+            if (
+                self._turn_id is not None
+                and params.get("threadId") == self._thread_id
+                and params.get("turnId") == self._turn_id
+            ):
+                self.provider_response_observed = True
+            return None
+        if method not in {"hook/started", "hook/completed"}:
+            return None
+        run = params.get("run")
+        if not isinstance(run, Mapping):
+            return None
+
+        current_thread = params.get("threadId") == self._thread_id
+        exact_source = self._has_exact_source(run)
+        reported_event = run.get("eventName")
+        run_id = run.get("id")
+        tracked_event = self._started_runs.get(run_id) if isinstance(run_id, str) else None
+        if method == "hook/started":
+            if (
+                current_thread
+                and exact_source
+                and reported_event in _HOOK_LIFECYCLE_SPECS
+                and isinstance(run_id, str)
+                and run_id
+            ):
+                self._started_runs[run_id] = str(reported_event)
+            return None
+
+        if tracked_event is not None:
+            event_name = tracked_event
+            attribution = "matching_exact_source_start"
+        elif (
+            current_thread
+            and reported_event in _HOOK_LIFECYCLE_SPECS
+            and (exact_source or self._has_explicit_lians_identity(run))
+        ):
+            event_name = str(reported_event)
+            attribution = (
+                "exact_installed_cache_source" if exact_source else "explicit_plugin_identity"
+            )
+        else:
+            # Event names are shared by all plugins. A foreign source with no
+            # exact run/plugin identity is unrelated and must not fail the gate.
+            return None
+
+        if not exact_source:
+            return _HookLifecycleFailure(event_name, "invalid_source", attribution)
+        if not current_thread or reported_event != event_name:
+            return _HookLifecycleFailure(event_name, "invalid_identity", attribution)
+        if event_name == "userPromptSubmit":
+            if self._turn_id is None or params.get("turnId") != self._turn_id:
+                return _HookLifecycleFailure(event_name, "invalid_identity", attribution)
+        elif params.get("turnId") not in {None, self._turn_id}:
+            return _HookLifecycleFailure(event_name, "invalid_identity", attribution)
+        if run.get("status") != "completed":
+            return _HookLifecycleFailure(event_name, "non_completed_status", attribution)
+        _, expected_scope = _HOOK_LIFECYCLE_SPECS[event_name]
+        if (
+            not isinstance(run_id, str)
+            or not run_id
+            or run.get("source") != "plugin"
+            or run.get("handlerType") != "command"
+            or run.get("scope") != expected_scope
+            or run.get("executionMode") != "sync"
+        ):
+            return _HookLifecycleFailure(event_name, "invalid_identity", attribution)
+        return None
+
+
+def _abort_failed_hook_lifecycle(
+    client: AppServerClient,
+    *,
+    failure: _HookLifecycleFailure,
+    label: str,
+    thread_id: str,
+    turn_id: str | None,
+    deadline: float,
+    provider_response_observed: bool,
+) -> None:
+    interrupt_attempted = turn_id is not None
+    interrupt_request_completed = False
+    if turn_id is not None:
+        # Codex App Server documents turn/interrupt as the cancellation request
+        # for an active turn. Its two identity fields are threadId and turnId.
+        try:
+            client.request(
+                TURN_INTERRUPT_METHOD,
+                {"threadId": thread_id, "turnId": turn_id},
+                timeout_seconds=max(0.001, min(5.0, deadline - time.monotonic())),
+                events=[],
+            )
+        except BenchmarkError:
+            # Cancellation is best-effort. Never replace the sanitized hook
+            # failure with untrusted app-server error data.
+            interrupt_request_completed = False
+        else:
+            interrupt_request_completed = True
+
+    display_name, _ = _HOOK_LIFECYCLE_SPECS[failure.event_name]
+    evidence = {
+        "schema": "lians.installed_hook_fail_fast.v1",
+        "notification": "hook/completed",
+        "hook_event": display_name,
+        "failure_kind": failure.kind,
+        "attribution": failure.attribution,
+        "provider_response_observed_before_failure": provider_response_observed,
+        "turn_interrupt": {
+            "method": TURN_INTERRUPT_METHOD,
+            "attempted": interrupt_attempted,
+            "request_completed": interrupt_request_completed,
+        },
+        "untrusted_details_retained": False,
+    }
+    interrupt_summary = (
+        f"{TURN_INTERRUPT_METHOD} was requested"
+        if interrupt_attempted
+        else "no active turn existed to interrupt"
+    )
+    raise BenchmarkError(
+        f"{label} fail-fast: installed-cache Lians {display_name} hook/completed "
+        f"failed lifecycle validation; {interrupt_summary}; no further call will run",
+        evidence=evidence,
+    )
+
+
+def _validate_hook_lifecycle(
     events: Sequence[Mapping[str, Any]],
     *,
     thread_id: str,
+    turn_id: str,
     plugin: InstalledPlugin,
+    label: str,
 ) -> dict[str, Any]:
-    """Require the installed SessionStart command to actually run before spend."""
+    """Bind both installed hook lifecycles to one real app-server turn."""
 
     expected_source = _path_key(plugin.root / "hooks" / "hooks.json")
-    matched: dict[str, list[Mapping[str, Any]]] = {
-        "hook/started": [],
-        "hook/completed": [],
+    expected_events = _HOOK_LIFECYCLE_SPECS
+    matched: dict[str, dict[str, list[tuple[int, Mapping[str, Any]]]]] = {
+        event_name: {"hook/started": [], "hook/completed": []} for event_name in expected_events
     }
-    for event in events:
+    for index, event in enumerate(events):
         method = event.get("method")
-        if method not in matched:
+        if method not in {"hook/started", "hook/completed"}:
             continue
         params = event.get("params")
         if not isinstance(params, Mapping) or params.get("threadId") != thread_id:
@@ -1086,32 +1290,97 @@ def _validate_session_start_dispatch(
         run = params.get("run")
         if not isinstance(run, Mapping):
             continue
-        if run.get("eventName") != "SessionStart":
+        event_name = run.get("eventName")
+        if event_name not in matched:
             continue
         if not isinstance(run.get("sourcePath"), str):
             continue
         if _path_key(str(run["sourcePath"])) != expected_source:
             continue
-        matched[str(method)].append(run)
-    if any(len(values) != 1 for values in matched.values()):
-        raise BenchmarkError(
-            "app-server did not dispatch exactly one installed Lians SessionStart hook; "
-            "no paid turn will run"
+        reported_turn_id = params.get("turnId")
+        if event_name == "userPromptSubmit" and reported_turn_id != turn_id:
+            raise BenchmarkError(
+                f"{label} installed Lians UserPromptSubmit notification had the wrong turn id"
+            )
+        if event_name == "sessionStart" and reported_turn_id not in {None, turn_id}:
+            raise BenchmarkError(
+                f"{label} installed Lians SessionStart notification had the wrong turn id"
+            )
+        matched[str(event_name)][str(method)].append((index, run))
+
+    lifecycle: dict[str, Any] = {}
+    positions: dict[str, tuple[int, int]] = {}
+    event_order: list[tuple[int, str]] = []
+    for event_name, (display_name, expected_scope) in expected_events.items():
+        started_matches = matched[event_name]["hook/started"]
+        completed_matches = matched[event_name]["hook/completed"]
+        if len(started_matches) != 1 or len(completed_matches) != 1:
+            raise BenchmarkError(
+                f"{label} did not emit exactly one installed-cache Lians {display_name} "
+                "hook/started and hook/completed pair; no further call will run"
+            )
+        started_index, started = started_matches[0]
+        completed_index, completed = completed_matches[0]
+        if started_index >= completed_index:
+            raise BenchmarkError(
+                f"{label} installed Lians {display_name} completed before it started"
+            )
+        run_id = started.get("id")
+        if not isinstance(run_id, str) or not run_id or completed.get("id") != run_id:
+            raise BenchmarkError(
+                f"{label} installed Lians {display_name} notifications did not identify one run"
+            )
+        if started.get("status") != "running" or completed.get("status") != "completed":
+            raise BenchmarkError(
+                f"{label} installed Lians {display_name} hook did not complete successfully"
+            )
+        for run in (started, completed):
+            if run.get("source") != "plugin" or run.get("handlerType") != "command":
+                raise BenchmarkError(
+                    f"{label} {display_name} was not dispatched from an installed plugin command"
+                )
+            if run.get("scope") != expected_scope or run.get("executionMode") != "sync":
+                raise BenchmarkError(
+                    f"{label} installed Lians {display_name} reported the wrong scope or mode"
+                )
+        positions[event_name] = (started_index, completed_index)
+        event_order.extend(
+            (
+                (started_index, f"{display_name}:started"),
+                (completed_index, f"{display_name}:completed"),
+            )
         )
-    started = matched["hook/started"][0]
-    completed = matched["hook/completed"][0]
-    if started.get("id") != completed.get("id"):
-        raise BenchmarkError("SessionStart hook notifications did not identify the same run")
-    if completed.get("status") != "completed":
-        raise BenchmarkError("installed Lians SessionStart hook did not complete successfully")
-    if completed.get("source") != "plugin" or completed.get("handlerType") != "command":
-        raise BenchmarkError("SessionStart was not dispatched from the installed plugin command")
+        lifecycle[display_name] = {
+            "started_count": 1,
+            "completed_count": 1,
+            "run_id_sha256": _sha256_bytes(run_id.encode("utf-8")),
+            "status": "completed",
+            "source": "installed_plugin_cache",
+            "duration_ms": completed.get("durationMs"),
+        }
+
+    if positions["sessionStart"][1] >= positions["userPromptSubmit"][0]:
+        raise BenchmarkError(
+            f"{label} installed Lians hook lifecycle was out of order: "
+            "SessionStart must complete before UserPromptSubmit starts"
+        )
+    provider_positions = [
+        index
+        for index, event in enumerate(events)
+        if event.get("method") == "rawResponse/completed"
+        and _matches_turn(event, thread_id, turn_id)
+    ]
+    if provider_positions and positions["userPromptSubmit"][1] >= min(provider_positions):
+        raise BenchmarkError(
+            f"{label} installed Lians UserPromptSubmit completed after a provider response"
+        )
     return {
+        "passed": True,
         "thread_id_sha256": _sha256_bytes(thread_id.encode("utf-8")),
-        "run_id_sha256": _sha256_bytes(str(completed["id"]).encode("utf-8")),
-        "status": "completed",
-        "source": "installed_plugin_cache",
-        "duration_ms": completed.get("durationMs"),
+        "turn_id_sha256": _sha256_bytes(turn_id.encode("utf-8")),
+        "event_order": [name for _, name in sorted(event_order)],
+        "completed_before_first_provider_response": bool(provider_positions),
+        "events": lifecycle,
     }
 
 
@@ -1168,6 +1437,25 @@ def _artifact_event(message: Mapping[str, Any]) -> dict[str, Any] | None:
     identity = {
         key: params[key] for key in ("threadId", "turnId") if isinstance(params.get(key), str)
     }
+    if method in {"hook/started", "hook/completed"}:
+        run = params.get("run")
+        if not isinstance(run, Mapping):
+            return None
+        safe_run = {
+            key: run[key]
+            for key in (
+                "id",
+                "eventName",
+                "executionMode",
+                "handlerType",
+                "scope",
+                "status",
+                "source",
+                "durationMs",
+            )
+            if key in run and isinstance(run[key], (str, int, float, bool, type(None)))
+        }
+        return {"method": method, "params": {**identity, "run": safe_run}}
     if method == "rawResponse/completed":
         usage = params.get("usage")
         return {
@@ -1237,7 +1525,12 @@ def _redact_local_paths(value: str) -> str:
     return value
 
 
-def _run_app_server_turn(client: AppServerClient, spec: RunSpec) -> Invocation:
+def _run_app_server_turn(
+    client: AppServerClient,
+    spec: RunSpec,
+    *,
+    plugin: InstalledPlugin,
+) -> Invocation:
     started = time.perf_counter()
     deadline = time.monotonic() + spec.timeout_seconds
     events: list[dict[str, Any]] = []
@@ -1258,6 +1551,30 @@ def _run_app_server_turn(client: AppServerClient, spec: RunSpec) -> Invocation:
     )
     thread_id = _validate_thread_start(thread_result, spec=spec)
     thread_start_wall_time_ms = (time.perf_counter() - thread_started) * 1000
+    lifecycle_monitor = _HookLifecycleMonitor(thread_id=thread_id, plugin=plugin)
+    observed_event_count = 0
+    turn_id: str | None = None
+
+    def inspect_new_events() -> None:
+        nonlocal observed_event_count
+        while observed_event_count < len(events):
+            event = events[observed_event_count]
+            observed_event_count += 1
+            failure = lifecycle_monitor.observe(event)
+            if failure is not None:
+                _abort_failed_hook_lifecycle(
+                    client,
+                    failure=failure,
+                    label=spec.label,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                    deadline=deadline,
+                    provider_response_observed=lifecycle_monitor.provider_response_observed,
+                )
+
+    # SessionStart can be delivered while thread/start is settling. Catch a
+    # failed installed hook here so no model turn is started at all.
+    inspect_new_events()
     turn_started = time.perf_counter()
     turn_result = client.request(
         "turn/start",
@@ -1269,14 +1586,26 @@ def _run_app_server_turn(client: AppServerClient, spec: RunSpec) -> Invocation:
     if not isinstance(turn, Mapping) or not isinstance(turn.get("id"), str):
         raise BenchmarkError(f"{spec.label} turn/start returned no turn id")
     turn_id = str(turn["id"])
+    lifecycle_monitor.bind_turn(turn_id)
     if turn.get("status") not in {"inProgress", "completed"}:
         raise BenchmarkError(f"{spec.label} turn/start returned an invalid status")
+    # request() may have collected lifecycle notifications before returning the
+    # turn identity. Validate them before reading any provider response.
+    inspect_new_events()
     while not any(_matching_turn_completed(event, thread_id, turn_id) for event in events):
         message = client.read(timeout_seconds=remaining())
         if "id" in message:
             raise BenchmarkError(f"{spec.label} received an unsupported server request")
         events.append(message)
+        inspect_new_events()
     turn_wall_time_ms = (time.perf_counter() - turn_started) * 1000
+    hook_lifecycle = _validate_hook_lifecycle(
+        events,
+        thread_id=thread_id,
+        turn_id=turn_id,
+        plugin=plugin,
+        label=spec.label,
+    )
 
     artifact_events = [safe for event in events if (safe := _artifact_event(event)) is not None]
     stdout = b"".join(
@@ -1292,6 +1621,7 @@ def _run_app_server_turn(client: AppServerClient, spec: RunSpec) -> Invocation:
         wall_time_ms=(time.perf_counter() - started) * 1000,
         thread_start_wall_time_ms=thread_start_wall_time_ms,
         turn_wall_time_ms=turn_wall_time_ms,
+        hook_lifecycle=hook_lifecycle,
     )
 
 
@@ -1581,6 +1911,58 @@ def _receipt_violations(spec: RunSpec, receipt: Mapping[str, Any]) -> list[str]:
     return violations
 
 
+def _public_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Return only strictly typed, publication-safe receipt evidence."""
+
+    public: dict[str, Any] = {}
+    for name in ("prompt_sha256", "query_sha256", "context_sha256"):
+        value = receipt.get(name)
+        if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value):
+            public[name] = value
+
+    enums = {
+        "query_source": {"explicit_tag", "bounded_prompt", "invalid"},
+        "backend": {"local", "remote"},
+        "retrieval_transport": {"direct", "daemon"},
+        "status": {
+            "injected",
+            "no_match",
+            "below_threshold",
+            "skipped_budget",
+            "skipped_degraded",
+            "skipped_error",
+            "skipped_invalid_input",
+        },
+    }
+    for name, accepted in enums.items():
+        value = receipt.get(name)
+        if isinstance(value, str) and value in accepted:
+            public[name] = value
+
+    for name in (
+        "truncated",
+        "retrieval_degraded",
+        "candidate_window_complete",
+        "graph_search_complete",
+        "injected",
+    ):
+        value = receipt.get(name)
+        if isinstance(value, bool):
+            public[name] = value
+
+    for name in ("memory_count", "token_estimate", "elapsed_ms"):
+        value = receipt.get(name)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            public[name] = value
+
+    score = receipt.get("top_score")
+    if score is None:
+        public["top_score"] = None
+    elif isinstance(score, (int, float)) and not isinstance(score, bool) and math.isfinite(score):
+        public["top_score"] = float(score)
+    return public
+
+
 def _write_raw(raw_dir: Path, spec: RunSpec, value: bytes) -> str:
     raw_dir.mkdir(parents=True, exist_ok=True)
     path = raw_dir / f"{spec.label}.stdout.jsonl"
@@ -1604,6 +1986,11 @@ def _parse_run(
         raise BenchmarkError(
             f"{spec.label} exited {invocation.returncode}: {_stderr_tail(invocation.stderr)}"
         )
+    if (
+        not isinstance(invocation.hook_lifecycle, Mapping)
+        or invocation.hook_lifecycle.get("passed") is not True
+    ):
+        raise BenchmarkError(f"{spec.label} omitted validated installed hook lifecycle evidence")
     events = _parse_events(invocation.stdout, spec.label)
     thread_id, turn_id = _turn_identity(events, spec.label)
     usage, response_ids = _complete_usage(
@@ -1618,6 +2005,7 @@ def _parse_run(
     reroutes = _reroute_evidence(events, thread_id=thread_id, turn_id=turn_id)
     receipt = _receipt_delta(spec)
     receipt_violations = _receipt_violations(spec, receipt)
+    public_receipt = _public_receipt(receipt)
     violations = list(receipt_violations)
     if calls:
         violations.append("model used a tool")
@@ -1658,8 +2046,11 @@ def _parse_run(
         "tool_calls": calls,
         "delegation_evidence": delegation,
         "reroute_evidence": reroutes,
-        "hook_receipt": receipt,
+        "hook_receipt": public_receipt,
+        "hook_receipt_fields_withheld": len(set(receipt) - set(public_receipt)),
         "post_trust_hook_receipt": True,
+        "hook_lifecycle": dict(invocation.hook_lifecycle),
+        "hook_lifecycle_valid": invocation.hook_lifecycle.get("passed") is True,
         "hook_contract_valid": not receipt_violations,
         "violations": violations,
         "valid": exact and not violations,
@@ -1687,13 +2078,17 @@ def _profile(plugin: InstalledPlugin, config: BenchmarkConfig) -> dict[str, Any]
         "normal_enabled_plugins_loaded": True,
         "ignore_user_config": False,
         "hook_trust_bypass": False,
+        "live_hook_lifecycle_required": [
+            "SessionStart:started/completed",
+            "UserPromptSubmit:started/completed",
+        ],
         "installed_plugin": {
             "plugin_id": plugin.plugin_id,
             "version": plugin.version,
             # The absolute install root can contain an operator's username and
             # is not needed to reproduce the artifact. The content hashes below
             # bind the measured installation without publishing local identity.
-            "root_kind": "local_install",
+            "root_kind": "versioned_installed_cache",
             "manifest_sha256": plugin.manifest_sha256,
             "bootstrap_sha256": plugin.bootstrap_sha256,
             "hook_sha256": plugin.hook_sha256,
@@ -1736,7 +2131,7 @@ def run_benchmark(
     plugin = plugin_discoverer(config.codex_exe)
     case = _load_case(config)
     report: dict[str, Any] = {
-        "schema_version": "lians.codex-sol-installed-plugin-ab.v2",
+        "schema_version": "lians.codex-sol-installed-plugin-ab.v3",
         "provider": "OpenAI Codex",
         "workload": "LOCOMO full context versus installed Lians pre-prompt recall",
         "dry_run": dry_run,
@@ -1754,6 +2149,13 @@ def run_benchmark(
             "per_run_estimated_credit_reserve": round(
                 config.max_suite_estimated_credits / len(EXECUTION_ORDERS[config.order]), 9
             ),
+            "credit_threshold_semantics": {
+                "kind": "post_turn_acceptance_and_continuation_threshold",
+                "hard_provider_spend_ceiling": False,
+                "completed_turn_may_overshoot": True,
+                "candidate_runs_first": True,
+                "baseline_runs_only_after_candidate_passes": True,
+            },
         },
         "estimated_credit_accounting": {
             "label": "estimated Sol credits; not a provider-reported per-turn debit",
@@ -1788,13 +2190,12 @@ def run_benchmark(
                 "initialize",
                 "initialized",
                 "hooks/list",
-                "thread/start session hook probe (baseline)",
-                "thread/start session hook probe (candidate)",
             ],
+            "scope": "exact trusted installed hook inventory only",
             "working_directory_count": 2,
             "required_lians_handlers_per_working_directory": 2,
-            "required_session_start_dispatches": 2,
-            "model_calls": 0,
+            "lifecycle_dispatch_checks": "deferred to each real live turn",
+            "codex_model_calls_during_inventory": 0,
             "before_paid_turns": True,
         }
         report["verdict"] = {
@@ -1810,6 +2211,31 @@ def run_benchmark(
         candidate_root = root / "candidate"
         baseline_root.mkdir()
         candidate_root.mkdir()
+        if preflight_only:
+            client = app_server_factory(config)
+            try:
+                report["hook_preflight"] = _preflight_app_server(
+                    client,
+                    cwds=(baseline_root, candidate_root),
+                    plugin=plugin,
+                    timeout_seconds=config.timeout_seconds,
+                )
+            finally:
+                client.close()
+            report["hook_preflight"]["project_preparation_performed"] = False
+            report["hook_preflight"]["bge_embedding_inference_calls"] = 0
+            report["runs"] = []
+            report["verdict"] = {
+                "status": "preflight_only",
+                "qualified_target_met": None,
+                "statement": (
+                    "Exact trusted installed hook inventory passed with zero threads, zero Codex "
+                    "model calls, and zero BGE embedding inferences; no dispatch or usage claim "
+                    "was made."
+                ),
+            }
+            return report
+
         prepared = project_preparer(plugin, baseline_root, candidate_root, case["seed_records"])
         if prepared.baseline_root.resolve() == prepared.candidate_root.resolve():
             raise BenchmarkError("baseline and candidate projects must be isolated")
@@ -1821,21 +2247,10 @@ def run_benchmark(
         try:
             report["hook_preflight"] = _preflight_app_server(
                 client,
-                prepared=prepared,
+                cwds=(prepared.baseline_root, prepared.candidate_root),
                 plugin=plugin,
                 timeout_seconds=config.timeout_seconds,
             )
-            if preflight_only:
-                report["runs"] = []
-                report["verdict"] = {
-                    "status": "preflight_only",
-                    "qualified_target_met": None,
-                    "statement": (
-                        "Installed hook discovery and SessionStart dispatch passed with "
-                        "zero model calls; no usage claim was made."
-                    ),
-                }
-                return report
             for sequence, (mode, repetition) in enumerate(order, start=1):
                 prompt = (
                     case["candidate_prompt"] if mode == "candidate" else case["baseline_prompt"]
@@ -1848,15 +2263,28 @@ def run_benchmark(
                     repetition=repetition,
                     prompt=prompt,
                 )
-                invocation = _run_app_server_turn(client, spec)
+                invocation = _run_app_server_turn(client, spec, plugin=plugin)
                 parsed = _parse_run(spec, invocation, gold=case["gold"], raw_dir=config.raw_dir)
                 runs.append(parsed)
-                if float(parsed["estimated_sol_credits"]) > per_run_reserve + 1e-12:
+                estimated_credits = float(parsed["estimated_sol_credits"])
+                if estimated_credits <= 0:
+                    raise BenchmarkError(
+                        f"{spec.label} reported no positive estimated usage; no further calls will run"
+                    )
+                if estimated_credits > per_run_reserve + 1e-12:
                     raise BenchmarkError(
                         f"{spec.label} exceeded its {per_run_reserve:g} estimated-credit reserve; "
                         "no further calls will run"
                     )
-                running_credits += float(parsed["estimated_sol_credits"])
+                if mode == "candidate" and not parsed["valid"]:
+                    failures = list(parsed["violations"])
+                    if not parsed["exact_answer_match"]:
+                        failures.append("answer did not exactly match gold")
+                    raise BenchmarkError(
+                        f"{spec.label} failed its candidate hook/quality contract "
+                        f"({'; '.join(failures)}); no baseline call will run"
+                    )
+                running_credits += estimated_credits
                 if running_credits > config.max_suite_estimated_credits + 1e-12:
                     raise BenchmarkError(
                         f"suite exceeded the {config.max_suite_estimated_credits:g} estimated-credit cap "
@@ -1907,6 +2335,9 @@ def run_benchmark(
         ),
         "all_runs_no_model_or_provider_reroute": all(not run["reroute_evidence"] for run in runs),
         "all_installed_hook_receipts_valid": all(bool(run["hook_contract_valid"]) for run in runs),
+        "all_installed_hook_lifecycles_valid": all(
+            bool(run["hook_lifecycle_valid"]) for run in runs
+        ),
         "exactly_two_paid_turns": two_call_gate,
         "economic_target_met": economics,
         "suite_estimated_credit_cap_met": cap_passed,
@@ -1951,7 +2382,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--preflight-only",
         action="store_true",
-        help="exercise installed hook discovery/dispatch without a model call",
+        help="validate exact trusted installed hook inventory without starting a thread/model turn",
     )
     return parser
 
