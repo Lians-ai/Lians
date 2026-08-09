@@ -28,8 +28,8 @@ from benchmarks.codex_sol_installed_plugin_ab import (
     InstalledPlugin,
     PreparedProjects,
     _app_server_command,
+    _classify_subject_reference,
     _plugin_from_document,
-    _protected_subject_reference,
     run_benchmark,
 )
 
@@ -632,12 +632,42 @@ def test_credit_cap_aborts_before_second_paid_turn(tmp_path: Path) -> None:
     assert server.closed is True
 
 
-def test_seed_storage_requires_a_v2_protected_subject_reference() -> None:
+def test_seed_storage_accepts_a_v2_protected_subject_reference() -> None:
+    expected = "codex-project:repo-0123456789ab"
     protected = "lians:subject:v2:hmac-sha256:" + "a" * 64 + ":" + "b" * 64
 
-    assert _protected_subject_reference(protected, raw_subject_id="customer-7") == protected
-    with pytest.raises(BenchmarkError, match="protected stable reference"):
-        _protected_subject_reference("customer-7", raw_subject_id="customer-7")
+    assert _classify_subject_reference(
+        protected,
+        expected_project_subject_id=expected,
+    ) == (protected, "v2_hmac_sha256", True)
+
+
+def test_seed_storage_reports_the_exact_raw_synthetic_project_subject() -> None:
+    expected = "codex-project:repo-0123456789ab"
+
+    assert _classify_subject_reference(
+        expected,
+        expected_project_subject_id=expected,
+    ) == (expected, "raw_synthetic_project_subject", False)
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("customer-7", "codex-project:repo-0123456789ab"),
+        ("customer-7", "customer-7"),
+        (
+            "codex-project:other-0123456789ab",
+            "codex-project:repo-0123456789ab",
+        ),
+    ],
+)
+def test_seed_storage_rejects_raw_user_or_mismatched_subject_references(
+    stored: str,
+    expected: str,
+) -> None:
+    with pytest.raises(BenchmarkError, match="project reference|Codex project reference"):
+        _classify_subject_reference(stored, expected_project_subject_id=expected)
 
 
 def test_plugin_inventory_requires_enabled_manifest_matching_install(tmp_path: Path) -> None:

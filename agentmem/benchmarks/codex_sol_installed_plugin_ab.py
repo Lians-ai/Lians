@@ -530,16 +530,28 @@ def _project_binding(
     return bootstrap, Path(data_home), child
 
 
-def _protected_subject_reference(value: Any, *, raw_subject_id: str) -> str:
-    prefix = "lians:subject:v2:hmac-sha256:"
+def _classify_subject_reference(
+    value: Any,
+    *,
+    expected_project_subject_id: str,
+) -> tuple[str, str, bool]:
+    project_pattern = r"codex-project:[a-z0-9][a-z0-9._-]{0,39}-[0-9a-f]{12}"
     if (
-        not isinstance(value, str)
-        or value == raw_subject_id
-        or not value.startswith(prefix)
-        or re.fullmatch(rf"{re.escape(prefix)}[0-9a-f]{{64}}:[0-9a-f]{{64}}", value) is None
+        not isinstance(expected_project_subject_id, str)
+        or re.fullmatch(project_pattern, expected_project_subject_id) is None
     ):
-        raise BenchmarkError("seeded SQLite subject was not a protected stable reference")
-    return value
+        raise BenchmarkError("expected project subject was not a synthetic Codex project reference")
+    if isinstance(value, str) and value == expected_project_subject_id:
+        return value, "raw_synthetic_project_subject", False
+
+    hmac_prefix = "lians:subject:v2:hmac-sha256:"
+    hmac_pattern = rf"{re.escape(hmac_prefix)}[0-9a-f]{{64}}:[0-9a-f]{{64}}"
+    if isinstance(value, str) and re.fullmatch(hmac_pattern, value) is not None:
+        return value, "v2_hmac_sha256", True
+    raise BenchmarkError(
+        "seeded SQLite subject was neither the expected synthetic project reference "
+        "nor a v2 protected stable reference"
+    )
 
 
 def _seed_candidate(
@@ -601,7 +613,12 @@ def _seed_candidate(
         ).fetchone()
     if row is None or row[:3] != (len(records), len(records), 1) or row[3] != row[4]:
         raise BenchmarkError("seeded SQLite rows did not prove encrypted project scoping")
-    stored_subject = _protected_subject_reference(row[3], raw_subject_id=subject_id)
+    stored_subject, subject_storage_format, subject_reference_protected = (
+        _classify_subject_reference(
+            row[3],
+            expected_project_subject_id=subject_id,
+        )
+    )
     database_bytes = db.read_bytes()
     if any(str(record["content"]).encode("utf-8") in database_bytes for record in records):
         raise BenchmarkError("seeded memory plaintext was found in the project database")
@@ -610,7 +627,8 @@ def _seed_candidate(
         "evidence_ids": [record["metadata"]["dia_id"] for record in records],
         "namespace": namespace,
         "agent_id": agent_id,
-        "subject_reference_protected": True,
+        "subject_reference_storage_format": subject_storage_format,
+        "subject_reference_protected": subject_reference_protected,
         "stored_subject_reference_sha256": _sha256_bytes(stored_subject.encode("utf-8")),
         "database_sha256": _sha256_file(db),
         "encrypted_rows": len(records),
