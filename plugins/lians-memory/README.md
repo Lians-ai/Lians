@@ -20,11 +20,12 @@ This is not an every-prompt, quota, latency, or installed-product guarantee. See
 the [controlled usage evidence](../../docs/benchmarks/codex-sol-ultra-checkout-hook-usage-evidence-2026-08-08.json).
 
 The current bundle's `lians-sdk` 0.5.0 wheel was tested through an isolated,
-direct-path install: 83 focused SDK tests passed and 2 optional-platform tests
+direct-path install: 84 focused SDK tests passed and 2 optional-platform tests
 skipped. Its pinned BGE artifact validated; an encrypted subject-bound write
 was recalled; the plaintext marker was absent from SQLite; dynamic MCP
 `--check` passed; and every hashed wheel RECORD entry plus the embedded license
-was verified. The plugin package suite passed 74 tests with 7 optional-platform
+was verified. A separate clean frozen plugin-runtime sync imported `greenlet`
+successfully. The plugin package suite passed 75 tests with 7 optional-platform
 skips. Hook inventory is present, but this host did not dispatch the installed
 plugin hooks through either the app server or `codex exec`. One paid candidate
 was rejected for that reason, so there is no accepted installed-plugin

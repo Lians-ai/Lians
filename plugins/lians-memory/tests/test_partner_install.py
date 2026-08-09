@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -1560,7 +1561,40 @@ def test_frozen_runtime_names_only_the_bundled_sdk() -> None:
     lock = (PLUGIN_ROOT / "runtime" / "uv.lock").read_text(encoding="utf-8")
     assert artifact.path.name in pyproject
     assert artifact.sha256 in lock
+    assert '\nname = "greenlet"\n' in lock
+    assert '{ name = "sqlalchemy", extra = ["asyncio"] }' in lock
     assert "https://pypi.org/project/lians" not in pyproject.lower()
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is required")
+def test_clean_frozen_runtime_sync_installs_greenlet(tmp_path: Path) -> None:
+    artifact = bootstrap.discover_wheel(PLUGIN_ROOT / "vendor")
+    data_home = tmp_path / "data"
+
+    lock_hash = bootstrap.sync_runtime(data_home, artifact)
+
+    assert len(lock_hash) == 64
+    greenlet_check = (
+        "import importlib.metadata as metadata; import greenlet; "
+        "print(metadata.version('greenlet'))"
+    )
+    completed = subprocess.run(
+        [
+            str(bootstrap.runtime_python(data_home)),
+            "-I",
+            "-B",
+            "-c",
+            greenlet_check,
+        ],
+        cwd=tmp_path,
+        env=bootstrap._scrubbed_setup_environment(),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip()
 
 
 def test_distributable_contains_no_machine_state_or_model_binary() -> None:
