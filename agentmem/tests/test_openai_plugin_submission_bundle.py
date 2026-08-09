@@ -87,3 +87,22 @@ def test_submission_cases_endpoint_and_operator_policy_statuses_are_truthful():
         metadata["reviewArtifacts"]["backupDeletionWindowStatus"]
         == "provider_verified_and_publicly_disclosed_encrypted_fly_snapshots_5_days"
     )
+
+
+def test_initial_launch_countries_are_consistent_across_submission_materials():
+    metadata = json.loads((BUNDLE / "submission" / "metadata.json").read_text(encoding="utf-8"))
+
+    assert metadata["availability"] == {
+        "countries": ["United States", "United Kingdom"],
+        "status": "operator_selected_pending_submission",
+    }
+
+    materials = (
+        ROOT / "docs" / "openai-universal-plugin-production.md",
+        BUNDLE / "submission" / "reviewer-guide.md",
+        BUNDLE / "submission" / "release-notes.md",
+    )
+    for path in materials:
+        text = path.read_text(encoding="utf-8")
+        assert "United States" in text, path
+        assert "United Kingdom" in text, path

@@ -12,9 +12,10 @@ The universal package is under `plugins/lians-memory-universal/`. It contains no
 - Canonical MCP endpoint: `https://mcp.lians.ai/mcp`
 - OAuth resource identifier after URL normalization: `https://mcp.lians.ai/`
 - Implemented tools: `remember`, `recall`, and `forget_memory`
+- Initial launch countries: **United States** and **United Kingdom**
 - Claim boundary: Lians can reduce repeated context setup when relevant memory exists. It does not increase OpenAI or Codex quotas, bypass rate limits, or guarantee faster total responses.
 
-Do not submit while `submission/metadata.json` contains `planned_canonical_not_live`, `pending_operator_action`, or `operator_selection_required_after_legal_and_support_review`.
+Do not submit while `submission/metadata.json` contains `planned_canonical_not_live` or `pending_operator_action`. The availability value `operator_selected_pending_submission` records the approved launch-country scope; it does not mean the plugin is submitted, published, or live.
 
 ## 1. Bring the canonical endpoint online
 
@@ -151,7 +152,8 @@ npx @modelcontextprotocol/inspector@latest
 - [ ] Use the three starter prompts from the manifest.
 - [ ] Upload exactly the five positive and three negative cases from `submission/test-cases.json`.
 - [ ] Record a demo covering remember, audited recall, confirmation, and permanent forget; add its HTTPS URL to `submission/metadata.json`.
-- [ ] Select only countries where legal terms, privacy handling, product availability, and support are ready.
+- [x] Approve **United States** and **United Kingdom** as the initial launch-country scope.
+- [ ] In the portal, select exactly **United States** and **United Kingdom**; add countries only after separate legal, privacy, product-availability, and support review.
 - [ ] Paste the notes from `submission/release-notes.md`.
 - [ ] Run **Scan Tools** against the live canonical endpoint and resolve every error or warning.
 

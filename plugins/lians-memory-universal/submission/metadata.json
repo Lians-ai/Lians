@@ -333,7 +333,10 @@
     "reviewerGuidePath": "./reviewer-guide.md"
   },
   "availability": {
-    "countries": [],
-    "status": "operator_selection_required_after_legal_and_support_review"
+    "countries": [
+      "United States",
+      "United Kingdom"
+    ],
+    "status": "operator_selected_pending_submission"
   }
 }

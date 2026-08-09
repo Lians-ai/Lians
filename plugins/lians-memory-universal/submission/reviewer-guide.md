@@ -1,6 +1,6 @@
 # Lians Memory reviewer guide
 
-The canonical endpoint is `https://mcp.lians.ai/mcp`. It is planned and is not live yet. Do not submit this guide until the endpoint, OAuth login, fixture reset, and every production gate below have been validated.
+The canonical endpoint is `https://mcp.lians.ai/mcp`. It is planned and is not live yet. The draft selects the **United States** and **United Kingdom** as its initial launch countries; that availability choice does not mean the plugin is submitted, approved, published, or live. Do not submit this guide until the endpoint, OAuth login, fixture reset, and every production gate below have been validated.
 
 ## Reviewer access
 
@@ -33,6 +33,7 @@ For the authenticated contract check, have an authorized operator inject `LIANS_
 
 Before giving access to a reviewer, also confirm:
 
+- the draft metadata and portal country selector contain exactly the United States and United Kingdom;
 - DNS, TLS, OAuth discovery, resource metadata, and the canonical endpoint are public and stable;
 - the demo account has no MFA or confirmation gate and no access outside its fixture tenant;
 - active retention is configured and scheduled pruning is running;
