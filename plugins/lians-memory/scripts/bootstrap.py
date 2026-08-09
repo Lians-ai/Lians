@@ -804,6 +804,22 @@ def _safe_directory(path: Path) -> None:
     _restrict_private_path(path, is_directory=True, verify=False)
 
 
+def _runtime_directory(path: Path, *, repair_permissions: bool) -> None:
+    """Prepare a runtime directory without reapplying its ACL on every prompt.
+
+    Setup, doctor, and SessionStart remain responsible for the full owner/DACL
+    contract.  A warm UserPromptSubmit process only needs to reject path swaps
+    (symlinks, reparses, or a non-directory) before using those already-private
+    paths.  Newly encountered project paths still take the full secure-creation
+    path once.
+    """
+
+    if repair_permissions or not os.path.lexists(path):
+        _safe_directory(path)
+        return
+    _require_private_directory(path)
+
+
 def _atomic_json(path: Path, value: Mapping[str, object]) -> None:
     _safe_directory(path.parent)
     if os.path.lexists(path):
@@ -1170,6 +1186,33 @@ def _record_owns_launcher(data_home: Path, destination: Path) -> bool:
     return isinstance(expected, str) and sha256_file(destination) == expected
 
 
+def _owned_launcher_still_works(
+    destination: Path,
+    environ: Mapping[str, str] | None = None,
+) -> bool:
+    """Confirm a locked Windows console shim reaches the refreshed runtime."""
+
+    values = os.environ if environ is None else environ
+    child = _scrubbed_setup_environment(values)
+    child["PYTHONPATH"] = ""
+    child["PYTHONHOME"] = ""
+    child["PYTHONNOUSERSITE"] = "1"
+    child["PYTHONSAFEPATH"] = "1"
+    try:
+        result = subprocess.run(
+            [str(destination), "--check"],
+            env=child,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        document = json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, UnicodeError, json.JSONDecodeError):
+        return False
+    return result.returncode == 0 and isinstance(document, dict) and document.get("ok") is True
+
+
 def install_launcher(
     data_home: Path,
     *,
@@ -1215,15 +1258,30 @@ def install_launcher(
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{LAUNCHER_COMMAND}.", dir=bin_dir)
     os.close(descriptor)
     temporary = Path(temporary_name)
+    kept_owned_launcher = False
     try:
         shutil.copyfile(source, temporary)
         if platform_name != "win32":
             temporary.chmod(0o700)
         os.replace(temporary, destination)
     except OSError as exc:
-        raise BootstrapError(f"could not install the MCP launcher: {destination}") from exc
+        # Windows cannot replace an executable while Codex has it open. The
+        # console shim contains only the stable interpreter/entry-point bridge;
+        # the just-synced Python environment contains the actual SDK. Retain an
+        # owned shim only when its live --check reaches that refreshed runtime.
+        if (
+            platform_name == "win32"
+            and _record_owns_launcher(data_home, destination)
+            and _owned_launcher_still_works(destination, environ)
+        ):
+            kept_owned_launcher = True
+        else:
+            raise BootstrapError(f"could not install the MCP launcher: {destination}") from exc
     finally:
         temporary.unlink(missing_ok=True)
+
+    if kept_owned_launcher:
+        _require_regular_file(destination, "MCP launcher")
 
     _atomic_json(
         _launcher_record_path(data_home),
@@ -1405,6 +1463,7 @@ def configure_runtime_environment(
     *,
     project_root: str | Path,
     require_managed_key: bool,
+    repair_private_paths: bool = True,
 ) -> dict[str, str]:
     child = dict(environ)
     # The outer wrappers set these before Python starts. Reassert them for the
@@ -1432,13 +1491,20 @@ def configure_runtime_environment(
     child["LIANS_CODEX_HOOK_DAEMON_REQUEST_TIMEOUT_MS"] = "3000"
     child["LIANS_CODEX_HOOK_DAEMON_START_TIMEOUT_MS"] = "120000"
     project_dir = project_data_dir(data_home, root)
-    existing_token, existing_token_was_private = _preflight_existing_daemon_token(
-        data_home, project_dir
-    )
-    _safe_directory(data_home / "projects")
-    _safe_directory(project_dir)
+    if repair_private_paths:
+        existing_token, existing_token_was_private = _preflight_existing_daemon_token(
+            data_home, project_dir
+        )
+    else:
+        token = project_dir / "daemon" / DAEMON_TOKEN_FILENAME
+        existing_token = os.path.lexists(token)
+        if existing_token:
+            _require_regular_file(token, "daemon authentication token")
+        existing_token_was_private = True
+    _runtime_directory(data_home / "projects", repair_permissions=repair_private_paths)
+    _runtime_directory(project_dir, repair_permissions=repair_private_paths)
     runtime_cwd = project_dir / "runtime"
-    _safe_directory(runtime_cwd)
+    _runtime_directory(runtime_cwd, repair_permissions=repair_private_paths)
     child["LIANS_PLUGIN_RUNTIME_CWD"] = str(runtime_cwd)
     child["LIANS_CODEX_HOOK_RECEIPT"] = str(project_dir / "hook-receipts.jsonl")
     if existing_token and not existing_token_was_private:
@@ -1456,10 +1522,15 @@ def configure_runtime_environment(
         child["AGENTMEM_ALLOW_UNENCRYPTED"] = "false"
         child["LIANS_MCP_LOCAL_SUBJECT_ID"] = project_subject_id
         child["LIANS_LOCAL_DB"] = str(project_dir / "memory.sqlite3")
-        child["LIANS_CODEX_HOOK_DAEMON"] = "auto"
+        # SessionStart owns daemon creation after the full private-path/DACL
+        # contract above. A warm UserPromptSubmit fast path is deliberately
+        # client-only: if prewarm was skipped or the daemon expired, recall
+        # fails open instead of creating local state without that validation.
+        child["LIANS_CODEX_HOOK_DAEMON"] = "auto" if repair_private_paths else "client"
         daemon_dir = project_dir / "daemon"
-        _safe_directory(daemon_dir)
-        _require_existing_daemon_token_private(daemon_dir)
+        _runtime_directory(daemon_dir, repair_permissions=repair_private_paths)
+        if repair_private_paths:
+            _require_existing_daemon_token_private(daemon_dir)
         child["LIANS_CODEX_HOOK_DAEMON_RUNTIME_DIR"] = str(daemon_dir)
         artifact = profile.get("bge_artifact_dir")
         if not isinstance(artifact, str) or not artifact:
@@ -1541,9 +1612,7 @@ def setup(
     }
 
 
-def _validated_codex_home(
-    environ: Mapping[str, str], *, explicit: Path | None = None
-) -> Path:
+def _validated_codex_home(environ: Mapping[str, str], *, explicit: Path | None = None) -> Path:
     raw: str | Path = explicit if explicit is not None else environ.get("CODEX_HOME", "")
     if not raw:
         raw = Path.home() / ".codex"

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -126,6 +127,42 @@ def _doctor(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def _run_hook_runtime(
+    command: str,
+    hook_arg: str | None,
+    child_env: dict[str, str],
+) -> int:
+    """Run the bundled model-free hook without a second Python process."""
+
+    module_name = "lians_memory_plugin_hook_runtime"
+    prior_module = sys.modules.get(module_name)
+    prior_environ = dict(os.environ)
+    prior_argv = list(sys.argv)
+    try:
+        os.environ.clear()
+        os.environ.update(child_env)
+        sys.argv = [str(HOOK_RUNTIME)]
+        spec = importlib.util.spec_from_file_location(module_name, HOOK_RUNTIME)
+        if spec is None or spec.loader is None:
+            raise BootstrapError("bundled hook runtime cannot be loaded")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        if command == "hook":
+            return int(module.main())
+        if hook_arg is None:
+            raise BootstrapError("hook lifecycle command is missing")
+        return int(module._daemon_command(hook_arg))
+    finally:
+        os.environ.clear()
+        os.environ.update(prior_environ)
+        sys.argv = prior_argv
+        if prior_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = prior_module
+
+
 def _runtime_command(command: str, daemon_action: str | None = None) -> int:
     data_home = resolve_data_home()
     project_root = Path.cwd().resolve()
@@ -143,11 +180,13 @@ def _runtime_command(command: str, daemon_action: str | None = None) -> int:
             os.environ,
             project_root=project_root,
             require_managed_key=require_key,
+            repair_private_paths=command != "hook",
         )
         child_env["LIANS_MEMORY_HOME"] = str(data_home)
         os.chdir(child_env["LIANS_PLUGIN_RUNTIME_CWD"])
         if command == "mcp":
             argv = [str(python), "-m", "lians.mcp_server"]
+            os.execve(str(python), argv, child_env)
         else:
             if not HOOK_RUNTIME.is_file():
                 raise BootstrapError(f"bundled hook runtime is missing: {HOOK_RUNTIME}")
@@ -160,10 +199,7 @@ def _runtime_command(command: str, daemon_action: str | None = None) -> int:
                     "start": "--prewarm",
                     "stop": "--stop",
                 }[str(daemon_action)]
-            argv = [str(python), str(HOOK_RUNTIME)]
-            if hook_arg:
-                argv.append(hook_arg)
-        os.execve(str(python), argv, child_env)
+            return _run_hook_runtime(command, hook_arg, child_env)
     except BootstrapError as exc:
         # Hooks are additive.  A new or temporarily broken plugin must never
         # block the user's prompt; MCP is optional until doctor passes.
