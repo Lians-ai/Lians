@@ -7,7 +7,7 @@ name = "lians-sdk"
 version = "0.5.0"
 description = "Correct, temporal, and auditable memory infrastructure for AI agents"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = { file = "LICENSE" }
 readme = "README.md"
 keywords = ["ai", "agent-memory", "long-term-memory", "llm", "mcp", "langchain", "langgraph", "crewai", "compliance", "audit-trail", "bitemporal", "gdpr"]
 classifiers = [
