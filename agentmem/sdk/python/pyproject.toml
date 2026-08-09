@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lians-sdk"
-version = "0.5.0"
+version = "0.5.0+codex.20260808.16"
 description = "Correct, temporal, and auditable memory infrastructure for AI agents"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
