@@ -1,6 +1,6 @@
 # Lians Memory universal plugin production checklist
 
-> **Planned, not live:** `https://mcp.lians.ai/mcp` is the selected canonical production endpoint. This repository does not assert that DNS, TLS, OAuth, or the service is live yet. Deploy and validate this exact host; do not substitute a temporary, testing, or alternate submission URL.
+> **DNS and TLS live; MCP route not live:** `mcp.lians.ai` resolves to Fly.io with a trusted certificate, and public health/readiness checks pass. The selected canonical `https://mcp.lians.ai/mcp` route and protected-resource metadata remain disabled and return 404 pending the reviewed deployment. Do not substitute a temporary, testing, or alternate submission URL.
 
 The universal package is under `plugins/lians-memory-universal/`. It contains no local hooks, setup scripts, vendored Python runtime, or custom UI. The implemented hosted MCP contract is in `agentmem/src/lians/openai_mcp.py`; the deployed service must match it exactly.
 
@@ -18,7 +18,7 @@ Do not submit while `submission/metadata.json` contains `planned_canonical_not_l
 
 ## 1. Bring the canonical endpoint online
 
-- [ ] Configure production DNS and a trusted TLS certificate for `mcp.lians.ai`.
+- [x] Configure production DNS and a trusted TLS certificate for `mcp.lians.ai`.
 - [ ] Deploy the hosted MCP application so Streamable HTTP is reachable at exactly `https://mcp.lians.ai/mcp`.
 - [ ] Configure `HOSTED_MCP_RESOURCE_URL=https://mcp.lians.ai`; verify runtime normalization publishes the exact OAuth resource identifier `https://mcp.lians.ai/`.
 - [ ] Enable the hosted MCP surface only after issuer, JWKS, origin, host, retention, and database settings are production-safe.
@@ -26,7 +26,7 @@ Do not submit while `submission/metadata.json` contains `planned_canonical_not_l
 - [ ] Do not submit a local endpoint, developer tunnel, template URL, fallback host, or alternate origin.
 - [ ] Confirm the universal endpoint works for every supported user and organization.
 - [ ] After live validation, change only `mcp.urlStatus` in `submission/metadata.json` from `planned_canonical_not_live` to `validated_live`; keep the canonical URL unchanged.
-- [ ] Confirm no obsolete host remains in the package and the planned host is consistent across the skill, metadata, and release notes.
+- [x] Confirm no obsolete host remains in the package and the planned host is consistent across the skill, metadata, and release notes.
 
 ## 2. Freeze and verify the implemented MCP contract
 
@@ -85,9 +85,9 @@ Tool discovery must match this table and `submission/metadata.json`:
 - [ ] Verify each hosted memory uses its own random content key, content is AES-256-GCM encrypted, and that key is wrapped under the configured master-key provider.
 - [ ] Verify hosted audit records use keyed HMACs and allowlisted controls and contain neither raw stored content nor raw recall queries.
 - [ ] Configure the active-content retention policy (365 days by default, configurable from 1 through 3650), keep scheduled pruning enabled, and test expiry through a prune cycle.
-- [ ] Treat `audit_retention_days` as a minimum only. Either implement and validate chain-safe audit expiry or obtain legal/privacy approval and explicitly disclose indefinite retention of pseudonymous, content-free append-only audit records; clear `auditRetentionLifecycleStatus` only afterward.
-- [ ] Publish a privacy policy covering collected data, purposes, recipients, retention, deletion, access, export, correction, and user controls.
-- [ ] Obtain provider-backed evidence for the maximum managed-backup deletion window and restore/tombstone behavior, publish the verified facts, and clear `backupDeletionWindowStatus`. Application code alone does not prove this gate.
+- [x] Treat `audit_retention_days` as a minimum only. The operator approved indefinite retention of pseudonymous, content-free append-only audit records on 2026-08-09, and the public privacy policy discloses it.
+- [x] Publish a privacy policy covering collected data, purposes, recipients, retention, deletion, access, export, correction, and user controls.
+- [x] Record provider-backed backup evidence: the encrypted Fly PostgreSQL volumes and current snapshots report five-day retention; Fly documents snapshot restoration; the public policy discloses that deleted content can remain recoverable until snapshot expiry. A restored pre-deletion snapshot is not claimed to contain a later tombstone.
 - [ ] Require fresh, explicit user confirmation before each irreversible `forget_memory` call. Never infer confirmation from an earlier unrelated message.
 - [ ] Test prompt injection, cross-tenant access, scope escalation, replay, secret ingestion, bulk transcript ingestion, and data exfiltration.
 
@@ -108,14 +108,14 @@ python (Join-Path $codexRoot "skills/.system/plugin-creator/scripts/validate_plu
 python (Join-Path $codexRoot "skills/.system/skill-creator/scripts/quick_validate.py") plugins/lians-memory-universal/skills/lians-memory
 ```
 
-- [ ] Parse every JSON and YAML file without warnings.
-- [ ] Confirm the manifest name matches the plugin folder.
-- [ ] Confirm `displayName` is at most 30 characters and `shortDescription` is one line and at most 30 characters.
-- [ ] Confirm there are no more than three starter prompts and each is at most 128 characters.
-- [ ] Confirm `submission/test-cases.json` contains exactly five positive and three negative cases, including confirmed permanent deletion.
+- [x] Parse every JSON and YAML file without warnings.
+- [x] Confirm the manifest name matches the plugin folder.
+- [x] Confirm `displayName` is at most 30 characters and `shortDescription` is one line and at most 30 characters.
+- [x] Confirm there are no more than three starter prompts and each is at most 128 characters.
+- [x] Confirm `submission/test-cases.json` contains exactly five positive and three negative cases, including confirmed permanent deletion.
 - [ ] Confirm `submission/data-handling.md` and `submission/reviewer-guide.md` exist, match the deployed behavior, and contain no credentials, tokens, or MFA secrets.
-- [ ] Confirm the icon is square and present inside the package.
-- [ ] Confirm no secret, private path, local hook, setup script, vendored runtime, obsolete endpoint, or unsupported MCP configuration is present.
+- [x] Confirm the icon is square and present inside the package.
+- [x] Confirm no secret, private path, local hook, setup script, vendored runtime, obsolete endpoint, or unsupported MCP configuration is present.
 
 Test the deployed service with the repository [endpoint checker](../scripts/check_openai_plugin_endpoint.py):
 
@@ -143,7 +143,7 @@ npx @modelcontextprotocol/inspector@latest
 - [ ] Use an OpenAI Platform project with global data residency. MCP submissions from EU-residency projects are currently not supported.
 - [ ] Confirm the submitter has Apps Management Write / `api.apps.write` and Apps Management Read / `api.apps.read` as needed.
 - [ ] Complete business verification for the **Lians** publisher identity.
-- [ ] Verify the public website, support, privacy, and terms URLs resolve and match that identity.
+- [x] Verify the public website, support, privacy, and terms URLs resolve and match that identity.
 - [ ] Record the canonical endpoint, OAuth configuration, reviewer credentials, successful domain verification, and current Scan Tools result.
 - [ ] Use [`reviewer-guide.md`](../plugins/lians-memory-universal/submission/reviewer-guide.md) to provision and verify the fixture account; transmit credentials only through the portal's secure reviewer fields.
 - [ ] Attach or reproduce the approved [`data-handling.md`](../plugins/lians-memory-universal/submission/data-handling.md) disclosure, including the verified external backup-deletion window.
@@ -178,7 +178,7 @@ No screenshots are required because this release has no custom UI.
 | OAuth | Discovery, PKCE, token validation, per-tool scopes, and reviewer login pass | Pending |
 | Privacy | Restricted-data rejection, isolation, retention, and audit controls pass | Pending |
 | Deletion | Explicit confirmation, tenant checks, crypto-shredding, and idempotent retry pass | Pending |
-| Backups | Provider-backed deletion window and restore/tombstone behavior are documented and disclosed | Pending |
+| Backups | Provider-backed deletion window and restore/tombstone behavior are documented and disclosed | Pass (2026-08-09) |
 | Domain | OpenAI challenge verification passes | Pending |
 | Evaluation | All five positive and three negative cases pass on supported surfaces | Pending |
 | Publisher | Required permissions and verified Lians business identity are present | Pending |

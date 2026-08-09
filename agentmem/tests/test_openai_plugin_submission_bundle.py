@@ -70,7 +70,7 @@ async def test_submission_tool_contracts_match_runtime_exactly():
         assert actual[name]["_meta"]["securitySchemes"] == actual[name]["securitySchemes"]
 
 
-def test_submission_cases_counts_and_pending_endpoint_are_truthful():
+def test_submission_cases_endpoint_and_operator_policy_statuses_are_truthful():
     metadata = json.loads((BUNDLE / "submission" / "metadata.json").read_text(encoding="utf-8"))
     cases = json.loads((BUNDLE / "submission" / "test-cases.json").read_text(encoding="utf-8"))
 
@@ -79,5 +79,11 @@ def test_submission_cases_counts_and_pending_endpoint_are_truthful():
     assert metadata["mcp"]["url"] == "https://mcp.lians.ai/mcp"
     assert metadata["mcp"]["urlStatus"] == "planned_canonical_not_live"
     assert metadata["draft"] is True
-    assert metadata["reviewArtifacts"]["auditRetentionLifecycleStatus"].endswith("_pending")
-    assert metadata["reviewArtifacts"]["backupDeletionWindowStatus"].endswith("_pending")
+    assert (
+        metadata["reviewArtifacts"]["auditRetentionLifecycleStatus"]
+        == "approved_and_publicly_disclosed_indefinite_pseudonymous_content_free"
+    )
+    assert (
+        metadata["reviewArtifacts"]["backupDeletionWindowStatus"]
+        == "provider_verified_and_publicly_disclosed_encrypted_fly_snapshots_5_days"
+    )

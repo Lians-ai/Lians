@@ -36,7 +36,7 @@ Before giving access to a reviewer, also confirm:
 - DNS, TLS, OAuth discovery, resource metadata, and the canonical endpoint are public and stable;
 - the demo account has no MFA or confirmation gate and no access outside its fixture tenant;
 - active retention is configured and scheduled pruning is running;
-- the managed-backup deletion window and restore behavior have passed the external policy gate in [`data-handling.md`](./data-handling.md); and
+- the published indefinite, content-free audit policy and five-day encrypted Fly snapshot window still match the production configuration and [`data-handling.md`](./data-handling.md); and
 - logs, telemetry, and audit output contain no raw memory snippets, recall queries, credentials, or bearer tokens.
 
 ## Fixture and reproducible cases

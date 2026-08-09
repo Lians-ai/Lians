@@ -1,6 +1,6 @@
 # Lians Memory data handling
 
-This document describes the implemented hosted MCP data path for `remember`, `recall`, and `forget_memory`. The canonical endpoint `https://mcp.lians.ai/mcp` is planned and is not live yet. Managed-backup deletion remains an external production-policy gate described below.
+This document describes the implemented hosted MCP data path for `remember`, `recall`, and `forget_memory`. DNS and trusted TLS are active for `mcp.lians.ai`, but the canonical `https://mcp.lians.ai/mcp` route remains disabled and is not live yet. The production operator's audit-retention and managed-backup decisions are recorded below.
 
 ## Collection boundary
 
@@ -30,6 +30,10 @@ The server verifies OAuth before a tool runs. It transforms the verified OAuth i
 
 Every tool call is authorized against that derived tenant namespace and the required scope. Project identifiers are derived inside the authenticated namespace. `forget_memory` additionally requires that the reference identify an active record created through the hosted OpenAI MCP surface; a missing, erased, foreign-tenant, or non-hosted reference is reported only as `not_found`.
 
+## Production processors and recipients
+
+OpenAI, including ChatGPT and Codex, is the client surface that sends the user-selected snippet or query and receives the requested result. Auth0 by Okta provides OAuth identity and account access; Lians derives the opaque hosted namespace before memory operations. Fly.io hosts the application and encrypted PostgreSQL volumes. Upstash provides operational rate-limiting state and does not serve as a backup of active memory content. Resend delivers account verification and recovery email. The [Lians privacy policy](https://www.lians.ai/privacy) publishes these roles and their applicable data categories.
+
 ## Encryption and active storage
 
 The hosted MCP assigns a unique internal subject identifier to each memory. Each memory therefore receives its own random 32-byte content key. Content is encrypted with AES-256-GCM, and the per-memory key is wrapped under the configured master-key provider. Active records store ciphertext rather than the submitted plaintext.
@@ -52,24 +56,23 @@ Active-content pruning removes the encrypted content and derived embedding, meta
 
 A confirmed `forget_memory` call performs the same active-store crypto-shredding immediately for the selected hosted record: it removes encrypted content and derived active data and destroys that memory's wrapped key. Repeating the call returns `not_found` and does not reveal cross-tenant details.
 
-The audit log is append-only and tamper-evident. The configured `audit_retention_days` is a minimum-retention policy, not an automatic audit-deletion deadline. In the current implementation, privacy-minimal audit records and non-content deletion evidence remain indefinitely in the active audit chain. Production submission is blocked until the operator either (a) implements and validates chain-safe audit archival/deletion with a published window or (b) publishes and obtains legal/privacy approval for indefinite retention of these pseudonymous, content-free records.
+The audit log is append-only and tamper-evident. The configured `audit_retention_days` is a minimum-retention policy, not an automatic audit-deletion deadline. In the current implementation, privacy-minimal audit records and non-content deletion evidence remain indefinitely in the active audit chain. On 2026-08-09, the production operator approved this indefinite retention policy for the pseudonymous, content-free audit chain and published it in the [Lians privacy policy](https://www.lians.ai/privacy). This decision must be reassessed if audit fields, purposes, recipients, or identifiability change.
 
-## External audit and backup gates
+## External audit and backup policy
 
-**Status: pending operator evidence; blocks production submission.**
+**Status: approved and publicly disclosed on 2026-08-09; revalidate before submission and after any storage change.**
 
-The application code proves active-store crypto-shredding, but it does not prove the retention or deletion behavior of managed database backups, replicas, snapshots, exports, or disaster-recovery media. No backup deletion window is promised in this repository.
+The application code proves active-store crypto-shredding. Production and staging PostgreSQL currently use encrypted Fly.io volumes with automatic daily snapshots enabled. The provider configuration and current snapshot inventory both report a five-day retention period. [Fly.io documents](https://fly.io/docs/volumes/snapshots/) that volume snapshots are point-in-time copies, are retained for five days by default, and can restore data into a new volume.
 
-Before submission, the production operator must:
+The resulting production policy is intentionally explicit:
 
-1. Approve and publish the append-only audit-retention policy or implement and validate chain-safe audit expiry.
-2. Obtain provider-backed evidence for the maximum backup-retention and deletion window across every production copy.
-3. Document how restores preserve deletion tombstones or otherwise prevent a forgotten record from becoming active again.
-4. Verify that replicas, exports, and disaster-recovery workflows are covered.
-5. Put the verified windows and limitations in the public privacy policy and reviewer materials.
-6. Record approval of that evidence in the production checklist and submission metadata.
+1. Privacy-minimal, content-free audit records and non-content deletion evidence remain indefinitely in the active append-only audit chain.
+2. Active memory content is crypto-shredded by confirmed deletion or scheduled expiry, but encrypted content captured in an earlier Fly snapshot can remain recoverable until that snapshot expires, for no more than the configured five-day snapshot window.
+3. A snapshot restore can reintroduce the historical state captured by that snapshot. A restored database must therefore remain out of public service until the operator checks retention and deletion state; the service does not claim that a pre-deletion snapshot already contains a later tombstone.
+4. Hosted recall-result and working-set caches are bypassed. Upstash is used for operational state and rate limiting, not as a backup of active memory content.
+5. The [Lians privacy policy](https://www.lians.ai/privacy) publishes the indefinite audit policy, the five-day encrypted snapshot window, and the possibility of recovery until snapshot expiry.
 
-If these facts are not verified, the plugin is not ready to submit.
+These facts satisfy the current operator policy gate. They must be reverified if the database, cache, replica, export, snapshot, disaster-recovery, or audit architecture changes.
 
 ## Evidence and operator checks
 
