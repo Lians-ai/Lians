@@ -1,0 +1,195 @@
+{
+  "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+  "freeze_status": "frozen_before_semantic_judging",
+  "manifest_sha256": "7cc78f2ed31b21af2a9fbbe01b9282cd18e4bc06e9146218a9eed3026079eca6",
+  "rubric": {
+    "audit_label": "secondary_posthoc_semantic_audit",
+    "cases": [
+      {
+        "accepted_answers": [
+          "Adoption agencies",
+          "adoption agencies"
+        ],
+        "adversarial_answer": null,
+        "category": 1,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "Adoption agencies",
+        "prompt_id": "conv0-cat1-first",
+        "qa_index": 3,
+        "question": "What did Caroline research?",
+        "rubric_case_id": "rubric-4a802c84a7542909ff02"
+      },
+      {
+        "accepted_answers": [
+          "Transgender woman",
+          "A transgender woman",
+          "transgender woman"
+        ],
+        "adversarial_answer": null,
+        "category": 1,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "Transgender woman",
+        "prompt_id": "conv0-cat1-second",
+        "qa_index": 4,
+        "question": "What is Caroline's identity?",
+        "rubric_case_id": "rubric-4d529577654dffad6fb1"
+      },
+      {
+        "accepted_answers": [
+          "7 May 2023",
+          "May 7, 2023"
+        ],
+        "adversarial_answer": null,
+        "category": 2,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "7 May 2023",
+        "prompt_id": "conv0-cat2-first",
+        "qa_index": 0,
+        "question": "When did Caroline go to the LGBTQ support group?",
+        "rubric_case_id": "rubric-eadc1f8509a862214d24"
+      },
+      {
+        "accepted_answers": [
+          "2022"
+        ],
+        "adversarial_answer": null,
+        "category": 2,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "2022",
+        "prompt_id": "conv0-cat2-second",
+        "qa_index": 1,
+        "question": "When did Melanie paint a sunrise?",
+        "rubric_case_id": "rubric-0714d95b642873e7e8ad"
+      },
+      {
+        "accepted_answers": [
+          "Psychology, counseling certification",
+          "Psychology and counseling certification",
+          "psychology, counseling certification"
+        ],
+        "adversarial_answer": null,
+        "category": 3,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "Psychology, counseling certification",
+        "prompt_id": "conv0-cat3-first",
+        "qa_index": 2,
+        "question": "What fields would Caroline be likely to pursue in her educaton?",
+        "rubric_case_id": "rubric-b1fdc110fd7e67b71c7e"
+      },
+      {
+        "accepted_answers": [
+          "Likely no",
+          "No",
+          "Probably not"
+        ],
+        "adversarial_answer": null,
+        "category": 3,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "Likely no",
+        "prompt_id": "conv0-cat3-second",
+        "qa_index": 14,
+        "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+        "rubric_case_id": "rubric-284e0cc41477e61168b4"
+      },
+      {
+        "accepted_answers": [
+          "mental health",
+          "Mental health"
+        ],
+        "adversarial_answer": null,
+        "category": 4,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "mental health",
+        "prompt_id": "conv0-cat4-first",
+        "qa_index": 82,
+        "question": "What did the charity race raise awareness for?",
+        "rubric_case_id": "rubric-d49d521c1c3ba8b5cc89"
+      },
+      {
+        "accepted_answers": [
+          "self-care is important",
+          "Self-care is important"
+        ],
+        "adversarial_answer": null,
+        "category": 4,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [],
+        "ground_truth": "self-care is important",
+        "prompt_id": "conv0-cat4-second",
+        "qa_index": 83,
+        "question": "What did Melanie realize after the charity race?",
+        "rubric_case_id": "rubric-343dcb497ddaa38c6466"
+      },
+      {
+        "accepted_answers": [
+          "UNKNOWN"
+        ],
+        "adversarial_answer": "self-care is important",
+        "category": 5,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [
+          "self-care is important"
+        ],
+        "ground_truth": "UNKNOWN",
+        "prompt_id": "conv0-cat5-first",
+        "qa_index": 152,
+        "question": "What did Caroline realize after her charity race?",
+        "rubric_case_id": "rubric-92ccd5b154ea24d00198"
+      },
+      {
+        "accepted_answers": [
+          "UNKNOWN"
+        ],
+        "adversarial_answer": "researching adoption agencies",
+        "category": 5,
+        "context_id": "locomo-conv0",
+        "conversation_index": 0,
+        "denied_answers": [
+          "researching adoption agencies"
+        ],
+        "ground_truth": "UNKNOWN",
+        "prompt_id": "conv0-cat5-second",
+        "qa_index": 153,
+        "question": "What are Melanie's plans for the summer with respect to adoption?",
+        "rubric_case_id": "rubric-720e32841e688825e29b"
+      }
+    ],
+    "global_criteria": [
+      "Pass only when the answer gives the correct substantive answer to the question, allowing ordinary wording, grammatical, date-format, and obvious lexical aliases.",
+      "Every additional factual claim must be both true in the supplied raw evidence and relevant to the question; an unsupported, false, transferred, or irrelevant extra claim makes the whole answer fail.",
+      "Do not reward partial overlap when the answer omits a substantive part of the reference answer or changes its certainty.",
+      "For category 5, pass only the exact string UNKNOWN. Any other spelling, framing, explanation, or transfer of the adversarial answer fails."
+    ],
+    "qualification_role": "secondary_only_not_original_qualification",
+    "schema_version": "lians.codex-sol-semantic-rubric-payload.v1",
+    "source_policy": {
+      "allowed_fields": [
+        "manifest prompt identifiers",
+        "questions",
+        "ground-truth/reference answers",
+        "adversarial/denied answers",
+        "categories",
+        "dataset indices needed to bind those fields"
+      ],
+      "matrix_outputs_or_answer_strings_used": false
+    }
+  },
+  "rubric_sha256": "bd03bb21fa3bca7b007197a45c3c1d707fab954adc54ac2c5f2a8cfca4564a64",
+  "schema_version": "lians.codex-sol-semantic-rubric.v1"
+}

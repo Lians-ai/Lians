@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019fe2e7-e4bd-7d63-8558-c5810a18d661"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Probably not; that support inspired her interest in counseling"}}
+{"type":"turn.completed","usage":{"input_tokens":12755,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":14,"reasoning_output_tokens":0}}

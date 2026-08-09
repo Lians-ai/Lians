@@ -1,0 +1,52 @@
+{
+  "schema": "lians.bge-onnx-product-provider-parity.v1",
+  "generated_at": "2026-08-08T19:51:27.142054+00:00",
+  "scope": "Production BgeOnnxProvider plus LocalLiansClient hybrid recall on the same ten category-spanning LOCOMO queries frozen in the PyTorch parity report",
+  "artifact": {
+    "model": "BAAI/bge-large-en-v1.5",
+    "revision": "d4aa6901d3a41ba39fb536a557fa166f842b0e09",
+    "manifest_sha256": "6aeb7fed1b1c9de0e86770b8cbbaaf8547f6bda593ec12dd94aff80aaafa0462",
+    "model_sha256": "69ed3f810d3b6d13f70dff9ca89966f39c0a0e877fb88211be7bcc070df2a2ce",
+    "tokenizer_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+  },
+  "runtime": {
+    "provider": "bge-onnx",
+    "onnxruntime": "1.28.0",
+    "threads": 8,
+    "disable_prepacking": true,
+    "graph_optimization": "all",
+    "model_calls": 0
+  },
+  "database": {
+    "namespace": "local",
+    "agent_id": "locomo-conv-26",
+    "logical_live_facts_rows": 419,
+    "logical_live_facts_sha256": "4a085f7328a4e5648eb3b923064081b4491e3e5701d0f99572c565fec6a2aa1a"
+  },
+  "implementation_sha256": {
+    "bge_onnx.py": "94aa63dfd40ff35b66fb26e4bd6ff15a3156e22c96953d3da596b113a9430b52",
+    "embeddings.py": "25ad9e54c4c600ab66f4fb9e0a86ea5b08a1fc823cd317c5ab07079963ce11cc",
+    "ranking.py": "5b8e7b7e0da136c59717d2713b25391b7a0c460d1e2499c916e8f4a8cb7febad"
+  },
+  "quality_gate": {
+    "pass": true,
+    "ordered_top20_exact_cases": 10,
+    "total_cases": 10,
+    "degraded_cases": 0,
+    "max_common_top20_score_abs_delta": 1.4603138481783517e-7,
+    "reference": "codex-bge-fp32-pytorch-parity-2026-08-08.json"
+  },
+  "cases": [
+    {"qa_index": 0, "ordered_top20_exact": true, "max_score_abs_delta": 5.093051602678145e-8},
+    {"qa_index": 1, "ordered_top20_exact": true, "max_score_abs_delta": 7.748603991775127e-8},
+    {"qa_index": 2, "ordered_top20_exact": true, "max_score_abs_delta": 5.6523012603726386e-8},
+    {"qa_index": 3, "ordered_top20_exact": true, "max_score_abs_delta": 6.854534267963786e-8},
+    {"qa_index": 4, "ordered_top20_exact": true, "max_score_abs_delta": 1.4603138481783517e-7},
+    {"qa_index": 14, "ordered_top20_exact": true, "max_score_abs_delta": 1.251697542836716e-7},
+    {"qa_index": 82, "ordered_top20_exact": true, "max_score_abs_delta": 1.3709068330536311e-7},
+    {"qa_index": 83, "ordered_top20_exact": true, "max_score_abs_delta": 1.0728836496998184e-7},
+    {"qa_index": 152, "ordered_top20_exact": true, "max_score_abs_delta": 1.0728837557261173e-7},
+    {"qa_index": 153, "ordered_top20_exact": true, "max_score_abs_delta": 6.85453424020821e-8}
+  ],
+  "timing_ms_not_a_latency_benchmark": 10038.636
+}

@@ -62,7 +62,12 @@ from .pii import (
     get_or_create_subject_key,
     lock_subject_key_for_update,
 )
-from .ranking import hybrid_recall, recall_candidate_contract
+from .ranking import (
+    hybrid_recall,
+    lexical_reranker_primary_enabled,
+    recall_candidate_contract,
+    reranker_enabled,
+)
 from .schemas import (
     ConflictFlagOut,
     ConflictListResult,
@@ -1711,22 +1716,33 @@ async def recall_memories(
         # needs, not something to silently absorb. Keyed lookups above never
         # embed, so they never degrade.
         retrieval_degraded = False
+        lexical_reranker_primary = lexical_reranker_primary_enabled()
         with tracer.start_as_current_span("recall.embed") as embed_span:
-            provider = get_embedding_provider()
-            try:
-                # Custom providers written against the pre-asymmetric
-                # interface may only implement embed_one; treat that as the
-                # query embedding rather than a degradation event.
-                embed_fn = getattr(provider, "embed_query", None) or provider.embed_one
-                query_embedding = await embed_fn(req.query)
-            except Exception as exc:
+            if lexical_reranker_primary:
                 query_embedding = []
-                retrieval_degraded = True
-                embed_span.set_attribute("retrieval_degraded", True)
-                logger.warning(
-                    "embedding provider failed (%s) — recall degrading to lexical-only",
-                    type(exc).__name__,
-                )
+                embed_span.set_attribute("retrieval_mode", "lexical_reranker_primary")
+                if not reranker_enabled():
+                    retrieval_degraded = True
+                    embed_span.set_attribute("retrieval_degraded", True)
+                    logger.warning(
+                        "lexical-primary recall requested without a configured reranker"
+                    )
+            else:
+                provider = get_embedding_provider()
+                try:
+                    # Custom providers written against the pre-asymmetric
+                    # interface may only implement embed_one; treat that as the
+                    # query embedding rather than a degradation event.
+                    embed_fn = getattr(provider, "embed_query", None) or provider.embed_one
+                    query_embedding = await embed_fn(req.query)
+                except Exception as exc:
+                    query_embedding = []
+                    retrieval_degraded = True
+                    embed_span.set_attribute("retrieval_degraded", True)
+                    logger.warning(
+                        "embedding provider failed (%s) — recall degrading to lexical-only",
+                        type(exc).__name__,
+                    )
         span.set_attribute("retrieval_degraded", retrieval_degraded)
 
         barrier_group = await _get_barrier_group(
@@ -1752,6 +1768,12 @@ async def recall_memories(
                 live_facts_override=None,
                 diagnostics=recall_diagnostics,
             )
+
+        if lexical_reranker_primary:
+            recall_diagnostics["candidate_mode"] = "bounded_lexical_reranker_primary"
+        if recall_diagnostics.get("reranker_complete") is False:
+            retrieval_degraded = True
+            span.set_attribute("retrieval_degraded", True)
 
         span.set_attribute("result_count", len(results))
 

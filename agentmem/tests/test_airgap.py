@@ -142,6 +142,11 @@ class TestAirgapValidation:
         from lians.main import _validate_airgap
         _validate_airgap(self._settings(embedding_provider="local"))
 
+    def test_pinned_bge_onnx_provider_is_also_safe(self):
+        from lians.main import _validate_airgap
+
+        _validate_airgap(self._settings(embedding_provider="bge-onnx"))
+
     def test_voyage_provider_raises(self):
         from lians.main import _validate_airgap
         with pytest.raises(RuntimeError, match="EMBEDDING_PROVIDER"):

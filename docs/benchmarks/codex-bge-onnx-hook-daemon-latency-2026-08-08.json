@@ -1,0 +1,91 @@
+{
+  "bge_onnx_artifact_sha256": {
+    "manifest.json": "6aeb7fed1b1c9de0e86770b8cbbaaf8547f6bda593ec12dd94aff80aaafa0462",
+    "model.onnx": "69ed3f810d3b6d13f70dff9ca89966f39c0a0e877fb88211be7bcc070df2a2ce",
+    "tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+  },
+  "database_file_sha256_after_run": "9e6fd63ad2a219676afa8ac6ada529e14627986007eafc649e9f066fb3fde729",
+  "embedding_model": "BAAI/bge-large-en-v1.5@d4aa6901d3a41ba39fb536a557fa166f842b0e09",
+  "embedding_provider": "bge-onnx",
+  "gate": {
+    "passed": true,
+    "scope": "fresh hook process to an already-running authenticated loopback daemon",
+    "target_p95_ms": 3500.0
+  },
+  "generated_at": "2026-08-08T19:41:40.255980+00:00",
+  "logical_live_facts": {
+    "canonicalization": "live_facts ordered by id as newline-delimited compact JSON; metadata parsed as JSON; encrypted content and stored embedding represented by their SHA-256",
+    "rows": 419,
+    "sha256": "4a085f7328a4e5648eb3b923064081b4491e3e5701d0f99572c565fec6a2aa1a"
+  },
+  "measurement_boundaries": {
+    "filesystem_cache": "operating-system filesystem page cache was not flushed",
+    "true_daemon_cold_start": "fresh daemon process through SDK/database initialization, exact artifact hash validation, ONNX session creation, and probe recall",
+    "warm_daemon_fresh_hook_process": "fresh Python hook process through authenticated loopback recall, context rendering, receipt append, and protocol output; daemon is already validated and prewarmed"
+  },
+  "memory_identity": {
+    "agent_id": "locomo-conv-26",
+    "k": 20,
+    "max_tokens": 768,
+    "min_score": 0.45,
+    "namespace": "local"
+  },
+  "model_calls": 0,
+  "query_sha256": "db23cff112433bc3f25a9807266bec8880a28e9960e82494cdb341841c24fb77",
+  "schema_version": "lians.codex-hook-daemon-latency.v1",
+  "session_start_quiet_lifecycle_smoke": {
+    "captured_characters": 0,
+    "captured_lines": 0,
+    "elapsed_ms": 6574.146,
+    "exit_code": 0,
+    "scope": "fresh --prewarm-quiet process through authenticated daemon readiness; daemon stopped after validation"
+  },
+  "true_daemon_cold_start_ms": 10133.64,
+  "warm_daemon_fresh_hook_process": {
+    "all_injected": true,
+    "all_protocol_outputs_valid": true,
+    "maximum_ms": 1550.269,
+    "p50_ms": 1010.594,
+    "p95_ms": 1550.269,
+    "receipt_elapsed_ms": [
+      828.0,
+      786.0,
+      711.0,
+      1264.0,
+      769.0,
+      792.0,
+      770.0,
+      1122.0,
+      884.0,
+      659.0
+    ],
+    "receipt_maximum_ms": 1264.0,
+    "receipt_p50_ms": 789.0,
+    "receipt_p95_ms": 1264.0,
+    "repeats": 10,
+    "top_scores": [
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268,
+      0.5816545458902268
+    ],
+    "wall_time_ms": [
+      1080.682,
+      953.624,
+      856.736,
+      1550.269,
+      1090.507,
+      953.627,
+      932.251,
+      1430.192,
+      1067.561,
+      839.097
+    ]
+  }
+}

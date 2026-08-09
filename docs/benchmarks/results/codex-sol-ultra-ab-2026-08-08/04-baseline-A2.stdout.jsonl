@@ -1,0 +1,12 @@
+{"type":"thread.started","thread_id":"019fe25c-dba3-7ae1-969e-00b05d5b9557"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_2","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_3","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_4","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_5","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_6","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"}}
+{"type":"item.completed","item":{"id":"item_7","type":"error","message":"Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_8","type":"agent_message","text":"7 May 2023"}}
+{"type":"turn.completed","usage":{"input_tokens":25826,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":9,"reasoning_output_tokens":0}}

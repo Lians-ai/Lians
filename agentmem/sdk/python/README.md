@@ -13,6 +13,7 @@
 ```bash
 pip install lians-sdk
 pip install lians-sdk[local]         # SQLite plus real local semantic embeddings
+pip install lians-sdk[bge-onnx]      # SQLite plus hash-pinned exact BGE ONNX
 pip install lians-sdk[mcp]           # Local MCP server
 pip install lians-sdk[langchain]     # LangChain
 pip install lians-sdk[langgraph]     # LangGraph
@@ -23,6 +24,37 @@ pip install lians-sdk[anthropic]     # Anthropic API middleware + webhook conver
 pip install lians-sdk[google-adk]    # Google ADK BasePlugin
 pip install lians-sdk[all]           # Everything
 ```
+
+### Exact BGE ONNX runtime (opt-in)
+
+`bge-onnx` runs the pinned `BAAI/bge-large-en-v1.5` FP32 ONNX graph locally and
+keeps the same 1024-dimensional document/query space as an existing BGE store;
+it does not reindex documents. Download `onnx/model.onnx` and `tokenizer.json`
+from revision `d4aa6901d3a41ba39fb536a557fa166f842b0e09`, then stage them with the
+offline exporter:
+
+```bash
+lians-bge-onnx-export \
+  --model /local/download/onnx/model.onnx \
+  --tokenizer /local/download/tokenizer.json \
+  --output /opt/lians/bge-large-en-v1.5-onnx
+
+export EMBEDDING_PROVIDER=bge-onnx
+export BGE_ONNX_ARTIFACT_DIR=/opt/lians/bge-large-en-v1.5-onnx
+export BGE_ONNX_INTRA_OP_THREADS=8
+```
+
+The exporter performs no network I/O and accepts only the pinned model and
+tokenizer hashes. The runtime revalidates the model, tokenizer, deterministic
+manifest, and 1024-dimensional ONNX contract before first inference. Keep the
+1.34 GB model outside the repository; only the small manifest belongs in
+configuration or benchmark evidence.
+
+Dimension compatibility is not embedding compatibility. Existing databases must
+have been indexed with that exact BGE revision and the same document/query
+normalization and instruction policy; otherwise reindex before enabling this
+provider. The current local store does not persist an embedder fingerprint, so
+the runtime cannot detect a different 1024-dimensional model automatically.
 
 ## Quickstart
 

@@ -21,6 +21,7 @@ Point-in-time queries (as_of set) still go to the ``memories`` table because
 """
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -34,6 +35,8 @@ from .crypto import decrypt_content
 from .models import LiveFact, Memory
 from .subject_key_loader import load_subject_keys
 
+logger = logging.getLogger(__name__)
+
 _ANN_PREFETCH_MULTIPLIER = 20
 _CANDIDATE_WINDOW_LIMIT = max(
     100,
@@ -44,7 +47,23 @@ _CANDIDATE_WINDOW_LIMIT = max(
 def recall_candidate_contract(k: int) -> str:
     """Stable cache partition for the bounded candidate-discovery contract."""
     ann_limit = min(_CANDIDATE_WINDOW_LIMIT, max(k * _ANN_PREFETCH_MULTIPLIER, 100))
-    return f"bounded-candidates-v1:ann={ann_limit}:fallback={_CANDIDATE_WINDOW_LIMIT}"
+    if RERANKER_ONNX_MODEL:
+        model = os.path.abspath(os.path.expanduser(RERANKER_ONNX_MODEL))
+        try:
+            stat = os.stat(model)
+            revision = f"{stat.st_size}-{stat.st_mtime_ns}"
+        except OSError:
+            revision = "missing"
+        reranker = f"onnx:{model}:{revision}"
+    elif RERANKER_MODEL:
+        reranker = f"sentence-transformers:{RERANKER_MODEL}"
+    else:
+        reranker = "off"
+    mode = "lexical-primary" if RERANKER_PRIMARY_LEXICAL else "hybrid"
+    return (
+        f"bounded-candidates-v2:ann={ann_limit}:fallback={_CANDIDATE_WINDOW_LIMIT}:"
+        f"mode={mode}:reranker={reranker}:prefetch={RERANKER_PREFETCH}"
+    )
 
 W_SEM = 0.50
 # BM25 is unbounded while cosine lives in [-1, 1]; at 0.20 a single strong
@@ -61,22 +80,55 @@ W_IMP = 0.15
 # 0.0 = pure diversity. Deterministic either way.
 MMR_LAMBDA = float(os.getenv("RECALL_MMR_LAMBDA", "1.0"))
 
-# Optional cross-encoder second stage: rerank the blend's top candidates with
-# a local reranker model before cutting to k. Probe-measured +8pts hit@10 on
-# LOCOMO conv_0 (86.7 vs 78.7 blend-only). Opt-in because it costs real CPU
-# (~50-150ms/pair without a GPU): set RECALL_RERANKER_MODEL to enable, e.g.
-# "BAAI/bge-reranker-v2-m3". Deterministic for a fixed model.
-RERANKER_MODEL = os.getenv("RECALL_RERANKER_MODEL", "")
-RERANKER_PREFETCH = int(os.getenv("RECALL_RERANKER_PREFETCH", "30"))
+# Optional cross-encoder second stage: rerank a bounded candidate window with
+# a local model before cutting to k. ``RECALL_RERANKER_MODEL`` selects the
+# sentence-transformers backend; ``RECALL_RERANKER_ONNX_MODEL`` selects the
+# dependency-light ONNX backend. ``RECALL_RERANKER_PRIMARY_LEXICAL=true``
+# intentionally uses pure BM25 ordering for candidate discovery, matching the
+# independently evaluated cold-retrieval profile. All modes are opt-in.
+RERANKER_MODEL = os.getenv("RECALL_RERANKER_MODEL", "").strip()
+RERANKER_ONNX_MODEL = os.getenv("RECALL_RERANKER_ONNX_MODEL", "").strip()
+RERANKER_ONNX_TOKENIZER = os.getenv("RECALL_RERANKER_ONNX_TOKENIZER", "").strip()
+RERANKER_PREFETCH = max(1, int(os.getenv("RECALL_RERANKER_PREFETCH", "30")))
+RERANKER_BATCH_SIZE = max(1, int(os.getenv("RECALL_RERANKER_BATCH_SIZE", "64")))
+RERANKER_MAX_LENGTH = max(8, int(os.getenv("RECALL_RERANKER_MAX_LENGTH", "256")))
+RERANKER_ORT_THREADS = max(1, int(os.getenv("RECALL_RERANKER_ORT_THREADS", "4")))
+RERANKER_PRIMARY_LEXICAL = os.getenv(
+    "RECALL_RERANKER_PRIMARY_LEXICAL", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 _reranker = None
+
+
+def reranker_enabled() -> bool:
+    """Return whether either supported cross-encoder backend is configured."""
+    return bool(RERANKER_ONNX_MODEL or RERANKER_MODEL)
+
+
+def lexical_reranker_primary_enabled() -> bool:
+    """Return whether recall should use lexical discovery + cross-encoding."""
+    return RERANKER_PRIMARY_LEXICAL
+
+
+def _reranker_backend() -> str:
+    return "onnx" if RERANKER_ONNX_MODEL else "sentence-transformers"
 
 
 def _get_reranker():
     global _reranker
     if _reranker is None:
-        from sentence_transformers import CrossEncoder
-        _reranker = CrossEncoder(RERANKER_MODEL, max_length=384)
+        if RERANKER_ONNX_MODEL:
+            from .onnx_reranker import OnnxCrossEncoder
+            _reranker = OnnxCrossEncoder(
+                RERANKER_ONNX_MODEL,
+                tokenizer_path=RERANKER_ONNX_TOKENIZER or None,
+                max_length=RERANKER_MAX_LENGTH,
+                batch_size=RERANKER_BATCH_SIZE,
+                intra_op_threads=RERANKER_ORT_THREADS,
+            )
+        else:
+            from sentence_transformers import CrossEncoder
+            _reranker = CrossEncoder(RERANKER_MODEL, max_length=RERANKER_MAX_LENGTH)
     return _reranker
 
 
@@ -84,22 +136,47 @@ def rerank_cross_encoder(
     query: str,
     scored: list[tuple[Any, float, Optional[str]]],
     k: int,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[tuple[Any, float, Optional[str]]]:
     """Rerank the top RERANKER_PREFETCH candidates by cross-encoder relevance
     and return the new top-k. Rows without decrypted content keep their blend
     order at the back of the prefetch window. Fail-open: any model error
     returns the blend ordering untouched."""
-    if not RERANKER_MODEL or len(scored) <= 1:
+    if not reranker_enabled():
+        return scored[:k]
+    if len(scored) <= 1:
+        if diagnostics is not None:
+            diagnostics.update(
+                reranker_complete=True,
+                reranker_backend=_reranker_backend(),
+                reranker_candidates=len(scored),
+            )
         return scored[:k]
     window = scored[:max(RERANKER_PREFETCH, k)]
     rest = scored[len(window):]
     try:
         ce = _get_reranker()
-        pairs = [(query, content or "") for _, _, content in window]
+        rerankable = [item for item in window if item[2]]
+        unavailable = [item for item in window if not item[2]]
+        pairs = [(query, content) for _, _, content in rerankable if content]
         ce_scores = ce.predict(pairs, show_progress_bar=False)
-        order = sorted(range(len(window)), key=lambda i: -float(ce_scores[i]))
-        reranked = [window[i] for i in order]
-    except Exception:
+        order = sorted(range(len(rerankable)), key=lambda i: -float(ce_scores[i]))
+        reranked = [rerankable[i] for i in order] + unavailable
+        if diagnostics is not None:
+            diagnostics.update(
+                reranker_complete=True,
+                reranker_backend=_reranker_backend(),
+                reranker_candidates=len(rerankable),
+            )
+    except Exception as exc:
+        logger.warning("recall reranker failed (%s)", type(exc).__name__)
+        if diagnostics is not None:
+            diagnostics.update(
+                reranker_complete=False,
+                reranker_backend=_reranker_backend(),
+                reranker_candidates=len(rerankable),
+                reranker_error_type=type(exc).__name__,
+            )
         return scored[:k]
     return (reranked + rest)[:k]
 
@@ -1026,10 +1103,28 @@ async def hybrid_recall(
             if mem is not None:
                 scored.append((mem, score, content))
 
-    scored.sort(key=lambda x: x[1], reverse=True)
+    if lexical_reranker_primary_enabled():
+        # The low-latency profile was evaluated with pure BM25 candidate
+        # discovery. Recency and importance are intentionally excluded here:
+        # mixing them in before the cross-encoder changes the measured top-100
+        # window. Ties follow source event order and stable ID so SQLite and
+        # PostgreSQL produce the same candidate set for a fixed corpus.
+        scored = [
+            (row, _bm25_score(query, content or ""), content)
+            for row, _score, content in scored
+        ]
+        scored.sort(
+            key=lambda item: (
+                -item[1],
+                _event_ts(item[0]),
+                str(item[0].id),
+            )
+        )
+    else:
+        scored.sort(key=lambda x: x[1], reverse=True)
     scored = _collapse_derived(scored)
-    if RERANKER_MODEL:
-        return rerank_cross_encoder(query, scored, k)
+    if reranker_enabled():
+        return rerank_cross_encoder(query, scored, k, diagnostics=diagnostics)
     return _mmr_select(scored, k)
 
 

@@ -1,0 +1,149 @@
+{
+  "accounting": {
+    "baseline": {
+      "effective_task_cost": 3.249,
+      "estimated_cost": 3.249,
+      "estimated_cost_unit": "credits",
+      "reported_cost": null,
+      "reported_cost_unit": null,
+      "token_counts": {
+        "cached_input_tokens": 0,
+        "output_tokens": 9,
+        "raw_input_tokens": 25938,
+        "uncached_input_tokens": 25938
+      },
+      "weighted_token_cost": 25947.0
+    },
+    "basis": "estimated_cost",
+    "candidate": {
+      "effective_task_cost": 1.5965,
+      "estimated_cost": 1.5965,
+      "estimated_cost_unit": "credits",
+      "reported_cost": null,
+      "reported_cost_unit": null,
+      "token_counts": {
+        "cached_input_tokens": 0,
+        "output_tokens": 9,
+        "raw_input_tokens": 12718,
+        "uncached_input_tokens": 12718
+      },
+      "weighted_token_cost": 12727.0
+    },
+    "estimate_metadata": {
+      "as_of": "2026-08-08",
+      "method": "Codex turn.completed token telemetry multiplied by published Sol credit rates",
+      "notes": "Selected second ABBA repeat. Full raw report also requires pooled, worst-repeat, and all-input-uncached sensitivity passes. Values are estimates, not provider-reported debits.",
+      "rates": {
+        "cache_write_input_credits_per_million": 156.25,
+        "cached_input_credits_per_million": 12.5,
+        "output_credits_per_million": 750.0,
+        "uncached_input_credits_per_million": 125.0
+      },
+      "source": "OpenAI Codex pricing and GPT-5.6 Sol model documentation",
+      "source_url": "https://learn.chatgpt.com/docs/pricing"
+    },
+    "token_input_basis": "cached_uncached_input",
+    "token_weights": {
+      "cached_input": 1.0,
+      "output": 1.0,
+      "raw_input": 1.0,
+      "uncached_input": 1.0
+    },
+    "unit": "credits"
+  },
+  "evaluation_order": [
+    "protected_quality",
+    "same_budget_economics"
+  ],
+  "limitations": [
+    "The result applies only to the named provider, workload, measurements, and weights.",
+    "Weighted tokens are a proxy unless both sides provide comparable provider cost or credits.",
+    "No unmeasured claim about quality, recall, latency, tokens, cost, or credits is implied."
+  ],
+  "observed": {
+    "candidate_cost_ratio": 0.491382,
+    "same_budget_usage_extension_percent": 103.507673,
+    "same_budget_usage_multiplier": 2.035077,
+    "task_cost_reduction_percent": 50.861804,
+    "token_changes": {
+      "cached_input_tokens": {
+        "baseline": 0,
+        "candidate": 0,
+        "candidate_ratio": null,
+        "delta": 0,
+        "reduction_percent": null
+      },
+      "output_tokens": {
+        "baseline": 9,
+        "candidate": 9,
+        "candidate_ratio": 1.0,
+        "delta": 0,
+        "reduction_percent": 0.0
+      },
+      "raw_input_tokens": {
+        "baseline": 25938,
+        "candidate": 12718,
+        "candidate_ratio": 0.490323,
+        "delta": -13220,
+        "reduction_percent": 50.967692
+      },
+      "uncached_input_tokens": {
+        "baseline": 25938,
+        "candidate": 12718,
+        "candidate_ratio": 0.490323,
+        "delta": -13220,
+        "reduction_percent": 50.967692
+      }
+    }
+  },
+  "quality_gate": {
+    "evaluated_first": true,
+    "failures": [],
+    "passed": true,
+    "protected_checks": [
+      {
+        "name": "all_four_answers_exact_gold",
+        "passed": true
+      },
+      {
+        "name": "all_hook_receipts_injected_real_retrieval",
+        "passed": true
+      },
+      {
+        "name": "no_model_facing_tools_or_delegation",
+        "passed": true
+      },
+      {
+        "name": "every_repeat_meets_target",
+        "passed": true
+      },
+      {
+        "name": "pooled_repeats_meet_target",
+        "passed": true
+      },
+      {
+        "name": "all_input_uncached_sensitivity_meets_target",
+        "passed": true
+      }
+    ]
+  },
+  "schema_version": "lians.provider-usage-extension.v1",
+  "scope": {
+    "provider": "OpenAI Codex gpt-5.6-sol ultra/default",
+    "workload": "LOCOMO conv0_q0 full conversation versus Lians UserPromptSubmit pre-model recall"
+  },
+  "target": {
+    "interpretation": "A 80% usage extension means 1.8x tasks for the same budget, so candidate per-task cost must be at most 55.5556% of baseline. It does not mean an 80% token reduction.",
+    "maximum_candidate_cost_ratio": 0.555556,
+    "minimum_task_cost_reduction_percent": 44.444444,
+    "requested_usage_extension_percent": 80.0,
+    "same_budget_usage_multiplier": 1.8
+  },
+  "verdict": {
+    "economic_target_met": true,
+    "protected_quality_passed": true,
+    "qualified_target_met": true,
+    "statement": "In this measured LOCOMO conv0_q0 full conversation versus Lians UserPromptSubmit pre-model recall case for OpenAI Codex gpt-5.6-sol ultra/default, the candidate preserved protected quality and reached 2.04x same-budget usage using estimated_cost. This result is workload-specific, not a universal savings guarantee.",
+    "status": "qualified_for_measured_workload"
+  }
+}

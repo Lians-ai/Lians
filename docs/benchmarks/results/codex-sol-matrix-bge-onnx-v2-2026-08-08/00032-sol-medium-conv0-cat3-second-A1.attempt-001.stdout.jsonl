@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"019fe2e3-763a-7f11-b4c8-2c8aa102b894"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"item.completed","item":{"id":"item_1","type":"error","message":"`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Probably not, since her support inspired her to help others similarly"}}
+{"type":"turn.completed","usage":{"input_tokens":25929,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":16,"reasoning_output_tokens":0}}

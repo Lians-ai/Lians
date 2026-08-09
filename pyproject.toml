@@ -69,6 +69,8 @@ Issues = "https://github.com/Lians-ai/Lians/issues"
 # For fully offline use, pre-download the model and set SENTENCE_TRANSFORMER_MODEL=/path.
 local = [
     "sentence-transformers>=3.0.0",
+    "onnxruntime>=1.20.0,<2",
+    "tokenizers>=0.20.0,<1",
 ]
 langchain = ["langchain-core>=0.2.0"]
 mcp = ["mcp>=1.0.0", "httpx>=0.27.0"]
@@ -101,6 +103,8 @@ vault = [
 # production manifests are importable regardless of the selected cloud KMS.
 production = [
     "sentence-transformers>=3.0.0",
+    "onnxruntime>=1.20.0,<2",
+    "tokenizers>=0.20.0,<1",
     "stripe>=8.10.0",
     "opentelemetry-api>=1.24.0",
     "opentelemetry-sdk>=1.24.0",

@@ -1,0 +1,42 @@
+{
+  "provider": "OpenAI Codex gpt-5.6-sol ultra/default",
+  "workload": "LOCOMO conv0_q0 full conversation versus Lians UserPromptSubmit pre-model recall",
+  "target_usage_extension_percent": 80,
+  "quality_gate": {
+    "protected_checks": [
+      {"name": "all_four_answers_exact_gold", "passed": true},
+      {"name": "all_hook_receipts_injected_real_retrieval", "passed": true},
+      {"name": "no_model_facing_tools_or_delegation", "passed": true},
+      {"name": "every_repeat_meets_target", "passed": true},
+      {"name": "pooled_repeats_meet_target", "passed": true},
+      {"name": "all_input_uncached_sensitivity_meets_target", "passed": true}
+    ]
+  },
+  "baseline": {
+    "raw_input_tokens": 25938,
+    "cached_input_tokens": 0,
+    "uncached_input_tokens": 25938,
+    "output_tokens": 9,
+    "estimated_credits": 3.249
+  },
+  "candidate": {
+    "raw_input_tokens": 12718,
+    "cached_input_tokens": 0,
+    "uncached_input_tokens": 12718,
+    "output_tokens": 9,
+    "estimated_credits": 1.5965
+  },
+  "estimate_metadata": {
+    "method": "Codex turn.completed token telemetry multiplied by published Sol credit rates",
+    "source": "OpenAI Codex pricing and GPT-5.6 Sol model documentation",
+    "source_url": "https://learn.chatgpt.com/docs/pricing",
+    "as_of": "2026-08-08",
+    "rates": {
+      "uncached_input_credits_per_million": 125,
+      "cached_input_credits_per_million": 12.5,
+      "cache_write_input_credits_per_million": 156.25,
+      "output_credits_per_million": 750
+    },
+    "notes": "Selected second ABBA repeat. Full raw report also requires pooled, worst-repeat, and all-input-uncached sensitivity passes. Values are estimates, not provider-reported debits."
+  }
+}

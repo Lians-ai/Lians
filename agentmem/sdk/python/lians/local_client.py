@@ -83,6 +83,39 @@ def _ensure_src_importable() -> None:
 _ensure_src_importable()
 
 
+_LOCAL_RUNTIME_MODULES = (
+    "kms",
+    "models",
+    "control_models",
+    "enterprise_models",
+    "evidence_models",
+    "governance_models",
+    "identity_models",
+    "integration_models",
+    "metering_models",
+    "recorder_models",
+    "subject_erasure_models",
+    "session_cache",
+    "schemas",
+    "memory_service",
+)
+
+
+def prepare_runtime_imports() -> None:
+    """Load local-engine modules before an MCP host starts AnyIO workers.
+
+    Windows can deadlock when the first local call imports SQLAlchemy, Pydantic,
+    cryptography, and the engine graph from a worker after stdio has started.
+    This function performs imports only: it opens no database, loads no model,
+    and requires no project path.
+    """
+
+    import importlib
+
+    for module_name in _LOCAL_RUNTIME_MODULES:
+        importlib.import_module(f"src.lians.{module_name}")
+
+
 def _resolve_embedding_provider(explicit: Optional[str]) -> str:
     if explicit:
         return explicit
@@ -121,10 +154,12 @@ class LocalLiansClient:
         multiple projects.  Defaults to ``"local"``.
     embedding_provider:
         Override the embedding provider (``"sentence-transformers"`` |
-        ``"local"`` | ``"voyage"`` | ``"openai"``). When omitted, uses the
-        real local model (``sentence-transformers``) if it is installed and
-        falls back to the deterministic test stub (``"local"``) otherwise.
-        Pass ``"local"`` explicitly for the zero-model test stub.
+        ``"bge-onnx"`` | ``"local"`` | ``"voyage"`` | ``"openai"``). The
+        exact BGE ONNX provider is opt-in and also requires a validated
+        ``BGE_ONNX_ARTIFACT_DIR``. When omitted, uses the real local model
+        (``sentence-transformers``) if it is installed and falls back to the
+        deterministic test stub (``"local"``) otherwise. Pass ``"local"``
+        explicitly for the zero-model test stub.
     """
 
     def __init__(
@@ -177,6 +212,7 @@ class LocalLiansClient:
     # ------------------------------------------------------------------
 
     async def _init_db(self) -> None:
+        prepare_runtime_imports()
         from src.lians.kms import load_master_key
         from src.lians.models import Base  # lazy import; avoids circular refs
 
@@ -192,21 +228,6 @@ class LocalLiansClient:
         # ``lians_engine.lians``; package attributes can otherwise resolve a
         # module loaded under the original name and register its tables on a
         # second SQLAlchemy Base instead of the aliased local-engine Base.
-        import importlib
-
-        for module_name in (
-            "control_models",
-            "enterprise_models",
-            "evidence_models",
-            "governance_models",
-            "identity_models",
-            "integration_models",
-            "metering_models",
-            "recorder_models",
-            "subject_erasure_models",
-        ):
-            importlib.import_module(f"src.lians.{module_name}")
-
         # In-process recall caches are keyed by (namespace, agent); a fresh
         # client is a fresh database, so anything cached by a previous client
         # in this process must not leak into it.

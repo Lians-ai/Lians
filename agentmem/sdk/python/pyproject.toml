@@ -7,7 +7,7 @@ name = "lians-sdk"
 version = "0.5.0"
 description = "Provider-neutral decision evidence, runtime control, reconstruction, and bitemporal memory for consequential AI systems"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = { file = "LICENSE" }
 readme = "README.md"
 keywords = ["ai-infrastructure", "decision-evidence", "agent-governance", "agent-memory", "mcp", "opentelemetry", "audit-trail", "bitemporal", "gdpr"]
 classifiers = [
@@ -33,6 +33,20 @@ openai-agents = ["openai-agents>=0.0.1"]
 autogen       = ["autogen-core>=0.4"]
 anthropic     = ["anthropic>=0.120.2,<1"]
 google-adk    = ["google-adk>=2.6.1,<3"]
+bge-onnx     = [
+    "sqlalchemy>=2.0",
+    "greenlet>=3.0",
+    "aiosqlite>=0.19",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.1",
+    "cryptography>=42",
+    "pgvector>=0.2.5",
+    "numpy>=1.26",
+    "fastapi>=0.110",
+    "asyncpg>=0.29",
+    "onnxruntime>=1.20,<2",
+    "tokenizers>=0.20,<1",
+]
 local         = [
     "sqlalchemy>=2.0",
     "aiosqlite>=0.19",
@@ -49,6 +63,10 @@ local         = [
     # in the local extra so the documented install never falls back to the
     # deterministic test-grade embedding stub.
     "sentence-transformers>=3.0",
+    # Optional dependency-light cross-encoder runtime. The feature remains
+    # off until RECALL_RERANKER_ONNX_MODEL points at an exported local graph.
+    "onnxruntime>=1.20,<2",
+    "tokenizers>=0.20,<1",
 ]
 mcp           = [
     "mcp>=1.0.0,<2",
@@ -63,13 +81,17 @@ mcp           = [
     "fastapi>=0.110",
     "asyncpg>=0.29",
     "sentence-transformers>=3.0",
+    "onnxruntime>=1.20,<2",
+    "tokenizers>=0.20,<1",
 ]
 all           = [
-    "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,anthropic,google-adk,local,mcp]",
+    "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,anthropic,google-adk,bge-onnx,local,mcp]",
 ]
 
 [project.scripts]
 lians-mcp = "lians.mcp_server:main"
+lians-memory-mcp = "lians.memory_plugin_mcp:main"
+lians-bge-onnx-export = "lians.bge_onnx_export:main"
 
 [project.urls]
 Homepage      = "https://www.lians.ai"

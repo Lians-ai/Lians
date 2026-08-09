@@ -1,0 +1,688 @@
+{
+  "schema_version": "lians.codex-sol-ultra-ab.v1",
+  "provider": "OpenAI Codex",
+  "workload": "LOCOMO full conversation versus installed Lians recall",
+  "dry_run": false,
+  "question_id": "conv0_q0",
+  "question": "When did Caroline go to the LGBTQ support group?",
+  "ground_truth_answer": "7 May 2023",
+  "quality_rule": "trim outer whitespace, then require exact gold string",
+  "profile": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "ultra",
+    "service_tier": "default",
+    "execution_order": [
+      "baseline:1",
+      "candidate:1",
+      "candidate:2",
+      "baseline:2"
+    ],
+    "selected_measurement": "second repeat from each arm",
+    "baseline": {
+      "lians_enabled": false,
+      "agents_md": false,
+      "context": "complete LOCOMO conversation"
+    },
+    "candidate": {
+      "lians_enabled": true,
+      "checked_out_mcp_python_sha256": "3470f7919170d235d7e6079691462c4b217745ec67ee612e745730e46d98f238",
+      "checked_out_mcp_server_sha256": "394beacf85d4f67221a5c12aed765cfaea8ddc8d60a06d377c8dc2bfb1f04042",
+      "agents_md": true,
+      "enabled_tools": [
+        "remember",
+        "recall"
+      ],
+      "schema_profile": "compact",
+      "recall_k": 20,
+      "maximum_context_tokens": 768,
+      "prompt_requires_exactly_one_recall": true
+    },
+    "unrelated_surfaces_disabled": [
+      "plugins",
+      "apps",
+      "node_repl"
+    ],
+    "delegation_policy": "fail closed if observed unless the provider explicitly marks thread-tree usage accounting complete"
+  },
+  "target": {
+    "usage_extension_percent": 80.0,
+    "same_budget_usage_multiplier": 1.8,
+    "maximum_candidate_cost_ratio": 0.555555556,
+    "minimum_estimated_credit_reduction_percent": 44.444444444
+  },
+  "estimated_credit_accounting": {
+    "label": "estimated Sol credits; not a provider-reported per-turn debit",
+    "method": "Codex turn.completed tokens multiplied by published Sol rates",
+    "source_url": "https://learn.chatgpt.com/docs/pricing",
+    "cache_write_multiplier_source_url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+    "cache_write_multiplier": 1.25,
+    "as_of": "2026-08-08",
+    "rates_per_million_tokens": {
+      "uncached_input_credits_per_million": 125.0,
+      "cached_input_credits_per_million": 12.5,
+      "cache_write_input_credits_per_million": 156.25,
+      "output_credits_per_million": 750.0
+    },
+    "cache_write_treatment": "cache-write tokens are removed from ordinary uncached input and priced separately",
+    "reasoning_treatment": "reasoning_output_tokens is retained for disclosure but is already included in output_tokens"
+  },
+  "source_artifacts": {
+    "question_sha256": "42e1aa9a23c488db1b0e5342bae6d21c83822eba7e82a17256cc2ef6d81875f4",
+    "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "source_db_sha256": "e9acc8dc05db76baccb2d617cc7d7ceef8fb08711a322d6c328d3617fc5f9c72",
+    "agents_md_sha256": "77dd9fb56a5052f2b3211aee2588ac0e2f3623d9cf286539f6c8c78d52db675f"
+  },
+  "prompt_sizes": {
+    "baseline_utf8_bytes": 63166,
+    "candidate_utf8_bytes": 462
+  },
+  "runs": [
+    {
+      "sequence": 1,
+      "label": "01-baseline-A1",
+      "mode": "baseline",
+      "repetition": 1,
+      "answer": "7 May 2023",
+      "gold_answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 4953.537,
+      "usage": {
+        "input_tokens": 25826,
+        "cached_input_tokens": 0,
+        "output_tokens": 9,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "uncached_input_tokens": 25826
+      },
+      "estimated_sol_credits": 3.235,
+      "estimated_not_provider_reported": true,
+      "tool_calls": [],
+      "delegation_evidence": [],
+      "complete_aggregate_accounting": false,
+      "violations": [],
+      "valid": true,
+      "events": [
+        {
+          "type": "thread.started",
+          "thread_id": "019fe25b-aaaf-7800-bfe9-ca8face1cd37"
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_0",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_1",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_2",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_3",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_4",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_5",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_6",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_7",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "turn.started"
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_8",
+            "type": "agent_message",
+            "text": "7 May 2023"
+          }
+        },
+        {
+          "type": "turn.completed",
+          "usage": {
+            "input_tokens": 25826,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 9,
+            "reasoning_output_tokens": 0
+          }
+        }
+      ],
+      "raw_stdout_sha256": "fd6222bb31a651815ed4ab70056062db3f07d4aa0a940e93ef097a16da1b19b8",
+      "raw_stdout_artifact": "%USERPROFILE%\\Downloads\\Ai_Mem_Soft\\docs\\benchmarks\\results\\codex-sol-ultra-ab-2026-08-08\\01-baseline-A1.stdout.jsonl",
+      "stderr_sha256": "85677bc25911734bcee1577fd32197b51172a34b500ce5cb228fe3d45e0a5b48",
+      "stderr_tail_redacted": "2026-08-08T17:11:26.108019Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n\n2026-08-08T17:11:26.110294Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n\n2026-08-08T17:11:26.110689Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n\n2026-08-08T17:11:26.110993Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n\n2026-08-08T17:11:26.160512Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n"
+    },
+    {
+      "sequence": 2,
+      "label": "02-candidate-B1",
+      "mode": "candidate",
+      "repetition": 1,
+      "answer": "7 May 2023",
+      "gold_answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 38396.404,
+      "usage": {
+        "input_tokens": 26425,
+        "cached_input_tokens": 17920,
+        "output_tokens": 373,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 270,
+        "uncached_input_tokens": 8505
+      },
+      "estimated_sol_credits": 1.566875,
+      "estimated_not_provider_reported": true,
+      "tool_calls": [
+        {
+          "kind": "mcp_tool_call",
+          "server": "lians",
+          "tool": "recall",
+          "arguments": {
+            "query": "When did Caroline go to the LGBTQ support group?"
+          },
+          "status": "completed",
+          "last_event": "item.completed"
+        }
+      ],
+      "delegation_evidence": [],
+      "complete_aggregate_accounting": false,
+      "violations": [],
+      "valid": true,
+      "events": [
+        {
+          "type": "thread.started",
+          "thread_id": "019fe25b-bcde-7631-8b82-efef87d8fdd1"
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_0",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_1",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_2",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_3",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_4",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_5",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_6",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_7",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "turn.started"
+        },
+        {
+          "type": "item.started",
+          "item": {
+            "id": "item_8",
+            "type": "mcp_tool_call",
+            "server": "lians",
+            "tool": "recall",
+            "arguments": {
+              "query": "When did Caroline go to the LGBTQ support group?"
+            },
+            "result": null,
+            "error": null,
+            "status": "in_progress"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_8",
+            "type": "mcp_tool_call",
+            "server": "lians",
+            "tool": "recall",
+            "arguments": {
+              "query": "When did Caroline go to the LGBTQ support group?"
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Memory evidence:\n- (2023-05-08 13:56) Caroline: I went to a LGBTQ support group yesterday and it was so powerful.\n- (2023-07-03 13:36) Melanie: Wow, Caroline, sounds like the parade was an awesome experience! It's great to see the love and support for the LGBTQ+ community. Congrats! Has this experience influenced your goals at all?\n- (2023-06-09 19:55) Melanie: Hey Caroline! Great to hear from you. Sounds like your event was amazing! I'm so proud of you for spreading awareness and getting others involved in the LGBTQ community. You've come a long way since your transition - keep on inspiring people with your strength and courage!\n- (2023-06-27 10:37) Caroline: I'm still figuring out the details, but I'm thinking of working with trans people, helping them accept themselves and supporting their mental health. Last Friday, I went to an LGBTQ+ counseling workshop and it was really enlightening. They talked about different therapeutic methods and how to best work with trans people. Seeing how passionate these pros were about making a safe space for people like me was amazing.\n- (2023-07-03 13:36) Caroline: Since we last spoke, some big things have happened. Last week I went to an LGBTQ+ pride parade. Everyone was so happy and it made me feel like I belonged. It showed me how much our community has grown, it was amazing!\n- (2023-07-17 14:31) Melanie: Wow, Caroline! They must have felt so appreciated. It's awesome to see the difference we can make in each other's lives. Any other exciting LGBTQ advocacy stuff coming up?\n- (2023-07-12 16:33) Caroline: Hey Mel, great to chat with you again! So much has happened since we last spoke - I went to an LGBTQ conference two days ago and it was really special. I got the chance to meet and connect with people who've gone through similar journeys. It was such a welcoming environment and I felt totally accepted. I'm really thankful for this amazing community - it's shown me how important it is to fight for trans rights and spread awareness.\n- (2023-07-20 20:56) Caroline: Thanks, Melanie! It's awesome to have our own platform to be ourselves and support others' rights. Our group, 'Connected LGBTQ Activists', is made of all kinds of people investing in positive changes. We have regular meetings, plan events and campaigns, to get together and support each other.\n- (2023-07-17 14:31) Caroline: Hey Melanie! That sounds great! Last weekend I joined a mentorship program for LGBTQ youth - it's really rewarding to help the community.\n- (2023-06-09 19:55) Caroline: Thanks, Mel! Your backing really means a lot. I felt super powerful giving my talk. I shared my own journey, the struggles I had and how much I've developed since coming out. It was wonderful to see how the audience related to what I said and how it inspired them to be better allies. Conversations about gender identity and inclusion are so necessary and I'm thankful for being able to give a voice to the trans community."
+                }
+              ],
+              "structured_content": null
+            },
+            "error": null,
+            "status": "completed"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_9",
+            "type": "agent_message",
+            "text": "7 May 2023"
+          }
+        },
+        {
+          "type": "turn.completed",
+          "usage": {
+            "input_tokens": 26425,
+            "cached_input_tokens": 17920,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 373,
+            "reasoning_output_tokens": 270
+          }
+        }
+      ],
+      "raw_stdout_sha256": "c65952ff13a44142f71abe900c840e102513f94681fef0902a8c2e033b9952f3",
+      "raw_stdout_artifact": "%USERPROFILE%\\Downloads\\Ai_Mem_Soft\\docs\\benchmarks\\results\\codex-sol-ultra-ab-2026-08-08\\02-candidate-B1.stdout.jsonl",
+      "stderr_sha256": "be71669d93b03189ea77094142bfbceaddb4e74db879b3f97eb1bc9730327c10",
+      "stderr_tail_redacted": "2026-08-08T17:11:30.774864Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n\n2026-08-08T17:11:30.775195Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n\n2026-08-08T17:11:30.775980Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n\n2026-08-08T17:11:30.776502Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n\n2026-08-08T17:11:30.793719Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n"
+    },
+    {
+      "sequence": 3,
+      "label": "03-candidate-B2",
+      "mode": "candidate",
+      "repetition": 2,
+      "answer": "7 May 2023",
+      "gold_answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 35004.749,
+      "usage": {
+        "input_tokens": 26590,
+        "cached_input_tokens": 12032,
+        "output_tokens": 544,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 387,
+        "uncached_input_tokens": 14558
+      },
+      "estimated_sol_credits": 2.37815,
+      "estimated_not_provider_reported": true,
+      "tool_calls": [
+        {
+          "kind": "mcp_tool_call",
+          "server": "lians",
+          "tool": "recall",
+          "arguments": {
+            "query": "When did Caroline go to the LGBTQ support group?"
+          },
+          "status": "completed",
+          "last_event": "item.completed"
+        }
+      ],
+      "delegation_evidence": [],
+      "complete_aggregate_accounting": false,
+      "violations": [],
+      "valid": true,
+      "events": [
+        {
+          "type": "thread.started",
+          "thread_id": "019fe25c-5314-7072-a169-877c182cdb5b"
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_0",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_1",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_2",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_3",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_4",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_5",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_6",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_7",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "turn.started"
+        },
+        {
+          "type": "item.started",
+          "item": {
+            "id": "item_8",
+            "type": "mcp_tool_call",
+            "server": "lians",
+            "tool": "recall",
+            "arguments": {
+              "query": "When did Caroline go to the LGBTQ support group?"
+            },
+            "result": null,
+            "error": null,
+            "status": "in_progress"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_8",
+            "type": "mcp_tool_call",
+            "server": "lians",
+            "tool": "recall",
+            "arguments": {
+              "query": "When did Caroline go to the LGBTQ support group?"
+            },
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Memory evidence:\n- (2023-05-08 13:56) Caroline: I went to a LGBTQ support group yesterday and it was so powerful.\n- (2023-07-03 13:36) Melanie: Wow, Caroline, sounds like the parade was an awesome experience! It's great to see the love and support for the LGBTQ+ community. Congrats! Has this experience influenced your goals at all?\n- (2023-06-09 19:55) Melanie: Hey Caroline! Great to hear from you. Sounds like your event was amazing! I'm so proud of you for spreading awareness and getting others involved in the LGBTQ community. You've come a long way since your transition - keep on inspiring people with your strength and courage!\n- (2023-06-27 10:37) Caroline: I'm still figuring out the details, but I'm thinking of working with trans people, helping them accept themselves and supporting their mental health. Last Friday, I went to an LGBTQ+ counseling workshop and it was really enlightening. They talked about different therapeutic methods and how to best work with trans people. Seeing how passionate these pros were about making a safe space for people like me was amazing.\n- (2023-07-03 13:36) Caroline: Since we last spoke, some big things have happened. Last week I went to an LGBTQ+ pride parade. Everyone was so happy and it made me feel like I belonged. It showed me how much our community has grown, it was amazing!\n- (2023-07-17 14:31) Melanie: Wow, Caroline! They must have felt so appreciated. It's awesome to see the difference we can make in each other's lives. Any other exciting LGBTQ advocacy stuff coming up?\n- (2023-07-12 16:33) Caroline: Hey Mel, great to chat with you again! So much has happened since we last spoke - I went to an LGBTQ conference two days ago and it was really special. I got the chance to meet and connect with people who've gone through similar journeys. It was such a welcoming environment and I felt totally accepted. I'm really thankful for this amazing community - it's shown me how important it is to fight for trans rights and spread awareness.\n- (2023-07-20 20:56) Caroline: Thanks, Melanie! It's awesome to have our own platform to be ourselves and support others' rights. Our group, 'Connected LGBTQ Activists', is made of all kinds of people investing in positive changes. We have regular meetings, plan events and campaigns, to get together and support each other.\n- (2023-07-17 14:31) Caroline: Hey Melanie! That sounds great! Last weekend I joined a mentorship program for LGBTQ youth - it's really rewarding to help the community.\n- (2023-06-09 19:55) Caroline: Thanks, Mel! Your backing really means a lot. I felt super powerful giving my talk. I shared my own journey, the struggles I had and how much I've developed since coming out. It was wonderful to see how the audience related to what I said and how it inspired them to be better allies. Conversations about gender identity and inclusion are so necessary and I'm thankful for being able to give a voice to the trans community."
+                }
+              ],
+              "structured_content": null
+            },
+            "error": null,
+            "status": "completed"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_9",
+            "type": "agent_message",
+            "text": "7 May 2023"
+          }
+        },
+        {
+          "type": "turn.completed",
+          "usage": {
+            "input_tokens": 26590,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 544,
+            "reasoning_output_tokens": 387
+          }
+        }
+      ],
+      "raw_stdout_sha256": "04248a1cf7a19dbcc3f0a06d202e32c1f3cdc088c05ad2b889edd32befe27d0c",
+      "raw_stdout_artifact": "%USERPROFILE%\\Downloads\\Ai_Mem_Soft\\docs\\benchmarks\\results\\codex-sol-ultra-ab-2026-08-08\\03-candidate-B2.stdout.jsonl",
+      "stderr_sha256": "593227652fa817872c35493e6e7b89b688ebda408093f16a29ae82961c7b7b7e",
+      "stderr_tail_redacted": "2026-08-08T17:12:09.230377Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n\n2026-08-08T17:12:09.230812Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n\n2026-08-08T17:12:09.231310Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n\n2026-08-08T17:12:09.231584Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n\n2026-08-08T17:12:09.249976Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n"
+    },
+    {
+      "sequence": 4,
+      "label": "04-baseline-A2",
+      "mode": "baseline",
+      "repetition": 2,
+      "answer": "7 May 2023",
+      "gold_answer": "7 May 2023",
+      "exact_answer_match": true,
+      "wall_time_ms": 4359.206,
+      "usage": {
+        "input_tokens": 25826,
+        "cached_input_tokens": 0,
+        "output_tokens": 9,
+        "cache_write_input_tokens": 0,
+        "reasoning_output_tokens": 0,
+        "uncached_input_tokens": 25826
+      },
+      "estimated_sol_credits": 3.235,
+      "estimated_not_provider_reported": true,
+      "tool_calls": [],
+      "delegation_evidence": [],
+      "complete_aggregate_accounting": false,
+      "violations": [],
+      "valid": true,
+      "events": [
+        {
+          "type": "thread.started",
+          "thread_id": "019fe25c-dba3-7ae1-969e-00b05d5b9557"
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_0",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_1",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_2",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_3",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_4",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_5",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_6",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_7",
+            "type": "error",
+            "message": "Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n"
+          }
+        },
+        {
+          "type": "turn.started"
+        },
+        {
+          "type": "item.completed",
+          "item": {
+            "id": "item_8",
+            "type": "agent_message",
+            "text": "7 May 2023"
+          }
+        },
+        {
+          "type": "turn.completed",
+          "usage": {
+            "input_tokens": 25826,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 9,
+            "reasoning_output_tokens": 0
+          }
+        }
+      ],
+      "raw_stdout_sha256": "115fecebc9e51e773e5eefe0b273e7ce17f46cdcb01ab24611b605d1fb200b7e",
+      "raw_stdout_artifact": "%USERPROFILE%\\Downloads\\Ai_Mem_Soft\\docs\\benchmarks\\results\\codex-sol-ultra-ab-2026-08-08\\04-baseline-A2.stdout.jsonl",
+      "stderr_sha256": "b04feeebc7387bb0ee324cb6785fd06888719b8d26d5acf0124aeb92f3d6b991",
+      "stderr_tail_redacted": "2026-08-08T17:12:44.188906Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\default.toml: invalid transport\n\n2026-08-08T17:12:44.189370Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\explorer.toml: invalid transport\n\n2026-08-08T17:12:44.189849Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\memory-researcher.toml: invalid transport\n\n2026-08-08T17:12:44.190231Z  WARN codex_core::config::agent_roles: Ignoring malformed agent role definition: failed to deserialize agent role file at %USERPROFILE%\\.codex\\agents\\worker.toml: invalid transport\n\n2026-08-08T17:12:44.206620Z  WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell\n"
+    }
+  ],
+  "selected": {
+    "baseline_label": "04-baseline-A2",
+    "candidate_label": "03-candidate-B2",
+    "rule": "second exact repeat for each arm"
+  },
+  "quality_gate": {
+    "evaluated_before_economics": true,
+    "baseline_exact_gold": true,
+    "candidate_exact_gold": true,
+    "passed": true
+  },
+  "observed": {
+    "baseline_estimated_sol_credits": 3.235,
+    "candidate_estimated_sol_credits": 2.37815,
+    "candidate_cost_ratio": 0.735131376,
+    "estimated_credit_reduction_percent": 26.486862442,
+    "same_budget_usage_multiplier": 1.360301074,
+    "same_budget_usage_extension_percent": 36.030107436,
+    "baseline_wall_time_ms": 4359.206,
+    "candidate_wall_time_ms": 35004.749
+  },
+  "verdict": {
+    "protected_quality_passed": true,
+    "all_run_tool_and_delegation_contracts_passed": true,
+    "economic_target_met": false,
+    "qualified_target_met": false,
+    "status": "target_not_qualified",
+    "statement": "This result applies only to the measured LOCOMO repeat and uses estimated, not provider-reported, Sol credits."
+  }
+}

@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # "voyage"               — Voyage AI (best finance quality, requires VOYAGE_API_KEY)
     # "openai"               — OpenAI text-embedding-3-small (dev fallback, requires OPENAI_API_KEY)
     # "sentence-transformers" — fully self-hosted, no external API calls
+    # "bge-onnx"             — exact hash-pinned BGE v1.5 ONNX, local CPU only
     # (requires pip install lians-platform[local])
     # "local"                — deterministic hash-projection for unit tests only
     embedding_provider: str = "local"
@@ -53,6 +54,13 @@ class Settings(BaseSettings):
     # old model via SENTENCE_TRANSFORMER_MODEL — embeddings from different
     # models never mix in one store.
     sentence_transformer_model: str = "Snowflake/snowflake-arctic-embed-l-v2.0"
+    # Artifact staged by ``lians-bge-onnx-export``. The provider accepts only
+    # the pinned BAAI revision and verifies the manifest/model/tokenizer hashes
+    # before its first inference. It never downloads or reindexes anything.
+    bge_onnx_artifact_dir: str = ""
+    # Zero delegates thread selection to ONNX Runtime. Eight is the measured
+    # low-latency default on the reference 8-core CPU.
+    bge_onnx_intra_op_threads: int = Field(default=8, ge=0, le=256)
 
     # Crypto
     master_encryption_key: str = ""  # base64-encoded 32 bytes (used by kms_provider="env")

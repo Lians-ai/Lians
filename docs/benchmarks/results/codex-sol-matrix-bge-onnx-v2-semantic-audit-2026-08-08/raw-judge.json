@@ -1,0 +1,1389 @@
+{
+  "answer_bank": [
+    {
+      "answer": "Adoption agencies and counseling or mental health career options",
+      "answer_id": "answer-0242232554e4f95c220b8342"
+    },
+    {
+      "answer": "Unclear",
+      "answer_id": "answer-0afcabbf8893d45fbe800ff7"
+    },
+    {
+      "answer": "Caroline is a trans woman and artist",
+      "answer_id": "answer-11ce5af38ad84787ee3e9a28"
+    },
+    {
+      "answer": "Self-care is important and helps her better care for her family",
+      "answer_id": "answer-1456c4915cf76c2197ebf73b"
+    },
+    {
+      "answer": "Caroline is a trans woman",
+      "answer_id": "answer-163173a3ad2a86efd0c52797"
+    },
+    {
+      "answer": "Probably not, since her support inspired her to help others similarly",
+      "answer_id": "answer-23442cbdd54c3ecedf2490b7"
+    },
+    {
+      "answer": "In 2022",
+      "answer_id": "answer-2745865f6940355ca1b4bbc1"
+    },
+    {
+      "answer": "Mental health",
+      "answer_id": "answer-361cab929af58111b4f98a55"
+    },
+    {
+      "answer": "Adoption agencies",
+      "answer_id": "answer-4cc0be293cb5a6eabb1b9603"
+    },
+    {
+      "answer": "It’s unclear, since she said her own support inspired her to pursue counseling",
+      "answer_id": "answer-4cdbb8ceee2a224e4cebe2b1"
+    },
+    {
+      "answer": "A transgender woman",
+      "answer_id": "answer-5b1f325fbcff070de315b7d0"
+    },
+    {
+      "answer": "UNKNOWN",
+      "answer_id": "answer-5d4e05efaeb0192a0754de74"
+    },
+    {
+      "answer": "7 May 2023",
+      "answer_id": "answer-632cda83d030320ec3b9a5a6"
+    },
+    {
+      "answer": "Self-care is really important",
+      "answer_id": "answer-8298bb189384db4fa76eeae6"
+    },
+    {
+      "answer": "May 7, 2023",
+      "answer_id": "answer-854b1a530a4b821c47624d90"
+    },
+    {
+      "answer": "Adoption agencies and counseling and mental health career options",
+      "answer_id": "answer-857daf317d8ea92bda9ff5bf"
+    },
+    {
+      "answer": "2022",
+      "answer_id": "answer-91c694b1877fcbcd218109d0"
+    },
+    {
+      "answer": "Probably not; receiving support inspired her interest in counseling",
+      "answer_id": "answer-97b25ff5b05dff58d17a581b"
+    },
+    {
+      "answer": "That self-care is really important",
+      "answer_id": "answer-9e6d7179bf6f6be390d3ab0f"
+    },
+    {
+      "answer": "Counseling or mental health studies",
+      "answer_id": "answer-9ee33e6843e79634adf1d7a6"
+    },
+    {
+      "answer": "Probably not—the support she received inspired her interest in counseling",
+      "answer_id": "answer-a29c5833395cf3fee3d8b236"
+    },
+    {
+      "answer": "It’s unclear",
+      "answer_id": "answer-b85350ec44624de13b509223"
+    },
+    {
+      "answer": "Counseling or mental health",
+      "answer_id": "answer-cb88f0352276cf11fcf4abaa"
+    },
+    {
+      "answer": "Counseling or mental health, especially supporting transgender people",
+      "answer_id": "answer-de669fdebb56458967c4c084"
+    },
+    {
+      "answer": "Unclear—her own support inspired her to pursue counseling, but she never said whether she would without it",
+      "answer_id": "answer-f12580c84512f21af7b34827"
+    },
+    {
+      "answer": "Probably not—her support directly inspired her interest in counseling",
+      "answer_id": "answer-f9db562fd67ecf3a6db6a304"
+    },
+    {
+      "answer": "Probably not; that support inspired her interest in counseling",
+      "answer_id": "answer-fffa4ad83cdaa8b74ab0795d"
+    }
+  ],
+  "audit_label": "secondary_posthoc_semantic_audit",
+  "blind_protocol": {
+    "answer_strings_deduplicated_globally": true,
+    "arm_profile_and_run_metadata_hidden": true,
+    "deterministic_shuffle": true,
+    "forbidden_metadata_keys": [
+      "mode",
+      "order_variant",
+      "profile_id",
+      "reasoning_effort",
+      "repetition",
+      "run_id",
+      "sequence",
+      "service_tier"
+    ],
+    "question_answer_units_deduplicated": true,
+    "shuffle_seed_sha256": "860f9ea021ab20b5221aabc2d98c089b418778a411187c43fd9db54e2bd38b3f"
+  },
+  "external_attempt_disclosure": {
+    "aggregate_cost_known": false,
+    "attempt_count": 3,
+    "exact_provider_reported_total_cost_usd": null,
+    "hard_cap_sum_upper_bound_usd": "0.15",
+    "notes": [
+      "One response completed under a 0.05 USD hard cap but was discarded before raw telemetry was retained because a local validator rejected a provider telemetry field.",
+      "A second invocation exited nonzero without retained provider telemetry.",
+      "A third invocation was terminated on request before completion; no further calls were made."
+    ]
+  },
+  "external_judge_raw": {
+    "invoked": false,
+    "max_budget_usd": "0",
+    "mcp_servers": [],
+    "model_pinned": true,
+    "provider_reported_model_usage": null,
+    "provider_reported_total_cost_usd": "0",
+    "provider_reported_usage": null,
+    "requested_model": "claude-haiku-4-5-20251001",
+    "status": "disabled_after_failed_attempts",
+    "tools": []
+  },
+  "external_judge_request": {
+    "arm_and_profile_metadata_hidden": true,
+    "audit_label": "secondary_posthoc_semantic_audit",
+    "cases": [
+      {
+        "accepted_reference_answers": [
+          "Likely no",
+          "No",
+          "Probably not"
+        ],
+        "blind_case_id": "blind-36c91d782ef94eaf85d13798",
+        "candidate_answer": "Probably not—her support directly inspired her interest in counseling",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Likely no",
+        "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D4:15",
+            "session": "session_4",
+            "session_date": "10:37 am on 27 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+          },
+          {
+            "evidence_id": "D3:5",
+            "session": "session_3",
+            "session_date": "7:55 pm on 9 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Adoption agencies",
+          "adoption agencies"
+        ],
+        "blind_case_id": "blind-bf605a6f16a8f23daa0323d5",
+        "candidate_answer": "Adoption agencies and counseling and mental health career options",
+        "category": 1,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Adoption agencies",
+        "question": "What did Caroline research?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D2:8",
+            "session": "session_2",
+            "session_date": "1:14 pm on 25 May, 2023",
+            "speaker": "Caroline",
+            "text": "Researching adoption agencies — it's been a dream to have a family and give a loving home to kids who need it."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Psychology, counseling certification",
+          "Psychology and counseling certification",
+          "psychology, counseling certification"
+        ],
+        "blind_case_id": "blind-8752c08c6608d53337b0a31e",
+        "candidate_answer": "Counseling or mental health",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Psychology, counseling certification",
+        "question": "What fields would Caroline be likely to pursue in her educaton?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D1:9",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "Gonna continue my edu and check out career options, which is pretty exciting!"
+          },
+          {
+            "evidence_id": "D1:11",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Transgender woman",
+          "A transgender woman",
+          "transgender woman"
+        ],
+        "blind_case_id": "blind-e6f6bea4f0559132b323ffcc",
+        "candidate_answer": "Caroline is a trans woman and artist",
+        "category": 1,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Transgender woman",
+        "question": "What is Caroline's identity?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D1:5",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "The transgender stories were so inspiring! I was so happy and thankful for all the support."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Likely no",
+          "No",
+          "Probably not"
+        ],
+        "blind_case_id": "blind-0f30d06938f1792944773a0d",
+        "candidate_answer": "Probably not; that support inspired her interest in counseling",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Likely no",
+        "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D4:15",
+            "session": "session_4",
+            "session_date": "10:37 am on 27 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+          },
+          {
+            "evidence_id": "D3:5",
+            "session": "session_3",
+            "session_date": "7:55 pm on 9 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Likely no",
+          "No",
+          "Probably not"
+        ],
+        "blind_case_id": "blind-d19e2ea33db3ba62200d9ae2",
+        "candidate_answer": "Probably not—the support she received inspired her interest in counseling",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Likely no",
+        "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D4:15",
+            "session": "session_4",
+            "session_date": "10:37 am on 27 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+          },
+          {
+            "evidence_id": "D3:5",
+            "session": "session_3",
+            "session_date": "7:55 pm on 9 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Likely no",
+          "No",
+          "Probably not"
+        ],
+        "blind_case_id": "blind-21fdec0feeab182d7bb5f76e",
+        "candidate_answer": "Probably not; receiving support inspired her interest in counseling",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Likely no",
+        "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D4:15",
+            "session": "session_4",
+            "session_date": "10:37 am on 27 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+          },
+          {
+            "evidence_id": "D3:5",
+            "session": "session_3",
+            "session_date": "7:55 pm on 9 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Likely no",
+          "No",
+          "Probably not"
+        ],
+        "blind_case_id": "blind-76785cf55135d75024d6ba41",
+        "candidate_answer": "Probably not, since her support inspired her to help others similarly",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Likely no",
+        "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D4:15",
+            "session": "session_4",
+            "session_date": "10:37 am on 27 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+          },
+          {
+            "evidence_id": "D3:5",
+            "session": "session_3",
+            "session_date": "7:55 pm on 9 June, 2023",
+            "speaker": "Caroline",
+            "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Adoption agencies",
+          "adoption agencies"
+        ],
+        "blind_case_id": "blind-29d7fb66f15d1c25ac0753cb",
+        "candidate_answer": "Adoption agencies and counseling or mental health career options",
+        "category": 1,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Adoption agencies",
+        "question": "What did Caroline research?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D2:8",
+            "session": "session_2",
+            "session_date": "1:14 pm on 25 May, 2023",
+            "speaker": "Caroline",
+            "text": "Researching adoption agencies — it's been a dream to have a family and give a loving home to kids who need it."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Psychology, counseling certification",
+          "Psychology and counseling certification",
+          "psychology, counseling certification"
+        ],
+        "blind_case_id": "blind-9149b5fd35ff0db42b85f194",
+        "candidate_answer": "Counseling or mental health, especially supporting transgender people",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Psychology, counseling certification",
+        "question": "What fields would Caroline be likely to pursue in her educaton?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D1:9",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "Gonna continue my edu and check out career options, which is pretty exciting!"
+          },
+          {
+            "evidence_id": "D1:11",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "self-care is important",
+          "Self-care is important"
+        ],
+        "blind_case_id": "blind-0e4e21011380fc667fbde38e",
+        "candidate_answer": "Self-care is important and helps her better care for her family",
+        "category": 4,
+        "denied_adversarial_answers": [],
+        "ground_truth": "self-care is important",
+        "question": "What did Melanie realize after the charity race?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D2:3",
+            "session": "session_2",
+            "session_date": "1:14 pm on 25 May, 2023",
+            "speaker": "Melanie",
+            "text": "Thanks, Caroline! The event was really thought-provoking. I'm starting to realize that self-care is really important. It's a journey for me, but when I look after myself, I'm able to better look after my family."
+          }
+        ]
+      },
+      {
+        "accepted_reference_answers": [
+          "Psychology, counseling certification",
+          "Psychology and counseling certification",
+          "psychology, counseling certification"
+        ],
+        "blind_case_id": "blind-b97f306e13106b69a3d9fa71",
+        "candidate_answer": "Counseling or mental health studies",
+        "category": 3,
+        "denied_adversarial_answers": [],
+        "ground_truth": "Psychology, counseling certification",
+        "question": "What fields would Caroline be likely to pursue in her educaton?",
+        "raw_evidence": [
+          {
+            "evidence_id": "D1:9",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "Gonna continue my edu and check out career options, which is pretty exciting!"
+          },
+          {
+            "evidence_id": "D1:11",
+            "session": "session_1",
+            "session_date": "1:56 pm on 8 May, 2023",
+            "speaker": "Caroline",
+            "text": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."
+          }
+        ]
+      }
+    ],
+    "criteria": [
+      "Pass only when the answer gives the correct substantive answer to the question, allowing ordinary wording, grammatical, date-format, and obvious lexical aliases.",
+      "Every additional factual claim must be both true in the supplied raw evidence and relevant to the question; an unsupported, false, transferred, or irrelevant extra claim makes the whole answer fail.",
+      "Do not reward partial overlap when the answer omits a substantive part of the reference answer or changes its certainty.",
+      "For category 5, pass only the exact string UNKNOWN. Any other spelling, framing, explanation, or transfer of the adversarial answer fails."
+    ],
+    "instructions": [
+      "Judge each case independently against the frozen benchmark reference and raw evidence.",
+      "Treat the benchmark ground truth as the target substantive answer.",
+      "Pass only if the candidate conveys that answer and every extra factual claim is both directly supported by the supplied evidence and relevant to the question.",
+      "Return exactly one decision for every blind_case_id and do not invent IDs."
+    ],
+    "rubric_sha256": "bd03bb21fa3bca7b007197a45c3c1d707fab954adc54ac2c5f2a8cfca4564a64"
+  },
+  "ordered_blind_units": [
+    {
+      "accepted_reference_answers": [
+        "self-care is important",
+        "Self-care is important"
+      ],
+      "answer_id": "answer-8298bb189384db4fa76eeae6",
+      "blind_case_id": "blind-18dde9b9becf5c2e793fcb05",
+      "candidate_answer": "Self-care is really important",
+      "category": 4,
+      "decision": {
+        "blind_case_id": "blind-18dde9b9becf5c2e793fcb05",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "self-care is important",
+      "question": "What did Melanie realize after the charity race?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:3",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Melanie",
+          "text": "Thanks, Caroline! The event was really thought-provoking. I'm starting to realize that self-care is really important. It's a journey for me, but when I look after myself, I'm able to better look after my family."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-343dcb497ddaa38c6466"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-f9db562fd67ecf3a6db6a304",
+      "blind_case_id": "blind-36c91d782ef94eaf85d13798",
+      "candidate_answer": "Probably not—her support directly inspired her interest in counseling",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-f12580c84512f21af7b34827",
+      "blind_case_id": "blind-6a86e12c021e56ec22976e27",
+      "candidate_answer": "Unclear—her own support inspired her to pursue counseling, but she never said whether she would without it",
+      "category": 3,
+      "decision": {
+        "blind_case_id": "blind-6a86e12c021e56ec22976e27",
+        "decision_source": "deterministic_explicit_uncertainty_v1",
+        "passed": false,
+        "rationale": "The answer changes the benchmark reference from a conclusion to uncertainty.",
+        "reason": "contradicts_reference"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "Adoption agencies",
+        "adoption agencies"
+      ],
+      "answer_id": "answer-857daf317d8ea92bda9ff5bf",
+      "blind_case_id": "blind-bf605a6f16a8f23daa0323d5",
+      "candidate_answer": "Adoption agencies and counseling and mental health career options",
+      "category": 1,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Adoption agencies",
+      "question": "What did Caroline research?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:8",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Caroline",
+          "text": "Researching adoption agencies — it's been a dream to have a family and give a loving home to kids who need it."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-4a802c84a7542909ff02"
+    },
+    {
+      "accepted_reference_answers": [
+        "2022"
+      ],
+      "answer_id": "answer-91c694b1877fcbcd218109d0",
+      "blind_case_id": "blind-c2ba77ff79bf0401614f8b18",
+      "candidate_answer": "2022",
+      "category": 2,
+      "decision": {
+        "blind_case_id": "blind-c2ba77ff79bf0401614f8b18",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "2022",
+      "question": "When did Melanie paint a sunrise?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:12",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Melanie",
+          "text": "You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-0714d95b642873e7e8ad"
+    },
+    {
+      "accepted_reference_answers": [
+        "Adoption agencies",
+        "adoption agencies"
+      ],
+      "answer_id": "answer-4cc0be293cb5a6eabb1b9603",
+      "blind_case_id": "blind-ebe97c8534396810e80a29d4",
+      "candidate_answer": "Adoption agencies",
+      "category": 1,
+      "decision": {
+        "blind_case_id": "blind-ebe97c8534396810e80a29d4",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Adoption agencies",
+      "question": "What did Caroline research?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:8",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Caroline",
+          "text": "Researching adoption agencies — it's been a dream to have a family and give a loving home to kids who need it."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-4a802c84a7542909ff02"
+    },
+    {
+      "accepted_reference_answers": [
+        "mental health",
+        "Mental health"
+      ],
+      "answer_id": "answer-361cab929af58111b4f98a55",
+      "blind_case_id": "blind-780c538334d0eeb985ff3a04",
+      "candidate_answer": "Mental health",
+      "category": 4,
+      "decision": {
+        "blind_case_id": "blind-780c538334d0eeb985ff3a04",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "mental health",
+      "question": "What did the charity race raise awareness for?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:2",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Caroline",
+          "text": "That charity race sounds great, Mel! Making a difference & raising awareness for mental health is super rewarding - I'm really proud of you for taking part!"
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-d49d521c1c3ba8b5cc89"
+    },
+    {
+      "accepted_reference_answers": [
+        "Psychology, counseling certification",
+        "Psychology and counseling certification",
+        "psychology, counseling certification"
+      ],
+      "answer_id": "answer-cb88f0352276cf11fcf4abaa",
+      "blind_case_id": "blind-8752c08c6608d53337b0a31e",
+      "candidate_answer": "Counseling or mental health",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Psychology, counseling certification",
+      "question": "What fields would Caroline be likely to pursue in her educaton?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:9",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "Gonna continue my edu and check out career options, which is pretty exciting!"
+        },
+        {
+          "evidence_id": "D1:11",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-b1fdc110fd7e67b71c7e"
+    },
+    {
+      "accepted_reference_answers": [
+        "Transgender woman",
+        "A transgender woman",
+        "transgender woman"
+      ],
+      "answer_id": "answer-11ce5af38ad84787ee3e9a28",
+      "blind_case_id": "blind-e6f6bea4f0559132b323ffcc",
+      "candidate_answer": "Caroline is a trans woman and artist",
+      "category": 1,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Transgender woman",
+      "question": "What is Caroline's identity?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:5",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "The transgender stories were so inspiring! I was so happy and thankful for all the support."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-4d529577654dffad6fb1"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-fffa4ad83cdaa8b74ab0795d",
+      "blind_case_id": "blind-0f30d06938f1792944773a0d",
+      "candidate_answer": "Probably not; that support inspired her interest in counseling",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "7 May 2023",
+        "May 7, 2023"
+      ],
+      "answer_id": "answer-632cda83d030320ec3b9a5a6",
+      "blind_case_id": "blind-cea1f383d2e9a72199fe09ed",
+      "candidate_answer": "7 May 2023",
+      "category": 2,
+      "decision": {
+        "blind_case_id": "blind-cea1f383d2e9a72199fe09ed",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "7 May 2023",
+      "question": "When did Caroline go to the LGBTQ support group?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:3",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "I went to a LGBTQ support group yesterday and it was so powerful."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-eadc1f8509a862214d24"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-0afcabbf8893d45fbe800ff7",
+      "blind_case_id": "blind-86c2c2cffa539b3ee3b45151",
+      "candidate_answer": "Unclear",
+      "category": 3,
+      "decision": {
+        "blind_case_id": "blind-86c2c2cffa539b3ee3b45151",
+        "decision_source": "deterministic_explicit_uncertainty_v1",
+        "passed": false,
+        "rationale": "The answer changes the benchmark reference from a conclusion to uncertainty.",
+        "reason": "contradicts_reference"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-a29c5833395cf3fee3d8b236",
+      "blind_case_id": "blind-d19e2ea33db3ba62200d9ae2",
+      "candidate_answer": "Probably not—the support she received inspired her interest in counseling",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "UNKNOWN"
+      ],
+      "answer_id": "answer-5d4e05efaeb0192a0754de74",
+      "blind_case_id": "blind-0540e7460a424ff5424e71c5",
+      "candidate_answer": "UNKNOWN",
+      "category": 5,
+      "decision": {
+        "blind_case_id": "blind-0540e7460a424ff5424e71c5",
+        "decision_source": "deterministic_category5_exact_v1",
+        "passed": true,
+        "rationale": "Category 5 requires the exact string UNKNOWN.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [
+        "self-care is important"
+      ],
+      "ground_truth": "UNKNOWN",
+      "question": "What did Caroline realize after her charity race?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:3",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Melanie",
+          "text": "Thanks, Caroline! The event was really thought-provoking. I'm starting to realize that self-care is really important. It's a journey for me, but when I look after myself, I'm able to better look after my family."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-92ccd5b154ea24d00198"
+    },
+    {
+      "accepted_reference_answers": [
+        "7 May 2023",
+        "May 7, 2023"
+      ],
+      "answer_id": "answer-854b1a530a4b821c47624d90",
+      "blind_case_id": "blind-df1d4f58f9e16fd680a8e31a",
+      "candidate_answer": "May 7, 2023",
+      "category": 2,
+      "decision": {
+        "blind_case_id": "blind-df1d4f58f9e16fd680a8e31a",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "7 May 2023",
+      "question": "When did Caroline go to the LGBTQ support group?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:3",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "I went to a LGBTQ support group yesterday and it was so powerful."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-eadc1f8509a862214d24"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-97b25ff5b05dff58d17a581b",
+      "blind_case_id": "blind-21fdec0feeab182d7bb5f76e",
+      "candidate_answer": "Probably not; receiving support inspired her interest in counseling",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "2022"
+      ],
+      "answer_id": "answer-2745865f6940355ca1b4bbc1",
+      "blind_case_id": "blind-73fa0da69c98fa930f9fad83",
+      "candidate_answer": "In 2022",
+      "category": 2,
+      "decision": {
+        "blind_case_id": "blind-73fa0da69c98fa930f9fad83",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "2022",
+      "question": "When did Melanie paint a sunrise?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:12",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Melanie",
+          "text": "You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-0714d95b642873e7e8ad"
+    },
+    {
+      "accepted_reference_answers": [
+        "self-care is important",
+        "Self-care is important"
+      ],
+      "answer_id": "answer-9e6d7179bf6f6be390d3ab0f",
+      "blind_case_id": "blind-50f42a1ee8de3ba43e5cf94e",
+      "candidate_answer": "That self-care is really important",
+      "category": 4,
+      "decision": {
+        "blind_case_id": "blind-50f42a1ee8de3ba43e5cf94e",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "self-care is important",
+      "question": "What did Melanie realize after the charity race?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:3",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Melanie",
+          "text": "Thanks, Caroline! The event was really thought-provoking. I'm starting to realize that self-care is really important. It's a journey for me, but when I look after myself, I'm able to better look after my family."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-343dcb497ddaa38c6466"
+    },
+    {
+      "accepted_reference_answers": [
+        "UNKNOWN"
+      ],
+      "answer_id": "answer-5d4e05efaeb0192a0754de74",
+      "blind_case_id": "blind-35a50eb12683ab5259a167d8",
+      "candidate_answer": "UNKNOWN",
+      "category": 5,
+      "decision": {
+        "blind_case_id": "blind-35a50eb12683ab5259a167d8",
+        "decision_source": "deterministic_category5_exact_v1",
+        "passed": true,
+        "rationale": "Category 5 requires the exact string UNKNOWN.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [
+        "researching adoption agencies"
+      ],
+      "ground_truth": "UNKNOWN",
+      "question": "What are Melanie's plans for the summer with respect to adoption?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:8",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Caroline",
+          "text": "Researching adoption agencies — it's been a dream to have a family and give a loving home to kids who need it."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-720e32841e688825e29b"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-b85350ec44624de13b509223",
+      "blind_case_id": "blind-a940af51fc5c022281056534",
+      "candidate_answer": "It’s unclear",
+      "category": 3,
+      "decision": {
+        "blind_case_id": "blind-a940af51fc5c022281056534",
+        "decision_source": "deterministic_explicit_uncertainty_v1",
+        "passed": false,
+        "rationale": "The answer changes the benchmark reference from a conclusion to uncertainty.",
+        "reason": "contradicts_reference"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-4cdbb8ceee2a224e4cebe2b1",
+      "blind_case_id": "blind-49e385f88c2d751547253b37",
+      "candidate_answer": "It’s unclear, since she said her own support inspired her to pursue counseling",
+      "category": 3,
+      "decision": {
+        "blind_case_id": "blind-49e385f88c2d751547253b37",
+        "decision_source": "deterministic_explicit_uncertainty_v1",
+        "passed": false,
+        "rationale": "The answer changes the benchmark reference from a conclusion to uncertainty.",
+        "reason": "contradicts_reference"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ],
+      "answer_id": "answer-23442cbdd54c3ecedf2490b7",
+      "blind_case_id": "blind-76785cf55135d75024d6ba41",
+      "candidate_answer": "Probably not, since her support inspired her to help others similarly",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Likely no",
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D4:15",
+          "session": "session_4",
+          "session_date": "10:37 am on 27 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks, Melanie. It really mattered. My own journey and the support I got made a huge difference. Now I want to help people go through it too. I saw how counseling and support groups improved my life, so I started caring more about mental health and understanding myself. Now I'm passionate about creating a safe, inviting place for people to grow."
+        },
+        {
+          "evidence_id": "D3:5",
+          "session": "session_3",
+          "session_date": "7:55 pm on 9 June, 2023",
+          "speaker": "Caroline",
+          "text": "Thanks Mel! Your kind words mean a lot. Sharing our experiences isn't always easy, but I feel it's important to help promote understanding and acceptance. I've been blessed with loads of love and support throughout this journey, and I want to pass it on to others. By sharing our stories, we can build a strong, supportive community of hope."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-284e0cc41477e61168b4"
+    },
+    {
+      "accepted_reference_answers": [
+        "Transgender woman",
+        "A transgender woman",
+        "transgender woman"
+      ],
+      "answer_id": "answer-5b1f325fbcff070de315b7d0",
+      "blind_case_id": "blind-06bfbaf1d9e330997d861078",
+      "candidate_answer": "A transgender woman",
+      "category": 1,
+      "decision": {
+        "blind_case_id": "blind-06bfbaf1d9e330997d861078",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Transgender woman",
+      "question": "What is Caroline's identity?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:5",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "The transgender stories were so inspiring! I was so happy and thankful for all the support."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-4d529577654dffad6fb1"
+    },
+    {
+      "accepted_reference_answers": [
+        "Transgender woman",
+        "A transgender woman",
+        "transgender woman"
+      ],
+      "answer_id": "answer-163173a3ad2a86efd0c52797",
+      "blind_case_id": "blind-4361ed7935c885cc14314f81",
+      "candidate_answer": "Caroline is a trans woman",
+      "category": 1,
+      "decision": {
+        "blind_case_id": "blind-4361ed7935c885cc14314f81",
+        "decision_source": "deterministic_surface_alias_v1",
+        "passed": true,
+        "rationale": "The answer is an exact reference answer or an obvious surface alias.",
+        "reason": "correct"
+      },
+      "denied_adversarial_answers": [],
+      "ground_truth": "Transgender woman",
+      "question": "What is Caroline's identity?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:5",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "The transgender stories were so inspiring! I was so happy and thankful for all the support."
+        }
+      ],
+      "resolution_status": "resolved",
+      "rubric_case_id": "rubric-4d529577654dffad6fb1"
+    },
+    {
+      "accepted_reference_answers": [
+        "Adoption agencies",
+        "adoption agencies"
+      ],
+      "answer_id": "answer-0242232554e4f95c220b8342",
+      "blind_case_id": "blind-29d7fb66f15d1c25ac0753cb",
+      "candidate_answer": "Adoption agencies and counseling or mental health career options",
+      "category": 1,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Adoption agencies",
+      "question": "What did Caroline research?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:8",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Caroline",
+          "text": "Researching adoption agencies — it's been a dream to have a family and give a loving home to kids who need it."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-4a802c84a7542909ff02"
+    },
+    {
+      "accepted_reference_answers": [
+        "Psychology, counseling certification",
+        "Psychology and counseling certification",
+        "psychology, counseling certification"
+      ],
+      "answer_id": "answer-de669fdebb56458967c4c084",
+      "blind_case_id": "blind-9149b5fd35ff0db42b85f194",
+      "candidate_answer": "Counseling or mental health, especially supporting transgender people",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Psychology, counseling certification",
+      "question": "What fields would Caroline be likely to pursue in her educaton?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:9",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "Gonna continue my edu and check out career options, which is pretty exciting!"
+        },
+        {
+          "evidence_id": "D1:11",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-b1fdc110fd7e67b71c7e"
+    },
+    {
+      "accepted_reference_answers": [
+        "self-care is important",
+        "Self-care is important"
+      ],
+      "answer_id": "answer-1456c4915cf76c2197ebf73b",
+      "blind_case_id": "blind-0e4e21011380fc667fbde38e",
+      "candidate_answer": "Self-care is important and helps her better care for her family",
+      "category": 4,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "self-care is important",
+      "question": "What did Melanie realize after the charity race?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D2:3",
+          "session": "session_2",
+          "session_date": "1:14 pm on 25 May, 2023",
+          "speaker": "Melanie",
+          "text": "Thanks, Caroline! The event was really thought-provoking. I'm starting to realize that self-care is really important. It's a journey for me, but when I look after myself, I'm able to better look after my family."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-343dcb497ddaa38c6466"
+    },
+    {
+      "accepted_reference_answers": [
+        "Psychology, counseling certification",
+        "Psychology and counseling certification",
+        "psychology, counseling certification"
+      ],
+      "answer_id": "answer-9ee33e6843e79634adf1d7a6",
+      "blind_case_id": "blind-b97f306e13106b69a3d9fa71",
+      "candidate_answer": "Counseling or mental health studies",
+      "category": 3,
+      "decision": null,
+      "denied_adversarial_answers": [],
+      "ground_truth": "Psychology, counseling certification",
+      "question": "What fields would Caroline be likely to pursue in her educaton?",
+      "raw_evidence": [
+        {
+          "evidence_id": "D1:9",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "Gonna continue my edu and check out career options, which is pretty exciting!"
+        },
+        {
+          "evidence_id": "D1:11",
+          "session": "session_1",
+          "session_date": "1:56 pm on 8 May, 2023",
+          "speaker": "Caroline",
+          "text": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."
+        }
+      ],
+      "resolution_status": "unresolved",
+      "rubric_case_id": "rubric-b1fdc110fd7e67b71c7e"
+    }
+  ],
+  "qualification_role": "secondary_only_not_original_qualification",
+  "rubric_sha256": "bd03bb21fa3bca7b007197a45c3c1d707fab954adc54ac2c5f2a8cfca4564a64",
+  "schema_version": "lians.codex-sol-semantic-judge-artifact.v1"
+}

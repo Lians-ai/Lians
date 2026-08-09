@@ -19,15 +19,63 @@ output. Its verdict is scoped to the named provider and workload.
 
 | Host | Comparison | Protected result | Per-task economic result | Same-budget usage | Target |
 | --- | --- | --- | ---: | ---: | --- |
+| Codex, `gpt-5.6-sol`, all six efforts/default | Ten frozen prompts, balanced A/B at each effort; 120 turns | primary matrix failed: 21/60 cells passed exact quality plus economics | pooled ratio 0.4502; worst cell ratio 4.0616 | pooled 2.22x (+122.1%) | pooled pass; every-prompt fail |
+| Codex, `gpt-5.6-sol`, Ultra/default | Full conversation vs. Lians pre-model hook recall, ABBA | all four exact; real retrieval receipts; no tools/delegation | 3.249 to 1.5965 estimated credits, down 50.9% | 2.04x (+103.5%) | pass for this repeat (+80% and +85%) |
 | Codex, GPT-5.6 Luna | Full conversation vs. Lians recall, same repeated LOCOMO question | both correct | 0.101385 to 0.048275 estimated credits, down 52.4% | 2.10x (+110.0%) | pass for this repeat |
 | Claude Code, `fable` alias | Full conversation vs. manually injected top-20 artifact, tools/MCP disabled | both correct | $0.296701 to $0.029340 provider-reported cost, down 90.1% | 10.11x (+911.3%) | context-isolation pass only |
 | Gemini CLI 0.54.4 | Checked-out Lians stdio connection and three-tool discovery | protocol/config only | no signed-in usage measurement | not measured | pending credentials |
 
-The Codex credit values are local calculations using the documented Luna token
-rates, not credits returned by a provider API. The machine-readable case labels
-them `estimated_credits` and records the source, date, and rates used. Claude's
+The Codex credit values are local calculations using the documented Sol or Luna
+token rates, not credits returned by a provider API. The machine-readable cases
+label them `estimated_credits` and record the source, date, and rates used. Claude's
 cost values are provider-reported by the signed-in CLI and remain labeled
 `reported_cost`.
+
+The six-effort Sol matrix is the broader Codex result and keeps its failed
+primary verdict despite passing pooled economics. All 60 candidate retrievals
+used a valid non-degraded prewarmed-daemon receipt; the maximum receipt latency
+was 1.631 seconds. Candidate exact checks passed 35/60 versus 30/60 for baseline,
+but only 24/60 paired cells passed the predeclared exact quality gate and only
+21/60 passed both quality and the +80% economic threshold. The report therefore
+does not support an every-prompt or universal quota claim. See the
+[matrix summary](codex-sol-matrix-bge-onnx-v2-2026-08-08.md).
+
+The posthoc semantic audit is intentionally non-qualifying and incomplete: it
+resolved 87/120 answers (82 pass, 5 fail) and left 33 unresolved. It preserves the
+primary exact-gate failure and must not be used to promote the pooled result.
+
+The signed-in Sol Ultra run used the exact `gpt-5.6-sol` model, `ultra`
+reasoning, and default service tier. Both baseline repeats reported 25,938
+uncached input and 9 output tokens (3.249 estimated credits). Both hook
+candidate repeats reported 12,718 uncached input and 9 output tokens (1.5965
+estimated credits). No cache reads were observed, so the all-input-uncached
+sensitivity is identical to the measured result. The verdict also requires the
+selected repeat, pooled repeats, and every individual repeat to pass. All four
+answers exactly matched `7 May 2023`; each candidate had one hash-only receipt
+for real k=20, 768-token-bounded retrieval and made no model-facing tool call.
+No delegation occurred, so this is evidence for a single non-delegated memory
+task with Ultra selected, not aggregate subagent economics.
+
+The hook candidate was slower locally: 20.5 seconds versus 3.5 seconds for the
+selected baseline, with roughly 17 seconds spent loading the local BGE retrieval
+runtime in a fresh process. This result supports usage extension, not a latency
+improvement. Hosted or persistent prewarmed retrieval is the production latency
+path.
+
+That production path was subsequently implemented with a persistent local
+daemon and a zero-output `SessionStart` prewarm. In the six-effort matrix, all 60
+fresh candidate hook processes called the prewarmed daemon and the maximum
+receipt latency was 1.631 seconds. Full daemon cold startup remained 6.574 to
+12.152 seconds in the recorded runs, so the sub-3.5-second result applies after
+session prewarm, not to true process-cold startup.
+
+The preceding model-facing MCP ABBA was not promoted: its selected candidate
+reached only +36.0% same-budget usage and its two-candidate mean reached +64.0%.
+One repeat individually cleared the target only because prompt-cache reuse was
+more favorable. The MCP path paid the large Codex prefix twice and generated
+373–544 output tokens to produce a nine-token answer. The pre-model hook removes
+that model-orchestration turn; the qualified hook result did not depend on cache
+reads.
 
 The Claude calls used 22,382 versus 2,144 input tokens, a 90.4% reduction. The
 benchmark manually injected a stored retrieval artifact and invoked Claude with
@@ -42,6 +90,11 @@ prompt length alone.
 
 The full evidence is in:
 
+- `docs/benchmarks/codex-sol-ultra-hook-ab-2026-08-08.json`
+- `docs/benchmarks/codex-sol-matrix-bge-onnx-v2-report-2026-08-08.json`
+- `docs/benchmarks/codex-sol-matrix-bge-onnx-v2-2026-08-08.md`
+- `docs/benchmarks/codex-sol-ultra-usage-extension-case-2026-08-08.json`
+- `docs/benchmarks/codex-sol-ultra-usage-extension-report-2026-08-08.json`
 - `docs/benchmarks/codex-mcp-local-2026-08-08.md`
 - `docs/benchmarks/codex-usage-extension-case-2026-08-08.json`
 - `integrations/lians-plugin/benchmarks/results/claude-locomo-ab-2026-08-08.json`
@@ -49,6 +102,12 @@ The full evidence is in:
 
 ## Product changes behind the target
 
+- Codex can recall before the first model request with a score-gated
+  `UserPromptSubmit` hook. The hook bounds context, labels memory as untrusted
+  data, skips degraded retrieval, emits an optional hash-only receipt, and
+  removes the second model turn required by model-selected MCP recall.
+- An optional `<lians-query>...</lians-query>` hint separates the retrieval
+  question from answer-format instructions without hiding either from Codex.
 - MCP recall now compiles through `/v1/context` and returns at most 2,650
   estimated tokens by default after considering up to 50 memories.
 - `LIANS_MCP_ENABLED_TOOLS` gives hosts a provider-neutral server-side allowlist;
@@ -102,7 +161,14 @@ Official host references:
 
 ```console
 python agentmem/benchmarks/provider_usage_extension.py \
+  docs/benchmarks/codex-sol-ultra-usage-extension-case-2026-08-08.json
+
+python agentmem/benchmarks/provider_usage_extension.py \
   docs/benchmarks/codex-usage-extension-case-2026-08-08.json
+
+python agentmem/benchmarks/codex_sol_ultra_ab.py \
+  --db /absolute/path/to/lians-locomo-codex.sqlite \
+  --retrieval-path hook --dry-run
 
 python agentmem/benchmarks/provider_usage_extension.py \
   integrations/lians-plugin/benchmarks/results/claude-usage-extension-case-2026-08-08.json

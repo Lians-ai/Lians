@@ -108,3 +108,76 @@ async def test_context_block_carries_the_degradation_flag(db, break_embeddings):
 
     assert ctx.retrieval_degraded is True
     assert "leverage" in ctx.context
+
+
+@pytest.mark.asyncio
+async def test_lexical_primary_reranker_skips_embedding_without_degrading(
+    db,
+    break_embeddings,
+    monkeypatch,
+):
+    mem = await _seed(db)
+    break_embeddings()
+    import lians.memory_service as ms
+    import lians.ranking as ranking
+
+    class _WorkingReranker:
+        def predict(self, pairs, *, show_progress_bar=False):
+            assert pairs
+            return [1.0] * len(pairs)
+
+    monkeypatch.setattr(ms, "lexical_reranker_primary_enabled", lambda: True)
+    monkeypatch.setattr(ms, "reranker_enabled", lambda: True)
+    monkeypatch.setattr(ranking, "RERANKER_PRIMARY_LEXICAL", True)
+    monkeypatch.setattr(ranking, "RERANKER_MODEL", "fixture")
+    monkeypatch.setattr(ranking, "RERANKER_ONNX_MODEL", "")
+    monkeypatch.setattr(ranking, "_reranker", _WorkingReranker())
+
+    result = await recall_memories(
+        db,
+        NS,
+        RecallRequest(agent_id=AGENT, query="leverage mandate growth book", k=5),
+    )
+
+    assert result.retrieval_degraded is False
+    assert result.candidate_mode == "bounded_lexical_reranker_primary"
+    assert [item.id for item in result.memories] == [mem.id]
+
+
+@pytest.mark.asyncio
+async def test_lexical_primary_reranker_failure_is_explicitly_degraded(
+    db,
+    monkeypatch,
+):
+    await _seed(db)
+    await add_memory(
+        db,
+        NS,
+        MemoryAdd(
+            agent_id=AGENT,
+            content="unrelated operational note",
+            event_time=datetime.now(timezone.utc),
+        ),
+    )
+    import lians.memory_service as ms
+    import lians.ranking as ranking
+
+    class _BrokenReranker:
+        def predict(self, pairs, *, show_progress_bar=False):
+            raise RuntimeError("fixture failure")
+
+    monkeypatch.setattr(ms, "lexical_reranker_primary_enabled", lambda: True)
+    monkeypatch.setattr(ms, "reranker_enabled", lambda: True)
+    monkeypatch.setattr(ranking, "RERANKER_PRIMARY_LEXICAL", True)
+    monkeypatch.setattr(ranking, "RERANKER_MODEL", "fixture")
+    monkeypatch.setattr(ranking, "RERANKER_ONNX_MODEL", "")
+    monkeypatch.setattr(ranking, "_reranker", _BrokenReranker())
+
+    result = await recall_memories(
+        db,
+        NS,
+        RecallRequest(agent_id=AGENT, query="leverage mandate growth book", k=5),
+    )
+
+    assert result.retrieval_degraded is True
+    assert result.candidate_mode == "bounded_lexical_reranker_primary"

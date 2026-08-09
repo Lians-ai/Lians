@@ -176,6 +176,17 @@ def test_production_validation_accepts_empty_or_explicit_proxy_trust() -> None:
     _validate_production_secrets(_production_settings("10.24.0.0/16,fd00:24::/64"))
 
 
+def test_production_validation_accepts_configured_bge_onnx_provider() -> None:
+    settings = _production_settings("").model_copy(
+        update={
+            "embedding_provider": "bge-onnx",
+            "bge_onnx_artifact_dir": "/opt/lians/bge-large-en-v1.5-onnx",
+        }
+    )
+
+    _validate_production_secrets(settings)
+
+
 @pytest.mark.parametrize(
     "configured",
     ["*", "0.0.0.0/0", "10.0.0.1/8", "0.0.0.0/1,128.0.0.0/1", "invalid"],
@@ -202,6 +213,13 @@ def test_production_startup_rejects_unsafe_proxy_trust(configured: str) -> None:
                 "openai_api_key": "",
             },
             "OPENAI_API_KEY",
+        ),
+        (
+            {
+                "embedding_provider": "bge-onnx",
+                "bge_onnx_artifact_dir": "",
+            },
+            "BGE_ONNX_ARTIFACT_DIR",
         ),
         ({"receipt_signing_key_id": "lians-receipt-key"}, "published trust key"),
         ({"receipt_signing_key_id": "bad/key"}, "1-64 ASCII"),

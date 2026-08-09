@@ -1,0 +1,66 @@
+{
+  "schema_version": "lians.codex-account-hook-smoke.v1",
+  "measured_at": "2026-08-08",
+  "scope": "current local Codex account configuration; direct hook-process smoke; zero model calls",
+  "configuration": {
+    "embedding_provider": "sentence-transformers",
+    "embedding_model": "Snowflake/snowflake-arctic-embed-l-v2.0",
+    "namespace": "codex-personal",
+    "agent_id": "codex-user",
+    "existing_index_preserved": true,
+    "daemon_mode": "auto",
+    "daemon_idle_seconds": 1800,
+    "daemon_request_timeout_ms": 3000,
+    "daemon_start_timeout_ms": 120000,
+    "session_start_quiet_prewarm_configured": true
+  },
+  "prewarm": {
+    "command": "user_prompt_submit_recall.py --prewarm-quiet",
+    "exit_code": 0,
+    "wall_time_ms": 22133.834,
+    "stdout_bytes": 0,
+    "stderr_bytes": 0
+  },
+  "fresh_hook_processes_to_prewarmed_daemon": {
+    "runs": 10,
+    "valid_json_runs": 10,
+    "injected_runs": 10,
+    "exact_untrusted_prefix_runs": 10,
+    "minimum_score": 0.45,
+    "query_sha256": "f2d843dd39a7aac75a2283b1b175ece62eb0a5098612671a20348b73dbe4dea6",
+    "wall_time_ms": [
+      1195.839,
+      1251.686,
+      1001.821,
+      1423.586,
+      1020.376,
+      694.719,
+      620.280,
+      1102.294,
+      1201.118,
+      1104.325
+    ],
+    "p50_ms": 1103.310,
+    "p95_max_ms": 1423.586,
+    "target_ms": 3500,
+    "target_passed": true
+  },
+  "production_threshold_receipt": {
+    "status": "injected",
+    "retrieval_transport": "daemon",
+    "retrieval_degraded": false,
+    "candidate_window_complete": true,
+    "graph_search_complete": true,
+    "memory_count": 2,
+    "token_estimate": 155,
+    "top_score": 0.7950946707668176,
+    "receipt_elapsed_ms": 292,
+    "context_sha256": "89e4ef79ec2f69413a815520aee0c52e8f87bdeb25c2229fa10950ab7dd6abf5"
+  },
+  "limitations": [
+    "The relevant query was derived from an existing encrypted account memory and never retained in this report; this is a retrieval and latency smoke, not a model answer-quality test.",
+    "The prewarm timing includes a fresh daemon process but does not flush the operating-system page cache.",
+    "The hook was invoked directly. Normal Codex hook execution still requires the user to trust the changed hook file and restart or start a new session.",
+    "The sub-3.5-second result applies after prewarm; the measured identity-correct prewarm itself took 22.134 seconds."
+  ]
+}

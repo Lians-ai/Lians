@@ -1,0 +1,64 @@
+{
+  "schema_version": "lians.codex-hook-daemon-latency.v1",
+  "measured_at": "2026-08-08",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "python": "3.12.6",
+  "model_calls": 0,
+  "source_artifacts": {
+    "database_sha256": "2e8f68d4e3669d97f3d30d4e20b820f83dedd87dc9a8fc8bc91ea71c43dc57c0",
+    "query_sha256": "db23cff112433bc3f25a9807266bec8880a28e9960e82494cdb341841c24fb77",
+    "hook_sha256": "8941916055126206f4c662b8a69206b8a2301c08b25965cd1988a8a76eee2843",
+    "daemon_sha256": "1483bdef1b989ccbaac36fb859f7d1af3224990a8df14bda51cd861d851bad2a",
+    "benchmark_sha256": "96d206816f7ad2a71a3f2021331e95581d99e76d06d6f2d6ae82e0ca8ad66c2f"
+  },
+  "retrieval_profile": {
+    "database_memories": 419,
+    "namespace": "local",
+    "agent_id": "locomo-conv-26",
+    "embedding_provider": "sentence-transformers",
+    "embedding_model": "BAAI/bge-large-en-v1.5",
+    "k": 20,
+    "maximum_context_tokens": 768,
+    "minimum_score": 0.45
+  },
+  "true_daemon_cold_start_ms": 16501.218,
+  "warm_daemon_fresh_hook_process": {
+    "repeats": 20,
+    "wall_time_ms": [
+      1179.198,
+      877.475,
+      970.914,
+      927.29,
+      886.752,
+      974.57,
+      936.445,
+      884.297,
+      886.641,
+      860.576,
+      848.486,
+      939.614,
+      867.324,
+      909.658,
+      923.782,
+      982.725,
+      924.51,
+      868.884,
+      858.492,
+      908.065
+    ],
+    "p50_ms": 908.861,
+    "p95_ms": 982.725,
+    "maximum_ms": 1179.198,
+    "all_injected": true,
+    "all_protocol_outputs_valid": true,
+    "all_retrieval_degraded_false": true,
+    "top_score_minimum": 0.5816545342346485,
+    "top_score_maximum": 0.5816545342346486
+  },
+  "gate": {
+    "target_p95_ms": 3500.0,
+    "passed": true,
+    "scope": "fresh hook process to an already-running authenticated loopback daemon"
+  },
+  "boundary": "The 0.983 second p95 does not include the one-time 16.501 second daemon/model cold start. The daemon must already be prewarmed."
+}

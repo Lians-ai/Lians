@@ -1,0 +1,219 @@
+{
+  "schema_version": "lians.codex-sol-prompt-matrix-manifest.v1",
+  "suite_id": "codex-sol-locomo-conv0-frozen-10-bge-onnx-v2",
+  "target_usage_extension_percent": 80,
+  "execution_order": "balanced",
+  "answer_instruction": "Return only the shortest direct answer, without an introduction, punctuation added for style, or explanation.",
+  "hook": {
+    "recall_k": 20,
+    "max_context_tokens": 768,
+    "minimum_score": 0,
+    "hook_receipt_elapsed_target_ms": 3500,
+    "require_complete_retrieval": true,
+    "embedding_backend": "bge_onnx",
+    "reranker_backend": "off",
+    "reranker_prefetch": 30,
+    "reranker_primary_lexical": false
+  },
+  "estimated_credit_accounting": {
+    "source_url": "https://learn.chatgpt.com/docs/pricing",
+    "as_of": "2026-08-08"
+  },
+  "profiles": [
+    {
+      "id": "sol-low",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "low",
+      "service_tier": "default",
+      "maximum_estimated_credits_per_run": 5,
+      "rates_per_million_tokens": {
+        "uncached_input_credits_per_million": 125,
+        "cached_input_credits_per_million": 12.5,
+        "cache_write_input_credits_per_million": 156.25,
+        "output_credits_per_million": 750
+      }
+    },
+    {
+      "id": "sol-medium",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "medium",
+      "service_tier": "default",
+      "maximum_estimated_credits_per_run": 5,
+      "rates_per_million_tokens": {
+        "uncached_input_credits_per_million": 125,
+        "cached_input_credits_per_million": 12.5,
+        "cache_write_input_credits_per_million": 156.25,
+        "output_credits_per_million": 750
+      }
+    },
+    {
+      "id": "sol-high",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high",
+      "service_tier": "default",
+      "maximum_estimated_credits_per_run": 5,
+      "rates_per_million_tokens": {
+        "uncached_input_credits_per_million": 125,
+        "cached_input_credits_per_million": 12.5,
+        "cache_write_input_credits_per_million": 156.25,
+        "output_credits_per_million": 750
+      }
+    },
+    {
+      "id": "sol-xhigh",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "xhigh",
+      "service_tier": "default",
+      "maximum_estimated_credits_per_run": 5,
+      "rates_per_million_tokens": {
+        "uncached_input_credits_per_million": 125,
+        "cached_input_credits_per_million": 12.5,
+        "cache_write_input_credits_per_million": 156.25,
+        "output_credits_per_million": 750
+      }
+    },
+    {
+      "id": "sol-max",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "max",
+      "service_tier": "default",
+      "maximum_estimated_credits_per_run": 5,
+      "rates_per_million_tokens": {
+        "uncached_input_credits_per_million": 125,
+        "cached_input_credits_per_million": 12.5,
+        "cache_write_input_credits_per_million": 156.25,
+        "output_credits_per_million": 750
+      }
+    },
+    {
+      "id": "sol-ultra",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "ultra",
+      "service_tier": "default",
+      "maximum_estimated_credits_per_run": 5,
+      "rates_per_million_tokens": {
+        "uncached_input_credits_per_million": 125,
+        "cached_input_credits_per_million": 12.5,
+        "cache_write_input_credits_per_million": 156.25,
+        "output_credits_per_million": 750
+      }
+    }
+  ],
+  "contexts": [
+    {
+      "id": "locomo-conv0",
+      "dataset_artifact": "agentmem/benchmarks/data/locomo10.json",
+      "conversation_index": 0
+    }
+  ],
+  "dataset_prompts": [
+    {
+      "id": "conv0-cat1-first",
+      "context_id": "locomo-conv0",
+      "qa_index": 3,
+      "category": 1,
+      "accepted_answers": [
+        "Adoption agencies",
+        "adoption agencies"
+      ]
+    },
+    {
+      "id": "conv0-cat1-second",
+      "context_id": "locomo-conv0",
+      "qa_index": 4,
+      "category": 1,
+      "accepted_answers": [
+        "Transgender woman",
+        "A transgender woman",
+        "transgender woman"
+      ]
+    },
+    {
+      "id": "conv0-cat2-first",
+      "context_id": "locomo-conv0",
+      "qa_index": 0,
+      "category": 2,
+      "accepted_answers": [
+        "7 May 2023",
+        "May 7, 2023"
+      ]
+    },
+    {
+      "id": "conv0-cat2-second",
+      "context_id": "locomo-conv0",
+      "qa_index": 1,
+      "category": 2,
+      "accepted_answers": [
+        "2022"
+      ]
+    },
+    {
+      "id": "conv0-cat3-first",
+      "context_id": "locomo-conv0",
+      "qa_index": 2,
+      "category": 3,
+      "accepted_answers": [
+        "Psychology, counseling certification",
+        "Psychology and counseling certification",
+        "psychology, counseling certification"
+      ]
+    },
+    {
+      "id": "conv0-cat3-second",
+      "context_id": "locomo-conv0",
+      "qa_index": 14,
+      "category": 3,
+      "accepted_answers": [
+        "Likely no",
+        "No",
+        "Probably not"
+      ]
+    },
+    {
+      "id": "conv0-cat4-first",
+      "context_id": "locomo-conv0",
+      "qa_index": 82,
+      "category": 4,
+      "accepted_answers": [
+        "mental health",
+        "Mental health"
+      ]
+    },
+    {
+      "id": "conv0-cat4-second",
+      "context_id": "locomo-conv0",
+      "qa_index": 83,
+      "category": 4,
+      "accepted_answers": [
+        "self-care is important",
+        "Self-care is important"
+      ]
+    },
+    {
+      "id": "conv0-cat5-first",
+      "context_id": "locomo-conv0",
+      "qa_index": 152,
+      "category": 5,
+      "accepted_answers": [
+        "UNKNOWN"
+      ],
+      "denied_answers": [
+        "self-care is important"
+      ],
+      "answer_instruction": "If the named person is not supported by direct evidence, return exactly UNKNOWN. Do not transfer another person's fact. Return exactly UNKNOWN for this question."
+    },
+    {
+      "id": "conv0-cat5-second",
+      "context_id": "locomo-conv0",
+      "qa_index": 153,
+      "category": 5,
+      "accepted_answers": [
+        "UNKNOWN"
+      ],
+      "denied_answers": [
+        "researching adoption agencies"
+      ],
+      "answer_instruction": "If the named person is not supported by direct evidence, return exactly UNKNOWN. Do not transfer another person's fact. Return exactly UNKNOWN for this question."
+    }
+  ]
+}

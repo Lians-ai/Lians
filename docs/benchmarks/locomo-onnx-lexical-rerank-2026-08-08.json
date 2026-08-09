@@ -1,0 +1,307 @@
+{
+  "schema_version": "lians.locomo-onnx-lexical-rerank-report.v1",
+  "created_at": "2026-08-08T19:31:19.0548501Z",
+  "decision": {
+    "quality_latency_gate_passed": true,
+    "recommended_optional_profile": "pure BM25 top100 -> cross-encoder/ms-marco-MiniLM-L-6-v2 ONNX FP32 -> top20 -> checked-out Codex renderer",
+    "smallest_passing_configuration": "w100_k20",
+    "evidence_boundary": "This evaluates evidence retrieval on LOCOMO, not Sol answer quality, refusal correctness, universal prompt coverage, or Codex credit usage."
+  },
+  "protocol": {
+    "network_calls": 0,
+    "model_api_calls": 0,
+    "dataset_prompts": 1986,
+    "prompts_with_evidence": 1982,
+    "unscored_without_evidence": 4,
+    "answerable_categories_1_to_4_n": 1536,
+    "adversarial_category_5_n": 446,
+    "conversation_stores": 10,
+    "store_memory_counts": [419, 367, 662, 623, 679, 675, 684, 675, 505, 565],
+    "candidate_windows": [30, 50, 75, 100],
+    "return_ks": [3, 5, 20],
+    "renderer_budget": "768 tokens estimated as 3072 characters by the checked-out Codex hook",
+    "score_admission": "rank-only synthetic score 1.0; cross-encoder logits were not treated as calibrated confidence",
+    "archived_reference": "BGE production-profile artifact at k=10; no archived BGE top20 artifact exists"
+  },
+  "predeclared_non_inferiority_gate": {
+    "overall_evidence_hit_and_all_margin": 0.01,
+    "per_category_evidence_hit_margin": 0.03,
+    "per_corpus_size_evidence_hit_margin": 0.02,
+    "passing_configurations": ["w100_k20"],
+    "winner_exact_renderer_passed": true
+  },
+  "answerable_exact_renderer": {
+    "candidate_w100_k20": {
+      "n": 1536,
+      "evidence_hit": 0.74349,
+      "evidence_all": 0.608724
+    },
+    "archived_bge_k10": {
+      "n": 1536,
+      "evidence_hit": 0.72526,
+      "evidence_all": 0.597005
+    },
+    "absolute_delta": {
+      "evidence_hit": 0.01823,
+      "evidence_all": 0.011719
+    },
+    "by_category": {
+      "1": {
+        "n": 282,
+        "candidate_hit": 0.698582,
+        "candidate_all": 0.195035,
+        "reference_hit": 0.652482,
+        "hit_delta": 0.0461
+      },
+      "2": {
+        "n": 321,
+        "candidate_hit": 0.816199,
+        "candidate_all": 0.750779,
+        "reference_hit": 0.794393,
+        "hit_delta": 0.021806
+      },
+      "3": {
+        "n": 92,
+        "candidate_hit": 0.434783,
+        "candidate_all": 0.26087,
+        "reference_hit": 0.456522,
+        "hit_delta": -0.021739
+      },
+      "4": {
+        "n": 841,
+        "candidate_hit": 0.764566,
+        "candidate_all": 0.731272,
+        "reference_hit": 0.752675,
+        "hit_delta": 0.011891
+      }
+    },
+    "by_corpus_size": {
+      "large_ge650": {
+        "n": 794,
+        "candidate_hit": 0.74937,
+        "candidate_all": 0.605793,
+        "reference_hit": 0.74937,
+        "hit_delta": 0.0
+      },
+      "medium_500_649": {
+        "n": 511,
+        "candidate_hit": 0.747554,
+        "candidate_all": 0.606654,
+        "reference_hit": 0.702544,
+        "hit_delta": 0.04501
+      },
+      "small_lt500": {
+        "n": 231,
+        "candidate_hit": 0.714286,
+        "candidate_all": 0.623377,
+        "reference_hit": 0.692641,
+        "hit_delta": 0.021645
+      }
+    }
+  },
+  "rejected_compact_profiles": {
+    "w100_k3": {
+      "evidence_hit": 0.651042,
+      "evidence_all": 0.518229,
+      "passed": false
+    },
+    "w100_k5": {
+      "evidence_hit": 0.691406,
+      "evidence_all": 0.561849,
+      "passed": false
+    },
+    "w75_k20": {
+      "evidence_hit": 0.721354,
+      "evidence_all": 0.587891,
+      "failure": "corpus-size gate",
+      "passed": false
+    }
+  },
+  "category_5_exact_renderer": {
+    "n": 446,
+    "evidence_hit": 0.639013,
+    "evidence_all": 0.623318,
+    "adversarial_answer_string_exposure": 0.378924,
+    "boundary": "Evidence and adversarial-answer string exposure are not refusal correctness or safety-judge accuracy."
+  },
+  "rendered_context_all_scored_prompts": {
+    "characters": {
+      "min": 2371,
+      "p50": 3072,
+      "p95": 3072,
+      "p99": 3072,
+      "max": 3072
+    },
+    "char_div_4_token_estimate": {
+      "min": 593,
+      "p50": 768,
+      "p95": 768,
+      "p99": 768,
+      "max": 768
+    },
+    "o200k_base_tokens": {
+      "min": 735,
+      "p50": 854,
+      "p95": 943,
+      "p99": 979,
+      "max": 1018
+    },
+    "rendered_memories": {
+      "min": 8,
+      "p50": 12,
+      "p95": 18,
+      "p99": 20,
+      "max": 20
+    },
+    "truncated_rate": 0.985873,
+    "finding": "The product's 768 char/4 estimate is not a 768-token o200k_base ceiling."
+  },
+  "fresh_process_cold_latency": {
+    "definition": "Fresh Python process, read-only conv0 SQLite, lexical top100, ONNX model/session load, rerank top20, and checked-out renderer; local artifacts present; OS file cache was not flushed.",
+    "fixed_query": "When did Caroline go to the LGBTQ support group?",
+    "repeats": 10,
+    "median_ms": 2662.412,
+    "p95_nearest_rank_ms": 2750.266,
+    "maximum_ms": 2750.266,
+    "target_ms": 3500,
+    "margin_to_target_ms": 749.734,
+    "all_runs_returned_20": true,
+    "all_runs_top_dia_id": "D1:3",
+    "passed": true,
+    "machine": {
+      "cpu": "AMD Ryzen 9 7940HS w/ Radeon 780M Graphics",
+      "os": "Microsoft Windows 10 Home 10.0.19045",
+      "architecture": "AMD64",
+      "python": "3.12.6",
+      "onnxruntime": "1.28.0",
+      "ort_intra_op_threads": 4
+    }
+  },
+  "checked_out_product_parity": {
+    "conversation_index": 0,
+    "candidate_window": 100,
+    "compared_candidates": 100,
+    "candidate_order_exact_match": true,
+    "cross_encoder_order_exact_match": true,
+    "top20_exact_match": true,
+    "assumption": "Pure src.lians.ranking._bm25_score ordering with event_time/id ties, then src.lians.ranking.rerank_cross_encoder."
+  },
+  "candidate_generation_ablation_all_evidence_prompts": {
+    "n": 1982,
+    "dense_only_minilm_same_space": {
+      "hit_at_20": 0.631685,
+      "all_at_20": 0.526236,
+      "hit_at_30": 0.693239,
+      "all_at_30": 0.585267,
+      "hit_at_100": 0.856206,
+      "all_at_100": 0.759334
+    },
+    "lexical_only": {
+      "hit_at_20": 0.561554,
+      "all_at_20": 0.469728,
+      "hit_at_30": 0.61554,
+      "all_at_30": 0.513118,
+      "hit_at_100": 0.790616,
+      "all_at_100": 0.679112
+    },
+    "valid_minilm_hybrid_same_space": {
+      "hit_at_20": 0.669021,
+      "all_at_20": 0.561554,
+      "hit_at_30": 0.727548,
+      "all_at_30": 0.62109,
+      "hit_at_100": 0.874874,
+      "all_at_100": 0.78557
+    },
+    "invalid_minilm_query_vs_bge_documents": {
+      "hit_at_20": 0.035318,
+      "all_at_20": 0.025227,
+      "hit_at_30": 0.050959,
+      "all_at_30": 0.032795,
+      "hit_at_100": 0.168012,
+      "all_at_100": 0.108981
+    },
+    "mixed_space_decision": "Rejected. Right-zero-padding normalized MiniLM 384-vectors to 1024 preserves MiniLM/MiniLM cosine only; it does not align MiniLM queries with BGE document vectors."
+  },
+  "other_trials": {
+    "pytorch_minilm_fresh_process": {
+      "latency_range_ms": [9500, 11300],
+      "passed_latency": false
+    },
+    "onnx_minilm_reembedded_conv0_dense_k10": {
+      "fresh_process_p95_ms": 826.502,
+      "answerable_n": 150,
+      "evidence_hit": 0.58,
+      "evidence_all": 0.4667,
+      "bge_reference_hit": 0.6867,
+      "bge_reference_all": 0.56,
+      "passed_quality": false
+    }
+  },
+  "onnx_artifact": {
+    "source_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "format": "ONNX FP32 opset 17",
+    "bytes": 90977787,
+    "sha256": "e7025df05c3fb09e6de28b123d11ab1d92fcbb21c07fa5457007a0c54e546c6f",
+    "tokenizer_json_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+    "max_length": 256,
+    "batch_size": 64,
+    "inputs": {
+      "input_ids": "tensor(int64)[batch,sequence]",
+      "attention_mask": "tensor(int64)[batch,sequence]",
+      "token_type_ids": "tensor(int64)[batch,sequence]"
+    },
+    "output": {
+      "logits": "tensor(float)[batch,1]"
+    },
+    "checked_in": false
+  },
+  "trial_environment_dependency_changes": {
+    "retained_because_quality_and_latency_gate_passed": true,
+    "sdk_venv_added_or_updated": {
+      "onnxruntime": "1.28.0",
+      "onnx": "1.22.0",
+      "flatbuffers": "25.12.19",
+      "ml-dtypes": "0.5.4",
+      "protobuf": "7.35.1"
+    },
+    "production_runtime_minimum": ["onnxruntime", "tokenizers", "numpy"],
+    "export_only_not_required_at_runtime": ["onnx", "ml-dtypes", "protobuf"]
+  },
+  "provenance": {
+    "benchmark_path": "agentmem/benchmarks/locomo_onnx_lexical_rerank_eval.py",
+    "benchmark_sha256": "071a4c01a1d0685f9bf231a96f855cf67150f576c05a3ad5604a5facecb917ad",
+    "test_path": "agentmem/tests/test_locomo_onnx_lexical_rerank_eval.py",
+    "test_sha256": "08776f7b70d9fb9d697483f0455db5f7e97de9c3ccdd3bde95545ab75bf31b94",
+    "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "renderer_sha256": "3532d7b3744381ad8519bc3cad9692f6b86cfd2803190de52ab4e9a4202fc13c",
+    "database_sha256": {
+      "0": "c8370d855a1b4059f32ef9096303c729fe111e30dbbf105d05179dc3e29321a1",
+      "1": "dee2a283304f695f3b01b7df0ae303829bdd50ebb9118ca574448d57e0b818ed",
+      "2": "7363806e99576902be3c4a0f0a467166b7433fde725786271ae17500b005eb5f",
+      "3": "135daa4436751b0f11a1e478e85c9de5934899a4fac5341d9f55c12e260e4b42",
+      "4": "1f0af47281ea866252036191bf8edc1330ffefd4bca1a37ef243d60ef81a3b6a",
+      "5": "3df4159b97221ea44368b58a1d63055d6e119a4361f76092e7f4af541c0f521e",
+      "6": "212b5f7744d196cc9a9c062e661157ebfa071ee4f019aefa3b8a2f7062d7308a",
+      "7": "48e06907236522d438c685598d8200227d3b21653d8e21cd7db122a2141a98b7",
+      "8": "2ae5e3e4c965e69136d6b8eb6b2a18c6aafc1fd3a81950ad56c80ad047ae568c",
+      "9": "47bbe9ddb72405ce9e3fab5eb99b09d6396378cc39be0e0539236dc4c35a1c32"
+    },
+    "temporary_evidence_sha256": {
+      "full_corpus_aggregate": "2300519cbb1614516c21a14b12a3078fc8d5c46682fe518003a8fe7245680f5f",
+      "exact_cap_aggregate": "7220f73122d1d63ea6a03c5171358b46c7be04e7010033e158a1053a5c9bbee9",
+      "candidate_ablation": "d399e6ec44835a7f1a97973af3eced154415d5a0fefdb2cdc4688fccd7da2ec1",
+      "cold_rendered": "3ff8aedba1ff29620b742becec6da2eee00142c25e1bed11389c76fd4826ba8c",
+      "product_parity": "ef1c000f88f0e9c34a5e8dd7bd6d01fc469969183b39b49f8f7854b49bc9156f"
+    }
+  },
+  "limitations": [
+    "LOCOMO is a bounded evidence-retrieval benchmark and does not represent every prompt or every Sol model.",
+    "No answer model was called, so the report does not establish answer accuracy, refusal correctness, latency, token use, or credits for Sol.",
+    "The archived BGE reference returns 10 rows while the candidate retrieves 20 before rendering.",
+    "The full quality sweep used SQLite stores read-only; PostgreSQL behavior and multi-tenant concurrency are outside this artifact.",
+    "Fresh-process timing does not flush the operating-system file cache and uses one fixed conv0 query on one Windows machine.",
+    "Cross-encoder logits are ranking values, not calibrated confidence scores; threshold behavior was not evaluated.",
+    "The product renderer enforces a character heuristic, so exact o200k_base usage exceeded 768 tokens on this corpus.",
+    "The ONNX graph and tokenizer are external artifacts and are intentionally not committed to the repository."
+  ]
+}

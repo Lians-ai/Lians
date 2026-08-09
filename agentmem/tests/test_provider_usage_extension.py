@@ -54,6 +54,27 @@ def test_85_percent_extension_requires_about_45_95_percent_cost_reduction():
     assert report["verdict"]["qualified_target_met"] is True
 
 
+def test_80_percent_extension_uses_the_exact_1_8x_same_budget_boundary():
+    case = _case(
+        baseline={"raw_input_tokens": 1800},
+        candidate={"raw_input_tokens": 1000},
+    )
+    case["provider"] = "synthetic GPT-5.6 Sol Ultra accounting case"
+    case["target_usage_extension_percent"] = 80
+
+    report = evaluate_case(case)
+
+    assert report["target"]["same_budget_usage_multiplier"] == 1.8
+    assert report["target"]["maximum_candidate_cost_ratio"] == pytest.approx(1 / 1.8)
+    assert report["target"]["minimum_task_cost_reduction_percent"] == pytest.approx(44.444444)
+    assert report["observed"]["same_budget_usage_multiplier"] == 1.8
+    assert report["verdict"]["qualified_target_met"] is True
+
+    case["candidate"]["raw_input_tokens"] = 1001
+    just_over_boundary = evaluate_case(case)
+    assert just_over_boundary["verdict"]["economic_target_met"] is False
+
+
 def test_protected_quality_failure_blocks_an_economically_passing_candidate():
     report = evaluate_case(
         _case(

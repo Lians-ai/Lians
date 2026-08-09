@@ -1,0 +1,1392 @@
+{
+  "gate": {
+    "filesystem_cache_boundary": "fresh process and fresh model session; operating-system filesystem page cache was not flushed",
+    "pass": true,
+    "scope": "new Python process through ONNX Runtime session creation, tokenizer load, read-only load of all 419 SQLite live facts and stored 1024-d embeddings, two-query BGE encode, current hybrid scoring, and JSON response",
+    "statistic": "p95_fresh_process_elapsed_ms",
+    "threshold_ms": 3500.0
+  },
+  "generated_at": "2026-08-08T19:19:33Z",
+  "provenance": {
+    "candidate_label": "official-fp32-onnx-no-prepack-runtime",
+    "candidate_model_sha256": "69ed3f810d3b6d13f70dff9ca89966f39c0a0e877fb88211be7bcc070df2a2ce",
+    "candidate_transform": "none; official upstream FP32 ONNX; ORT session.disable_prepacking=1 at runtime",
+    "database_scope": "namespace=local, agent_id=locomo-conv-26; canonical logical hash matches source DB",
+    "database_sha256": "d0dc16315abffc2c358d4fad13a92c38ec6153c3c05e2b1330514fb0d2b628af",
+    "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "disable_prepacking": true,
+    "graph_optimization": "all",
+    "logical_live_facts_rows": 419,
+    "logical_live_facts_sha256": "df5d1143f4e7a663e5557276c47a52431ee93652c87280ae385e4eaaa19c2f76",
+    "model_revision": "d4aa6901d3a41ba39fb536a557fa166f842b0e09",
+    "model_source": "BAAI/bge-large-en-v1.5",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "python": "3.12.6 (tags/v3.12.6:a4a2d2b, Sep  6 2024, 20:11:23) [MSC v.1940 64 bit (AMD64)]",
+    "python_executable": "%USERPROFILE%\\Downloads\\Ai_Mem_Soft\\agentmem\\sdk\\python\\.venv\\Scripts\\python.exe",
+    "runner_sha256": "5b395e82b6ab82cfdfba49dd622c04d5a66ffca45c26fead73b34427a86398e8",
+    "threads": 8,
+    "tokenizer_json_sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+    "upstream_fp32_onnx_sha256": "69ed3f810d3b6d13f70dff9ca89966f39c0a0e877fb88211be7bcc070df2a2ce"
+  },
+  "runs": [
+    {
+      "category": 2,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "772af4ce061437ecd7b75fb134c01c4ae80834439921b860d56de28cd001d93f",
+            "id": "59f39ddc-2f3d-493e-9c6a-21f91127c109",
+            "score": 0.5816544865248162
+          },
+          {
+            "content_sha256": "7bc6ca7d8204420db286cb9850e41bcb8d446644fb85f5acb4603178a9281c21",
+            "id": "b6511b3f-ea20-4976-a7fb-b076c992bd91",
+            "score": 0.5437446218273942
+          },
+          {
+            "content_sha256": "156d22f0f5035012c22a5c1593e3da6b3282a3db8bedc184066abb60f9b36cdb",
+            "id": "be65bcef-18ac-4364-b65f-5f109f6bbe89",
+            "score": 0.5404440949509491
+          },
+          {
+            "content_sha256": "a69643a86eaa14e82721036f4a8fbadf6b91ab1ced58a2d7679f05f31b26dcc4",
+            "id": "305ddd90-57d4-40ea-bf9c-57f0bceae444",
+            "score": 0.5380326438333912
+          },
+          {
+            "content_sha256": "2473550af53cf37cde2edea05c03bfaff8747b616ced4e45c32da83b1a81363b",
+            "id": "8e2de24b-28d6-44fd-b2af-7950ed112724",
+            "score": 0.5373071821794317
+          },
+          {
+            "content_sha256": "2593627d1f29cc8f99bed10da2d209b66df686cac40de89d7f8245ef0b8ccfba",
+            "id": "e0b5ddc0-26ed-46be-a8b3-a292d984e982",
+            "score": 0.5367449438230546
+          },
+          {
+            "content_sha256": "ac0f3777fc4a69868d002263cc9ced0c2c728450558923057282e296395795f9",
+            "id": "7b612ca4-d86e-4b83-a71c-07a66fed8d7d",
+            "score": 0.5341936616839409
+          },
+          {
+            "content_sha256": "2107d77d6d1f737ce9a20a67eacce1f6ef4ad15590ca0eda795a61e85cb89126",
+            "id": "d2035631-19d0-4414-9f4a-6ccf038daea9",
+            "score": 0.5299613969102204
+          },
+          {
+            "content_sha256": "cf713732c1891d6e1a100e26c320c51541ede77336f3c4b3cf63fdb847b2b2a8",
+            "id": "61620d27-6b5d-4e8f-ba96-a8fd091e55c8",
+            "score": 0.529458119178695
+          },
+          {
+            "content_sha256": "5c15c007665d5eafe3c4f1da1200721b3491150c636e73f9e8b5c4efc8892627",
+            "id": "2850c3cb-87b4-4b6e-86e0-aea3207640ab",
+            "score": 0.528188221813503
+          },
+          {
+            "content_sha256": "d42f0c582ec99643bb0ea89d0bdf154f450a6b43b72b4b28ac1afc4632f2b70f",
+            "id": "74ea66ad-7bed-4ae5-90fb-1e7ec605dea7",
+            "score": 0.5279848788993005
+          },
+          {
+            "content_sha256": "b4e0f189779fcbe85ffe0720bca3b3c853fd4abb82ffb59ef41f699c0c434eac",
+            "id": "ce7bed30-370a-434f-8451-2ff03a418f5e",
+            "score": 0.5273864863183784
+          },
+          {
+            "content_sha256": "83c49de12f56db399cf99691b27bf8b161892782efb0067d3960007b3f7412a4",
+            "id": "286e0367-d9b8-445f-8929-b5fa01568646",
+            "score": 0.5260127262126564
+          },
+          {
+            "content_sha256": "1369c116721a50b4cd3b106629cd44bcb49b91bad4c4981f32783ea78d36e62f",
+            "id": "ca88a388-733c-4d99-b397-49433ab7881e",
+            "score": 0.5253304232003404
+          },
+          {
+            "content_sha256": "a2e5fdc6fe49c256c43ad907e759257317553741c61b6510931841fbe12933a7",
+            "id": "ebed9b12-5f0f-41d8-be0c-0644ee8b80d2",
+            "score": 0.5244598278425124
+          },
+          {
+            "content_sha256": "632972717d09567f07dd948512f717d215efb67ec08f1b339654d9de5aca6a71",
+            "id": "170f6b3a-0d4c-48c4-a9b9-3ecc627b923b",
+            "score": 0.5228335600157336
+          },
+          {
+            "content_sha256": "d5a95cba26ea66b69df7736e10265d26100fcfc6aa406b961fb16b7ac39a7605",
+            "id": "92899323-5270-4ee7-a59f-16c6cbff4535",
+            "score": 0.5217247420101451
+          },
+          {
+            "content_sha256": "16480e0a07c48df6545a006fcda04ce59550deb891474a276c994e26b8492241",
+            "id": "e51954a4-b2b2-4b89-8815-14e69a1ae8df",
+            "score": 0.5211077233209773
+          },
+          {
+            "content_sha256": "535fee7c4b4274f509c087c0e266c23bb67e7e00cb7f7921b706bdd34f9e9751",
+            "id": "e9cba904-b73b-4594-8dc1-402747dc84bb",
+            "score": 0.5199061338304329
+          },
+          {
+            "content_sha256": "1b26b3784332a8c55530a26153de7de5756de5a13734abb8ee75d8ad2cef68c5",
+            "id": "e341cc33-081c-4aaf-a852-a85803f4decd",
+            "score": 0.5194952828436734
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 154.981,
+          "hybrid_score": 24.163,
+          "imports": 294.89,
+          "internal_total": 2306.9,
+          "model_load": 1528.934,
+          "sqlite_load_and_pack": 272.319,
+          "tokenizer_load": 31.613
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "db23cff112433bc3f25a9807266bec8880a28e9960e82494cdb341841c24fb77",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2553.355,
+      "qa_index": 0,
+      "query": "When did Caroline go to the LGBTQ support group?",
+      "query_sha256": "db23cff112433bc3f25a9807266bec8880a28e9960e82494cdb341841c24fb77",
+      "run": 1,
+      "stderr": ""
+    },
+    {
+      "category": 2,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "f81798bc56619962416d6520ffd638ab9ebae6af3527e7d3afd7b7fdcab5bc42",
+            "id": "b55db6fc-0b9b-438f-a2ad-e5285ab4f872",
+            "score": 0.5702371030950927
+          },
+          {
+            "content_sha256": "1b6e2535f94592899480a27dbbbfe5520165c735e854987963f6fe8514896c5e",
+            "id": "75fb84d7-2404-46dd-aaa3-574cf333141a",
+            "score": 0.5204321805524902
+          },
+          {
+            "content_sha256": "81cbc34fe43d9d751a1f5f7f45741f194af1065ca92cf8e94bf9b34a35c6e6f7",
+            "id": "6efb30bc-d89c-4958-8e4a-f54175facf0e",
+            "score": 0.5141061999812859
+          },
+          {
+            "content_sha256": "3f5f84ec0442d4532d36c16cdc43ab476cf8a9e613f893525c73dec6cfda79eb",
+            "id": "cf1ce237-7fa5-4a59-8d98-d3d21dc40402",
+            "score": 0.5118157049047536
+          },
+          {
+            "content_sha256": "a3a75b6d5cdd4235bf7370888018cccab24f5bc0f713b11453ba52eed95aa1de",
+            "id": "723c9b0d-f34e-4285-b645-f8a1296b1f46",
+            "score": 0.5090168987148425
+          },
+          {
+            "content_sha256": "644e8009e57e45cbc9a75daac3ff760d6e255354a80c3f3c628b41492cccd3e8",
+            "id": "75dc4785-bb88-413f-a4c1-95348caa1581",
+            "score": 0.5051355171936871
+          },
+          {
+            "content_sha256": "38cef175119c31e8571cc9a923847c2f8bf7c9b3356e9e74bfcfbcf7726c8012",
+            "id": "5fe45203-be47-46ab-a6c7-81de1f6308d7",
+            "score": 0.5043860489610629
+          },
+          {
+            "content_sha256": "8b190afa653568670e95b0a68700000fd2957a989441c8f36aa2035a0ac64ddb",
+            "id": "c8c8f57a-7ccb-43a5-97ec-fd5b3dd225a2",
+            "score": 0.4981862072721345
+          },
+          {
+            "content_sha256": "704ac8bd85c2df2cb6528ed3f100760a8466b57adac646ff213ede38f693d67c",
+            "id": "eee725f1-abbd-42f6-a37e-fe662a789cc5",
+            "score": 0.49185423855997823
+          },
+          {
+            "content_sha256": "48a5f4fb3e930f87193680bfbf903de8066d3bfef3718ae3d13b530359f0a16a",
+            "id": "05806e2b-e191-4450-b31c-9659dc5f0eb1",
+            "score": 0.4847325209497569
+          },
+          {
+            "content_sha256": "d19908e399a5d7b0cd6190adf380e0f5c1089bac478f899ae7888b41df26df43",
+            "id": "3b02ed7a-44df-49d6-9031-bece57c9e7ee",
+            "score": 0.48414750481683927
+          },
+          {
+            "content_sha256": "ed4debf5d8417393ee619a69ea9046de39907b571fcdf111ac85b9a8776598fb",
+            "id": "bf60fbe9-b63f-4966-8ba7-797f2ea6e82a",
+            "score": 0.48395967703557835
+          },
+          {
+            "content_sha256": "4cb87bc9a7f0748ce9ac1067523e53c5c86fcd829905778140fb730bde5ff689",
+            "id": "46806b84-3568-4011-9598-ab1b02d2a950",
+            "score": 0.4825646993861111
+          },
+          {
+            "content_sha256": "135c73df155adf6a903bec37e1e7ac1e8753d3819756e73894aa1964020cea48",
+            "id": "863a1e5d-bc8e-4630-8f0f-1d385f9d40cb",
+            "score": 0.48038819797115134
+          },
+          {
+            "content_sha256": "c889042c37f764db6664645febb2cf239ccbcebb7b8048def0865fb3edac52ff",
+            "id": "d0e321f8-2139-4aa0-b192-3be304651c88",
+            "score": 0.47706802057147496
+          },
+          {
+            "content_sha256": "0e9758a10f513cf064b8c044c8aabc5a238059f5376cdc672d4830765b06cc92",
+            "id": "4406cce4-1f50-428f-b359-ac944608f35b",
+            "score": 0.4759924118443167
+          },
+          {
+            "content_sha256": "d972357cb4bc7016b5ad174a3b0820fde584cd3c835646d021c7defeee21150c",
+            "id": "50cd286c-3b0c-459d-ba01-3e318c52d304",
+            "score": 0.47371411041219946
+          },
+          {
+            "content_sha256": "123ec8267fdc2c950d50dd6130a8fc0a49de68ce4f75feca7d958b3a685133e4",
+            "id": "d6f16e43-8faf-48b4-879f-4131db2119f0",
+            "score": 0.4736168175886019
+          },
+          {
+            "content_sha256": "ffdcbcbc102458e814978f986a0585d6785d6e20a993031c25bcfd5e2d875791",
+            "id": "2e579a50-f650-4bba-8bd0-c6f3d62202f3",
+            "score": 0.4684909431311608
+          },
+          {
+            "content_sha256": "220ecc0c77c1166572da629b2c0508144ff8d46c92daadc9f178d4f36f12bcfd",
+            "id": "75410a0d-c80c-4978-be4c-fc4503ee7a57",
+            "score": 0.46826776908939716
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 146.01,
+          "hybrid_score": 23.068,
+          "imports": 341.171,
+          "internal_total": 2382.08,
+          "model_load": 1563.428,
+          "sqlite_load_and_pack": 270.522,
+          "tokenizer_load": 37.88
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "3fe8fabebce9572de230b407486d4edb6ce86ba1a70966371cfe39af18c3dc8b",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2642.993,
+      "qa_index": 1,
+      "query": "When did Melanie paint a sunrise?",
+      "query_sha256": "3fe8fabebce9572de230b407486d4edb6ce86ba1a70966371cfe39af18c3dc8b",
+      "run": 2,
+      "stderr": ""
+    },
+    {
+      "category": 3,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "9ca9c65580e076343b5cedbd5ded2aef552ad2051c40f7fd34d234587e281ba1",
+            "id": "bc41ad00-939d-4790-b340-dc6f0d9f443b",
+            "score": 0.5235655389258446
+          },
+          {
+            "content_sha256": "c16691b9c126da892ad981c4574a45e0ba60f9130648dd6f3ddc870427c9d44d",
+            "id": "4367bd82-d573-4703-a0d5-aab98da0b6e8",
+            "score": 0.5067619618885277
+          },
+          {
+            "content_sha256": "d9fbab0bdae76bf72a19ab6b0c256023c6d111f3f3577803c612f1a5f49ed37a",
+            "id": "6f4056be-2834-4e43-b2f0-ff74db12b4c0",
+            "score": 0.4871383868095982
+          },
+          {
+            "content_sha256": "4d0db113e92dda0c38d643bf646e32aca169375c9fdb2e5866e1855261211ffe",
+            "id": "80905dec-6802-4e58-8911-29ed7dc4f8ff",
+            "score": 0.46533298392684347
+          },
+          {
+            "content_sha256": "120a95e78a82ba8802018213925158a3d5f39d7f937704748a8f04d02adcd0c3",
+            "id": "9fb1587b-bd9f-44a3-8e82-48b081ae726b",
+            "score": 0.4585300147885855
+          },
+          {
+            "content_sha256": "3319e95b3ee3d73351d43a8bfb24f30cdec8f426cad8e0a1ce079698753b4c60",
+            "id": "c5ff86b2-c450-4b11-8afe-4747009939f0",
+            "score": 0.4465936707879954
+          },
+          {
+            "content_sha256": "2091182cc0f71b9fdf62f0a829a819376ba86ed0e03886eeef60cd2ce1e48eb3",
+            "id": "e6302af5-4033-4bf8-a18a-8c0a5a77929d",
+            "score": 0.4448028748451587
+          },
+          {
+            "content_sha256": "3d3193bb4ec18538212700fc4f165b1c719f9221cc4884724a18eb089faf2f85",
+            "id": "9068ef47-fc97-42e3-a359-2eeec2ed0be7",
+            "score": 0.44361878923465875
+          },
+          {
+            "content_sha256": "bec5c80f9551e968ab3728829e89157c2e61c232f624904b735acf5bf0aa32cf",
+            "id": "abadf092-ed72-4d52-a3e4-23da5ac9a36e",
+            "score": 0.4427133746383451
+          },
+          {
+            "content_sha256": "8945c317bc548d29a28cc93a82bd67685f516417f2823a2693c8df1e83444ad9",
+            "id": "473b20ba-adca-40da-b21a-872ffa36bfab",
+            "score": 0.43852453757892645
+          },
+          {
+            "content_sha256": "5df9a8377c60267bd12454750a01a4397173de92ad32358806ebd814a1ef4046",
+            "id": "e429c703-7131-43c0-9f5f-0d5a41e80308",
+            "score": 0.4366712344074628
+          },
+          {
+            "content_sha256": "b6bcdfeb852de180e7ee748ba8d5996eb8dbe6ec19fcf06d55a88d2c845c8e49",
+            "id": "cae64e37-ca0a-44fe-9aa7-9ad343932659",
+            "score": 0.4365669576390056
+          },
+          {
+            "content_sha256": "4695e60c75e8ca2a163188f2a507510947f53664033dd4a1500aeff61fc02e57",
+            "id": "a53b5c82-88d6-4e52-af0b-4b56872fecec",
+            "score": 0.434095948244817
+          },
+          {
+            "content_sha256": "eba25401b7a1714c06ee913baf45b805a16278fc8b25ed909c82a2a7fb4f15db",
+            "id": "4681aae2-1a0f-4ed6-b954-660be1edc59e",
+            "score": 0.43311246105136164
+          },
+          {
+            "content_sha256": "1b26b3784332a8c55530a26153de7de5756de5a13734abb8ee75d8ad2cef68c5",
+            "id": "e341cc33-081c-4aaf-a852-a85803f4decd",
+            "score": 0.432975386683154
+          },
+          {
+            "content_sha256": "035035425e33507c93955d167d9031b4495069279bd8c2a0742c6dbc8a617ec6",
+            "id": "ce20bb35-4bce-470a-b2e3-26226800c19e",
+            "score": 0.4314347643512253
+          },
+          {
+            "content_sha256": "ca7cb24c27ee8533037b0bcda709e49d65866dd78adca7c4f941a7220df178f2",
+            "id": "1582fa59-6afa-4c9e-8ea8-eeb0d7369ad1",
+            "score": 0.4294834775046409
+          },
+          {
+            "content_sha256": "f9f24d02770e1d01434b5c5ab2e8ef73f840ed2076b49016df4c7ad6cb2d6a95",
+            "id": "9ad16977-2b0c-4eb2-8db1-146e32cc3913",
+            "score": 0.42904375561949654
+          },
+          {
+            "content_sha256": "b87c12d13234afeda75b498cc0c146d4a6403269c729bffc610250f3dd177b7d",
+            "id": "82530a8c-fab0-4a56-9444-32df944ecd2b",
+            "score": 0.4289001669786755
+          },
+          {
+            "content_sha256": "91964090a632620e1408433487089e6d1cb2f561176d208691ea98221e78e35f",
+            "id": "003b487e-c1e8-4036-9f30-ed8d05ddc6db",
+            "score": 0.42694608191986383
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 195.012,
+          "hybrid_score": 25.634,
+          "imports": 302.603,
+          "internal_total": 2479.838,
+          "model_load": 1667.47,
+          "sqlite_load_and_pack": 261.192,
+          "tokenizer_load": 27.927
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "a23bf35eea31573780dcde5f871d18508783b6a99c91956662be3d681bf003af",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2723.773,
+      "qa_index": 2,
+      "query": "What fields would Caroline be likely to pursue in her educaton?",
+      "query_sha256": "a23bf35eea31573780dcde5f871d18508783b6a99c91956662be3d681bf003af",
+      "run": 3,
+      "stderr": ""
+    },
+    {
+      "category": 1,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "7fe2a38be0fe22601c4afdd3d8dc024058664b8b2dda8c5adea9e5b7184461a7",
+            "id": "a1b00474-2edf-4557-8d4a-7b740482db72",
+            "score": 0.4830668294771203
+          },
+          {
+            "content_sha256": "aebc6f74be59f2eef1c4402b453338eac40aaa4303c878336d987c961d6ef15e",
+            "id": "9fd97257-e800-4f02-9a0d-f81b15ef26d2",
+            "score": 0.47275956505043276
+          },
+          {
+            "content_sha256": "53bfba0a09870b490ea6bc272e7cd1074fb03df345d8e20e2adf4e6f92ad1114",
+            "id": "119932f4-6c1f-4ab1-a63e-7ccb49ce20ae",
+            "score": 0.4713747994167639
+          },
+          {
+            "content_sha256": "c16691b9c126da892ad981c4574a45e0ba60f9130648dd6f3ddc870427c9d44d",
+            "id": "4367bd82-d573-4703-a0d5-aab98da0b6e8",
+            "score": 0.4700530201101683
+          },
+          {
+            "content_sha256": "6be46ad59902d4460232900f36e0f3061189f3432c8e2f787a11af038f415ae5",
+            "id": "be3d17d4-1554-4972-959f-eb974d3915fa",
+            "score": 0.4696500392634376
+          },
+          {
+            "content_sha256": "5df9a8377c60267bd12454750a01a4397173de92ad32358806ebd814a1ef4046",
+            "id": "e429c703-7131-43c0-9f5f-0d5a41e80308",
+            "score": 0.4601803378390036
+          },
+          {
+            "content_sha256": "4d0db113e92dda0c38d643bf646e32aca169375c9fdb2e5866e1855261211ffe",
+            "id": "80905dec-6802-4e58-8911-29ed7dc4f8ff",
+            "score": 0.4598837843624389
+          },
+          {
+            "content_sha256": "3319e95b3ee3d73351d43a8bfb24f30cdec8f426cad8e0a1ce079698753b4c60",
+            "id": "c5ff86b2-c450-4b11-8afe-4747009939f0",
+            "score": 0.4583779509893615
+          },
+          {
+            "content_sha256": "c6f1f82eca1bde16c48225ab5565da42980068409d380c92aa16d550777e822f",
+            "id": "3772f03c-f292-4b9e-8c06-62f1ad3247d2",
+            "score": 0.4571690640579485
+          },
+          {
+            "content_sha256": "4e0e4c546056e93fd2cb8f1e7770aa2cda8d534b736a5b27e7681ba58f157d6d",
+            "id": "00b47af0-9962-42c6-8111-c465bf2a5825",
+            "score": 0.45684087573570853
+          },
+          {
+            "content_sha256": "bec5c80f9551e968ab3728829e89157c2e61c232f624904b735acf5bf0aa32cf",
+            "id": "abadf092-ed72-4d52-a3e4-23da5ac9a36e",
+            "score": 0.456032401151417
+          },
+          {
+            "content_sha256": "ca7cb24c27ee8533037b0bcda709e49d65866dd78adca7c4f941a7220df178f2",
+            "id": "1582fa59-6afa-4c9e-8ea8-eeb0d7369ad1",
+            "score": 0.45466107924911764
+          },
+          {
+            "content_sha256": "357a8e4dcdd367b58411c2e7156f8dce5824d237fbf1c92fe4b0f18f102c7a33",
+            "id": "dcfe1194-b0a8-43fe-94a2-2a6b372cd7ee",
+            "score": 0.45442665536151305
+          },
+          {
+            "content_sha256": "0adc693823fd4d5642dc98f4cbf1dfd9d454295b37a29958d5c9cea19e92d2c5",
+            "id": "1128e593-bfc9-415a-9b52-524b21a7b073",
+            "score": 0.45416439820485816
+          },
+          {
+            "content_sha256": "4695e60c75e8ca2a163188f2a507510947f53664033dd4a1500aeff61fc02e57",
+            "id": "a53b5c82-88d6-4e52-af0b-4b56872fecec",
+            "score": 0.4531726051114887
+          },
+          {
+            "content_sha256": "28e0e4205ac9d5fdbab14ecb9636870e9614b90e3f172539bc812320c4bd3338",
+            "id": "798f3817-34a9-4454-b8d5-81c7c62eb204",
+            "score": 0.45272743320635744
+          },
+          {
+            "content_sha256": "ccc20fae4b02ee003542856fea10d1d5cb39300aecd601d01803df610ff5efa3",
+            "id": "772907fb-8709-4f6c-8292-6838b2e9db18",
+            "score": 0.45248234861207653
+          },
+          {
+            "content_sha256": "3d3193bb4ec18538212700fc4f165b1c719f9221cc4884724a18eb089faf2f85",
+            "id": "9068ef47-fc97-42e3-a359-2eeec2ed0be7",
+            "score": 0.45242823045505703
+          },
+          {
+            "content_sha256": "2091182cc0f71b9fdf62f0a829a819376ba86ed0e03886eeef60cd2ce1e48eb3",
+            "id": "e6302af5-4033-4bf8-a18a-8c0a5a77929d",
+            "score": 0.4523134835210302
+          },
+          {
+            "content_sha256": "3221d4794981ccfe0b4329befc8ce2e3e96aaa8ef375aba486d2a88f9411a81f",
+            "id": "9fbd0b96-1d28-4e36-a7a2-85b1caad4277",
+            "score": 0.4507849919893045
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 153.861,
+          "hybrid_score": 24.103,
+          "imports": 314.16,
+          "internal_total": 2560.184,
+          "model_load": 1768.693,
+          "sqlite_load_and_pack": 271.721,
+          "tokenizer_load": 27.647
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "3d81469db48234b833ca03ce04cda98f08030c66b582d3d59aa803d6a153f8e0",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2852.16,
+      "qa_index": 3,
+      "query": "What did Caroline research?",
+      "query_sha256": "3d81469db48234b833ca03ce04cda98f08030c66b582d3d59aa803d6a153f8e0",
+      "run": 4,
+      "stderr": ""
+    },
+    {
+      "category": 1,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "5e3b25d368d84df8f2db685a6837ee99cfd80b4be21759221f72a043a7a3ce24",
+            "id": "a14c65e5-4c4f-4da9-90f2-3edf2635ef37",
+            "score": 0.49791072820412435
+          },
+          {
+            "content_sha256": "0adc693823fd4d5642dc98f4cbf1dfd9d454295b37a29958d5c9cea19e92d2c5",
+            "id": "1128e593-bfc9-415a-9b52-524b21a7b073",
+            "score": 0.48314279571249746
+          },
+          {
+            "content_sha256": "a54c365db38e4ffb296169f9d4d0d456936bd209eb76f5559e0cde279a1634c9",
+            "id": "b8dead80-e288-43e8-bce6-24e01621d9a1",
+            "score": 0.4789597986716325
+          },
+          {
+            "content_sha256": "f7d17812cb0441431f7692024db859901f4c089bcdb65c4f09c0feffc755fe69",
+            "id": "99e08296-7b27-47f9-b59f-b7219952cc8a",
+            "score": 0.47662993141104953
+          },
+          {
+            "content_sha256": "4e0e4c546056e93fd2cb8f1e7770aa2cda8d534b736a5b27e7681ba58f157d6d",
+            "id": "00b47af0-9962-42c6-8111-c465bf2a5825",
+            "score": 0.4701350858310859
+          },
+          {
+            "content_sha256": "811d99f3c0a58fcca6c2ea463eb70162f667f4f7ce4571b70a942a94e318a897",
+            "id": "60f9d8a5-55aa-4fc3-b4e6-0e1df05575b1",
+            "score": 0.47006968533729093
+          },
+          {
+            "content_sha256": "2281930a0010c8d52c840f0ad617ecaa564862d6c58217c393cf8adc1450fbb1",
+            "id": "c58383fa-8c0c-44a2-9af6-82b5bf5b00b2",
+            "score": 0.46983499206097873
+          },
+          {
+            "content_sha256": "116c03074381289230b9034653c86100165043979be81a224059592f9384b2c4",
+            "id": "2155e83b-85ee-4743-a0ab-a13ba1a3b545",
+            "score": 0.4695217101282347
+          },
+          {
+            "content_sha256": "a2e5fdc6fe49c256c43ad907e759257317553741c61b6510931841fbe12933a7",
+            "id": "ebed9b12-5f0f-41d8-be0c-0644ee8b80d2",
+            "score": 0.46817711111669874
+          },
+          {
+            "content_sha256": "6612240f55cc5b028901fa75d22147ab4f55b22006fd9c10041730b265ea4f61",
+            "id": "dfe9d7f8-f082-4a19-974f-bfb69abee206",
+            "score": 0.4672328913558332
+          },
+          {
+            "content_sha256": "ebc54da758dbfe1e3fd0dece4ca1ed827573162e25b8c7dc8113a5d654b04fc2",
+            "id": "17deb908-1e69-45bf-8bc1-8495e11866ee",
+            "score": 0.4666134565009349
+          },
+          {
+            "content_sha256": "137c85fb3bf6e5efb845a5d580c02c7eac8f2ff9005cd31dadadf2bdfbead89c",
+            "id": "264b74fa-930e-4748-92f5-2ed9ef1ac7d8",
+            "score": 0.466163206776879
+          },
+          {
+            "content_sha256": "53bfba0a09870b490ea6bc272e7cd1074fb03df345d8e20e2adf4e6f92ad1114",
+            "id": "119932f4-6c1f-4ab1-a63e-7ccb49ce20ae",
+            "score": 0.4652244649572868
+          },
+          {
+            "content_sha256": "d19908e399a5d7b0cd6190adf380e0f5c1089bac478f899ae7888b41df26df43",
+            "id": "3b02ed7a-44df-49d6-9031-bece57c9e7ee",
+            "score": 0.46262913184807036
+          },
+          {
+            "content_sha256": "d911a2086048fc1730b7ea9f557c4e98d72ea32a83e3678e261b6e9b40a21f3b",
+            "id": "a6be3853-59ed-46db-abfa-147ffcfaba2f",
+            "score": 0.4625774318927001
+          },
+          {
+            "content_sha256": "ffdcbcbc102458e814978f986a0585d6785d6e20a993031c25bcfd5e2d875791",
+            "id": "2e579a50-f650-4bba-8bd0-c6f3d62202f3",
+            "score": 0.4602707947422091
+          },
+          {
+            "content_sha256": "d345174c11b2f80a676ba0260c43066b58902e809671b3f123c77d5ab71492ee",
+            "id": "29e38ac3-0857-4e28-8d4f-965c0dce13f2",
+            "score": 0.4590587005331869
+          },
+          {
+            "content_sha256": "e45f7fe3179211ba958de609bbbd8e34b112e26a3217678b90507c119da1018a",
+            "id": "3c34c661-eb7b-4648-a66b-b4a21a83fefa",
+            "score": 0.45857921492105574
+          },
+          {
+            "content_sha256": "5da53a88192a22105bb7f011c217ef7b7bd61be54c093b25e3f904fae964f661",
+            "id": "3920befd-03ab-4f5e-9b56-4053b50c5079",
+            "score": 0.4580976966912498
+          },
+          {
+            "content_sha256": "e7e64ca8a31807218458e9d798598c5d775105da6474f6bbf09524f6cc510fac",
+            "id": "c01f900f-8eba-43de-86c2-ce5ce725ff21",
+            "score": 0.45791049378989623
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 167.052,
+          "hybrid_score": 25.517,
+          "imports": 303.278,
+          "internal_total": 2312.199,
+          "model_load": 1516.92,
+          "sqlite_load_and_pack": 274.854,
+          "tokenizer_load": 24.579
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "557073e870d0eab54bd19b0b8eae378ddeee639da133935d995abb398a709edd",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2576.724,
+      "qa_index": 4,
+      "query": "What is Caroline's identity?",
+      "query_sha256": "557073e870d0eab54bd19b0b8eae378ddeee639da133935d995abb398a709edd",
+      "run": 5,
+      "stderr": ""
+    },
+    {
+      "category": 3,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "b87c12d13234afeda75b498cc0c146d4a6403269c729bffc610250f3dd177b7d",
+            "id": "82530a8c-fab0-4a56-9444-32df944ecd2b",
+            "score": 0.5474530334285382
+          },
+          {
+            "content_sha256": "d5a95cba26ea66b69df7736e10265d26100fcfc6aa406b961fb16b7ac39a7605",
+            "id": "92899323-5270-4ee7-a59f-16c6cbff4535",
+            "score": 0.5268033763042459
+          },
+          {
+            "content_sha256": "d9fbab0bdae76bf72a19ab6b0c256023c6d111f3f3577803c612f1a5f49ed37a",
+            "id": "6f4056be-2834-4e43-b2f0-ff74db12b4c0",
+            "score": 0.5236872048597225
+          },
+          {
+            "content_sha256": "120a95e78a82ba8802018213925158a3d5f39d7f937704748a8f04d02adcd0c3",
+            "id": "9fb1587b-bd9f-44a3-8e82-48b081ae726b",
+            "score": 0.5193765077954459
+          },
+          {
+            "content_sha256": "4d0db113e92dda0c38d643bf646e32aca169375c9fdb2e5866e1855261211ffe",
+            "id": "80905dec-6802-4e58-8911-29ed7dc4f8ff",
+            "score": 0.5188122277119855
+          },
+          {
+            "content_sha256": "5df9a8377c60267bd12454750a01a4397173de92ad32358806ebd814a1ef4046",
+            "id": "e429c703-7131-43c0-9f5f-0d5a41e80308",
+            "score": 0.516289888073317
+          },
+          {
+            "content_sha256": "ca7cb24c27ee8533037b0bcda709e49d65866dd78adca7c4f941a7220df178f2",
+            "id": "1582fa59-6afa-4c9e-8ea8-eeb0d7369ad1",
+            "score": 0.49631720590447775
+          },
+          {
+            "content_sha256": "16480e0a07c48df6545a006fcda04ce59550deb891474a276c994e26b8492241",
+            "id": "e51954a4-b2b2-4b89-8815-14e69a1ae8df",
+            "score": 0.4893330257355667
+          },
+          {
+            "content_sha256": "a2e5fdc6fe49c256c43ad907e759257317553741c61b6510931841fbe12933a7",
+            "id": "ebed9b12-5f0f-41d8-be0c-0644ee8b80d2",
+            "score": 0.4876846036914021
+          },
+          {
+            "content_sha256": "4e4430433f07a3226adffcce6a66b9d130b8ad45d3f6fd32e80cc9dfb38d930e",
+            "id": "711318b4-1ff8-408f-b8e9-b168c77dcd07",
+            "score": 0.4782448167168695
+          },
+          {
+            "content_sha256": "3d3193bb4ec18538212700fc4f165b1c719f9221cc4884724a18eb089faf2f85",
+            "id": "9068ef47-fc97-42e3-a359-2eeec2ed0be7",
+            "score": 0.477076653081901
+          },
+          {
+            "content_sha256": "a69643a86eaa14e82721036f4a8fbadf6b91ab1ced58a2d7679f05f31b26dcc4",
+            "id": "305ddd90-57d4-40ea-bf9c-57f0bceae444",
+            "score": 0.47606471592934274
+          },
+          {
+            "content_sha256": "9f702cfd7eaeda019d6db87613d29045daf1f88435ca3af7ba2a6ea79fe7d362",
+            "id": "8b464205-6a5a-42fd-a745-40b23259cfa4",
+            "score": 0.4735274088374552
+          },
+          {
+            "content_sha256": "8de86ac8b2a8f2d38bd82d5b7a31792cba0c85044d51a90d5c79b7e69a29e0ce",
+            "id": "6f329e76-2055-4041-aba8-df20c8699e21",
+            "score": 0.4712364311370655
+          },
+          {
+            "content_sha256": "d345174c11b2f80a676ba0260c43066b58902e809671b3f123c77d5ab71492ee",
+            "id": "29e38ac3-0857-4e28-8d4f-965c0dce13f2",
+            "score": 0.4706352941077621
+          },
+          {
+            "content_sha256": "291fdc03b379db01c66973714ff34b61c8ac2b0d8a18084142ce49836632f79d",
+            "id": "af0d785c-6068-4366-8be5-918bf0a05817",
+            "score": 0.47052607998717483
+          },
+          {
+            "content_sha256": "50f44e2fe8620788ac3fb789dd2d57d657114592dc4f7cf2ceabf6b37672f24f",
+            "id": "f70e0612-013d-4a23-8f4c-c64bba53a66b",
+            "score": 0.47044262990086966
+          },
+          {
+            "content_sha256": "3221d4794981ccfe0b4329befc8ce2e3e96aaa8ef375aba486d2a88f9411a81f",
+            "id": "9fbd0b96-1d28-4e36-a7a2-85b1caad4277",
+            "score": 0.469846360018228
+          },
+          {
+            "content_sha256": "35eed0c57da122c7dd3015286476ae45be55afe7def2c607d5ea539849be4692",
+            "id": "3dafff73-aa7e-4e40-b621-55133e5631e6",
+            "score": 0.46928356105282104
+          },
+          {
+            "content_sha256": "7572e305e9d4709d9325f17dd52fd7af67a79f33279a07e4be4e62b9c1d13fcc",
+            "id": "6a5756e3-833a-4805-8724-c7fd27fd1ddc",
+            "score": 0.46892228137162745
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 204.958,
+          "hybrid_score": 25.298,
+          "imports": 300.468,
+          "internal_total": 2425.366,
+          "model_load": 1623.774,
+          "sqlite_load_and_pack": 245.938,
+          "tokenizer_load": 24.931
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "8537ab6fd33e3f981c7fc96d3a7e9d131cfc1d12c54f9458649873c245108b5e",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2673.676,
+      "qa_index": 14,
+      "query": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "query_sha256": "8537ab6fd33e3f981c7fc96d3a7e9d131cfc1d12c54f9458649873c245108b5e",
+      "run": 6,
+      "stderr": ""
+    },
+    {
+      "category": 4,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "99ef91838172d40a7453a28bd6df9afa193a0390a19d196b7e5e93cfe020e9c3",
+            "id": "7649b581-5f2c-4dd9-a47c-32955380eecc",
+            "score": 0.5112935594813596
+          },
+          {
+            "content_sha256": "7718f550b891d3e6d692c20b25a103fab4c4c600a8ca0b89a57f5767ff7fb0ed",
+            "id": "76cc2bf6-8ce8-42dc-b831-19de76b447f0",
+            "score": 0.4747767686199601
+          },
+          {
+            "content_sha256": "4115a9d7037cf39059a56ddc913b8bbf206e7debe3833abfa0cb4a04f05ad6f4",
+            "id": "b7cd00e3-abad-4dee-a31e-bed9e9b655f6",
+            "score": 0.4348260000563191
+          },
+          {
+            "content_sha256": "9f702cfd7eaeda019d6db87613d29045daf1f88435ca3af7ba2a6ea79fe7d362",
+            "id": "8b464205-6a5a-42fd-a745-40b23259cfa4",
+            "score": 0.4165466295239937
+          },
+          {
+            "content_sha256": "b36e4a035622df74ec1a5b91fd37141d3999af2696d0c4a6e28c8a04c4a0ec9b",
+            "id": "e178b487-f17f-4949-8cd1-9a55150b7ef5",
+            "score": 0.409341879865201
+          },
+          {
+            "content_sha256": "7bc6ca7d8204420db286cb9850e41bcb8d446644fb85f5acb4603178a9281c21",
+            "id": "b6511b3f-ea20-4976-a7fb-b076c992bd91",
+            "score": 0.40882990643515194
+          },
+          {
+            "content_sha256": "d5a95cba26ea66b69df7736e10265d26100fcfc6aa406b961fb16b7ac39a7605",
+            "id": "92899323-5270-4ee7-a59f-16c6cbff4535",
+            "score": 0.4076242739322202
+          },
+          {
+            "content_sha256": "addb7a3f754039c44255449b7b2e94f51869c85befb1f563eb1d990f02b386fc",
+            "id": "498d3f52-31bf-4853-916c-bf462ed3a87f",
+            "score": 0.4073820103244953
+          },
+          {
+            "content_sha256": "f9f39f776a959e8373f0b3241bbbb12ae2516e06c4068d398ca3724ff9cb5e06",
+            "id": "82f9ffb4-2519-4101-bf2d-78a76cdacdf0",
+            "score": 0.406769953863458
+          },
+          {
+            "content_sha256": "df77e750ca32a66ea3f7ec58f1c489650eebc7c63a9db3b2ecfb665b83d56c85",
+            "id": "d54aa3f5-2a2c-4495-a8be-92a5672ce085",
+            "score": 0.40202326457920473
+          },
+          {
+            "content_sha256": "d97df925a513c784205d92c2d733e30099a9dc81dcdf0c1c533dfcda8f6a157f",
+            "id": "78b0aae6-9742-4b42-bae7-110e8fbb65de",
+            "score": 0.40098314957996006
+          },
+          {
+            "content_sha256": "1a35864977a0ce9b6aab5c47c4cd3928517a6c798c160e3127c011dd3206b4d3",
+            "id": "dfd67245-b00e-408b-bfb0-bbb2b50347ed",
+            "score": 0.3999067714819767
+          },
+          {
+            "content_sha256": "78a279158200faee572578fc1b53eb39deaef09a03298e9a15543479fc8ce793",
+            "id": "9029a6ba-85d0-4321-a725-ff3b38e64a48",
+            "score": 0.3981443349864525
+          },
+          {
+            "content_sha256": "35eed0c57da122c7dd3015286476ae45be55afe7def2c607d5ea539849be4692",
+            "id": "3dafff73-aa7e-4e40-b621-55133e5631e6",
+            "score": 0.39795443561409205
+          },
+          {
+            "content_sha256": "768d8f3734bfe51444af721d4a721180a7b9e6da4fc1eaf7c5e14f4405bda1e8",
+            "id": "f1b32298-3952-4085-8831-ab0094c3ee0e",
+            "score": 0.39570598808843543
+          },
+          {
+            "content_sha256": "535fee7c4b4274f509c087c0e266c23bb67e7e00cb7f7921b706bdd34f9e9751",
+            "id": "e9cba904-b73b-4594-8dc1-402747dc84bb",
+            "score": 0.39296040750724354
+          },
+          {
+            "content_sha256": "eadef35ee8a90de8d9e11b683120f45766741a36902e08b6b48f4a8d475f9ed9",
+            "id": "d8bfdedd-b3f2-41d0-b4b8-091321e5d9bd",
+            "score": 0.39105876554586516
+          },
+          {
+            "content_sha256": "8de86ac8b2a8f2d38bd82d5b7a31792cba0c85044d51a90d5c79b7e69a29e0ce",
+            "id": "6f329e76-2055-4041-aba8-df20c8699e21",
+            "score": 0.3885126041322653
+          },
+          {
+            "content_sha256": "ca7cb24c27ee8533037b0bcda709e49d65866dd78adca7c4f941a7220df178f2",
+            "id": "1582fa59-6afa-4c9e-8ea8-eeb0d7369ad1",
+            "score": 0.388145640838417
+          },
+          {
+            "content_sha256": "f96116f6cadc8c60e6e11e1c540a9669f0ff7a904659c9008b1ac30b6cb6a61e",
+            "id": "792b98f4-bcd7-439c-9cf8-5d381373f0b2",
+            "score": 0.3875597141159683
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 168.336,
+          "hybrid_score": 23.686,
+          "imports": 301.276,
+          "internal_total": 2444.103,
+          "model_load": 1661.401,
+          "sqlite_load_and_pack": 262.578,
+          "tokenizer_load": 26.826
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "d655f74fe3f7194564489450f0b77e69eacf705269e77bbae3c6d34242ab00be",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2690.648,
+      "qa_index": 82,
+      "query": "What did the charity race raise awareness for?",
+      "query_sha256": "d655f74fe3f7194564489450f0b77e69eacf705269e77bbae3c6d34242ab00be",
+      "run": 7,
+      "stderr": ""
+    },
+    {
+      "category": 4,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "7718f550b891d3e6d692c20b25a103fab4c4c600a8ca0b89a57f5767ff7fb0ed",
+            "id": "76cc2bf6-8ce8-42dc-b831-19de76b447f0",
+            "score": 0.5422098278355058
+          },
+          {
+            "content_sha256": "4115a9d7037cf39059a56ddc913b8bbf206e7debe3833abfa0cb4a04f05ad6f4",
+            "id": "b7cd00e3-abad-4dee-a31e-bed9e9b655f6",
+            "score": 0.539093762734439
+          },
+          {
+            "content_sha256": "99ef91838172d40a7453a28bd6df9afa193a0390a19d196b7e5e93cfe020e9c3",
+            "id": "7649b581-5f2c-4dd9-a47c-32955380eecc",
+            "score": 0.5323550335055978
+          },
+          {
+            "content_sha256": "d5a95cba26ea66b69df7736e10265d26100fcfc6aa406b961fb16b7ac39a7605",
+            "id": "92899323-5270-4ee7-a59f-16c6cbff4535",
+            "score": 0.4997920090320127
+          },
+          {
+            "content_sha256": "8de86ac8b2a8f2d38bd82d5b7a31792cba0c85044d51a90d5c79b7e69a29e0ce",
+            "id": "6f329e76-2055-4041-aba8-df20c8699e21",
+            "score": 0.49248213946091984
+          },
+          {
+            "content_sha256": "a3646e5c48b8df1023244974665a05375b0c42f3a342683181a01d4313953646",
+            "id": "120290c1-6c16-4979-9a9a-d97b3610a4ff",
+            "score": 0.4917191498428772
+          },
+          {
+            "content_sha256": "4aaa5953fed960069ab84e02fc91a47b6e865d1acd3819fc983ea323c3a96ce7",
+            "id": "8a39c461-d8f5-415f-a385-82a9e0857bf8",
+            "score": 0.4910716626634779
+          },
+          {
+            "content_sha256": "5fa3aa3e12376c0c70a6a18e412e773e588fafd26976c0e126bbcac1010d95d8",
+            "id": "9436a19a-433e-49f1-84fe-93ee67bc37a9",
+            "score": 0.49025850545011546
+          },
+          {
+            "content_sha256": "1c4551d97472b8b685dedf1abb1ecc051c5b4001747bb08f70b3b775e1ed4210",
+            "id": "bbaf3415-ec95-4e14-a1b2-0f5b692f9634",
+            "score": 0.48845873719167854
+          },
+          {
+            "content_sha256": "c13629b3ad78e5e7c8a34fcb0a2f7ce8752cf0b9ce287b04160193c5aaef0ece",
+            "id": "7a35ff10-3c84-4371-bc58-b36b5241a5e3",
+            "score": 0.4849416053544776
+          },
+          {
+            "content_sha256": "3319e95b3ee3d73351d43a8bfb24f30cdec8f426cad8e0a1ce079698753b4c60",
+            "id": "c5ff86b2-c450-4b11-8afe-4747009939f0",
+            "score": 0.4832725754868822
+          },
+          {
+            "content_sha256": "d345174c11b2f80a676ba0260c43066b58902e809671b3f123c77d5ab71492ee",
+            "id": "29e38ac3-0857-4e28-8d4f-965c0dce13f2",
+            "score": 0.4821676201186218
+          },
+          {
+            "content_sha256": "971414dc0a95f55952a01307fef1464bdea6757e5c76c602ca1910e276b9dec4",
+            "id": "41103998-f4ab-4ed0-96a4-df09653340a2",
+            "score": 0.48062887548743916
+          },
+          {
+            "content_sha256": "ca7cb24c27ee8533037b0bcda709e49d65866dd78adca7c4f941a7220df178f2",
+            "id": "1582fa59-6afa-4c9e-8ea8-eeb0d7369ad1",
+            "score": 0.47895671461847683
+          },
+          {
+            "content_sha256": "b36e4a035622df74ec1a5b91fd37141d3999af2696d0c4a6e28c8a04c4a0ec9b",
+            "id": "e178b487-f17f-4949-8cd1-9a55150b7ef5",
+            "score": 0.4786453626361208
+          },
+          {
+            "content_sha256": "4d7288d298b7c1c0bf84a6414471f816a5545a57fbedc0e515049da6e0ee0034",
+            "id": "4523fe7b-874f-4889-ab61-bced245ac743",
+            "score": 0.47721517040170597
+          },
+          {
+            "content_sha256": "6ca72ce6fdf08fbc0738daf49a66958a39821e721cc7ae6abcda3fc344bb44d5",
+            "id": "c8a84b91-61cf-4599-bbfe-1c5dc0c71f91",
+            "score": 0.47602215341207293
+          },
+          {
+            "content_sha256": "b5cc7feaf285e121eff792a182ae5dcb2eae5b7f0a39dd27b851526bee41f5f5",
+            "id": "7be334e3-37ef-4622-9fae-c7e1ae2891ef",
+            "score": 0.4747787020435593
+          },
+          {
+            "content_sha256": "5df9a8377c60267bd12454750a01a4397173de92ad32358806ebd814a1ef4046",
+            "id": "e429c703-7131-43c0-9f5f-0d5a41e80308",
+            "score": 0.4744501204826666
+          },
+          {
+            "content_sha256": "143845095398d932e0784e885033ca227dad5bf8324656ed6928c8737b13448e",
+            "id": "5bf0eedb-2367-4a05-99d5-0e9746b43ac1",
+            "score": 0.47433109274382446
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 168.811,
+          "hybrid_score": 21.667,
+          "imports": 296.855,
+          "internal_total": 2392.283,
+          "model_load": 1587.223,
+          "sqlite_load_and_pack": 288.384,
+          "tokenizer_load": 29.343
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "b3c200001a8080566fd946a51171a56708b17e566087384af3a6d95538c69cf8",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2639.534,
+      "qa_index": 83,
+      "query": "What did Melanie realize after the charity race?",
+      "query_sha256": "b3c200001a8080566fd946a51171a56708b17e566087384af3a6d95538c69cf8",
+      "run": 8,
+      "stderr": ""
+    },
+    {
+      "category": 5,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "99ef91838172d40a7453a28bd6df9afa193a0390a19d196b7e5e93cfe020e9c3",
+            "id": "7649b581-5f2c-4dd9-a47c-32955380eecc",
+            "score": 0.5438388222213837
+          },
+          {
+            "content_sha256": "7718f550b891d3e6d692c20b25a103fab4c4c600a8ca0b89a57f5767ff7fb0ed",
+            "id": "76cc2bf6-8ce8-42dc-b831-19de76b447f0",
+            "score": 0.5393102108787949
+          },
+          {
+            "content_sha256": "4115a9d7037cf39059a56ddc913b8bbf206e7debe3833abfa0cb4a04f05ad6f4",
+            "id": "b7cd00e3-abad-4dee-a31e-bed9e9b655f6",
+            "score": 0.5311538772636782
+          },
+          {
+            "content_sha256": "8de86ac8b2a8f2d38bd82d5b7a31792cba0c85044d51a90d5c79b7e69a29e0ce",
+            "id": "6f329e76-2055-4041-aba8-df20c8699e21",
+            "score": 0.5003017324136482
+          },
+          {
+            "content_sha256": "d5a95cba26ea66b69df7736e10265d26100fcfc6aa406b961fb16b7ac39a7605",
+            "id": "92899323-5270-4ee7-a59f-16c6cbff4535",
+            "score": 0.4985345711962442
+          },
+          {
+            "content_sha256": "d345174c11b2f80a676ba0260c43066b58902e809671b3f123c77d5ab71492ee",
+            "id": "29e38ac3-0857-4e28-8d4f-965c0dce13f2",
+            "score": 0.4954951590857543
+          },
+          {
+            "content_sha256": "5fa3aa3e12376c0c70a6a18e412e773e588fafd26976c0e126bbcac1010d95d8",
+            "id": "9436a19a-433e-49f1-84fe-93ee67bc37a9",
+            "score": 0.4940256084068873
+          },
+          {
+            "content_sha256": "6be46ad59902d4460232900f36e0f3061189f3432c8e2f787a11af038f415ae5",
+            "id": "be3d17d4-1554-4972-959f-eb974d3915fa",
+            "score": 0.4923968771512716
+          },
+          {
+            "content_sha256": "3319e95b3ee3d73351d43a8bfb24f30cdec8f426cad8e0a1ce079698753b4c60",
+            "id": "c5ff86b2-c450-4b11-8afe-4747009939f0",
+            "score": 0.4914077154290514
+          },
+          {
+            "content_sha256": "a2e5fdc6fe49c256c43ad907e759257317553741c61b6510931841fbe12933a7",
+            "id": "ebed9b12-5f0f-41d8-be0c-0644ee8b80d2",
+            "score": 0.4897874632776183
+          },
+          {
+            "content_sha256": "ca7cb24c27ee8533037b0bcda709e49d65866dd78adca7c4f941a7220df178f2",
+            "id": "1582fa59-6afa-4c9e-8ea8-eeb0d7369ad1",
+            "score": 0.4890956733110275
+          },
+          {
+            "content_sha256": "1c4551d97472b8b685dedf1abb1ecc051c5b4001747bb08f70b3b775e1ed4210",
+            "id": "bbaf3415-ec95-4e14-a1b2-0f5b692f9634",
+            "score": 0.4881633067698493
+          },
+          {
+            "content_sha256": "a3646e5c48b8df1023244974665a05375b0c42f3a342683181a01d4313953646",
+            "id": "120290c1-6c16-4979-9a9a-d97b3610a4ff",
+            "score": 0.4878765874058197
+          },
+          {
+            "content_sha256": "4aaa5953fed960069ab84e02fc91a47b6e865d1acd3819fc983ea323c3a96ce7",
+            "id": "8a39c461-d8f5-415f-a385-82a9e0857bf8",
+            "score": 0.48713263010885144
+          },
+          {
+            "content_sha256": "4d7288d298b7c1c0bf84a6414471f816a5545a57fbedc0e515049da6e0ee0034",
+            "id": "4523fe7b-874f-4889-ab61-bced245ac743",
+            "score": 0.48513379647172855
+          },
+          {
+            "content_sha256": "143845095398d932e0784e885033ca227dad5bf8324656ed6928c8737b13448e",
+            "id": "5bf0eedb-2367-4a05-99d5-0e9746b43ac1",
+            "score": 0.4821112870263562
+          },
+          {
+            "content_sha256": "e7e64ca8a31807218458e9d798598c5d775105da6474f6bbf09524f6cc510fac",
+            "id": "c01f900f-8eba-43de-86c2-ce5ce725ff21",
+            "score": 0.47912654405264976
+          },
+          {
+            "content_sha256": "5df9a8377c60267bd12454750a01a4397173de92ad32358806ebd814a1ef4046",
+            "id": "e429c703-7131-43c0-9f5f-0d5a41e80308",
+            "score": 0.4784992130138708
+          },
+          {
+            "content_sha256": "78a279158200faee572578fc1b53eb39deaef09a03298e9a15543479fc8ce793",
+            "id": "9029a6ba-85d0-4321-a725-ff3b38e64a48",
+            "score": 0.47668439193034595
+          },
+          {
+            "content_sha256": "2091182cc0f71b9fdf62f0a829a819376ba86ed0e03886eeef60cd2ce1e48eb3",
+            "id": "e6302af5-4033-4bf8-a18a-8c0a5a77929d",
+            "score": 0.47605357739403176
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 163.039,
+          "hybrid_score": 22.451,
+          "imports": 308.583,
+          "internal_total": 2402.049,
+          "model_load": 1618.461,
+          "sqlite_load_and_pack": 262.018,
+          "tokenizer_load": 27.497
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "27b4847984de1d6c9dde59d26f076fd6f729ed02020feb2ba8bea5a54afae319",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2657.258,
+      "qa_index": 152,
+      "query": "What did Caroline realize after her charity race?",
+      "query_sha256": "27b4847984de1d6c9dde59d26f076fd6f729ed02020feb2ba8bea5a54afae319",
+      "run": 9,
+      "stderr": ""
+    },
+    {
+      "category": 5,
+      "child": {
+        "dimensions": 1024,
+        "disable_prepacking": true,
+        "graph_optimization": "all",
+        "memories": [
+          {
+            "content_sha256": "f9f549098a40cdfd8944f1dbf104778eaf0a068432d27473467526c53e410287",
+            "id": "d6590451-fba7-4689-bd0f-ed57b227df09",
+            "score": 0.5546740275890548
+          },
+          {
+            "content_sha256": "75ed1e152fa477b6b97d306875c1faeb2ebb3f838f920f9cf2273529902efeaf",
+            "id": "1c5179e5-11e3-4d43-b8d7-009bd22eb70a",
+            "score": 0.5341405372860247
+          },
+          {
+            "content_sha256": "52c1dbe58a57a610616ce7690ed5ca0982aebacc7985991d8947266e773338f5",
+            "id": "1428aa0f-9636-4689-854d-7966b7695fce",
+            "score": 0.5308163164860342
+          },
+          {
+            "content_sha256": "5df60ad8ced8aeb4975c104f612166be1abec9ecbe3951cad8e480246c8c1591",
+            "id": "7383cf12-deb0-423a-8ee8-49b630d8f45e",
+            "score": 0.5302406384188006
+          },
+          {
+            "content_sha256": "5f020aa7cfd456263954945e5e1e8d4fba21834ddbb9b66facc37c1c5c90489a",
+            "id": "5d4e487b-7181-4d74-9c43-723fe5f3e4f8",
+            "score": 0.5301371031033496
+          },
+          {
+            "content_sha256": "51f6b4976c84aa6ec11bb13801ff3e49cb13b6bda33b5b35d840d51884cbd8f3",
+            "id": "192ff2e4-6b10-4bda-a4cc-aeb648886e63",
+            "score": 0.5298980740304586
+          },
+          {
+            "content_sha256": "a3646e5c48b8df1023244974665a05375b0c42f3a342683181a01d4313953646",
+            "id": "120290c1-6c16-4979-9a9a-d97b3610a4ff",
+            "score": 0.5289288760514042
+          },
+          {
+            "content_sha256": "26d39dbdf518bc0371cc0799b273d4ab264ba16c46668c8acc88d496aaeabd58",
+            "id": "c417b3b2-d130-4442-9a22-45acf7e19d7a",
+            "score": 0.5238373553922353
+          },
+          {
+            "content_sha256": "a0ccceebf0e41933543f2921a60281fda4a445ecdf672178df478df84879b3f9",
+            "id": "741b9f79-6bdb-438c-972f-d5080b9f8efe",
+            "score": 0.5235163472132655
+          },
+          {
+            "content_sha256": "c8e9fb83f1dcab2aef3f2c98292928b767934f057281e7f0efe51bcd6ebe0287",
+            "id": "5b42250f-8947-471a-9c91-30e56b37d31b",
+            "score": 0.5149570483929431
+          },
+          {
+            "content_sha256": "30b8545866c46b3378aace82b01a3e7fef3408310617d2e3f421996ce843b9bf",
+            "id": "ea61dbb0-4cc1-4a0f-b962-c991f72c6ba5",
+            "score": 0.5141353612340585
+          },
+          {
+            "content_sha256": "6ca72ce6fdf08fbc0738daf49a66958a39821e721cc7ae6abcda3fc344bb44d5",
+            "id": "c8a84b91-61cf-4599-bbfe-1c5dc0c71f91",
+            "score": 0.5119398748088337
+          },
+          {
+            "content_sha256": "4aaa5953fed960069ab84e02fc91a47b6e865d1acd3819fc983ea323c3a96ce7",
+            "id": "8a39c461-d8f5-415f-a385-82a9e0857bf8",
+            "score": 0.5078170488490338
+          },
+          {
+            "content_sha256": "b57b5b6f61c5a3f6495516b5987d8bf2b62c49819de94007bfa27c6613b0bdab",
+            "id": "d644f013-3565-4fa2-b634-af2d4fe3d722",
+            "score": 0.5074032697555702
+          },
+          {
+            "content_sha256": "3b210435360480a182464450d8e11f42da0bd209844556d8249f7ab23d3c2d08",
+            "id": "83da26dd-6345-4b72-a142-de6af5e9c5a0",
+            "score": 0.49011180534327625
+          },
+          {
+            "content_sha256": "f056e9cf83380ccecb8479ba233f17b0a1daff47946c5e0f28ce7af6b35b6961",
+            "id": "9c3c2c48-c6d3-4265-9721-3c6a78bd6a7a",
+            "score": 0.48976320368834153
+          },
+          {
+            "content_sha256": "4f7a63b09591ced92af7907d11934211f01a9debe71105ffdbd1d00389c0fc6f",
+            "id": "e545b7db-1c68-4f75-8db5-c247858c4e72",
+            "score": 0.4888536463301176
+          },
+          {
+            "content_sha256": "0dd3fd4a1f80476cd1c7416d2b627b6821a25bfbd485682a2306a23b5973a950",
+            "id": "49fb893c-da45-4cdb-a30b-5e39c1c35bfd",
+            "score": 0.4880638183664211
+          },
+          {
+            "content_sha256": "3319e95b3ee3d73351d43a8bfb24f30cdec8f426cad8e0a1ce079698753b4c60",
+            "id": "c5ff86b2-c450-4b11-8afe-4747009939f0",
+            "score": 0.4867149836103043
+          },
+          {
+            "content_sha256": "cf713732c1891d6e1a100e26c320c51541ede77336f3c4b3cf63fdb847b2b2a8",
+            "id": "61620d27-6b5d-4e8f-ba96-a8fd091e55c8",
+            "score": 0.4856052559035859
+          }
+        ],
+        "ort_version": "1.28.0",
+        "phases_ms": {
+          "encode": 212.171,
+          "hybrid_score": 27.39,
+          "imports": 321.356,
+          "internal_total": 2505.201,
+          "model_load": 1642.461,
+          "sqlite_load_and_pack": 276.426,
+          "tokenizer_load": 25.398
+        },
+        "providers": [
+          "CPUExecutionProvider"
+        ],
+        "query_sha256": "753a2d308908a185eb2cca48e15941005e2fcac20dcd978d50ecf28f95f45641",
+        "row_count": 419,
+        "schema": "lians.bge-onnx-lite-cold-run.v1",
+        "sentence_transformers_imported": false,
+        "threads": 8,
+        "torch_imported": false
+      },
+      "fresh_process_elapsed_ms": 2769.996,
+      "qa_index": 153,
+      "query": "What are Melanie's plans for the summer with respect to adoption?",
+      "query_sha256": "753a2d308908a185eb2cca48e15941005e2fcac20dcd978d50ecf28f95f45641",
+      "run": 10,
+      "stderr": ""
+    }
+  ],
+  "schema": "lians.bge-onnx-cold-latency-matrix.v1",
+  "summary_ms": {
+    "count": 10,
+    "max": 2852.16,
+    "mean": 2678.0117,
+    "median": 2665.4669999999996,
+    "min": 2553.355,
+    "p95": 2815.1862
+  }
+}

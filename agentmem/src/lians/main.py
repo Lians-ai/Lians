@@ -81,7 +81,7 @@ from .version import __version__
 
 logger = logging.getLogger("lians.startup")
 
-_AIRGAP_SAFE_PROVIDERS = {"sentence-transformers", "local"}
+_AIRGAP_SAFE_PROVIDERS = {"sentence-transformers", "bge-onnx", "local"}
 
 
 _DEV_SECRETS = {
@@ -240,15 +240,25 @@ def _validate_production_secrets(settings) -> None:
             "and anchor publication are transactionally durable"
         )
     embedding_provider = settings.embedding_provider.strip().lower()
-    if embedding_provider not in {"voyage", "openai", "sentence-transformers"}:
+    if embedding_provider not in {
+        "voyage",
+        "openai",
+        "sentence-transformers",
+        "bge-onnx",
+    }:
         errors.append(
-            "EMBEDDING_PROVIDER must be voyage, openai, or sentence-transformers "
+            "EMBEDDING_PROVIDER must be voyage, openai, sentence-transformers, "
+            "or bge-onnx "
             "in production; local is deterministic test-only"
         )
     elif embedding_provider == "voyage" and not settings.voyage_api_key.strip():
         errors.append("VOYAGE_API_KEY is required when EMBEDDING_PROVIDER=voyage")
     elif embedding_provider == "openai" and not settings.openai_api_key.strip():
         errors.append("OPENAI_API_KEY is required when EMBEDDING_PROVIDER=openai")
+    elif embedding_provider == "bge-onnx" and not settings.bge_onnx_artifact_dir.strip():
+        errors.append(
+            "BGE_ONNX_ARTIFACT_DIR is required when EMBEDDING_PROVIDER=bge-onnx"
+        )
     if (
         settings.supersession_llm_stage or settings.graph_extract_llm or settings.auto_metadata_llm
     ) and not settings.anthropic_api_key.strip():
@@ -418,7 +428,8 @@ def _validate_airgap(settings) -> None:
     if settings.embedding_provider not in _AIRGAP_SAFE_PROVIDERS:
         errors.append(
             f"EMBEDDING_PROVIDER={settings.embedding_provider!r} makes external API calls. "
-            f"Set EMBEDDING_PROVIDER=sentence-transformers for self-hosted inference."
+            "Set EMBEDDING_PROVIDER=sentence-transformers or bge-onnx for "
+            "self-hosted inference."
         )
     if settings.supersession_llm_stage:
         errors.append(
