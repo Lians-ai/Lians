@@ -1,12 +1,12 @@
 """Align experience RLS policies with the runtime namespace variable.
 
-Revision ID: 0029_fix_experience_namespace_rls
+Revision ID: 0029_experience_rls
 Revises: 0028_decision_envelopes
 """
 
 from alembic import op
 
-revision = "0029_fix_experience_namespace_rls"
+revision = "0029_experience_rls"
 down_revision = "0028_decision_envelopes"
 branch_labels = None
 depends_on = None

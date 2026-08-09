@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from pathlib import Path
 
@@ -19,7 +20,7 @@ def _migration_source() -> str:
 def test_hosted_rls_migration_follows_the_current_head_and_forces_core_tables():
     source = _migration_source()
 
-    assert 'down_revision = "0029_fix_experience_namespace_rls"' in source
+    assert 'down_revision = "0029_experience_rls"' in source
     assert 'op.get_bind().dialect.name != "postgresql"' in source
     for table in (
         "event_log",
@@ -33,6 +34,30 @@ def test_hosted_rls_migration_follows_the_current_head_and_forces_core_tables():
     assert "ALTER TABLE {table} FORCE ROW LEVEL SECURITY" in source
     assert "CREATE POLICY rls_{table}_namespace" in source
     assert "app.current_namespace" in source
+
+
+def test_all_revision_identifiers_fit_alembic_version_table():
+    versions = Path(__file__).resolve().parents[1] / "alembic" / "versions"
+    for path in versions.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        revision = next(
+            (
+                node.value.value
+                for node in tree.body
+                if isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name) and target.id == "revision"
+                    for target in node.targets
+                )
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ),
+            None,
+        )
+        assert revision is not None, f"{path.name} does not declare a revision"
+        assert len(revision) <= 32, (
+            f"{path.name} revision {revision!r} exceeds alembic_version.version_num VARCHAR(32)"
+        )
 
 
 def test_migration_file_is_importable():

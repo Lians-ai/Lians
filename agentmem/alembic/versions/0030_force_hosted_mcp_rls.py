@@ -1,13 +1,13 @@
 """Force tenant RLS on every table used by the hosted MCP surface.
 
 Revision ID: 0030_force_hosted_mcp_rls
-Revises: 0029_fix_experience_namespace_rls
+Revises: 0029_experience_rls
 """
 
 from alembic import op
 
 revision = "0030_force_hosted_mcp_rls"
-down_revision = "0029_fix_experience_namespace_rls"
+down_revision = "0029_experience_rls"
 branch_labels = None
 depends_on = None
 
