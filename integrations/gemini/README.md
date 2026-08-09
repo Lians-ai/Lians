@@ -11,9 +11,11 @@ for five audit-only tools.
 2. Copy `settings.example.json` into your project as `.gemini/settings.json`, or
    merge its `mcpServers.lians` object into `~/.gemini/settings.json` for every
    project.
-3. Set `LIANS_API_KEY` in your environment. Do not paste the key into the JSON
-   file. The example uses `https://api.lians.dev` and derives an isolated agent
-   and namespace from the project working directory.
+3. Replace `https://your-lians.example` with an operator-supplied deployed
+   HTTPS endpoint, then set `LIANS_API_KEY` in your environment. Do not paste
+   the key into the JSON file. This repository does not currently claim a live
+   public managed endpoint. The profile derives an isolated agent and namespace
+   from the project working directory.
 4. Copy or merge this directory's `GEMINI.md` into the project-root `GEMINI.md`.
 5. Restart Gemini CLI, then run `gemini mcp list`. In an interactive session,
    `/tools` should show `mcp_lians_remember`, `mcp_lians_recall`, and

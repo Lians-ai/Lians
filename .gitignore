@@ -10,6 +10,17 @@ env/
 dist/
 build/
 *.whl
+# The Codex plugin intentionally vendors one provenance-verified source wheel.
+!plugins/lians-memory/vendor/*.whl
+
+# Local business operations and generated exports can contain mailbox, contact,
+# investor, formation, or payment data. Keep them out of the public repository.
+/output/
+/outputs/
+/outreach_research/
+/docs/legal/formation-execution-*.md
+/docs/gtm/forum-ventures-call-book-*.md
+/docs/gtm/forum-ventures-live-cheat-sheet-*.md
 
 # Java build output
 agentmem/sdk/java/target/

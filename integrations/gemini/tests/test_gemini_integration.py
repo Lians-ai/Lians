@@ -42,7 +42,7 @@ def test_settings_examples_are_minimal_safe_core_profiles() -> None:
 def test_managed_profile_references_key_without_embedding_it() -> None:
     server = _settings("settings.example.json")["mcpServers"]["lians"]
     assert server["env"]["LIANS_API_KEY"] == "$LIANS_API_KEY"
-    assert server["env"]["LIANS_URL"] == "https://api.lians.dev"
+    assert server["env"]["LIANS_URL"] == "https://your-lians.example"
     assert not any("lians_" in value for value in server["env"].values())
 
 

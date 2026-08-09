@@ -1,8 +1,9 @@
 # Lians MCP server for Codex CLI
 #
 # Add this block to your Codex config (~/.codex/config.toml) to expose Lians as a
-# native MCP tool server. The ordinary profile exposes three bounded memory tools
-# without any SDK code in your project.
+# native MCP tool server. The Ultra coordinator profile exposes two compact
+# memory tools without any SDK code in your project. Historical recall uses the
+# optional as_of_iso field on recall, so it does not require a third schema.
 #
 # Requires `uvx` (ships with `uv`): https://docs.astral.sh/uv/
 # Install uv, then Codex launches the server on demand via the command below.
@@ -19,7 +20,7 @@ enabled = true
 # Wait for tool discovery before starting a turn. Local embedding prewarm can
 # otherwise race a fast model response on a fresh Codex process.
 required = true
-enabled_tools = ["remember", "recall", "recall_at"]
+enabled_tools = ["remember", "recall"]
 default_tools_approval_mode = "writes"
 env_vars = ["LIANS_URL", "LIANS_API_KEY", "LIANS_AGENT_ID", "LIANS_NAMESPACE"]
 
@@ -31,9 +32,12 @@ LIANS_MCP_PROJECT_ROOT = "/absolute/path/to/this/project"
 # the project root. Replace both only for intentional cross-project sharing.
 LIANS_AGENT_ID = ""
 LIANS_NAMESPACE = ""
-LIANS_MCP_ENABLED_TOOLS = "remember,recall,recall_at"
-LIANS_MCP_RECALL_K = "50"
-LIANS_MCP_CONTEXT_MAX_TOKENS = "2650"
+LIANS_MCP_ENABLED_TOOLS = "remember,recall"
+LIANS_MCP_SCHEMA_PROFILE = "compact"
+LIANS_MCP_RECALL_K = "20"
+LIANS_MCP_CONTEXT_MAX_TOKENS = "768"
+# Used by the optional UserPromptSubmit hook; calibrate for your embedding model.
+LIANS_CODEX_HOOK_MIN_SCORE = "0.45"
 
 # ── Local mode (no server, no API key) ─────────────────────────────────────────
 # For prototyping you can omit LIANS_URL / LIANS_API_KEY and run the local SQLite
@@ -45,24 +49,40 @@ LIANS_MCP_CONTEXT_MAX_TOKENS = "2650"
 #   startup_timeout_sec = 300
 #   tool_timeout_sec = 120
 #   required = true
-#   enabled_tools = ["remember", "recall", "recall_at"]
+#   enabled_tools = ["remember", "recall"]
 #   default_tools_approval_mode = "writes"
 #   [mcp_servers.lians.env]
 #   LIANS_MCP_PROJECT_ROOT = "/absolute/path/to/this/project"
 #   LIANS_AGENT_ID = ""
 #   LIANS_NAMESPACE = ""
 #   LIANS_LOCAL_DB = "/absolute/path/to/.lians/codex.db"
-#   LIANS_MCP_ENABLED_TOOLS = "remember,recall,recall_at"
-#   LIANS_MCP_RECALL_K = "50"
-#   LIANS_MCP_CONTEXT_MAX_TOKENS = "2650"
+#   LIANS_MCP_ENABLED_TOOLS = "remember,recall"
+#   LIANS_MCP_SCHEMA_PROFILE = "compact"
+#   LIANS_MCP_RECALL_K = "20"
+#   LIANS_MCP_CONTEXT_MAX_TOKENS = "768"
+#   LIANS_CODEX_HOOK_MIN_SCORE = "0.45"
 #   LIANS_MCP_PREWARM = "background"
+#   LIANS_CODEX_HOOK_DAEMON = "auto"
+#   LIANS_CODEX_HOOK_DAEMON_IDLE_SECONDS = "1800"
+#   LIANS_CODEX_HOOK_DAEMON_REQUEST_TIMEOUT_MS = "3000"
+#   LIANS_CODEX_HOOK_DAEMON_START_TIMEOUT_MS = "120000"
 #   EMBEDDING_PROVIDER = "sentence-transformers"
+#
+# To query an existing 1024-dimensional BGE index with the exact, faster ONNX
+# runtime (without reindexing documents), replace the provider above and add:
+#   EMBEDDING_PROVIDER = "bge-onnx"
+#   BGE_ONNX_ARTIFACT_DIR = "/absolute/path/to/bge-large-en-v1.5-onnx"
+#   BGE_ONNX_INTRA_OP_THREADS = "8"
+# The directory must have been staged by lians-bge-onnx-export. The runtime
+# accepts only the pinned model, tokenizer, and manifest hashes and never
+# downloads a model.
 #
 # The local MCP server completes bounded imports before the handshake, then loads
 # the model and runs a probe in the background. The longer startup timeout also
 # covers a first uvx install or model download; warm calls use tool_timeout_sec.
 # If the model is already cached for an air-gapped host, add HF_HUB_OFFLINE = "1".
 #
-# Evidence profile: replace enabled_tools above with all eight server tools:
+# Evidence profile: set LIANS_MCP_SCHEMA_PROFILE = "standard" and replace
+# enabled_tools above with all eight server tools:
 # ["remember", "recall", "recall_at", "reconstruct", "list_conflicts",
 #  "memory_lineage", "fact_history", "backtest_check"]

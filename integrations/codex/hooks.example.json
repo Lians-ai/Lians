@@ -1,0 +1,33 @@
+{
+  "description": "Inject bounded, score-gated Lians memory before each Codex prompt.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/absolute/path/to/python-with-lians\" \"/absolute/path/to/integrations/codex/user_prompt_submit_recall.py\" --prewarm-quiet",
+            "commandWindows": "\"C:\\absolute\\path\\to\\python-with-lians.exe\" \"C:\\absolute\\path\\to\\integrations\\codex\\user_prompt_submit_recall.py\" --prewarm-quiet",
+            "timeout": 120,
+            "statusMessage": "Prewarming Lians memory"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"/absolute/path/to/python-with-lians\" \"/absolute/path/to/integrations/codex/user_prompt_submit_recall.py\"",
+            "commandWindows": "\"C:\\absolute\\path\\to\\python-with-lians.exe\" \"C:\\absolute\\path\\to\\integrations\\codex\\user_prompt_submit_recall.py\"",
+            "timeout": 120,
+            "statusMessage": "Recalling Lians memory",
+            "additionalContextLimit": 768
+          }
+        ]
+      }
+    ]
+  }
+}

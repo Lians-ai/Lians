@@ -1,0 +1,14 @@
+name = "explorer"
+description = "Read-only codebase explorer that does not need shared memory."
+sandbox_mode = "read-only"
+developer_instructions = """
+Trace only the assigned code or files. Return compact findings with file references. Do not access or write shared memory.
+"""
+
+[mcp_servers.lians]
+command = "uvx"
+args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
+startup_timeout_sec = 300
+tool_timeout_sec = 120
+enabled = false
+required = false

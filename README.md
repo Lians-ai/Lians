@@ -67,11 +67,13 @@ and the [Codex/PostgreSQL validation](docs/benchmarks/codex-mcp-local-2026-08-08
 For the product target of 85% more same-budget usage, the economic threshold is
 1.85x comparable tasks, which requires at least 45.95% lower measured per-task
 cost after protected quality passes. One signed-in Codex end-to-end repeat
-reached 2.10x same-budget usage. A signed-in Claude manual context-isolation
-repeat reached 10.11x with tools and MCP disabled, so it is an upper bound on
-context savings rather than installed-plugin evidence; both answer pairs were
-correct. Gemini's MCP/configuration path is validated but its model A/B remains
-pending credentials. See the
+reached 2.10x same-budget usage. A later 120-turn matrix across all six
+`gpt-5.6-sol` reasoning efforts reached 2.22x pooled (+122.10%), but failed the
+predeclared every-prompt quality-and-economics gate; it is workload evidence,
+not a universal guarantee. A signed-in Claude manual context-isolation repeat
+reached 10.11x with tools and MCP disabled, so it is an upper bound on context
+savings rather than installed-plugin evidence. Gemini's MCP/configuration path
+is validated but its model A/B remains pending credentials. See the
 [cross-provider usage-extension report](docs/benchmarks/provider-usage-extension-2026-08-08.md).
 
 Decision evidence remains the trust boundary: Lians records what an agent saw,
@@ -553,7 +555,9 @@ client.erase(subject_id, request_ref)                    # GDPR crypto-shred
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EMBEDDING_PROVIDER` | `local` | `voyage` · `openai` · `sentence-transformers` · `local` |
+| `EMBEDDING_PROVIDER` | `local` | `voyage` · `openai` · `sentence-transformers` · `bge-onnx` (exact pinned local BGE) · `local` (test stub) |
+| `BGE_ONNX_ARTIFACT_DIR` | — | Required for `bge-onnx`; external directory staged by `lians-bge-onnx-export` and verified by exact manifest/model/tokenizer hashes |
+| `BGE_ONNX_INTRA_OP_THREADS` | `8` | ONNX Runtime CPU thread count; `0` delegates selection to ONNX Runtime |
 | `VOYAGE_API_KEY` | — | Required when `EMBEDDING_PROVIDER=voyage` |
 | `MASTER_ENCRYPTION_KEY` | — | Development-only base64 key for `KMS_PROVIDER=env`; blank fails closed unless an explicit test bypass is set |
 | `MASTER_KEY_ID` | — | Required production-safe version ID embedded in new v2 envelopes; rotate with the offline [dual-key runbook](docs/master-key-rotation.md) |

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "artifact": {
+    "filename": "lians_sdk-0.5.0+codex.20260808.14-py3-none-any.whl",
+    "sha256": "b1d8b29a6dc1c5c03a1a281360c5cb557ecd0e6da70b14dadaae5295c59a7bee",
+    "sdk_version": "0.5.0+codex.20260808.14",
+    "source_commit": "96726b9fc271d668c7e4fec81719b5a53e0ad6fd",
+    "source_tree_sha256": "a44d20458f6307564d6ccc619bf3d6622408d62c7c8d588468796849787e08ff",
+    "source_tree_algorithm": "sha256(sorted git-visible relative_path NUL file_sha256 LF)",
+    "source_tree_file_count": 211
+  }
+}

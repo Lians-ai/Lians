@@ -10,7 +10,7 @@
       ],
       "cwd": ".",
       "env": {
-        "LIANS_URL": "https://api.lians.dev",
+        "LIANS_URL": "https://your-lians.example",
         "LIANS_API_KEY": "$LIANS_API_KEY",
         "LIANS_MCP_PROJECT_ROOT": ".",
         "LIANS_AGENT_ID": "$LIANS_AGENT_ID",
