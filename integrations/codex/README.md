@@ -78,22 +78,6 @@ wrap only the intended search question in `<lians-query>...</lians-query>`. Code
 still sees the complete prompt; only the Lians embedding query is narrowed. Plain
 prompts continue to work without the tag.
 
-On the signed-in 2026-08-08 Sol Ultra/default LOCOMO ABBA, the hook path reduced
-estimated per-task credits from 3.249 to 1.5965 while all four answers stayed
-exact. That is a 50.9% reduction and 2.04x same-budget usage (+103.5%). Every
-repeat, pooled accounting, and an all-input-uncached sensitivity passed the +80%
-target. This is a workload-scoped result, not a universal account-quota claim;
-see the [raw report](../../docs/benchmarks/codex-sol-ultra-hook-ab-2026-08-08.json).
-
-A subsequent 120-turn matrix covered low, medium, high, xhigh, max, and ultra on
-the same visible `gpt-5.6-sol` model. Pooled estimated credits fell to a
-`0.450237577` candidate ratio, or 2.22x same-budget usage (+122.10%); the
-all-input-uncached sensitivity still reached +102.24%. The primary matrix did
-**not** qualify as an every-prompt claim: only 21/60 paired cells passed both the
-predeclared exact-answer gate and the +80% economic threshold, and the worst
-cell cost ratio was 4.06. See the
-[matrix report](../../docs/benchmarks/codex-sol-matrix-bge-onnx-v2-2026-08-08.md).
-
 Backend selection uses the existing Lians settings:
 
 - Set `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID` for hosted
@@ -117,77 +101,9 @@ or exception text.
 For the smallest model-visible surface, let this hook own current-memory reads and
 expose only `remember` through MCP. Keep the normal `recall` tool when a workflow
 needs explicit historical (`as_of_iso`), multi-hop, or evidence-heavy retrieval.
-The measured hook profile exposed no model-facing MCP tools, so retrieval happened
-before the first model request and did not pay for a tool-selection turn.
-
-The original sentence-transformers local hook started a fresh embedding runtime
-and was slower in the measured run (20.5 seconds versus 3.5 seconds for the
-baseline). The opt-in exact BGE ONNX provider removes that model stack without
-changing the existing 1024-dimensional BGE index. Install `lians-sdk[bge-onnx]`,
-stage the pinned external artifact, and configure the MCP/hook environment:
-
-```bash
-lians-bge-onnx-export \
-  --model /local/download/onnx/model.onnx \
-  --tokenizer /local/download/tokenizer.json \
-  --output /opt/lians/bge-large-en-v1.5-onnx
-```
-
-```toml
-EMBEDDING_PROVIDER = "bge-onnx"
-BGE_ONNX_ARTIFACT_DIR = "/opt/lians/bge-large-en-v1.5-onnx"
-BGE_ONNX_INTRA_OP_THREADS = "8"
-```
-
-The exporter is air-gap safe: it performs no downloads and accepts only the
-pinned upstream revision, exact model/tokenizer SHA-256 values, and deterministic
-manifest. The runtime is lazy, verifies those files and the 1024-dimensional
-model contract before first inference, uses CPU ONNX Runtime with prepacking
-disabled, and fails closed on mismatch. The 1.34 GB graph remains outside the
-repository. Prefer the persistent local recall daemon so fresh hook processes
-reuse the validated, prewarmed runtime.
-
-Do not point this provider at an arbitrary 1024-dimensional store. The database
-must have been indexed with the exact pinned BGE revision and matching document/
-query preprocessing, or it must be reindexed first. Store-level embedder identity
-is not persisted yet, so dimension checks alone cannot detect a same-size model
-mismatch. The personal Codex configuration should therefore retain its existing
-embedding provider unless that database is intentionally reindexed.
-
-On the 2026-08-08 frozen 419-row LOCOMO snapshot, ten isolated fresh Python/ONNX
-processes completed query encode plus hybrid retrieval in 2.665 seconds p50,
-2.815 seconds p95, and 2.852 seconds max. That dependency-light runner did not
-include full SDK/daemon initialization. Full production daemon cold prewarm was
-6.574 to 10.134 seconds across the recorded runs. A diagnostic 8.79-second run
-included 1.52 seconds of artifact hashing, 1.53 seconds of ONNX session creation,
-and a 3.47-second provider embed path. In the all-ten preflight, receipt latency
-never exceeded 765 ms and fresh-hook wall time never exceeded 920 ms. The
-independently archived reproduction recorded 1.011 seconds p50 and 1.550 seconds
-p95/max hook wall time; receipt p95/max was 1.264 seconds. Every response was
-injected through the daemon with valid protocol output and zero model calls.
-Keep the blocking `SessionStart` prewarm enabled; do not present warm-hook numbers
-as cold-start latency. See the
-[production hook evidence](../../docs/benchmarks/codex-bge-onnx-hook-daemon-latency-2026-08-08.json).
-The recorded latency windows were sequential. The local daemon currently handles
-one request at a time, so concurrent-task p95 and timeout behavior remain unproven.
-
-The existing personal Codex Arctic store was also tested without changing its
-embedding model: identity-correct quiet prewarm took 22.134 seconds, then 10/10
-fresh hook processes performed real, score-gated injection through the daemon in
-1.103 seconds p50 and 1.424 seconds maximum. This was a direct zero-model-call
-smoke; normal account execution still requires trusting the final hook definition
-with `/hooks`. See the
-[account smoke evidence](../../docs/benchmarks/codex-account-arctic-hook-smoke-2026-08-08.json).
-
-The FP32 ONNX path matched PyTorch BGE
-on all ten queries at ordered top-1/5/10/20, with minimum vector cosine 1.0 and
-maximum score drift `1.74e-7`. These are workload- and machine-scoped cold-start
-results; the operating-system page cache was not flushed. See the
-[latency evidence](../../docs/benchmarks/codex-bge-fp32-cold-latency-2026-08-08.json)
-and [PyTorch parity evidence](../../docs/benchmarks/codex-bge-fp32-pytorch-parity-2026-08-08.json).
-The production provider itself also reproduced the ordered top-20 on all ten
-queries with no degraded cases and maximum score drift `1.46e-7`; see the
-[provider parity evidence](../../docs/benchmarks/codex-bge-onnx-provider-parity-2026-08-08.json).
+The hook is designed to retrieve before the first model request, without exposing
+a model-facing recall tool. Validate latency and task economics on the target
+machine and workload before making performance or savings claims.
 
 ## Install via the skills standard
 

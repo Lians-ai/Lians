@@ -5,6 +5,7 @@ import base64
 import importlib.util
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import zipfile
@@ -12,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -775,7 +777,32 @@ def test_local_sqlite_does_not_contain_raw_memory_plaintext_via_sdk_subprocess(
     assert completed.returncode == 0, completed.stderr
     sqlite_bytes = b"".join(path.read_bytes() for path in tmp_path.glob("memory.sqlite3*"))
     assert sentinel.encode() not in sqlite_bytes
-    assert b"lians-sealed" in sqlite_bytes
+
+    # Local memory content is stored as raw AES-GCM bytes (nonce + ciphertext
+    # + tag), not with the string envelope used by secret_storage. Prove the
+    # database holds an encrypted payload and a separately wrapped subject key,
+    # then unwrap/decrypt them with the configured master key.
+    with sqlite3.connect(database) as connection:
+        encrypted_content, subject_id = connection.execute(
+            "SELECT content_encrypted, subject_id FROM memories"
+        ).fetchone()
+        wrapped_subject_key = connection.execute(
+            "SELECT enc_key FROM subject_keys WHERE namespace = ? AND subject_id = ?",
+            ("codex-test", "codex-project:test"),
+        ).fetchone()[0]
+
+    assert subject_id == "codex-project:test"
+    assert len(encrypted_content) == len(sentinel.encode()) + 28
+    assert len(wrapped_subject_key) == 60
+
+    master_key = b"k" * 32
+    content_key = AESGCM(master_key).decrypt(
+        wrapped_subject_key[:12], wrapped_subject_key[12:], None
+    )
+    plaintext = AESGCM(content_key).decrypt(
+        encrypted_content[:12], encrypted_content[12:], None
+    )
+    assert plaintext == sentinel.encode()
 
 
 def test_local_master_key_is_random_stable_and_not_returned(
