@@ -1,0 +1,157 @@
+{
+  "schema": "lians.codex-installed-cache-latency-evidence.v1",
+  "report_date": "2026-08-08",
+  "workload": {
+    "id": "locomo-conversation-0-bge-onnx",
+    "plugin_version": "0.1.0+codex.20260809022314",
+    "memories": 419,
+    "live_facts": 419,
+    "operating_system": "Windows",
+    "storage_and_embedding": "local SQLite and BGE ONNX"
+  },
+  "methodology": {
+    "measurement_surface": "installed-cache hook entry point invoked directly",
+    "prewarm_processes": 1,
+    "fresh_hook_processes": 20,
+    "execution": "sequential",
+    "shared_prewarmed_daemon": true,
+    "percentile_method": "Type 7 linear interpolation, h=(n-1)*p",
+    "model_calls": 0,
+    "network_calls": 0
+  },
+  "installed_cache_run": {
+    "prewarm_wall_ms": 6871.19,
+    "timing_pairs_ms": [
+      {
+        "hook_process_wall_ms": 1139.624,
+        "receipt_elapsed_ms": 581
+      },
+      {
+        "hook_process_wall_ms": 1045.945,
+        "receipt_elapsed_ms": 549
+      },
+      {
+        "hook_process_wall_ms": 1137.62,
+        "receipt_elapsed_ms": 596
+      },
+      {
+        "hook_process_wall_ms": 1051.287,
+        "receipt_elapsed_ms": 531
+      },
+      {
+        "hook_process_wall_ms": 1150.947,
+        "receipt_elapsed_ms": 610
+      },
+      {
+        "hook_process_wall_ms": 1187.182,
+        "receipt_elapsed_ms": 645
+      },
+      {
+        "hook_process_wall_ms": 1055.058,
+        "receipt_elapsed_ms": 543
+      },
+      {
+        "hook_process_wall_ms": 1072.905,
+        "receipt_elapsed_ms": 569
+      },
+      {
+        "hook_process_wall_ms": 1054.731,
+        "receipt_elapsed_ms": 547
+      },
+      {
+        "hook_process_wall_ms": 1051.788,
+        "receipt_elapsed_ms": 543
+      },
+      {
+        "hook_process_wall_ms": 1034.522,
+        "receipt_elapsed_ms": 545
+      },
+      {
+        "hook_process_wall_ms": 1149.264,
+        "receipt_elapsed_ms": 595
+      },
+      {
+        "hook_process_wall_ms": 1130.178,
+        "receipt_elapsed_ms": 599
+      },
+      {
+        "hook_process_wall_ms": 1119.984,
+        "receipt_elapsed_ms": 559
+      },
+      {
+        "hook_process_wall_ms": 1197.135,
+        "receipt_elapsed_ms": 631
+      },
+      {
+        "hook_process_wall_ms": 1057.966,
+        "receipt_elapsed_ms": 536
+      },
+      {
+        "hook_process_wall_ms": 1072.782,
+        "receipt_elapsed_ms": 545
+      },
+      {
+        "hook_process_wall_ms": 1111.982,
+        "receipt_elapsed_ms": 554
+      },
+      {
+        "hook_process_wall_ms": 1074.222,
+        "receipt_elapsed_ms": 531
+      },
+      {
+        "hook_process_wall_ms": 1057.55,
+        "receipt_elapsed_ms": 563
+      }
+    ],
+    "hook_process_wall": {
+      "p50_ms": 1073.564,
+      "p95_ms": 1187.68,
+      "max_ms": 1197.135
+    },
+    "receipt_elapsed": {
+      "p50_ms": 556.5,
+      "p95_ms": 631.7,
+      "max_ms": 645
+    },
+    "quality_gates": {
+      "samples": 20,
+      "injected": 20,
+      "daemon_transport": 20,
+      "non_degraded": 20,
+      "same_top_evidence": 20,
+      "all_passed": true
+    }
+  },
+  "wrapper_only_microbenchmark": {
+    "separate_from_installed_cache_run": true,
+    "scope": "wrapper, fixed native Python startup, and no-op temporary launcher",
+    "method": "20 interleaved samples per wrapper",
+    "real_plugin_profile_database_daemon_model_or_network_access": false,
+    "cmd_ms": {
+      "p50_ms": 94.684,
+      "p95_ms": 102.885
+    },
+    "powershell_ms": {
+      "p50_ms": 327.479,
+      "p95_ms": 403.875
+    }
+  },
+  "claim_boundary": {
+    "supported": "For this 419-memory sequential installed-cache workload, after one measured prewarm, all 20 fresh hook processes injected the same top evidence through the daemon without degraded retrieval; the reported wall and receipt timings describe only those hook invocations.",
+    "not_measured": [
+      "overall model or agent response time",
+      "concurrent load",
+      "disk-cold startup or retrieval",
+      "public-install end-to-end plugin loading",
+      "other workloads, machines, models, or prompts"
+    ],
+    "universal_claim_supported": false
+  },
+  "limitations": {
+    "operating_system_page_cache_flushed": false,
+    "machine_isolation_controlled": false,
+    "same_identity_daemon_present_before_prewarm": false,
+    "other_local_background_processes_present": true,
+    "fresh_hook_processes_shared_one_deliberately_prewarmed_daemon": true
+  }
+}
