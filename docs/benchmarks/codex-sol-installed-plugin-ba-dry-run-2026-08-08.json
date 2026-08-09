@@ -1,0 +1,115 @@
+{
+  "schema_version": "lians.codex-sol-installed-plugin-ab.v2",
+  "provider": "OpenAI Codex",
+  "workload": "LOCOMO full context versus installed Lians pre-prompt recall",
+  "dry_run": true,
+  "question_id": "conv0_q0",
+  "question": "When did Caroline go to the LGBTQ support group?",
+  "ground_truth_answer": "7 May 2023",
+  "quality_rule": "trim outer whitespace, then require exact gold string",
+  "profile": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "ultra",
+    "service_tier": "default",
+    "execution_order": [
+      "candidate:1",
+      "baseline:1"
+    ],
+    "paid_call_count": 2,
+    "transport": "persistent codex app-server stdio JSON-RPC",
+    "app_server_strict_config": true,
+    "experimental_raw_events": true,
+    "sandbox": {
+      "mode": "workspace-write",
+      "writable_roots": "isolated arm plus Lians data home",
+      "network_access": false
+    },
+    "usage_source": "rawResponse/completed exact provider usage",
+    "raw_artifacts_path_sanitized": true,
+    "normal_user_config_loaded": true,
+    "normal_enabled_plugins_loaded": true,
+    "ignore_user_config": false,
+    "hook_trust_bypass": false,
+    "installed_plugin": {
+      "plugin_id": "lians-memory@lians",
+      "version": "0.1.0+codex.20260809022314",
+      "root_kind": "local_install",
+      "manifest_sha256": "1b020a61e9f4454c47ec28ee2d9ecbd18fc1a33a93c9f24cdf4b2f1b6dd9c984",
+      "bootstrap_sha256": "38612cb3e6d0a14ac99970e3f7c2518bc88862f3898d28cab9e150af09cb034c",
+      "hook_sha256": "629ec392e93fcf6bfd503d3825f167b614226f8de929f797c3be716cbc5153ed"
+    },
+    "baseline": {
+      "context": "complete LOCOMO conversation",
+      "project_memory": "fresh and empty"
+    },
+    "candidate": {
+      "context": "short question plus installed pre-prompt hook injection",
+      "seed_runtime": "installed frozen plugin runtime",
+      "embedding_provider": "bge-onnx",
+      "encrypted_project_scope_required": true,
+      "maximum_injected_context_tokens": 768
+    }
+  },
+  "target": {
+    "usage_extension_percent": 80.0,
+    "same_budget_usage_multiplier": 1.8,
+    "maximum_candidate_cost_ratio": 0.555555556,
+    "suite_estimated_credit_cap": 10.0,
+    "per_run_estimated_credit_reserve": 5.0
+  },
+  "estimated_credit_accounting": {
+    "label": "estimated Sol credits; not a provider-reported per-turn debit",
+    "rates_per_million_tokens": {
+      "uncached_input_credits_per_million": 125.0,
+      "cached_input_credits_per_million": 12.5,
+      "cache_write_input_credits_per_million": 156.25,
+      "output_credits_per_million": 750.0
+    },
+    "reasoning_output_tokens_are_already_in_output_tokens": true
+  },
+  "source_artifacts": {
+    "frozen_case_sha256": "0765a735585396536985882913f4fa912f14d898a3beb68216168083d4461fe5",
+    "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4"
+  },
+  "prompt_sizes": {
+    "baseline_utf8_bytes": 63144,
+    "candidate_utf8_bytes": 352
+  },
+  "seed_plan": {
+    "record_count": 1,
+    "evidence_ids": [
+      "D1:3"
+    ],
+    "copies_gold_answer": false
+  },
+  "planned_runs": [
+    {
+      "sequence": 1,
+      "mode": "candidate",
+      "repetition": 1,
+      "isolated_project": true
+    },
+    {
+      "sequence": 2,
+      "mode": "baseline",
+      "repetition": 1,
+      "isolated_project": true
+    }
+  ],
+  "planned_preflight": {
+    "transport": "persistent codex app-server stdio JSON-RPC",
+    "sequence": [
+      "initialize",
+      "initialized",
+      "hooks/list"
+    ],
+    "working_directory_count": 2,
+    "required_lians_handlers_per_working_directory": 2,
+    "before_paid_turns": true
+  },
+  "verdict": {
+    "status": "dry_run_only",
+    "qualified_target_met": null,
+    "statement": "No model call, seeding inference, or usage claim was made."
+  }
+}

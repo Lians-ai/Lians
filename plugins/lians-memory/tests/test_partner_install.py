@@ -172,9 +172,7 @@ def test_native_data_home_ignores_relative_base_and_uses_absolute_home(
     fallback: Path,
 ) -> None:
     suffix = (
-        Path("Lians") / "CodexMemory"
-        if platform == "win32"
-        else Path("lians") / "codex-memory"
+        Path("Lians") / "CodexMemory" if platform == "win32" else Path("lians") / "codex-memory"
     )
     result = bootstrap.native_data_home(
         {base_name: relative_base},
@@ -224,11 +222,14 @@ def test_absolute_native_base_does_not_depend_on_home(
 ) -> None:
     base = tmp_path / "absolute-base"
 
-    assert bootstrap.native_data_home(
-        {base_name: str(base)},
-        platform=platform,
-        home=Path("relative-home"),
-    ) == (base / suffix).resolve()
+    assert (
+        bootstrap.native_data_home(
+            {base_name: str(base)},
+            platform=platform,
+            home=Path("relative-home"),
+        )
+        == (base / suffix).resolve()
+    )
 
 
 def test_native_profile_location_does_not_depend_on_plugin_cache(tmp_path: Path) -> None:
@@ -484,9 +485,7 @@ def test_static_hook_launcher_scrubs_hostile_local_provider_and_egress_environme
     monkeypatch.setattr(lians_plugin, "runtime_python", lambda _data_home: python)
     for name, _value in bootstrap._LOCAL_RUNTIME_SECURITY_ENV:
         monkeypatch.setenv(name, "hostile-inherited-value")
-    monkeypatch.setenv(
-        "MASTER_ENCRYPTION_KEY", base64.b64encode(b"x" * 32).decode("ascii")
-    )
+    monkeypatch.setenv("MASTER_ENCRYPTION_KEY", base64.b64encode(b"x" * 32).decode("ascii"))
     monkeypatch.setenv("AGENTMEM_ALLOW_UNENCRYPTED", "true")
     monkeypatch.setenv("BGE_ONNX_ARTIFACT_DIR", str(tmp_path / "untrusted-model"))
     monkeypatch.setenv("PYTHONPATH", str(tmp_path / "import-canary"))
@@ -508,16 +507,15 @@ def test_static_hook_launcher_scrubs_hostile_local_provider_and_egress_environme
     monkeypatch.setattr(bootstrap.os, "cpu_count", lambda: 64)
     captured: dict[str, object] = {}
 
-    def fake_execve(executable: str, argv: list[str], environ: dict[str, str]) -> None:
-        captured["executable"] = executable
-        captured["argv"] = argv
+    def fake_run_hook_runtime(command: str, hook_arg: str | None, environ: dict[str, str]) -> int:
+        captured["command"] = command
+        captured["hook_arg"] = hook_arg
         captured["environment"] = environ
-        raise SystemExit(0)
+        return 0
 
-    monkeypatch.setattr(lians_plugin.os, "execve", fake_execve)
+    monkeypatch.setattr(lians_plugin, "_run_hook_runtime", fake_run_hook_runtime)
 
-    with pytest.raises(SystemExit):
-        lians_plugin._runtime_command("hook")
+    assert lians_plugin._runtime_command("hook") == 0
 
     child = captured["environment"]
     assert isinstance(child, dict)
@@ -563,7 +561,90 @@ def test_static_hook_launcher_scrubs_hostile_local_provider_and_egress_environme
     assert child["LIANS_CODEX_HOOK_DAEMON_REQUEST_TIMEOUT_MS"] == "3000"
     assert child["LIANS_CODEX_HOOK_DAEMON_START_TIMEOUT_MS"] == "120000"
     assert child["BGE_ONNX_INTRA_OP_THREADS"] == "8"
-    assert captured["argv"] == [str(python), str(lians_plugin.HOOK_RUNTIME)]
+    assert captured["command"] == "hook"
+    assert captured["hook_arg"] is None
+
+
+def test_warm_hook_path_does_not_reapply_existing_directory_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_home = tmp_path / "data"
+    artifact = tmp_path / "model"
+    artifact.mkdir()
+    encoded_key = base64.b64encode(b"w" * 32).decode("ascii")
+    data_home.mkdir()
+    (data_home / bootstrap.LOCAL_MASTER_KEY_FILENAME).write_text(
+        encoded_key + "\n", encoding="ascii"
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    profile = {
+        "schema_version": 1,
+        "mode": "local",
+        "bge_artifact_dir": str(artifact),
+    }
+    bootstrap.configure_runtime_environment(
+        data_home,
+        profile,
+        {},
+        project_root=project,
+        require_managed_key=True,
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "_restrict_private_path",
+        lambda *_args, **_kwargs: pytest.fail("warm hook must not rewrite private ACLs"),
+    )
+    child = bootstrap.configure_runtime_environment(
+        data_home,
+        profile,
+        {},
+        project_root=project,
+        require_managed_key=True,
+        repair_private_paths=False,
+    )
+
+    assert Path(child["LIANS_PLUGIN_RUNTIME_CWD"]).is_dir()
+    assert Path(child["LIANS_CODEX_HOOK_DAEMON_RUNTIME_DIR"]).is_dir()
+    assert child["LIANS_CODEX_HOOK_DAEMON"] == "client"
+
+
+def test_warm_hook_without_session_prewarm_cannot_spawn_daemon(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_home = tmp_path / "data"
+    artifact = tmp_path / "model"
+    artifact.mkdir()
+    encoded_key = base64.b64encode(b"n" * 32).decode("ascii")
+    data_home.mkdir()
+    (data_home / bootstrap.LOCAL_MASTER_KEY_FILENAME).write_text(
+        encoded_key + "\n", encoding="ascii"
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    child = bootstrap.configure_runtime_environment(
+        data_home,
+        {
+            "schema_version": 1,
+            "mode": "local",
+            "bge_artifact_dir": str(artifact),
+        },
+        {},
+        project_root=project,
+        require_managed_key=True,
+        repair_private_paths=False,
+    )
+    hook = _load_bundled_hook()
+    settings = hook.build_settings({"cwd": str(project)}, child)
+    daemon = hook._daemon_runtime()
+    monkeypatch.setattr(
+        daemon,
+        "spawn",
+        lambda *_args, **_kwargs: pytest.fail("client-only hook must not spawn a daemon"),
+    )
+
+    with pytest.raises(RuntimeError, match="not ready"):
+        hook.retrieve(settings, "memory query")
 
 
 def test_runtime_launcher_leaves_malicious_project_dotenv_before_exec(
