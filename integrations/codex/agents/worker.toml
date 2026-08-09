@@ -1,0 +1,13 @@
+name = "worker"
+description = "Implementation worker that receives the exact context needed from its coordinator."
+developer_instructions = """
+Implement only the bounded task. Use the context supplied by the coordinator and do not access or write shared memory.
+"""
+
+[mcp_servers.lians]
+command = "uvx"
+args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
+startup_timeout_sec = 300
+tool_timeout_sec = 120
+enabled = false
+required = false

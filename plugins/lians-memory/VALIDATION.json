@@ -1,0 +1,57 @@
+{
+  "schema": "lians.codex-memory-plugin-validation.v1",
+  "measured_at": "2026-08-08",
+  "host": {
+    "os": "Windows",
+    "codex_cli": "0.147.0-alpha.6.5"
+  },
+  "bundle": {
+    "sdk_version": "0.5.0+codex.20260808.14",
+    "sdk_wheel_sha256": "b1d8b29a6dc1c5c03a1a281360c5cb557ecd0e6da70b14dadaae5295c59a7bee",
+    "license_embedded": true,
+    "frozen_lock_verified": true
+  },
+  "automated": {
+    "sdk": {
+      "passed": 210,
+      "skipped_optional_platform": 29
+    },
+    "plugin": {
+      "passed": 67,
+      "skipped_optional_platform": 7
+    }
+  },
+  "functional": {
+    "mcp_tools": [
+      "remember",
+      "recall"
+    ],
+    "codex_scope_capability_advertised": true,
+    "same_project_write_and_recall": true,
+    "second_project_no_hit": true,
+    "distinct_project_databases": true,
+    "plaintext_marker_absent_from_both_sqlite_files": true,
+    "recall_has_untrusted_data_boundary": true,
+    "installed_launcher_mcp_elapsed_ms": 8443.5,
+    "plugin_recall_controls_pinned": true,
+    "compact_tool_schema_pinned": true,
+    "pythonpath_shadow_blocked": true,
+    "hostile_ambient_engine_env_ignored": true,
+    "untrusted_project_env_ignored": true,
+    "private_mcp_runtime_env_absent": true,
+    "session_start_prewarm_elapsed_ms": 6749.9,
+    "session_start_output_chars": 0,
+    "warm_fresh_hook_elapsed_ms": 2216.4,
+    "warm_hook_transport": "daemon",
+    "warm_hook_memory_count": 1,
+    "warm_hook_top_score": 0.684303670361221,
+    "warm_hook_retrieval_degraded": false,
+    "receipt_contains_prompt_or_memory_text": false
+  },
+  "limitations": [
+    "Single Windows host; sequential validation; OS page cache was not flushed.",
+    "The functional smoke used local embeddings and made no paid model call.",
+    "It does not establish universal prompt savings, concurrent-task latency, or a packaged model-cost A/B.",
+    "Doctor intentionally remains not-ready on this account until legacy user-level Lians MCP and hook definitions are disabled."
+  ]
+}

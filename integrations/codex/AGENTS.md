@@ -1,4 +1,4 @@
-# Lians Memory — Codex Agent Instructions
+# Lians memory policy
 
 This repository (or session) uses **Lians**, a financial-grade memory layer, to
 give the agent persistent, governed memory across runs. When working here,

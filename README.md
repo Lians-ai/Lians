@@ -497,7 +497,9 @@ client.erase(subject_id, request_ref)                    # GDPR crypto-shred
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EMBEDDING_PROVIDER` | `local` | `voyage` · `openai` · `sentence-transformers` · `local` |
+| `EMBEDDING_PROVIDER` | `local` | `voyage` · `openai` · `sentence-transformers` · `bge-onnx` (exact pinned local BGE) · `local` (test stub) |
+| `BGE_ONNX_ARTIFACT_DIR` | — | Required for `bge-onnx`; external directory staged by `lians-bge-onnx-export` and verified by exact manifest/model/tokenizer hashes |
+| `BGE_ONNX_INTRA_OP_THREADS` | `8` | ONNX Runtime CPU thread count; `0` delegates selection to ONNX Runtime |
 | `VOYAGE_API_KEY` | — | Required when `EMBEDDING_PROVIDER=voyage` |
 | `MASTER_ENCRYPTION_KEY` | — | Base64 32-byte key; blank disables PII encryption |
 | `KMS_PROVIDER` | `env` | `env` · `aws` · `azure` · `vault` |
