@@ -6,7 +6,7 @@ pilot, evaluation, or proof of concept.
 
 ## Parties
 
-**Provider:** Lians AI, Corp. (doing business as Lians)
+**Provider:** Lians AI
 **Customer legal name:** ______________________________________________
 **Customer address:** _________________________________________________
 **Billing contact and email:** ________________________________________

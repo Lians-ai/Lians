@@ -15,7 +15,7 @@ routing, card, API-key, or login credentials into this file.
   `[required]`
 - Buyer-facing statement descriptor: `[required]`
 - Collection method: `[Stripe invoice / ACH / wire]`
-- Officer confirms this account may receive revenue for **Lians AI, Corp.**:
+- Officer confirms this account may receive revenue for **Lians AI**:
   `[yes / no]`
 - Officer authorizes issuance of the first **$2,250 USD** kickoff invoice:
   `[yes / no]`
@@ -42,7 +42,7 @@ Complete only after a buyer accepts the paid scope:
 
 ## Invoice controls
 
-- Invoice issuer exactly matches `Lians AI, Corp.`: `[pass / fail]`
+- Invoice issuer exactly matches `Lians AI`: `[pass / fail]`
 - Invoice amount is `$2,250.00 USD`: `[pass / fail]`
 - Invoice references the signed AI Evidence Readiness Sprint: `[pass / fail]`
 - Payment instructions originate from the authorized provider: `[pass / fail]`

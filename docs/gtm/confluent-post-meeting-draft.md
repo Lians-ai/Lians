@@ -32,7 +32,7 @@ Best,
 
 Ethan Beirne
 Co-Founder and CEO
-Lians AI, Corp.
+Lians AI
 https://www.lians.ai
 
 ## B. Confluent will introduce a buyer
@@ -64,7 +64,7 @@ Best,
 
 Ethan Beirne
 Co-Founder and CEO
-Lians AI, Corp.
+Lians AI
 https://www.lians.ai
 
 ## C. No commercial path

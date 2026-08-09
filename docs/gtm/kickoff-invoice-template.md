@@ -3,7 +3,7 @@
 > Complete all bracketed fields before sending. Do not begin work until payment
 > is confirmed.
 
-**From:** Lians AI, Corp. (doing business as Lians)
+**From:** Lians AI
 **Email:** info@lians.ai
 **Business address:** [INSERT LEGAL BUSINESS ADDRESS]
 **Invoice number:** [LIANS-YYYY-NNN]
