@@ -1,0 +1,61 @@
+name: Feature request
+description: Propose a focused product, API, evidence, or workflow improvement.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping shape Lians. For open-ended architecture questions, use GitHub Discussions instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the workflow and the evidence, reconstruction, memory, or control problem you cannot solve today.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Consequence and review boundary
+      description: What action or output matters, who reviews it, and what must be reconstructable later?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: Describe the smallest useful behavior or interface. Examples and pseudocode are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary surface
+      options:
+        - Memory engine
+        - Decision Receipts
+        - Universal Recorder / OpenTelemetry
+        - Runtime Gate
+        - Investigator
+        - Python SDK
+        - TypeScript SDK
+        - MCP server
+        - Deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I can help implement or test this capability.
+        - label: I can provide a synthetic, sanitized, or public reproduction.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, and confidential records.
+          required: true

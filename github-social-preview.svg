@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Lians GitHub social preview</title>
+  <desc id="desc">Open-source decision evidence and reconstruction for production AI agents.</desc>
+  <rect width="1280" height="640" fill="#07111f"/>
+  <circle cx="1110" cy="30" r="285" fill="#0b2f55"/>
+  <path d="M0 100h1280M0 220h1280M0 340h1280M0 460h1280M0 580h1280" stroke="#70b7ff" stroke-opacity=".08"/>
+  <path d="M760 0v640M900 0v640M1040 0v640M1180 0v640" stroke="#70b7ff" stroke-opacity=".11"/>
+  <text x="88" y="98" fill="#7fc4ff" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="8">LIANS · V0.5.0</text>
+  <text x="88" y="232" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="700">Prove what your AI knew</text>
+  <text x="88" y="320" fill="#7fc4ff" font-family="Arial, Helvetica, sans-serif" font-size="68" font-weight="700">when it acted.</text>
+  <text x="88" y="413" fill="#c9d7e5" font-family="Arial, Helvetica, sans-serif" font-size="28">Open-source decision evidence + reconstruction</text>
+  <rect x="88" y="480" width="865" height="72" rx="13" fill="#0a63a5"/>
+  <text x="120" y="525" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Bitemporal memory · Decision Receipts · Runtime Gate · Investigator</text>
+  <text x="88" y="600" fill="#7f93a8" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="2">APACHE 2.0 · PYTHON · TYPESCRIPT · MCP · SELF-HOSTED</text>
+</svg>

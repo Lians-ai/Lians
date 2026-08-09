@@ -1,12 +1,12 @@
 # Contributing to Lians
 
-Thank you for your interest in contributing. Lians is a financial-grade memory layer for AI agents — contributions that improve correctness, compliance coverage, or integration breadth are especially welcome.
+Thank you for your interest in contributing. Lians is an open-source decision evidence and reconstruction layer for production AI agents. Contributions that improve correctness, governed memory, evidence quality, safety boundaries, or integration breadth are especially welcome.
 
 ## Before you start
 
-Open an issue before opening a PR for anything beyond a small bug fix. This lets us align on approach before you invest time writing code.
+Use [GitHub Discussions](https://github.com/Lians-ai/Lians/discussions) for architecture questions, workflow design, and early proposals. Open an issue before a PR for anything beyond a small bug fix so we can align on scope before you invest time writing code.
 
-Search existing issues first to avoid duplicates.
+Search existing issues and discussions first. Use the integration request for a framework, SDK, MCP, or deployment integration; the methodology correction form to challenge a benchmark or claim; and the feature request for a bounded product change.
 
 ## Repository layout
 
@@ -48,7 +48,7 @@ pytest -v
 
 ```bash
 cd agentmem/sdk/typescript
-npm install
+npm ci
 npm test
 ```
 
@@ -76,6 +76,9 @@ test: cover conflict detection edge case
 - [ ] New behaviour is covered by a test
 - [ ] Documentation updated for any user-facing change
 - [ ] No secrets, credentials, or real API keys in the diff
+- [ ] Benchmark, compatibility, compliance, and performance claims link to dated evidence and state their limits
+- [ ] Synthetic examples are clearly distinguished from customer deployments
+- [ ] Capture gaps, schema compatibility, and migration impact are called out where relevant
 - [ ] PR description links the relevant issue (`Closes #123`)
 
 ## Reporting a security issue
@@ -87,3 +90,13 @@ Do **not** open a public issue for vulnerabilities. See [SECURITY.md](SECURITY.m
 - Python: standard `ruff` defaults, 100-character line length
 - TypeScript: `tsc --strict`, no `any` without justification
 - No new dependencies on core paths without discussion
+
+## Evidence and claim discipline
+
+Lians is used around consequential systems, so public claims should remain narrower than the evidence.
+
+- Link benchmark and performance claims to a dated method, configuration, and result artifact.
+- Distinguish a synthetic proof from a customer deployment.
+- Do not claim compliance, certification, endorsement, universal performance, or deterministic replay without direct evidence.
+- State capture gaps and failure modes explicitly.
+- Remove secrets, personal data, protected health information, customer data, and confidential records from issues, tests, fixtures, and logs.

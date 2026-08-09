@@ -13,6 +13,10 @@
   -
   <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
   -
+  <a href="https://github.com/Lians-ai/Lians/releases/tag/v0.5.0">v0.5.0</a>
+  -
+  <a href="https://github.com/Lians-ai/Lians/discussions">Discussions</a>
+  -
   <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
 </p>
 
@@ -46,8 +50,9 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **cross-platform
-decision evidence and reconstruction layer for regulated AI**. It gives
+[Lians](https://github.com/Lians-ai/Lians) is the **open-source decision evidence
+and reconstruction layer for production AI agents**. Agent memory remembers;
+Lians proves what the agent knew when it acted. It gives
 compliance, model-risk, and operational-risk teams one record of what an agent
 knew, what it retrieved, which policy governed it, which tools ran, who
 reviewed it, and what changed later.
@@ -79,6 +84,12 @@ The platform exposes one evidence workflow:
 
 Memory remains a core evidence source and performance primitive. It is not the
 commercial category by itself.
+
+**Start from your role:** [build locally](#quickstart) ·
+[inspect the v0.5.0 release](https://github.com/Lians-ai/Lians/releases/tag/v0.5.0) ·
+[read the decision-reconstruction guide](https://www.lians.ai/blog/decision-reconstruction) ·
+[scope one evidence workflow](https://www.lians.ai/diagnostic) ·
+[ask a technical question](https://github.com/Lians-ai/Lians/discussions)
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
@@ -404,8 +415,8 @@ verify the machine-readable [published release status](docs/published-release-st
 
 | Language | Install | Client | Docs |
 |----------|---------|--------|------|
-| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
-| **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
+| **Python 0.5.0** | `pip install lians-sdk==0.5.0` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
+| **TypeScript / Node 0.5.0** | `npm install @lians-ai/lians@0.5.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
 | **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
 | **Java 0.4.1** (JVM 11+) | `ai.lians:lians-sdk:0.4.1` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
 | **C 0.4.1** (C99 + libcurl) | build from the `v0.4.1` source tag | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |

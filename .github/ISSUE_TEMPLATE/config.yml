@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Technical questions and design discussions
+    url: https://github.com/Lians-ai/Lians/discussions
+    about: Ask implementation questions, share an architecture, or discuss a proposed workflow boundary.
   - name: Security vulnerability
     url: https://github.com/Lians-ai/Lians/security/policy
     about: Report security vulnerabilities through the private process in our security policy.
