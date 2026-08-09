@@ -76,26 +76,35 @@
     "candidate_end_to_end_wall_was_slower": true,
     "universal_claim_supported": false
   },
-  "historical_warm_latency": {
-    "status": "historical installed .15 evidence; not rerun on the current wheel",
-    "report": "docs/benchmarks/codex-installed-plugin-latency-evidence-2026-08-08.json",
-    "installed_cache_version": "0.1.0+codex.20260809022314",
-    "sdk_version": "0.5.0+codex.20260808.15",
+  "installed_warm_latency": {
+    "status": "installed-cache direct-hook measurement of the runtime artifacts bundled here",
+    "report": "docs/benchmarks/codex-installed-plugin-latency-evidence-2026-08-09.json",
+    "measured_installed_cache_version": "0.1.0+codex.20260809040627",
+    "sdk_version": "0.5.0",
+    "runtime_artifact_identity": {
+      "python_files_byte_identical": true,
+      "windows_cmd_wrapper_code_equivalent_after_line_ending_normalization": true,
+      "measured_installed_cache_cmd_sha256": "2a7be63b4fdb6bb6d940411fdb2e3dbe26f7a83714b8739c32644e3cb900c568",
+      "repository_git_blob_cmd_sha256": "68e0e04a774e0f5440abba5623394873c5d142ee1f11e419fac7c311d5eae853"
+    },
     "memory_rows": 419,
-    "session_start_prewarm_elapsed_ms": 6871.19,
+    "session_start_prewarm_elapsed_ms": 6090.554,
     "fresh_hook_processes": 20,
     "injected": 20,
     "retrieval_degraded": 0,
-    "hook_wall_p95_ms": 1187.68,
-    "hook_wall_max_ms": 1197.135,
+    "hook_wall_p50_ms": 960.664,
+    "hook_wall_p95_ms": 1071.088,
+    "hook_wall_max_ms": 1109.455,
+    "warm_hook_p95_under_3500_ms": true,
+    "prewarm_under_3500_ms": false,
     "overall_model_response_time_measured": false
   },
   "limitations": [
-    "The current bundle was tested as a package, through an isolated direct-path wheel install, and through an isolated clean frozen plugin-runtime sync that imported greenlet; it was not installed, cached, or retrusted in Codex for this release gate.",
+    "The runtime code bundled here was installed and measured directly from the Codex cache at version 0.1.0+codex.20260809040627; this evidence refresh changes only package metadata and documentation. The Windows-installed .cmd wrapper uses CRLF while the Git blob uses LF, and both raw hashes are recorded.",
     "Hook files are present and contract-tested, but neither app-server nor codex exec dispatched the installed-plugin hook on this host.",
     "The one reviewed paid installed-plugin candidate was rejected, so no installed-plugin economics result was accepted.",
     "The 2.035x result applies only to one four-run Sol Ultra checkout-hook workload using estimated credits; it does not establish universal prompt savings or a Codex quota increase.",
-    "The 6.871-second prewarm and 1.188-second warm p95 are historical .15 installed-cache measurements and were not rerun on the current 0.5.0 wheel.",
-    "No evidence here establishes overall response-time improvement, concurrent-task latency, or an every-prompt benefit."
+    "The 6.091-second prewarm misses the 3.5-second cold-start target; only the prewarmed direct hook achieved a 1.071-second p95 on this sequential workload.",
+    "No evidence here establishes Codex host dispatch, overall response-time improvement, concurrent-task latency, or an every-prompt benefit."
   ]
 }

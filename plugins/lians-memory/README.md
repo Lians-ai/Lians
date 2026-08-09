@@ -31,12 +31,13 @@ plugin hooks through either the app server or `codex exec`. One paid candidate
 was rejected for that reason, so there is no accepted installed-plugin
 economics result.
 
-Separately, historical installed-cache evidence used an earlier `.15` SDK
-bundle. Quiet SessionStart prewarm took 6.871 seconds. After prewarm, 20 fresh
-hook processes reached 1.188 seconds p95 and 1.197 seconds max wall time, with
-all 20 non-degraded. Those numbers were not rerun on the current wheel and do
-not establish cold-start or overall model response-time improvement. See the
-[historical latency evidence](../../docs/benchmarks/codex-installed-plugin-latency-evidence-2026-08-08.json)
+The runtime artifacts bundled here were also measured from the installed cache.
+Quiet SessionStart prewarm took 6.091 seconds. After prewarm, 20 fresh hook
+processes reached 1.071 seconds p95 and 1.109 seconds max wall time, with all 20
+injected and non-degraded. This supports a narrow warm prompt-hook runtime claim
+for that sequential 419-memory workload; it does not establish disk-cold startup
+under 3.5 seconds, concurrent performance, or overall model response-time
+improvement. See the [latency evidence](../../docs/benchmarks/codex-installed-plugin-latency-evidence-2026-08-09.json)
 and `VALIDATION.json` for the machine-readable boundary.
 
 ## Package contents
@@ -130,13 +131,13 @@ database: its embedding provider may not match the plugin's pinned BGE index.
 
 ## Latency boundary
 
-Historical evidence from the installed `.15` bundle completed 20 sequential,
-process-fresh prompt hooks against a 419-memory BGE store with 1.188 seconds p95
-and 1.197 seconds max wall time after prewarm. The one-time fresh-identity
-SessionStart prewarm took 6.871 seconds and did not beat 3.5 seconds. These
-measurements were not rerun for the current 0.5.0 wheel. Keep SessionStart
-prewarm enabled and do not present the warm numbers as cold-start or end-to-end
-response latency.
+Current installed-cache evidence completed 20 sequential, process-fresh prompt
+hooks against a 419-memory BGE store with 1.071 seconds p95 and 1.109 seconds
+max wall time after prewarm. The one-time fresh-identity SessionStart prewarm
+took 6.091 seconds and did not beat 3.5 seconds. Keep SessionStart prewarm
+enabled and do not present the warm numbers as cold-start or end-to-end response
+latency. The evidence report records the Windows installed-cache hashes; the
+`.cmd` wrapper differs from the Git blob only by CRLF versus LF line endings.
 
 The local daemon is single-threaded, the OS/model page cache was not flushed,
 and concurrent tasks are not yet qualified. If SessionStart was skipped or the

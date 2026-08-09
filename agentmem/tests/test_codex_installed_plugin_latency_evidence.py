@@ -16,7 +16,7 @@ REPORT_PATH = (
     Path(__file__).parents[2]
     / "docs"
     / "benchmarks"
-    / "codex-installed-plugin-latency-evidence-2026-08-08.json"
+    / "codex-installed-plugin-latency-evidence-2026-08-09.json"
 )
 
 
@@ -25,16 +25,16 @@ def test_installed_cache_statistics_recompute_from_all_raw_pairs():
     report = build_report()
     run = report["installed_cache_run"]
 
-    assert run["prewarm_wall_ms"] == 6871.190
+    assert run["prewarm_wall_ms"] == 6090.554
     assert run["hook_process_wall"] == {
-        "p50_ms": 1073.564,
-        "p95_ms": 1187.680,
-        "max_ms": 1197.135,
+        "p50_ms": 960.664,
+        "p95_ms": 1071.088,
+        "max_ms": 1109.455,
     }
     assert run["receipt_elapsed"] == {
-        "p50_ms": 556.5,
-        "p95_ms": 631.7,
-        "max_ms": 645,
+        "p50_ms": 631.0,
+        "p95_ms": 695.95,
+        "max_ms": 752,
     }
     assert run["timing_pairs_ms"] == [
         {"hook_process_wall_ms": wall, "receipt_elapsed_ms": receipt}
@@ -47,12 +47,30 @@ def test_every_sample_passes_the_recorded_quality_gates():
     gates = report["installed_cache_run"]["quality_gates"]
 
     assert gates == {
+        "evidence_form": "aggregate receipt checks; raw receipts withheld",
         "samples": 20,
         "injected": 20,
         "daemon_transport": 20,
         "non_degraded": 20,
         "same_top_evidence": 20,
+        "same_full_context": 20,
+        "candidate_window_complete": 20,
+        "graph_search_complete": 20,
         "all_passed": True,
+    }
+
+
+def test_installed_hashes_distinguish_windows_line_ending_normalization():
+    report = build_report()
+
+    assert report["source_identity"] == {
+        "run_hook_cmd_git_blob_sha256": (
+            "68e0e04a774e0f5440abba5623394873c5d142ee1f11e419fac7c311d5eae853"
+        ),
+        "run_hook_cmd_installed_cache_line_endings": "CRLF",
+        "run_hook_cmd_git_blob_line_endings": "LF",
+        "run_hook_cmd_code_equivalent_after_line_ending_normalization": True,
+        "other_reported_runtime_artifacts_byte_identical": True,
     }
 
 
@@ -73,9 +91,11 @@ def test_claim_boundary_explicitly_excludes_unmeasured_surfaces():
         "overall model or agent response time",
         "concurrent load",
         "disk-cold startup or retrieval",
-        "public-install end-to-end plugin loading",
+        "Codex host hook dispatch or end-to-end plugin loading",
         "other workloads, machines, models, or prompts",
     ]
+    assert boundary["warm_hook_p95_under_3_5_seconds_supported"] is True
+    assert boundary["prewarm_under_3_5_seconds_supported"] is False
 
 
 def test_rendered_evidence_is_sanitized_and_contains_no_secret_like_values():

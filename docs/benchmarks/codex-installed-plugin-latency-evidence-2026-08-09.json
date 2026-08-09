@@ -1,0 +1,181 @@
+{
+  "schema": "lians.codex-installed-cache-latency-evidence.v1",
+  "report_date": "2026-08-09",
+  "workload": {
+    "id": "locomo-conversation-0-bge-onnx",
+    "plugin_version": "0.1.0+codex.20260809040627",
+    "memories": 419,
+    "live_facts": 419,
+    "operating_system": "Windows",
+    "storage_and_embedding": "local SQLite and BGE ONNX",
+    "embedding_dimensions": 1024,
+    "fixture_sha256": "36970399263d3cc6f34357c02b85d1172320a6c76599b3061af9dd81ffea0da9"
+  },
+  "methodology": {
+    "measurement_surface": "installed-cache hook entry point invoked directly",
+    "prewarm_processes": 1,
+    "fresh_hook_processes": 20,
+    "execution": "sequential",
+    "shared_prewarmed_daemon": true,
+    "percentile_method": "Type 7 linear interpolation, h=(n-1)*p",
+    "model_calls": 0,
+    "external_network_calls": 0,
+    "loopback_daemon_transport": true,
+    "reindexed": false,
+    "fixture_mutation": "namespace and agent identity remap only"
+  },
+  "measured_installed_cache_artifact_sha256": {
+    "run_hook_cmd": "2a7be63b4fdb6bb6d940411fdb2e3dbe26f7a83714b8739c32644e3cb900c568",
+    "lians_plugin_py": "4762ff64dc327a3d0eb5f3d35061de6a5d340031a1c8d02a8d10d42ce7cc45e4",
+    "user_prompt_submit_recall_py": "629ec392e93fcf6bfd503d3825f167b614226f8de929f797c3be716cbc5153ed",
+    "local_recall_daemon_py": "c2336f7ede6427473329c32d01c7a76b409c311ff4462c5c829479b69280619a"
+  },
+  "source_identity": {
+    "run_hook_cmd_git_blob_sha256": "68e0e04a774e0f5440abba5623394873c5d142ee1f11e419fac7c311d5eae853",
+    "run_hook_cmd_installed_cache_line_endings": "CRLF",
+    "run_hook_cmd_git_blob_line_endings": "LF",
+    "run_hook_cmd_code_equivalent_after_line_ending_normalization": true,
+    "other_reported_runtime_artifacts_byte_identical": true
+  },
+  "installed_cache_run": {
+    "prewarm_wall_ms": 6090.554,
+    "timing_pairs_ms": [
+      {
+        "hook_process_wall_ms": 985.761,
+        "receipt_elapsed_ms": 583
+      },
+      {
+        "hook_process_wall_ms": 979.816,
+        "receipt_elapsed_ms": 634
+      },
+      {
+        "hook_process_wall_ms": 900.277,
+        "receipt_elapsed_ms": 592
+      },
+      {
+        "hook_process_wall_ms": 952.49,
+        "receipt_elapsed_ms": 628
+      },
+      {
+        "hook_process_wall_ms": 959.412,
+        "receipt_elapsed_ms": 641
+      },
+      {
+        "hook_process_wall_ms": 912.003,
+        "receipt_elapsed_ms": 580
+      },
+      {
+        "hook_process_wall_ms": 955.57,
+        "receipt_elapsed_ms": 628
+      },
+      {
+        "hook_process_wall_ms": 1069.069,
+        "receipt_elapsed_ms": 693
+      },
+      {
+        "hook_process_wall_ms": 1038.77,
+        "receipt_elapsed_ms": 669
+      },
+      {
+        "hook_process_wall_ms": 961.916,
+        "receipt_elapsed_ms": 630
+      },
+      {
+        "hook_process_wall_ms": 941.582,
+        "receipt_elapsed_ms": 598
+      },
+      {
+        "hook_process_wall_ms": 979.407,
+        "receipt_elapsed_ms": 652
+      },
+      {
+        "hook_process_wall_ms": 959.252,
+        "receipt_elapsed_ms": 644
+      },
+      {
+        "hook_process_wall_ms": 911.507,
+        "receipt_elapsed_ms": 591
+      },
+      {
+        "hook_process_wall_ms": 996.538,
+        "receipt_elapsed_ms": 645
+      },
+      {
+        "hook_process_wall_ms": 965.297,
+        "receipt_elapsed_ms": 632
+      },
+      {
+        "hook_process_wall_ms": 1109.455,
+        "receipt_elapsed_ms": 752
+      },
+      {
+        "hook_process_wall_ms": 919.43,
+        "receipt_elapsed_ms": 609
+      },
+      {
+        "hook_process_wall_ms": 1005.88,
+        "receipt_elapsed_ms": 652
+      },
+      {
+        "hook_process_wall_ms": 853.975,
+        "receipt_elapsed_ms": 540
+      }
+    ],
+    "hook_process_wall": {
+      "p50_ms": 960.664,
+      "p95_ms": 1071.088,
+      "max_ms": 1109.455
+    },
+    "receipt_elapsed": {
+      "p50_ms": 631.0,
+      "p95_ms": 695.95,
+      "max_ms": 752
+    },
+    "quality_gates": {
+      "evidence_form": "aggregate receipt checks; raw receipts withheld",
+      "samples": 20,
+      "injected": 20,
+      "daemon_transport": 20,
+      "non_degraded": 20,
+      "same_top_evidence": 20,
+      "same_full_context": 20,
+      "candidate_window_complete": 20,
+      "graph_search_complete": 20,
+      "all_passed": true
+    }
+  },
+  "wrapper_only_microbenchmark": {
+    "separate_from_installed_cache_run": true,
+    "scope": "wrapper, fixed native Python startup, and no-op temporary launcher",
+    "method": "20 interleaved samples per wrapper",
+    "real_plugin_profile_database_daemon_model_or_network_access": false,
+    "cmd_ms": {
+      "p50_ms": 94.684,
+      "p95_ms": 102.885
+    },
+    "powershell_ms": {
+      "p50_ms": 327.479,
+      "p95_ms": 403.875
+    }
+  },
+  "claim_boundary": {
+    "supported": "For this 419-memory sequential installed-cache workload, after one measured prewarm, all 20 fresh hook processes injected the same top evidence through the daemon without degraded retrieval; the reported wall and receipt timings describe only those hook invocations. Warm hook wall time was 1.071 seconds p95 and 1.109 seconds maximum.",
+    "not_measured": [
+      "overall model or agent response time",
+      "concurrent load",
+      "disk-cold startup or retrieval",
+      "Codex host hook dispatch or end-to-end plugin loading",
+      "other workloads, machines, models, or prompts"
+    ],
+    "warm_hook_p95_under_3_5_seconds_supported": true,
+    "prewarm_under_3_5_seconds_supported": false,
+    "universal_claim_supported": false
+  },
+  "limitations": {
+    "operating_system_page_cache_flushed": false,
+    "machine_isolation_controlled": false,
+    "same_identity_daemon_present_before_prewarm": false,
+    "other_local_background_processes_present": true,
+    "fresh_hook_processes_shared_one_deliberately_prewarmed_daemon": true
+  }
+}
