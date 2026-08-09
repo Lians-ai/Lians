@@ -38,8 +38,12 @@ def test_database_gates_require_current_alembic_head() -> None:
     for workflow_path in (WORKFLOW_PATH, STAGING_WORKFLOW_PATH):
         workflow = workflow_path.read_text(encoding="utf-8")
 
-        assert workflow.count("--expected-revision") == 1
         assert "--expected-revision 0030_force_hosted_mcp_rls" in workflow
+
+    production_workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    staging_workflow = STAGING_WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert production_workflow.count("--expected-revision") == 1
+    assert staging_workflow.count("--expected-revision 0030_force_hosted_mcp_rls") == 1
 
 
 def test_post_deploy_release_identity_and_smoke_gates_remain() -> None:

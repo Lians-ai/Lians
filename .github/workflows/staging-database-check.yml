@@ -2,6 +2,17 @@ name: Staging database check
 
 on:
   workflow_dispatch:
+    inputs:
+      migrate:
+        description: Snapshot and migrate staging from 0028 to 0030
+        required: true
+        default: false
+        type: boolean
+      confirm:
+        description: Type MIGRATE STAGING to authorize the optional migration
+        required: true
+        default: "VERIFY ONLY"
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +40,162 @@ jobs:
 
       - name: Install read-only check dependency
         run: python -m pip install "asyncpg>=0.29,<1"
+
+      - name: Require explicit migration confirmation
+        if: ${{ inputs.migrate }}
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = "MIGRATE STAGING"
+
+      - name: Install migration dependencies
+        if: ${{ inputs.migrate }}
+        run: >-
+          python -m pip install
+          "alembic>=1.13,<2"
+          "sqlalchemy[asyncio]>=2.0.30,<3"
+          "pydantic-settings>=2.14,<3"
+          "pgvector>=0.3,<1"
+
+      - name: Create an immediate encrypted staging database snapshot
+        if: ${{ inputs.migrate }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          volumes="$(flyctl volumes list --app agentmem-lotus-staging-db --json)"
+          volume_count="$(jq 'length' <<<"$volumes")"
+          test "$volume_count" -eq 1
+          test "$(jq -r '.[0].encrypted' <<<"$volumes")" = "true"
+          test "$(jq -r '.[0].state' <<<"$volumes")" = "created"
+          volume_id="$(jq -er '.[0].id' <<<"$volumes")"
+
+          before_snapshots="$(
+            flyctl volumes snapshots list "$volume_id" \
+              --app agentmem-lotus-staging-db \
+              --json
+          )"
+          before_snapshot_ids="$(jq -c '[.[].id]' <<<"$before_snapshots")"
+          snapshot_started_at="$(date -u +%s)"
+
+          snapshot_create_log="$RUNNER_TEMP/staging-snapshot-create.log"
+          flyctl volumes snapshots create "$volume_id" \
+            --app agentmem-lotus-staging-db \
+            >"$snapshot_create_log" 2>&1 &
+          snapshot_create_pid=$!
+
+          cleanup_snapshot_create() {
+            if [ -n "${snapshot_create_pid:-}" ]; then
+              if kill -0 "$snapshot_create_pid" 2>/dev/null; then
+                kill "$snapshot_create_pid" 2>/dev/null || true
+              fi
+              wait "$snapshot_create_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup_snapshot_create EXIT
+
+          selected_snapshot=""
+          for _ in $(seq 1 90); do
+            snapshots="$(
+              flyctl volumes snapshots list "$volume_id" \
+                --app agentmem-lotus-staging-db \
+                --json
+            )"
+            selected_snapshot="$(
+              jq -ec \
+                --argjson before_ids "$before_snapshot_ids" \
+                --argjson started_at "$snapshot_started_at" '
+                map(select(.status == "created"))
+                | map(
+                    select(
+                      .id as $id
+                      | ($before_ids | index($id) | not)
+                    )
+                  )
+                | sort_by(.created_at)
+                | last
+                | select(. != null)
+                | . + {
+                    created_epoch: (.created_at | fromdateiso8601),
+                    age_seconds: (
+                      (now - (.created_at | fromdateiso8601))
+                      | floor
+                    )
+                  }
+                | select(.created_epoch >= ($started_at - 30))
+                | select(.age_seconds >= 0 and .age_seconds <= 600)
+              ' <<<"$snapshots" || true
+            )"
+            if [ -n "$selected_snapshot" ]; then
+              break
+            fi
+            if [ -n "${snapshot_create_pid:-}" ] && \
+              ! kill -0 "$snapshot_create_pid" 2>/dev/null; then
+              wait "$snapshot_create_pid" 2>/dev/null || true
+              snapshot_create_pid=""
+            fi
+            sleep 2
+          done
+
+          cleanup_snapshot_create
+          trap - EXIT
+          snapshot_create_pid=""
+
+          if [ -z "$selected_snapshot" ]; then
+            echo "Fly did not confirm a new staging snapshot." >&2
+            cat "$snapshot_create_log" >&2 || true
+            exit 1
+          fi
+
+          snapshot_id="$(jq -er '.id' <<<"$selected_snapshot")"
+          snapshot_age_seconds="$(jq -er '.age_seconds' <<<"$selected_snapshot")"
+
+          echo "Staging database snapshot confirmed: $snapshot_id"
+          echo "### Staging database safety" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Snapshot: \`$snapshot_id\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: new snapshot created by this workflow" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Age: $snapshot_age_seconds seconds" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Volume: encrypted" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Migrate staging through its private Fly tunnel
+        if: ${{ inputs.migrate }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+
+          flyctl proxy 15433:5432 \
+            --app agentmem-lotus-staging-db \
+            --bind-addr 127.0.0.1 \
+            --quiet \
+            >"$RUNNER_TEMP/fly-staging-migration-proxy.log" 2>&1 &
+          proxy_pid=$!
+          trap 'kill "$proxy_pid" 2>/dev/null || true' EXIT
+
+          python - <<'PY'
+          import socket
+          import time
+
+          deadline = time.monotonic() + 60
+          while time.monotonic() < deadline:
+              try:
+                  with socket.create_connection(("127.0.0.1", 15433), timeout=1):
+                      break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit("Fly staging migration proxy did not become ready within 60 seconds")
+          PY
+
+          python scripts/check_staging_database.py \
+            --host 127.0.0.1 \
+            --port 15433 \
+            --expected-revision 0028_decision_envelopes
+
+          python scripts/migrate_via_fly_proxy.py --host 127.0.0.1 --port 15433
 
       - name: Open Fly tunnel and verify staging
         env:
