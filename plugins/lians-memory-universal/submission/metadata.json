@@ -40,26 +40,64 @@
     "customUI": false,
     "authentication": {
       "type": "oauth2.1",
-      "status": "pending_operator_action",
+      "status": "production_oauth_e2e_validated",
       "scopes": [
         "memory:read",
         "memory:write"
       ],
-      "reviewerCredentialsStatus": "pending_operator_action"
+      "reviewerCredentialsStatus": "login_and_live_fixture_validated_pending_secure_portal_entry",
+      "reviewerLoginAt": "2026-08-10T03:40:58Z"
     },
     "liveVerification": {
-      "status": "unauthenticated_boundary_validated_authenticated_mcp_pending",
-      "verifiedAt": "2026-08-10T02:31:24Z",
+      "status": "production_oauth_e2e_validated_portal_gates_pending",
+      "workflowVerifiedAt": "2026-08-10T02:31:24Z",
       "workflowRunURL": "https://github.com/Lians-ai/Lians/actions/runs/31349405257",
       "buildSHA": "e72fad2c7f98ecf54b6553a90bf8d862046c1abc",
       "schemaRevision": "0030_force_hosted_mcp_rls",
-      "verificationMode": "no-token",
-      "authenticatedMcpStatus": "pending_operator_action",
+      "verificationMode": "production_workflow_no_token_plus_operator_oauth_e2e",
+      "authenticatedMcpStatus": "validated_production_oauth_e2e",
       "checks": {
         "https": "ok",
         "protectedResourceMetadata": "ok",
         "unauthenticatedChallenge": "ok",
         "authenticatedMcp": "skipped_no_token"
+      },
+      "authenticatedE2E": {
+        "status": "passed",
+        "verifiedAt": "2026-08-10T03:41:10.126400Z",
+        "timestampSource": "sanitized_auth0_and_fly_event_timestamps",
+        "reviewerLoginAt": "2026-08-10T03:40:58Z",
+        "observedEvents": {
+          "authorizationSuccessAt": "2026-08-10T03:41:01.140Z",
+          "tokenExchangeAt": "2026-08-10T03:41:01.372Z",
+          "unauthenticatedChallengeAt": "2026-08-10T03:41:04.346034Z",
+          "authenticatedEndpointCheckerCompletedAt": "2026-08-10T03:41:05.084992Z",
+          "canaryInitializedAt": "2026-08-10T03:41:05.582330Z",
+          "rememberCompletedAt": "2026-08-10T03:41:07.879529Z",
+          "recallCompletedAt": "2026-08-10T03:41:09.810661Z",
+          "confirmedForgetCompletedAt": "2026-08-10T03:41:10.126400Z"
+        },
+        "toolCallTimestampMapping": "fixed_harness_order_remember_recall_forget_provider_labels_generic",
+        "checks": {
+          "protectedResourceMetadata": "ok",
+          "oidcDiscovery": "ok",
+          "dynamicClientRegistration": "ok",
+          "browserLogin": "ok",
+          "authorizationCallback": "ok",
+          "tokenExchange": "ok",
+          "repositoryJwtVerification": "ok",
+          "authenticatedEndpointChecker": "ok",
+          "mcpRemember": "ok",
+          "mcpRecall": "ok",
+          "mcpConfirmedForget": "ok",
+          "sessionCleanup": "ok"
+        },
+        "temporaryClientCleanup": {
+          "dcrCleanupAdvertised": false,
+          "manualDeletion": "ok",
+          "registeredClientInventoryAfterDeletion": 0
+        },
+        "evidencePolicy": "sanitized_status_only_no_credentials_tokens_client_ids_memory_payloads_or_local_paths"
       },
       "coldBoot": {
         "status": "qualified_three_run_production_rehearsal",
@@ -396,12 +434,13 @@
     "positiveCaseCount": 5,
     "negativeCaseCount": 3,
     "casesPath": "./test-cases.json",
-    "demoAccountFixture": "lians-reviewer-fixture-v1"
+    "demoAccountFixture": "lians-reviewer-fixture-v1",
+    "demoAccountFixtureStatus": "live_provisioned_and_verified"
   },
   "reviewArtifacts": {
     "domainVerificationStatus": "pending_operator_action",
     "toolScanStatus": "pending_operator_action",
-    "reviewerAccountStatus": "pending_operator_action",
+    "reviewerAccountStatus": "login_and_live_fixture_validated_pending_reset_rehearsal_and_secure_portal_delivery",
     "auditRetentionLifecycleStatus": "approved_and_publicly_disclosed_indefinite_pseudonymous_content_free",
     "backupDeletionWindowStatus": "provider_verified_and_publicly_disclosed_encrypted_fly_snapshots_5_days",
     "demoRecordingURL": null,

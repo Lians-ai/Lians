@@ -27,7 +27,9 @@ Production workflow [31349405257](https://github.com/Lians-ai/Lians/actions/runs
 - A fresh encrypted database snapshot was confirmed before migration.
 - Production migrated to and verified `0030_force_hosted_mcp_rls`.
 - The blue-green deployment, exact-machine resolution, and public health, liveness, readiness, authentication-boundary, and documentation checks passed.
-- The no-token OpenAI MCP boundary check passed HTTPS, protected-resource metadata, and the unauthenticated challenge. Authenticated MCP initialization and tool validation were intentionally skipped because no bearer token was supplied and remain a separate pre-submission gate.
+- The workflow's no-token OpenAI MCP boundary check passed HTTPS, protected-resource metadata, and the unauthenticated challenge; it intentionally skipped authenticated MCP because no bearer token was supplied.
+- During minute `2026-08-10T03:41Z`, a separate sanitized operator-run production OAuth E2E passed protected-resource metadata, OIDC discovery, DCR, browser login, authorization callback, token exchange, repository JWT verification, the authenticated endpoint checker, MCP remember/recall/confirmed-forget calls, and session cleanup. The final MCP completion event was `2026-08-10T03:41:10.126400Z`; generic provider tool labels are mapped only by the harness's fixed remember/recall/forget order. Auth0 displayed the reviewer account's latest login at `2026-08-10T03:40:58Z`.
+- The authorization server did not advertise DCR cleanup. The exact temporary client was manually deleted and the registered-client inventory was verified as zero. No credentials, tokens, client identifiers, memory payloads or references, raw responses, or local paths are retained in this evidence.
 
 Three consecutive production rehearsals qualified the cold-boot boundary. The recorded timing basis is machine start to first readiness at `1/1 passing`, not total workflow or image-build duration. Each rehearsal used a distinct new Machine ID and reached readiness below the 360-second hosted startup timeout. Each workflow then recorded a single immediate post-MCP result with health, liveness, and readiness `ok`; the cited run does not attest an extended observation window or later degradation state.
 
@@ -39,7 +41,7 @@ Three consecutive production rehearsals qualified the cold-boot boundary. The re
 
 The maximum observed cold boot was `197.963s`, below the configured 360-second application startup timeout. This does **not** prove that Fly honored the configured 420-second health-check grace: every deploy log warned, `Service HTTP check has a grace period greater than 1 minute (7m0s); this will be lowered to 1 minute`. The effective Fly grace was one minute, so the configured 420 seconds was **not honored**.
 
-This production release does not mean the universal plugin has been submitted, approved, published, or listed by OpenAI.
+This production release and the later operator OAuth E2E do not mean the universal plugin passed OpenAI business or domain verification, Scan Tools, portal selection, submission, approval, publication, or directory listing.
 
 ## Controls already enforced
 
