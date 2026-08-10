@@ -2,15 +2,17 @@
 
 How Clerk plans map to lians features, how to provision API keys per tier, how to gate routes and UI, and how to handle upgrades and downgrades.
 
-> **Scope:** this document describes tiering for the **managed cloud offering
-> only**. The self-hosted product is Apache 2.0 and complete — every feature
-> gated below (information barriers, crypto-shred erasure, backtest checks,
-> audit chain, air-gap mode) ships in the open-source repository with no
-> license key. Tiers here gate access to *our hosted instance*, not the software.
+> **Scope and status:** this is the proposed entitlement design for the
+> **managed cloud offering only**, not a statement that every tier, price, or
+> quota is live. Code already published under Apache 2.0 remains available
+> under that license. These tiers gate access to Lians-hosted capacity,
+> organization services, managed operations, and contractual support; they do
+> not revoke rights to public code. Confirm a customer's active entitlements
+> before quoting them.
 
 ---
 
-## Tier Overview
+## Proposed Tier Overview
 
 | Tier | Price | Monthly Writes | Monthly Recalls |
 |---|---|---|---|

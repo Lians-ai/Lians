@@ -1,6 +1,6 @@
 {
   "name": "lians-memory",
-  "version": "0.1.0+codex.20260809063706",
+  "version": "0.1.0+codex.20260810171831",
   "description": "Project-scoped, score-gated memory recall and durable memory tools for Codex.",
   "author": {
     "name": "Lians",

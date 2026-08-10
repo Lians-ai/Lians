@@ -65,12 +65,13 @@ stored beneath a fixed OS-native, per-user Lians data directory, never in the
 installed plugin snapshot. Version 0.1 rejects custom data-home overrides so a
 shared or replaceable path cannot redirect the trusted runtime.
 
-## Install from this checkout
+## Install from GitHub
 
-Prerequisite: install [uv](https://docs.astral.sh/uv/). Then add the repository
-marketplace and install the plugin:
+Prerequisite: install [uv](https://docs.astral.sh/uv/). Clone the public
+repository, add that checkout as a marketplace, and install the plugin:
 
 ```text
+git clone https://github.com/Lians-ai/Lians.git
 codex plugin marketplace add /absolute/path/to/Lians
 codex plugin add lians-memory@lians
 ```

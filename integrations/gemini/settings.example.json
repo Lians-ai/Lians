@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "lians": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "lians-sdk[mcp]",
+        "lians-mcp"
+      ],
+      "timeout": 120000,
+      "trust": false,
+      "includeTools": [
+        "remember",
+        "recall"
+      ]
+    }
+  }
+}

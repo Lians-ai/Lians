@@ -1,7 +1,7 @@
 {
   "name": "lians",
   "description": "Bitemporal memory for Claude Code with deterministic supersession, point-in-time recall, local MCP, erasure proofs, and tamper-evident history.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": {
     "name": "Lians",
     "email": "support@lians.ai",

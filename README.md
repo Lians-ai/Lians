@@ -110,6 +110,41 @@ evidence turn it into a product that people and organizations can trust.
 | **Information barriers** | Local checks | PostgreSQL RLS | Managed policy |
 | **Air-gap capable** | No | Yes | No |
 
+### Install a community connector from GitHub
+
+The GitHub Community edition gives an individual developer durable, bounded
+memory without tying it to one model provider. The same memory pattern can sit
+beside Codex, Claude, Gemini, or another MCP-compatible client. Model access,
+context-window size, and provider quotas do not change; Lians can reduce
+repeated context when relevant memory replaces material that would otherwise
+be resent.
+
+**Codex**
+
+```text
+git clone https://github.com/Lians-ai/Lians.git
+codex plugin marketplace add /absolute/path/to/Lians
+codex plugin add lians-memory@lians
+```
+
+**Claude Code**
+
+```text
+/plugin marketplace add Lians-ai/Lians
+/plugin install lians@lians-plugins
+```
+
+**Gemini CLI**
+
+Copy [`integrations/gemini/settings.example.json`](integrations/gemini/settings.example.json)
+into your Gemini CLI settings. The starter profile exposes only `remember` and
+`recall`; see the [Gemini setup guide](integrations/gemini/README.md).
+
+Community is intentionally self-managed. Lians Cloud and enterprise packages
+reserve hosted continuity across clients and devices, shared/team memory,
+higher managed limits, administration, managed evidence operations, and
+support. See the [public/paid product boundary](docs/community-cloud-boundary.md).
+
 ---
 
 ## Agent memory should improve without losing the record
@@ -362,14 +397,15 @@ Endpoints: `POST /v1/graph/relate` · `/v1/graph/unrelate` · `/v1/graph/extract
 
 ---
 
-## Agent integrations — Claude Code, Codex, MCP
+## Agent integrations — Claude Code, Codex, Gemini, MCP
 
 Give any coding agent persistent, compliance-grade memory:
 
 | Host | How |
 |------|-----|
-| **Claude Code** | Plugin with slash commands (`/lians-remember`, `/lians-recall`, `/lians-audit`, `/lians-integrate`) and a compliance subagent — [`integrations/lians-plugin`](integrations/lians-plugin) |
-| **Codex** | Drop-in `AGENTS.md` + MCP config — [`integrations/codex`](integrations/codex) |
+| **Claude Code** | GitHub marketplace plugin with memory, integration, and technical-evidence commands — [`integrations/lians-plugin`](integrations/lians-plugin) |
+| **Codex** | GitHub marketplace plugin with bounded automatic recall and compact memory tools — [`plugins/lians-memory`](plugins/lians-memory) |
+| **Gemini CLI** | Provider-neutral MCP starter profile exposing `remember` and `recall` — [`integrations/gemini`](integrations/gemini) |
 | **Skills standard** | `npx skills add https://github.com/Lians-ai/Lians --skill lians` — works in Claude Code, Codex, Cursor — [`skills/`](skills) |
 | **Any MCP host** | One-time config; eight native memory tools — see [MCP section](#mcp--native-tool-in-any-ai-client) above |
 
@@ -616,13 +652,18 @@ Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and
 
 ## Packaging & Pricing
 
-Lians is open-source and fully self-hostable — **the entire feature set,
-including every compliance primitive, is in this repository under Apache 2.0.**
-Paid packages sell deployment support, hardening review, and evidence
-packets around the open core, not license keys. A managed cloud is in early
-access for customers whose compliance posture allows hosted processing
-(contact us); regulated buyers should choose the package by deployment
-boundary and evidence requirements, not by a consumer-style monthly tier.
+Code already published in this repository remains available under Apache 2.0.
+The Community edition is a useful, self-managed memory and technical-evidence
+foundation, not a time-limited trial. Paid Lians packages monetize the service
+boundary: managed hosting and continuity, higher hosted limits, organization
+and policy administration, managed evidence operations, deployment review,
+support, and contractual commitments. Future hosted control-plane services may
+ship outside this public repository.
+
+The managed cloud is in early access for customers whose compliance posture
+allows hosted processing (contact us). Do not describe a paid feature, quota,
+or SLA as generally available until it is enabled in the customer's contract
+and environment.
 
 | Package | Best for | Deployment | Commercial model |
 |---|---|---|---|
@@ -637,7 +678,7 @@ managed environment. Financial and legal customers may require customer-managed
 keys, private networking, regional residency, dedicated environments, or
 air-gapped deployment.
 
-Full packaging documentation: [docs/pricing-tiers.md](docs/pricing-tiers.md) and [docs/billing.md](docs/billing.md)
+Full packaging documentation: [public/paid product boundary](docs/community-cloud-boundary.md), [package guide](docs/pricing-tiers.md), and [managed billing design](docs/billing.md)
 
 **Switching from another system?** [Migrate from mem0](docs/migrate-from-mem0.md) or [Migrate from Zep CE](docs/migrate-from-zep.md)
 
