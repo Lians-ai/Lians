@@ -417,6 +417,12 @@ jobs:
           python scripts/check_openai_plugin_endpoint.py \
             --resource-url https://mcp.lians.ai/mcp
 
+      - name: Verify the MCP boundary preserved production health
+        run: |
+          python scripts/check_production_deployment.py \
+            --base-url https://mcp.lians.ai \
+            --health-only
+
       - name: Publish rollback command
         if: always()
         run: |
