@@ -5,6 +5,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "fly-deploy.yml"
+ROLLBACK_WORKFLOW_PATH = REPOSITORY_ROOT / ".github" / "workflows" / "fly-rollback.yml"
 STAGING_WORKFLOW_PATH = (
     REPOSITORY_ROOT / ".github" / "workflows" / "staging-database-check.yml"
 )
@@ -32,6 +33,23 @@ def test_bluegreen_prerequisites_remain_configured() -> None:
         for check in service["checks"]
     )
     assert "mounts" not in config
+
+
+def test_cold_start_budget_fits_deployment_wait_windows() -> None:
+    with FLY_CONFIG_PATH.open("rb") as handle:
+        config = tomllib.load(handle)
+
+    readiness_check = next(
+        check
+        for check in config["http_service"]["checks"]
+        if check.get("method") == "GET" and check.get("path") == "/readyz"
+    )
+    assert config["env"]["HOSTED_MCP_STARTUP_TIMEOUT_SECONDS"] == "360"
+    assert readiness_check["grace_period"] == "420s"
+
+    for workflow_path in (WORKFLOW_PATH, ROLLBACK_WORKFLOW_PATH):
+        workflow = workflow_path.read_text(encoding="utf-8")
+        assert "--wait-timeout 10m" in workflow
 
 
 def test_database_gates_require_current_alembic_head() -> None:

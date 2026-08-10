@@ -80,7 +80,7 @@ async def test_hosted_rls_gate_accepts_complete_catalog_and_skips_non_hosted():
 
 
 def test_hosted_startup_timeout_has_an_independent_env_setting(monkeypatch):
-    assert Settings.model_fields["hosted_mcp_startup_timeout_seconds"].default == 180
+    assert Settings.model_fields["hosted_mcp_startup_timeout_seconds"].default == 360
     assert Settings.model_fields["hosted_mcp_tool_timeout_seconds"].default == 30
 
     monkeypatch.setenv("HOSTED_MCP_STARTUP_TIMEOUT_SECONDS", "240")
@@ -109,9 +109,9 @@ def test_hosted_startup_timeout_default_is_published_to_deploy_configs():
     fly_config = (repository_root / "fly.toml").read_text(encoding="utf-8")
     render_config = (repository_root / "render.yaml").read_text(encoding="utf-8")
 
-    assert "HOSTED_MCP_STARTUP_TIMEOUT_SECONDS=180" in env_example
-    assert 'HOSTED_MCP_STARTUP_TIMEOUT_SECONDS = "180"' in fly_config
-    assert ('- key: HOSTED_MCP_STARTUP_TIMEOUT_SECONDS\n        value: "180"') in render_config
+    assert "HOSTED_MCP_STARTUP_TIMEOUT_SECONDS=360" in env_example
+    assert 'HOSTED_MCP_STARTUP_TIMEOUT_SECONDS = "360"' in fly_config
+    assert ('- key: HOSTED_MCP_STARTUP_TIMEOUT_SECONDS\n        value: "360"') in render_config
 
 
 async def test_hosted_dependency_gate_forces_one_startup_jwks_refresh():

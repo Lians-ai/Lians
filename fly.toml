@@ -23,7 +23,7 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
     soft_limit = 150
 
   [[http_service.checks]]
-    grace_period = "60s"
+    grace_period = "420s"
     interval     = "15s"
     method       = "GET"
     path         = "/readyz"
@@ -54,7 +54,7 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
   HOSTED_MCP_SERVICE_DOCUMENTATION_URL = "https://www.lians.ai/privacy"
   HOSTED_MCP_RETENTION_DAYS     = "365"
   HOSTED_MCP_AUDIT_RETENTION_DAYS = "365"
-  HOSTED_MCP_STARTUP_TIMEOUT_SECONDS = "180"
+  HOSTED_MCP_STARTUP_TIMEOUT_SECONDS = "360"
   HOSTED_MCP_TOOL_TIMEOUT_SECONDS = "30"
   HOSTED_MCP_MAX_CONCURRENT_INFERENCE = "1"
   HOSTED_MCP_INFERENCE_QUEUE_TIMEOUT_SECONDS = "0.1"

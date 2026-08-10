@@ -1,6 +1,7 @@
+from functools import lru_cache
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
 
 
 class Settings(BaseSettings):
@@ -99,7 +100,7 @@ class Settings(BaseSettings):
     # than an individual MCP tool is allowed to run. Keep these deadlines
     # independent so hosted startup remains fail-closed without weakening the
     # per-call latency bound.
-    hosted_mcp_startup_timeout_seconds: int = Field(default=180, ge=1, le=900)
+    hosted_mcp_startup_timeout_seconds: int = Field(default=360, ge=1, le=900)
     hosted_mcp_tool_timeout_seconds: int = Field(default=30, ge=1, le=120)
     hosted_mcp_max_concurrent_inference: int = Field(default=1, ge=1, le=8)
     hosted_mcp_inference_queue_timeout_seconds: float = Field(
