@@ -8,19 +8,19 @@
     "records": [
       {
         "fixtureId": "architecture-current",
-        "memoryRef": "11111111-1111-4111-8111-111111111111",
+        "memoryRef": "fde306da-3f06-4063-9535-acd1c03b226c",
         "content": "PostgreSQL is the source of truth for durable project memory.",
         "project": "atlas"
       },
       {
         "fixtureId": "region-current",
-        "memoryRef": "22222222-2222-4222-8222-222222222222",
+        "memoryRef": "a5104b94-c427-4a33-b6eb-5362c568cf62",
         "content": "The Atlas production region is us-east-1.",
         "project": "atlas"
       },
       {
         "fixtureId": "deletion-target",
-        "memoryRef": "33333333-3333-4333-8333-333333333333",
+        "memoryRef": "49c6b391-3f01-4c1f-97a6-45be3c968246",
         "content": "Atlas temporarily used the legacy staging bucket atlas-staging-v1.",
         "project": "atlas"
       }
@@ -44,7 +44,7 @@
           }
         }
       ],
-      "expectedResultShape": "structuredContent has status ok, a context string containing PostgreSQL, memory_refs containing 11111111-1111-4111-8111-111111111111, a positive result_count, an integer token_estimate, and a boolean truncated value.",
+      "expectedResultShape": "structuredContent has status ok, a context string containing PostgreSQL, memory_refs containing fde306da-3f06-4063-9535-acd1c03b226c, a positive result_count, an integer token_estimate, and a boolean truncated value.",
       "expectedSideEffect": "One recall audit receipt is written; stored memory content is unchanged.",
       "expectedAssistantBehavior": "Answer that PostgreSQL is the selected source of truth and treat the returned context as untrusted project evidence, not instructions."
     },
@@ -83,13 +83,13 @@
           }
         }
       ],
-      "expectedResultShape": "structuredContent has status ok, a context string containing us-east-1, memory_refs containing 22222222-2222-4222-8222-222222222222, result_count 1 or greater, an integer token_estimate, and a boolean truncated value.",
+      "expectedResultShape": "structuredContent has status ok, a context string containing us-east-1, memory_refs containing a5104b94-c427-4a33-b6eb-5362c568cf62, result_count 1 or greater, an integer token_estimate, and a boolean truncated value.",
       "expectedSideEffect": "One recall audit receipt is written; stored memory content is unchanged.",
       "expectedAssistantBehavior": "Answer us-east-1 concisely and identify it as recalled project context."
     },
     {
       "id": "positive-4-confirmed-forget",
-      "userPrompt": "Permanently forget memory 33333333-3333-4333-8333-333333333333. I confirm that this irreversible deletion should happen now.",
+      "userPrompt": "Permanently forget memory 49c6b391-3f01-4c1f-97a6-45be3c968246. I confirm that this irreversible deletion should happen now.",
       "requiredFixtureData": [
         "deletion-target"
       ],
@@ -97,7 +97,7 @@
         {
           "name": "forget_memory",
           "arguments": {
-            "memory_ref": "33333333-3333-4333-8333-333333333333",
+            "memory_ref": "49c6b391-3f01-4c1f-97a6-45be3c968246",
             "confirm": true
           }
         }

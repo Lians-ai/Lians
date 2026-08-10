@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,6 +54,14 @@ def _without_titles(value: Any) -> Any:
     return value
 
 
+def _mapping_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return set(value).union(*(_mapping_keys(item) for item in value.values()))
+    if isinstance(value, list):
+        return set().union(*(_mapping_keys(item) for item in value))
+    return set()
+
+
 async def test_submission_tool_contracts_match_runtime_exactly():
     metadata = json.loads((BUNDLE / "submission" / "metadata.json").read_text(encoding="utf-8"))
     submitted = {tool["name"]: tool for tool in metadata["mcp"]["tools"]}
@@ -77,21 +86,76 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
 
     assert len(cases["positive"]) == metadata["testing"]["positiveCaseCount"] == 5
     assert len(cases["negative"]) == metadata["testing"]["negativeCaseCount"] == 3
+    assert metadata["testing"]["demoAccountFixtureStatus"] == "live_provisioned_and_verified"
+    assert {record["fixtureId"]: record["memoryRef"] for record in cases["fixture"]["records"]} == {
+        "architecture-current": "fde306da-3f06-4063-9535-acd1c03b226c",
+        "region-current": "a5104b94-c427-4a33-b6eb-5362c568cf62",
+        "deletion-target": "49c6b391-3f01-4c1f-97a6-45be3c968246",
+    }
+    serialized_cases = json.dumps(cases)
+    for stale_ref in (
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+    ):
+        assert stale_ref not in serialized_cases
     assert metadata["mcp"]["url"] == "https://mcp.lians.ai/mcp"
     assert metadata["mcp"]["urlStatus"] == "validated_live"
     assert metadata["mcp"]["liveVerification"] == {
-        "status": "unauthenticated_boundary_validated_authenticated_mcp_pending",
-        "verifiedAt": "2026-08-10T02:31:24Z",
+        "status": "production_oauth_e2e_validated_portal_gates_pending",
+        "workflowVerifiedAt": "2026-08-10T02:31:24Z",
         "workflowRunURL": ("https://github.com/Lians-ai/Lians/actions/runs/31349405257"),
         "buildSHA": "e72fad2c7f98ecf54b6553a90bf8d862046c1abc",
         "schemaRevision": "0030_force_hosted_mcp_rls",
-        "verificationMode": "no-token",
-        "authenticatedMcpStatus": "pending_operator_action",
+        "verificationMode": "production_workflow_no_token_plus_operator_oauth_e2e",
+        "authenticatedMcpStatus": "validated_production_oauth_e2e",
         "checks": {
             "https": "ok",
             "protectedResourceMetadata": "ok",
             "unauthenticatedChallenge": "ok",
             "authenticatedMcp": "skipped_no_token",
+        },
+        "authenticatedE2E": {
+            "status": "passed",
+            "verifiedAt": "2026-08-10T03:41:10.126400Z",
+            "timestampSource": "sanitized_auth0_and_fly_event_timestamps",
+            "reviewerLoginAt": "2026-08-10T03:40:58Z",
+            "observedEvents": {
+                "authorizationSuccessAt": "2026-08-10T03:41:01.140Z",
+                "tokenExchangeAt": "2026-08-10T03:41:01.372Z",
+                "unauthenticatedChallengeAt": "2026-08-10T03:41:04.346034Z",
+                "authenticatedEndpointCheckerCompletedAt": "2026-08-10T03:41:05.084992Z",
+                "canaryInitializedAt": "2026-08-10T03:41:05.582330Z",
+                "rememberCompletedAt": "2026-08-10T03:41:07.879529Z",
+                "recallCompletedAt": "2026-08-10T03:41:09.810661Z",
+                "confirmedForgetCompletedAt": "2026-08-10T03:41:10.126400Z",
+            },
+            "toolCallTimestampMapping": (
+                "fixed_harness_order_remember_recall_forget_provider_labels_generic"
+            ),
+            "checks": {
+                "protectedResourceMetadata": "ok",
+                "oidcDiscovery": "ok",
+                "dynamicClientRegistration": "ok",
+                "browserLogin": "ok",
+                "authorizationCallback": "ok",
+                "tokenExchange": "ok",
+                "repositoryJwtVerification": "ok",
+                "authenticatedEndpointChecker": "ok",
+                "mcpRemember": "ok",
+                "mcpRecall": "ok",
+                "mcpConfirmedForget": "ok",
+                "sessionCleanup": "ok",
+            },
+            "temporaryClientCleanup": {
+                "dcrCleanupAdvertised": False,
+                "manualDeletion": "ok",
+                "registeredClientInventoryAfterDeletion": 0,
+            },
+            "evidencePolicy": (
+                "sanitized_status_only_no_credentials_tokens_client_ids_"
+                "memory_payloads_or_local_paths"
+            ),
         },
         "coldBoot": {
             "status": "qualified_three_run_production_rehearsal",
@@ -188,9 +252,25 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
         "not_attested_by_cited_workflows"
     )
     assert metadata["draft"] is True
-    assert metadata["mcp"]["authentication"]["status"] == "pending_operator_action"
+    assert metadata["mcp"]["authentication"] == {
+        "type": "oauth2.1",
+        "status": "production_oauth_e2e_validated",
+        "scopes": ["memory:read", "memory:write"],
+        "reviewerCredentialsStatus": (
+            "login_and_live_fixture_validated_pending_secure_portal_entry"
+        ),
+        "reviewerLoginAt": "2026-08-10T03:40:58Z",
+    }
+    authenticated_e2e = metadata["mcp"]["liveVerification"]["authenticatedE2E"]
+    assert authenticated_e2e["verifiedAt"] == "2026-08-10T03:41:10.126400Z"
+    assert authenticated_e2e["temporaryClientCleanup"] == {
+        "dcrCleanupAdvertised": False,
+        "manualDeletion": "ok",
+        "registeredClientInventoryAfterDeletion": 0,
+    }
     assert (
-        metadata["mcp"]["authentication"]["reviewerCredentialsStatus"] == "pending_operator_action"
+        metadata["reviewArtifacts"]["reviewerAccountStatus"]
+        == "login_and_live_fixture_validated_pending_reset_rehearsal_and_secure_portal_delivery"
     )
     for field in (
         "verificationStatus",
@@ -201,7 +281,6 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
     assert metadata["skills"][0]["scanStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["domainVerificationStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["toolScanStatus"] == "pending_operator_action"
-    assert metadata["reviewArtifacts"]["reviewerAccountStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["demoRecordingURL"] is None
     assert (
         metadata["reviewArtifacts"]["auditRetentionLifecycleStatus"]
@@ -285,6 +364,112 @@ def test_live_deployment_evidence_is_consistent_across_submission_materials():
         text = path.read_text(encoding="utf-8").casefold()
         for stale_claim in stale_live_claims:
             assert stale_claim not in text, (path, stale_claim)
+
+
+def test_authenticated_oauth_e2e_evidence_is_consistent_and_sanitized():
+    metadata = json.loads((BUNDLE / "submission" / "metadata.json").read_text(encoding="utf-8"))
+    authenticated_e2e = metadata["mcp"]["liveVerification"]["authenticatedE2E"]
+
+    assert authenticated_e2e["verifiedAt"] == "2026-08-10T03:41:10.126400Z"
+    assert authenticated_e2e["timestampSource"] == "sanitized_auth0_and_fly_event_timestamps"
+    assert authenticated_e2e["reviewerLoginAt"] == "2026-08-10T03:40:58Z"
+    assert authenticated_e2e["observedEvents"] == {
+        "authorizationSuccessAt": "2026-08-10T03:41:01.140Z",
+        "tokenExchangeAt": "2026-08-10T03:41:01.372Z",
+        "unauthenticatedChallengeAt": "2026-08-10T03:41:04.346034Z",
+        "authenticatedEndpointCheckerCompletedAt": "2026-08-10T03:41:05.084992Z",
+        "canaryInitializedAt": "2026-08-10T03:41:05.582330Z",
+        "rememberCompletedAt": "2026-08-10T03:41:07.879529Z",
+        "recallCompletedAt": "2026-08-10T03:41:09.810661Z",
+        "confirmedForgetCompletedAt": "2026-08-10T03:41:10.126400Z",
+    }
+    assert authenticated_e2e["toolCallTimestampMapping"] == (
+        "fixed_harness_order_remember_recall_forget_provider_labels_generic"
+    )
+    assert set(authenticated_e2e["checks"]) == {
+        "protectedResourceMetadata",
+        "oidcDiscovery",
+        "dynamicClientRegistration",
+        "browserLogin",
+        "authorizationCallback",
+        "tokenExchange",
+        "repositoryJwtVerification",
+        "authenticatedEndpointChecker",
+        "mcpRemember",
+        "mcpRecall",
+        "mcpConfirmedForget",
+        "sessionCleanup",
+    }
+    assert set(authenticated_e2e["checks"].values()) == {"ok"}
+    assert authenticated_e2e["temporaryClientCleanup"] == {
+        "dcrCleanupAdvertised": False,
+        "manualDeletion": "ok",
+        "registeredClientInventoryAfterDeletion": 0,
+    }
+    unsafe_evidence_keys = {
+        "credential",
+        "credentials",
+        "token",
+        "bearertoken",
+        "accesstoken",
+        "refreshtoken",
+        "idtoken",
+        "clientid",
+        "clientsecret",
+        "memorycontent",
+        "memorypayload",
+        "memoryref",
+        "localpath",
+        "rawresponse",
+    }
+    normalized_evidence_keys = {
+        re.sub(r"[^a-z0-9]", "", key.casefold()) for key in _mapping_keys(authenticated_e2e)
+    }
+    assert normalized_evidence_keys.isdisjoint(unsafe_evidence_keys)
+
+    verification_materials = (
+        ROOT / "docs" / "openai-universal-plugin-production.md",
+        ROOT / "docs" / "production-release.md",
+        BUNDLE / "README.md",
+        BUNDLE / "submission" / "data-handling.md",
+        BUNDLE / "submission" / "reviewer-guide.md",
+        BUNDLE / "submission" / "release-notes.md",
+    )
+    for path in verification_materials:
+        text = path.read_text(encoding="utf-8")
+        assert "2026-08-10T03:41Z" in text, path
+        assert "authenticated" in text.casefold(), path
+        assert re.search(r"[A-Za-z]:\\Users\\", text) is None, path
+        assert re.search(r"\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}", text) is None, path
+        assert re.search(r"\bBearer\s+[A-Za-z0-9._~-]{12,}", text, re.IGNORECASE) is None, path
+
+    reviewer_materials = (
+        ROOT / "docs" / "openai-universal-plugin-production.md",
+        ROOT / "docs" / "production-release.md",
+        BUNDLE / "README.md",
+        BUNDLE / "submission" / "reviewer-guide.md",
+        BUNDLE / "submission" / "release-notes.md",
+    )
+    for path in reviewer_materials:
+        assert "2026-08-10T03:40:58Z" in path.read_text(encoding="utf-8"), path
+
+    timestamp_provenance_materials = (
+        ROOT / "docs" / "openai-universal-plugin-production.md",
+        ROOT / "docs" / "production-release.md",
+        BUNDLE / "submission" / "reviewer-guide.md",
+    )
+    for path in timestamp_provenance_materials:
+        text = path.read_text(encoding="utf-8")
+        assert "2026-08-10T03:41:10.126400Z" in text, path
+        assert "fixed" in text.casefold() and "order" in text.casefold(), path
+
+    assert metadata["draft"] is True
+    assert metadata["testing"]["demoAccountFixtureStatus"] == "live_provisioned_and_verified"
+    assert metadata["publisher"]["verificationStatus"] == "pending_operator_action"
+    assert metadata["skills"][0]["scanStatus"] == "pending_operator_action"
+    assert metadata["reviewArtifacts"]["domainVerificationStatus"] == "pending_operator_action"
+    assert metadata["reviewArtifacts"]["toolScanStatus"] == "pending_operator_action"
+    assert metadata["availability"]["status"] == "operator_selected_pending_submission"
 
 
 def test_initial_launch_countries_are_consistent_across_submission_materials():

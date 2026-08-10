@@ -1,6 +1,6 @@
 # Lians Memory reviewer guide
 
-The canonical endpoint is `https://mcp.lians.ai/mcp`. It is live at production build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` with schema `0030_force_hosted_mcp_rls`; HTTPS, protected-resource metadata, and the unauthenticated OAuth challenge are verified. Three distinct production Machines qualified the cold-boot boundary below the 360-second hosted startup timeout. Each cited workflow attests only one immediate post-MCP result with health, liveness, and readiness `ok`; it does not attest an extended observation window or later degradation state. Fly lowered the configured 420-second health-check grace to an effective one minute, so 420 seconds was not honored. Authenticated MCP initialization and tool discovery, the reviewer fixture, OpenAI publisher and business verification, domain verification, Scan Tools, the demo, and portal selection all remain pending. The draft selects the **United States** and **United Kingdom** as its operator-approved launch scope, but those countries have not yet been selected in the OpenAI portal. The plugin has not been submitted, approved, published, or listed. Do not submit this guide until OAuth login, fixture reset, and every remaining production gate below have been validated.
+The canonical endpoint is `https://mcp.lians.ai/mcp`. It is live at production build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` with schema `0030_force_hosted_mcp_rls`; HTTPS, protected-resource metadata, and the unauthenticated OAuth challenge are verified. Three distinct production Machines qualified the cold-boot boundary below the 360-second hosted startup timeout. Each cited workflow attests only one immediate post-MCP result with health, liveness, and readiness `ok`; it does not attest an extended observation window or later degradation state. Fly lowered the configured 420-second health-check grace to an effective one minute, so 420 seconds was not honored. During minute `2026-08-10T03:41Z`, a sanitized production OAuth E2E passed discovery, registration, browser authorization, token and repository JWT verification, authenticated endpoint checking, MCP remember/recall/confirmed-forget calls, and cleanup. The public synthetic three-record reviewer fixture is live and verified. Fixture reset rehearsal, secure portal credential delivery, OpenAI publisher and business verification, domain verification, Scan Tools, the demo, and portal selection all remain pending. The draft selects the **United States** and **United Kingdom** as its operator-approved launch scope, but those countries have not yet been selected in the OpenAI portal. The plugin has not been submitted, approved, published, or listed. Do not submit this guide until fixture reset and every remaining production gate below have been validated.
 
 ## Reviewer access
 
@@ -12,6 +12,8 @@ Provision a dedicated demo account that:
 - can be restored to the published fixture before every case.
 
 Supply the account identifier and temporary credential only through the OpenAI submission portal's secure reviewer-credential fields. Never put credentials, bearer tokens, recovery codes, MFA secrets, or usable secret examples in this repository, this guide, tickets, screenshots, recordings, or ordinary email. Rotate or revoke reviewer access after review according to the operator's access policy.
+
+Browser login for the dedicated reviewer account passed in the production OAuth E2E, Auth0 displayed its latest login at `2026-08-10T03:40:58Z`, and the public synthetic three-record fixture was provisioned and verified live. Reset rehearsal and secure portal credential delivery remain pending.
 
 ## Operator preflight
 
@@ -31,6 +33,8 @@ python scripts/check_openai_plugin_endpoint.py --resource-url https://mcp.lians.
 
 For the authenticated contract check, have an authorized operator inject `LIANS_MCP_BEARER_TOKEN` into the process environment through the approved secret manager, run the first command again, and then clear the environment value. Do not paste a token into a command, document, terminal transcript, or review artifact. A passing authenticated run initializes MCP protocol version `2025-11-25` and verifies that discovery exposes exactly `remember`, `recall`, and `forget_memory` with the submitted schemas, security schemes, and annotations.
 
+The sanitized production OAuth E2E passed during minute `2026-08-10T03:41Z`: protected-resource metadata, OIDC discovery, DCR, browser login, authorization callback, token exchange, repository JWT verification, the authenticated endpoint checker, MCP remember, MCP recall, confirmed MCP forget, and session cleanup all returned success. The final MCP completion event was `2026-08-10T03:41:10.126400Z`. Provider logs label tool events generically, so the per-tool timestamp mapping relies only on the harness's fixed remember/recall/forget order. The authorization server did not advertise DCR cleanup, so the operator manually deleted the exact temporary client and verified the registered-client inventory was zero. The retained evidence contains no credentials, tokens, client identifiers, memory payloads or references, raw responses, or local paths. This canary does not replace the full fixture-backed five-positive/three-negative evaluation or OpenAI portal Scan Tools.
+
 Before giving access to a reviewer, also confirm:
 
 - the draft metadata contains exactly the United States and United Kingdom and the portal country selector has been set to match;
@@ -43,6 +47,8 @@ Before giving access to a reviewer, also confirm:
 ## Fixture and reproducible cases
 
 Use [`test-cases.json`](./test-cases.json) as the source of truth. It contains exactly five positive and three negative cases. Restore `lians-reviewer-fixture-v1` before each case so cases are independent. The three documented UUIDs must identify active records owned by the demo account and created through the hosted MCP surface.
+
+The three UUIDs published in `test-cases.json` are verified live references for public synthetic reviewer records. Do not substitute private canary references or content. Recreate or restore the same three fixture records before each independent review case and update the published references if reprovisioning assigns new UUIDs.
 
 Recommended run order:
 
