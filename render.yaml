@@ -58,7 +58,7 @@ services:
       - key: HOSTED_MCP_SERVICE_DOCUMENTATION_URL
         value: https://www.lians.ai/privacy
       - key: HOSTED_MCP_STARTUP_TIMEOUT_SECONDS
-        value: "180"
+        value: "360"
       - key: HOSTED_MCP_TOOL_TIMEOUT_SECONDS
         value: "30"
       - key: HOSTED_MCP_MAX_CONCURRENT_INFERENCE
