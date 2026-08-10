@@ -1,6 +1,6 @@
 # Lians Memory reviewer guide
 
-The canonical endpoint is `https://mcp.lians.ai/mcp`. It is planned and is not live yet. The draft selects the **United States** and **United Kingdom** as its initial launch countries; that availability choice does not mean the plugin is submitted, approved, published, or live. Do not submit this guide until the endpoint, OAuth login, fixture reset, and every production gate below have been validated.
+The canonical endpoint is `https://mcp.lians.ai/mcp`. It is live at production build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` with schema `0030_force_hosted_mcp_rls`; HTTPS, protected-resource metadata, and the unauthenticated OAuth challenge are verified. Three distinct production Machines qualified the cold-boot boundary below the 360-second hosted startup timeout. Each cited workflow attests only one immediate post-MCP result with health, liveness, and readiness `ok`; it does not attest an extended observation window or later degradation state. Fly lowered the configured 420-second health-check grace to an effective one minute, so 420 seconds was not honored. Authenticated MCP initialization and tool discovery, the reviewer fixture, OpenAI publisher and business verification, domain verification, Scan Tools, the demo, and portal selection all remain pending. The draft selects the **United States** and **United Kingdom** as its operator-approved launch scope, but those countries have not yet been selected in the OpenAI portal. The plugin has not been submitted, approved, published, or listed. Do not submit this guide until OAuth login, fixture reset, and every remaining production gate below have been validated.
 
 ## Reviewer access
 
@@ -33,7 +33,7 @@ For the authenticated contract check, have an authorized operator inject `LIANS_
 
 Before giving access to a reviewer, also confirm:
 
-- the draft metadata and portal country selector contain exactly the United States and United Kingdom;
+- the draft metadata contains exactly the United States and United Kingdom and the portal country selector has been set to match;
 - DNS, TLS, OAuth discovery, resource metadata, and the canonical endpoint are public and stable;
 - the demo account has no MFA or confirmation gate and no access outside its fixture tenant;
 - active retention is configured and scheduled pruning is running;

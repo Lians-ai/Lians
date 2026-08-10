@@ -9,7 +9,7 @@ dependencies:
       value: "lians-memory"
       description: "Store, recall, and explicitly forget user-approved project memory"
       transport: "streamable_http"
-      # Planned canonical endpoint. It is not asserted live yet; do not substitute another host.
+      # Canonical live endpoint at build e72fad2c7f98ecf54b6553a90bf8d862046c1abc. Authenticated submission testing remains pending; do not substitute another host.
       url: "https://mcp.lians.ai/mcp"
 
 policy:

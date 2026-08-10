@@ -1,6 +1,6 @@
 # Lians Memory data handling
 
-This document describes the implemented hosted MCP data path for `remember`, `recall`, and `forget_memory`. DNS and trusted TLS are active for `mcp.lians.ai`, but the canonical `https://mcp.lians.ai/mcp` route remains disabled and is not live yet. The production operator's audit-retention and managed-backup decisions are recorded below.
+This document describes the implemented hosted MCP data path for `remember`, `recall`, and `forget_memory`. The canonical `https://mcp.lians.ai/mcp` route is live at production build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` with schema `0030_force_hosted_mcp_rls`. HTTPS, protected-resource metadata, and the unauthenticated OAuth challenge have passed the repository checker. Authenticated MCP initialization and tool execution remain a pre-submission validation gate. The production operator's audit-retention and managed-backup decisions are recorded below.
 
 ## Collection boundary
 
