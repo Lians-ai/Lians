@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Durable, user-controlled project memory with confirmed deletion.",
   "author": {
-    "name": "Lians",
+    "name": "Lians, Ai",
     "url": "https://www.lians.ai"
   },
   "homepage": "https://www.lians.ai",
@@ -20,15 +20,16 @@
   "interface": {
     "displayName": "Lians Memory",
     "shortDescription": "More memory, less repetition",
-    "longDescription": "Lians Memory stores project facts and decisions that users explicitly choose to keep, recalls bounded context, and permanently forgets a selected memory only after confirmation. It does not increase OpenAI usage quotas or bypass rate limits.",
-    "developerName": "Lians",
+    "longDescription": "Lians Memory stores project facts and decisions that users explicitly choose to keep, recalls bounded context, and removes a selected memory from active storage after confirmation. It does not increase OpenAI usage quotas or bypass rate limits.",
+    "developerName": "Lians, Ai",
     "category": "Productivity",
     "capabilities": [
       "Recall approved project memory",
       "Store explicit project facts",
-      "Permanently forget confirmed memories"
+      "Remove confirmed memories from active storage"
     ],
     "websiteURL": "https://www.lians.ai",
+    "supportURL": "https://www.lians.ai/contact",
     "privacyPolicyURL": "https://www.lians.ai/privacy",
     "termsOfServiceURL": "https://www.lians.ai/terms",
     "defaultPrompt": [

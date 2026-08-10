@@ -9,8 +9,8 @@
   "listing": {
     "displayName": "Lians Memory",
     "shortDescription": "More memory, less repetition",
-    "longDescription": "Lians Memory stores project facts and decisions that users explicitly choose to keep, recalls bounded context, and permanently forgets a selected memory only after confirmation. It does not increase OpenAI usage quotas or bypass rate limits.",
-    "developerName": "Lians",
+    "longDescription": "Lians Memory stores project facts and decisions that users explicitly choose to keep, recalls bounded context, and removes a selected memory from active storage after confirmation. It does not increase OpenAI usage quotas or bypass rate limits.",
+    "developerName": "Lians, Ai",
     "category": "Productivity",
     "websiteURL": "https://www.lians.ai",
     "supportURL": "https://www.lians.ai/contact",
@@ -24,10 +24,10 @@
     ]
   },
   "publisher": {
-    "identity": "Lians",
-    "verificationStatus": "pending_operator_action",
-    "appsManagementWriteStatus": "pending_operator_action",
-    "appsManagementReadStatus": "pending_operator_action",
+    "identity": "Lians, Ai",
+    "verificationStatus": "verified_openai_portal",
+    "appsManagementWriteStatus": "validated_apps_management_owner",
+    "appsManagementReadStatus": "validated_apps_management_owner",
     "platformDataResidency": "global_required"
   },
   "mcp": {
@@ -348,7 +348,7 @@
       {
         "name": "forget_memory",
         "title": "Forget one memory",
-        "description": "Permanently crypto-shred one stored memory by its reference. Call only after the user explicitly confirms this irreversible deletion.",
+        "description": "Immediately crypto-shred one stored memory from active service storage by its reference. Encrypted provider backups may retain a recoverable copy for up to 5 days. Call only after the user explicitly confirms.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -360,7 +360,7 @@
             "confirm": {
               "type": "boolean",
               "default": false,
-              "description": "Must be true only after the user confirms permanent deletion."
+              "description": "Must be true only after the user confirms immediate active-service crypto-shredding and the disclosed encrypted provider backup window of up to 5 days."
             }
           },
           "required": [
@@ -408,10 +408,10 @@
           "openWorldHint": false
         },
         "annotationJustification": {
-          "readOnlyHint": "The tool permanently erases the selected memory's encrypted content.",
-          "destructiveHint": "Confirmed execution irreversibly crypto-shreds one matching memory.",
+          "readOnlyHint": "The tool removes the selected memory's encrypted content from active service storage; encrypted provider backups may retain a recoverable copy for up to 5 days.",
+          "destructiveHint": "Confirmed execution immediately crypto-shreds one matching memory from active service storage.",
           "idempotentHint": "Repeating the call cannot erase the same active memory again and returns not_found after it is gone.",
-          "openWorldHint": "The deletion remains inside the authenticated user's tenant-scoped Lians memory store."
+          "openWorldHint": "The active-storage removal remains inside the authenticated user's tenant-scoped Lians memory store."
         },
         "confirmationPolicy": {
           "required": true,
@@ -435,12 +435,13 @@
     "negativeCaseCount": 3,
     "casesPath": "./test-cases.json",
     "demoAccountFixture": "lians-reviewer-fixture-v1",
-    "demoAccountFixtureStatus": "live_provisioned_and_verified"
+    "demoAccountFixtureStatus": "live_provisioned_and_verified",
+    "developerModeRehearsalStatus": "pending_operator_action"
   },
   "reviewArtifacts": {
     "domainVerificationStatus": "pending_operator_action",
     "toolScanStatus": "pending_operator_action",
-    "reviewerAccountStatus": "login_and_live_fixture_validated_pending_reset_rehearsal_and_secure_portal_delivery",
+    "reviewerAccountStatus": "login_and_live_fixture_validated_pending_secure_portal_delivery",
     "auditRetentionLifecycleStatus": "approved_and_publicly_disclosed_indefinite_pseudonymous_content_free",
     "backupDeletionWindowStatus": "provider_verified_and_publicly_disclosed_encrypted_fly_snapshots_5_days",
     "demoRecordingURL": null,

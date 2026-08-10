@@ -718,6 +718,20 @@ async def test_authenticated_tool_calls_encrypt_isolate_and_forget(db, monkeypat
         )
         assert bob_forget["structuredContent"]["status"] == "not_found"
 
+        unconfirmed_forget = await call_tool(
+            client,
+            "alice-token",
+            41,
+            "forget_memory",
+            {"memory_ref": memory_ref, "confirm": False},
+        )
+        assert unconfirmed_forget["isError"] is True
+        assert unconfirmed_forget["content"][0]["text"] == (
+            "Removal was not performed. Ask the user to confirm immediate active-service "
+            "crypto-shredding and the disclosed encrypted provider backup window of up to 5 "
+            "days first."
+        )
+
         # Growth controls must never block a confirmed user erasure.
         settings.hosted_mcp_max_audit_events_per_day = 0
         alice_forget = await call_tool(
@@ -729,12 +743,29 @@ async def test_authenticated_tool_calls_encrypt_isolate_and_forget(db, monkeypat
         )
         assert alice_forget["structuredContent"]["status"] == "forgotten"
         assert alice_forget["structuredContent"]["memories_erased"] == 1
+        assert alice_forget["content"][0]["text"] == (
+            "The selected memory was immediately crypto-shredded from active service storage. "
+            "Encrypted provider backups may retain a recoverable copy for up to 5 days."
+        )
         settings.hosted_mcp_max_audit_events_per_day = 5_000
         async with session_factory() as inspection:
             erase_event = (
                 await inspection.execute(select(EventLog).where(EventLog.op == "erase"))
             ).scalar_one()
             assert erase_event.payload == {"privacy_minimal": True}
+
+        exact_forget_retry = await call_tool(
+            client,
+            "alice-token",
+            50,
+            "forget_memory",
+            {"memory_ref": memory_ref, "confirm": True},
+        )
+        assert exact_forget_retry["structuredContent"] == {
+            "status": "not_found",
+            "memory_ref": memory_ref,
+            "memories_erased": 0,
+        }
 
         forgotten_retry = await call_tool(
             client,
