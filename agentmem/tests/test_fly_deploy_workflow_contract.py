@@ -85,3 +85,16 @@ def test_post_deploy_release_identity_and_smoke_gates_remain() -> None:
     assert "FLY_MACHINE_EXEC_TOKEN" not in workflow
     assert "scripts/check_production_deployment.py" in workflow
     assert '--expected-build-sha "$GITHUB_SHA"' in workflow
+    assert "--base-url https://mcp.lians.ai" in workflow
+    assert "scripts/check_openai_plugin_endpoint.py" in workflow
+    assert "--resource-url https://mcp.lians.ai/mcp" in workflow
+
+
+def test_production_config_enables_hosted_mcp_with_personal_tenancy() -> None:
+    with FLY_CONFIG_PATH.open("rb") as handle:
+        config = tomllib.load(handle)
+
+    environment = config["env"]
+    assert environment["HOSTED_MCP_ENABLED"] == "true"
+    assert environment["HOSTED_MCP_RESOURCE_URL"] == "https://mcp.lians.ai"
+    assert environment["HOSTED_MCP_TENANT_CLAIM"] == "sub"

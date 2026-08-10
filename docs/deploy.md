@@ -35,11 +35,11 @@ alembic upgrade head
 
 # Verify schema version
 alembic current
-# Expected: 0028_decision_envelopes (head)
+# Expected: 0030_force_hosted_mcp_rls (head)
 ```
 
-Before deploying migration 0028, complete the disposable staging-data
-rehearsal in `docs/migration-0028-staging-rehearsal.md`.
+Before deploying a new migration head, complete the guarded staging database
+workflow and verify the exact revision required by the production workflow.
 
 For the exact Fly.io production gate, release sequence, abort criteria, and
 application rollback procedure, use `docs/production-release.md`.
