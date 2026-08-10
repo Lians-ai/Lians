@@ -107,7 +107,8 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
     assert metadata["publisher"]["identity"] == "Lians, Ai"
     assert manifest["author"]["name"] == "Lians, Ai"
     assert manifest["interface"]["developerName"] == "Lians, Ai"
-    assert manifest["interface"]["supportURL"] == "https://www.lians.ai/contact"
+    assert metadata["listing"]["supportURL"] == "https://www.lians.ai/contact"
+    assert "supportURL" not in manifest["interface"]
 
     assert len(cases["positive"]) == metadata["testing"]["positiveCaseCount"] == 5
     assert len(cases["negative"]) == metadata["testing"]["negativeCaseCount"] == 3
