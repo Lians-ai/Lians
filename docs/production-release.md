@@ -18,6 +18,29 @@ production application `agentmem-lotus`.
 The production workflow migrates the database to the reviewed Alembic head
 `0030_force_hosted_mcp_rls` before the application image is promoted.
 
+## Latest verified production release
+
+Production workflow [31349405257](https://github.com/Lians-ai/Lians/actions/runs/31349405257) is the latest successful verification of `master` build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc`; GitHub recorded its final workflow update at `2026-08-10T02:31:24Z`.
+
+- The staging recheck passed before the production job started.
+- The protected environment recorded independent approval and the full five-minute wait timer.
+- A fresh encrypted database snapshot was confirmed before migration.
+- Production migrated to and verified `0030_force_hosted_mcp_rls`.
+- The blue-green deployment, exact-machine resolution, and public health, liveness, readiness, authentication-boundary, and documentation checks passed.
+- The no-token OpenAI MCP boundary check passed HTTPS, protected-resource metadata, and the unauthenticated challenge. Authenticated MCP initialization and tool validation were intentionally skipped because no bearer token was supplied and remain a separate pre-submission gate.
+
+Three consecutive production rehearsals qualified the cold-boot boundary. The recorded timing basis is machine start to first readiness at `1/1 passing`, not total workflow or image-build duration. Each rehearsal used a distinct new Machine ID and reached readiness below the 360-second hosted startup timeout. Each workflow then recorded a single immediate post-MCP result with health, liveness, and readiness `ok`; the cited run does not attest an extended observation window or later degradation state.
+
+| Production workflow | Machine ID | Production job completed (UTC) | Machine start to first `1/1 passing` | Immediate post-MCP health result |
+| --- | --- | --- | --- | --- |
+| [31347743399](https://github.com/Lians-ai/Lians/actions/runs/31347743399) | `28691d1b640298` | `2026-08-10T01:59:04Z` | `197.528s` (`01:55:07.0366956Z` to `01:58:24.5647632Z`) | health/liveness/readiness `ok` at `01:59:01.1331951Z` |
+| [31348671152](https://github.com/Lians-ai/Lians/actions/runs/31348671152) | `7841659cd4d6e8` | `2026-08-10T02:15:28Z` | `197.947s` (`02:11:27.3152732Z` to `02:14:45.2623950Z`) | health/liveness/readiness `ok` at `02:15:24.2071289Z` |
+| [31349405257](https://github.com/Lians-ai/Lians/actions/runs/31349405257) | `8dd9e0ce170928` | `2026-08-10T02:31:23Z` | `197.963s` (`02:27:24.4377031Z` to `02:30:42.4003935Z`) | health/liveness/readiness `ok` at `02:31:18.7557165Z` |
+
+The maximum observed cold boot was `197.963s`, below the configured 360-second application startup timeout. This does **not** prove that Fly honored the configured 420-second health-check grace: every deploy log warned, `Service HTTP check has a grace period greater than 1 minute (7m0s); this will be lowered to 1 minute`. The effective Fly grace was one minute, so the configured 420 seconds was **not honored**.
+
+This production release does not mean the universal plugin has been submitted, approved, published, or listed by OpenAI.
+
 ## Controls already enforced
 
 - Production deploys are manual. A merge or push does not release the app.
@@ -30,7 +53,9 @@ The production workflow migrates the database to the reviewed Alembic head
 - The workflow records the prior good image and requests a fresh encrypted
   database-volume snapshot before deploying. If Fly coalesces that request,
   it accepts only an existing `created` snapshot no older than two hours.
-- Fly gates promotion on `/readyz`.
+- Fly gates promotion on `/readyz`; current deploy logs lower the configured
+  420-second grace period to an effective one minute, so operators must not
+  represent the configured 420 seconds as honored.
 - The workflow verifies revision `0030_force_hosted_mcp_rls`, the public API
   surface, and the unauthenticated OpenAI MCP boundary after deployment.
 
@@ -95,8 +120,9 @@ failed release logs and snapshot identifiers.
 
 ## Known nonblocking follow-ups
 
-- Redis is required for hosted-MCP rate limits. Confirm its staged secret is
-  deployed and reachable before enabling the public MCP surface.
+- Redis is required for hosted-MCP rate limits. Continue monitoring its
+  production connectivity, bounded local fallback, and degradation telemetry
+  now that the public MCP surface is enabled.
 - Fly automatic snapshots retain five days. Enable off-platform WAL/archive
   backups before treating the current setup as the final disaster-recovery
   posture.

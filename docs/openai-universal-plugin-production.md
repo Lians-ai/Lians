@@ -1,6 +1,6 @@
 # Lians Memory universal plugin production checklist
 
-> **DNS and TLS live; MCP route not live:** `mcp.lians.ai` resolves to Fly.io with a trusted certificate, and public health/readiness checks pass. The selected canonical `https://mcp.lians.ai/mcp` route and protected-resource metadata remain disabled and return 404 pending the reviewed deployment. Do not substitute a temporary, testing, or alternate submission URL.
+> **Canonical route live; authenticated MCP and OpenAI portal gates pending:** production workflow [31349405257](https://github.com/Lians-ai/Lians/actions/runs/31349405257) most recently deployed build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` at schema `0030_force_hosted_mcp_rls`. Three distinct production Machines passed the cold-boot qualification, and each cited workflow recorded a single immediate post-MCP result with health, liveness, and readiness `ok`. The cited workflows do not attest an extended post-MCP observation window or later degradation state. Authenticated MCP initialization and tool discovery, the reviewer fixture, OpenAI publisher and business verification, domain verification, Scan Tools, the demo, portal selection of the operator-approved United States and United Kingdom scope, submission, review, and publication remain pending.
 
 The universal package is under `plugins/lians-memory-universal/`. It contains no local hooks, setup scripts, vendored Python runtime, or custom UI. The implemented hosted MCP contract is in `agentmem/src/lians/openai_mcp.py`; the deployed service must match it exactly.
 
@@ -13,21 +13,28 @@ The universal package is under `plugins/lians-memory-universal/`. It contains no
 - OAuth resource identifier after URL normalization: `https://mcp.lians.ai/`
 - Implemented tools: `remember`, `recall`, and `forget_memory`
 - Initial launch countries: **United States** and **United Kingdom**
+- Verified production build: `e72fad2c7f98ecf54b6553a90bf8d862046c1abc`
+- Verified production schema: `0030_force_hosted_mcp_rls`
+- Verified public boundary: HTTPS, protected-resource metadata, and unauthenticated OAuth challenge
+- Cold-boot qualification: three successful production rehearsals on distinct Machine IDs; machine-start to first `1/1 passing` readiness was `197.528`, `197.947`, and `197.963` seconds, so the observed maximum `197.963` seconds was below the 360-second hosted startup timeout
+- Post-MCP health: each workflow recorded one single immediate result with health, liveness, and readiness `ok`; it does not attest an extended observation window or later degradation state
+- Fly grace disclosure: the deploy logs warned that the configured 420-second (`7m0s`) HTTP-check grace period was lowered to an effective one minute; the configured 420 seconds was **not honored** and is not part of the qualification claim
+- Pending live-client boundary: authenticated MCP initialization, discovery, and tool execution
 - Claim boundary: Lians can reduce repeated context setup when relevant memory exists. It does not increase OpenAI or Codex quotas, bypass rate limits, or guarantee faster total responses.
 
-Do not submit while `submission/metadata.json` contains `planned_canonical_not_live` or `pending_operator_action`. The availability value `operator_selected_pending_submission` records the approved launch-country scope; it does not mean the plugin is submitted, published, or live.
+`mcp.urlStatus: validated_live` records only that the canonical public endpoint boundary is live and verified. It does not assert that authenticated MCP, OpenAI review, or publication is complete. Do not submit while `submission/metadata.json` contains `pending_operator_action`. The availability value `operator_selected_pending_submission` records the approved launch-country scope; it does not mean the countries are selected in the portal or that the plugin is submitted, approved, published, or listed.
 
 ## 1. Bring the canonical endpoint online
 
 - [x] Configure production DNS and a trusted TLS certificate for `mcp.lians.ai`.
-- [ ] Deploy the hosted MCP application so Streamable HTTP is reachable at exactly `https://mcp.lians.ai/mcp`.
-- [ ] Configure `HOSTED_MCP_RESOURCE_URL=https://mcp.lians.ai`; verify runtime normalization publishes the exact OAuth resource identifier `https://mcp.lians.ai/`.
-- [ ] Enable the hosted MCP surface only after issuer, JWKS, origin, host, retention, and database settings are production-safe.
+- [x] Deploy the hosted MCP application so Streamable HTTP is reachable at exactly `https://mcp.lians.ai/mcp`.
+- [x] Configure `HOSTED_MCP_RESOURCE_URL=https://mcp.lians.ai`; the protected-resource document publishes the exact normalized OAuth resource identifier `https://mcp.lians.ai/`.
+- [ ] Reverify the now-enabled surface's issuer, JWKS, origin, host, retention, and database settings before submission.
 - [ ] Build the self-hosted embedding model from the immutable revision in `SENTENCE_TRANSFORMER_REVISION`, verify the same revision at runtime, and keep the 2 GB Fly image at one Uvicorn worker so model memory is not duplicated.
-- [ ] Do not submit a local endpoint, developer tunnel, template URL, fallback host, or alternate origin.
+- [x] Do not submit a local endpoint, developer tunnel, template URL, fallback host, or alternate origin.
 - [ ] Confirm the universal endpoint works for every supported user and organization.
-- [ ] After live validation, change only `mcp.urlStatus` in `submission/metadata.json` from `planned_canonical_not_live` to `validated_live`; keep the canonical URL unchanged.
-- [x] Confirm no obsolete host remains in the package and the planned host is consistent across the skill, metadata, and release notes.
+- [x] Record `mcp.urlStatus` as `validated_live` without changing the canonical URL; keep authenticated MCP status separately pending.
+- [x] Confirm no obsolete host remains in the package and the canonical host is consistent across the skill, metadata, and release notes.
 
 ## 2. Freeze and verify the implemented MCP contract
 
@@ -61,7 +68,8 @@ Tool discovery must match this table and `submission/metadata.json`:
 
 ## 3. Complete OAuth 2.1
 
-- [ ] Publish protected-resource metadata at `https://mcp.lians.ai/.well-known/oauth-protected-resource` with resource `https://mcp.lians.ai/`, the authorization-server issuer, and both supported scopes.
+- [x] Publish protected-resource metadata at `https://mcp.lians.ai/.well-known/oauth-protected-resource` with resource `https://mcp.lians.ai/`, the authorization-server issuer, and both supported scopes.
+- [x] Return an unauthenticated `WWW-Authenticate` challenge bound to that exact protected-resource metadata URL.
 - [ ] Publish OAuth or OIDC discovery metadata with the correct authorization, token, JWKS, and registration endpoints.
 - [ ] Support authorization code with `S256` PKCE.
 - [ ] Support CIMD when available, or DCR or predefined client registration as configured in the submission portal.
@@ -124,13 +132,16 @@ Test the deployed service with the repository [endpoint checker](../scripts/chec
 python scripts/check_openai_plugin_endpoint.py --resource-url https://mcp.lians.ai/mcp
 ```
 
+The latest no-token run, [31349405257](https://github.com/Lians-ai/Lians/actions/runs/31349405257), passed on 2026-08-10 for build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc`: `https`, `protected_resource_metadata`, and `unauthenticated_challenge` were `ok`; `authenticated_mcp` was `skipped_no_token` and remains pending operator validation.
+
 For the authenticated contract check, securely inject `LIANS_MCP_BEARER_TOKEN` into the process environment, run the same command, and clear it afterward. Never put the token on the command line or in review artifacts. The MCP Inspector may then be used for interactive testing:
 
 ```powershell
 npx @modelcontextprotocol/inspector@latest
 ```
 
-- [ ] Initialization and tool discovery succeed at `https://mcp.lians.ai/mcp`.
+- [x] The public no-token endpoint check passes at `https://mcp.lians.ai/mcp` without exposing a credential.
+- [ ] Authenticated initialization and tool discovery succeed at `https://mcp.lians.ai/mcp`.
 - [ ] Discovery exactly matches the three contracts in `submission/metadata.json`.
 - [ ] OAuth discovery, linking, reauthorization, scope denial, and token rejection work.
 - [ ] `recall` writes an audit receipt but does not alter memory content.
@@ -175,7 +186,9 @@ No screenshots are required because this release has no custom UI.
 
 | Gate | Required evidence | Status |
 | --- | --- | --- |
-| Endpoint | Canonical public HTTPS Streamable HTTP initialization and tool calls pass | Pending |
+| Public endpoint | Canonical HTTPS route, protected-resource metadata, and unauthenticated challenge pass | Pass (2026-08-10, build `e72fad2`) |
+| Cold boot | Three distinct production Machines reach first `1/1 passing` readiness below the 360-second startup timeout; each workflow also records one immediate post-MCP health result | Pass (`197.528`, `197.947`, `197.963` seconds; max `197.963`) |
+| Authenticated MCP | Authenticated initialization, discovery, and tool calls pass | Pending |
 | Contract | All three schemas, structured outputs, security schemes, and annotations match code | Pending |
 | OAuth | Discovery, PKCE, token validation, per-tool scopes, and reviewer login pass | Pending |
 | Privacy | Restricted-data rejection, isolation, retention, and audit controls pass | Pending |
@@ -184,6 +197,9 @@ No screenshots are required because this release has no custom UI.
 | Domain | OpenAI challenge verification passes | Pending |
 | Evaluation | All five positive and three negative cases pass on supported surfaces | Pending |
 | Publisher | Required permissions and verified Lians business identity are present | Pending |
+| Reviewer fixture | Public no-MFA account, fixture reset, and secure portal credentials pass | Pending |
+| Scan Tools | OpenAI Scan Tools completes with no unresolved error or warning | Pending |
+| Portal availability | Exactly United States and United Kingdom are selected in the portal | Pending |
 | Review assets | Legal/support URLs, demo, regions, scan result, and release notes are complete | Pending |
 
 The operator may submit only when every gate is **Pass**, `mcp.urlStatus` is `validated_live`, and the canonical endpoint has passed live OpenAI client testing.
