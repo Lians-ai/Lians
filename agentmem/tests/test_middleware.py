@@ -336,6 +336,42 @@ class TestRateLimitMiddleware:
         assert second.status_code == 429
         assert second.headers["Retry-After"] == "60"
 
+    async def test_redis_timeout_is_not_retried_and_records_one_fallback(self):
+        """A timed-out mutating script may have committed, so never retry it."""
+        from fastapi import FastAPI
+        from src.lians.middleware import RateLimitMiddleware
+
+        limited_app = FastAPI()
+
+        @limited_app.get("/limited")
+        async def limited():
+            return {"ok": True}
+
+        limited_app.add_middleware(
+            RateLimitMiddleware,
+            requests_per_minute=1,
+            fingerprint_secret="test-rate-limit-fingerprint-secret",
+        )
+        with (
+            patch("src.lians.cache._get_redis") as mock_redis,
+            patch("src.lians.degradation.record_degradation") as degradation,
+        ):
+            redis = AsyncMock()
+            redis.eval = AsyncMock(side_effect=TimeoutError("slow Redis reply"))
+            mock_redis.return_value = redis
+            async with AsyncClient(
+                transport=ASGITransport(app=limited_app),
+                base_url="http://test",
+            ) as local_client:
+                response = await local_client.get(
+                    "/limited", headers={"X-API-Key": "fallback-key"}
+                )
+
+        assert response.status_code == 200
+        assert response.headers["X-RateLimit-Remaining"] == "0"
+        assert redis.eval.await_count == 1
+        degradation.assert_called_once_with("rate_limit", "redis_unavailable")
+
     def test_api_key_discriminator_is_keyed_and_stable(self):
         """Bucket IDs must not expose a reusable digest of the API key."""
         from src.lians.middleware import RateLimitMiddleware

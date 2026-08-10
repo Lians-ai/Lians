@@ -36,6 +36,8 @@ from typing import Any, Iterator, Optional
 _redis_client: Any = None
 logger = logging.getLogger("agentmem.cache")
 _CACHE_SCHEMA_VERSION = "scoring-v2"
+_REDIS_CONNECT_TIMEOUT_SECONDS = 1
+_REDIS_SOCKET_TIMEOUT_SECONDS = 3
 _FIXED_WINDOW_INCREMENT_LUA = """
 local count = redis.call('INCRBY', KEYS[1], ARGV[1])
 local ttl = redis.call('TTL', KEYS[1])
@@ -87,8 +89,12 @@ def _get_redis() -> Any:
         _redis_client = aioredis.from_url(
             get_settings().redis_url,
             decode_responses=True,
-            socket_connect_timeout=1,
-            socket_timeout=1,
+            socket_connect_timeout=_REDIS_CONNECT_TIMEOUT_SECONDS,
+            socket_timeout=_REDIS_SOCKET_TIMEOUT_SECONDS,
+            # The fixed-window script mutates state atomically. A timed-out
+            # reply may still mean Redis committed the increment, so retrying
+            # could double-count one request.
+            retry_on_timeout=False,
         )
     return _redis_client
 

@@ -1,9 +1,25 @@
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from src.lians import cache
+
+
+def test_redis_client_allows_bounded_read_jitter_without_command_retry(monkeypatch):
+    from redis import asyncio as aioredis
+
+    client = object()
+    from_url = Mock(return_value=client)
+    monkeypatch.setattr(aioredis, "from_url", from_url)
+    monkeypatch.setattr(cache, "_redis_client", None)
+
+    assert cache._get_redis() is client
+    assert from_url.call_count == 1
+    _, kwargs = from_url.call_args
+    assert kwargs["socket_connect_timeout"] == 1
+    assert kwargs["socket_timeout"] == 3
+    assert kwargs["retry_on_timeout"] is False
 
 
 @pytest.fixture

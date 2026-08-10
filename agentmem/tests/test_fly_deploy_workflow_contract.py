@@ -108,6 +108,20 @@ def test_post_deploy_release_identity_and_smoke_gates_remain() -> None:
     assert "--resource-url https://mcp.lians.ai/mcp" in workflow
 
 
+def test_mcp_boundary_is_followed_by_a_fresh_health_gate() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    boundary = "python scripts/check_openai_plugin_endpoint.py"
+    post_boundary_gate = (
+        "python scripts/check_production_deployment.py \\\n"
+        "            --base-url https://mcp.lians.ai \\\n"
+        "            --health-only"
+    )
+
+    assert workflow.count(boundary) == 1
+    assert workflow.count(post_boundary_gate) == 1
+    assert workflow.index(boundary) < workflow.index(post_boundary_gate)
+
+
 def test_production_config_enables_hosted_mcp_with_personal_tenancy() -> None:
     with FLY_CONFIG_PATH.open("rb") as handle:
         config = tomllib.load(handle)
