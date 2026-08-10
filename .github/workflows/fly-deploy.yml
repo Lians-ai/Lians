@@ -90,7 +90,7 @@ jobs:
     timeout-minutes: 45
     environment:
       name: production
-      url: https://agentmem-lotus.fly.dev
+      url: https://mcp.lians.ai
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
@@ -409,8 +409,13 @@ jobs:
       - name: Run public production smoke checks
         run: |
           python scripts/check_production_deployment.py \
-            --base-url https://agentmem-lotus.fly.dev \
+            --base-url https://mcp.lians.ai \
             --expected-build-sha "$GITHUB_SHA"
+
+      - name: Verify the public OpenAI MCP boundary
+        run: |
+          python scripts/check_openai_plugin_endpoint.py \
+            --resource-url https://mcp.lians.ai/mcp
 
       - name: Publish rollback command
         if: always()
