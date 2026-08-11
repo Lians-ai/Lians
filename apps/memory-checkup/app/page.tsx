@@ -17,31 +17,50 @@ type VerificationState = "verified" | "checking" | "failed" | "unavailable";
 const controlStages = [
   {
     number: "01",
-    name: "Universal Recorder",
+    name: "Record what mattered",
     description:
-      "Normalize native, OTLP GenAI, MCP, and A2A events while redacting secrets before content is hashed.",
-    proof: "NATIVE / OTLP / MCP / A2A",
+      "The Universal Recorder captures memory, prompts, tools, policy, identity, and review across native, OTLP, MCP, and A2A events.",
+    proof: "UNIVERSAL RECORDER / OPEN INPUTS",
   },
   {
     number: "02",
-    name: "Decision Receipt",
+    name: "Prove the boundary",
     description:
-      "Freeze the declared evidence boundary, completeness disclosure, acting identity, and integrity material.",
-    proof: "SHA-256 / Ed25519 / APPEND-ONLY",
+      "A Decision Receipt freezes the declared evidence boundary, completeness disclosure, acting identity, and integrity material.",
+    proof: "DECISION RECEIPT / SHA-256 / ED25519",
   },
   {
     number: "03",
-    name: "Runtime Gate",
+    name: "Govern the action",
     description:
-      "Verify trusted receipts and bind the real principal, scopes, barrier, policy, and approval quorum before action.",
-    proof: "IDENTITY-BOUND / 2-OF-2",
+      "The Authority Gate binds the real principal, scopes, information barrier, policy, and approval quorum before release.",
+    proof: "AUTHORITY GATE / IDENTITY-BOUND",
   },
   {
     number: "04",
-    name: "Investigator",
+    name: "Learn from change",
     description:
-      "Prioritize affected decisions, separate proof from reachability, assign remediation, and attest closure.",
-    proof: "INDEXED IMPACT / CASES / CLOSURE",
+      "Impact Intelligence finds exposed decisions, separates proof from reachability, assigns remediation, and attests closure.",
+    proof: "IMPACT INTELLIGENCE / CLOSURE",
+  },
+] as const;
+
+const answerabilityQuestions = [
+  {
+    question: "What did it know?",
+    answer: "Point-in-time memory and provenance",
+  },
+  {
+    question: "Why did it act?",
+    answer: "A complete decision evidence graph",
+  },
+  {
+    question: "Who authorized it?",
+    answer: "Identity-bound policy and approval",
+  },
+  {
+    question: "What changed next?",
+    answer: "Blast-radius detection and remediation",
   },
 ] as const;
 
@@ -213,20 +232,20 @@ export default function Home() {
   return (
     <main id="top">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="Lians Investigator home">
+        <a className="brand" href="#top" aria-label="Lians home">
           <span className="brand-mark" aria-hidden="true">
             L
           </span>
           <span className="brand-name">Lians</span>
-          <span className="brand-product">Investigator</span>
+          <span className="brand-product">Decision System</span>
         </a>
         <nav className="topnav" aria-label="Page sections">
-          <Link href="/studio">Studio</Link>
-          <a href="#control">Control loop</a>
-          <a href="#incident">Incident</a>
-          <a href="#impact">Impact</a>
-          <a href="#backtest">Backtest proof</a>
-          <a href="#receipt">Receipt</a>
+          <Link href="/studio">Memory Studio</Link>
+          <a href="#control">Proof loop</a>
+          <a href="#incident">Live case</a>
+          <a href="#impact">Blast radius</a>
+          <a href="#backtest">Lookahead test</a>
+          <a href="#receipt">Verify</a>
         </nav>
         <div className="topbar-actions">
           <span className="demo-pill">
@@ -241,27 +260,25 @@ export default function Home() {
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">
-            <span aria-hidden="true">01</span> DECISION EVIDENCE INFRASTRUCTURE
+            THE SYSTEM OF RECORD FOR AI DECISIONS
           </p>
-          <h1>Every consequential AI action gets a verifiable receipt.</h1>
+          <h1>Make every AI decision answerable.</h1>
           <p className="hero-lede">
-            Lians records what an agent saw, proves who was permitted to act,
-            enforces runtime policy, and reconstructs the decision boundary when
-            facts, policies, or permissions change.
+            Lians gives teams the memory, authority, evidence, and controls to
+            understand what AI knew, why it acted, who authorized it, and what
+            changed next&mdash;across every model, agent, and provider.
           </p>
           <div className="hero-actions">
             <a className="primary-button" href="#incident">
-              Investigate incident <span aria-hidden="true">↓</span>
+              See a decision investigated <span aria-hidden="true">↓</span>
             </a>
-            <a className="secondary-button" href="#backtest">
-              Explore lookahead proof
-            </a>
+            <Link className="secondary-button" href="/studio">Open Memory Studio</Link>
             <button
               className="secondary-button"
               type="button"
               onClick={downloadReceipt}
             >
-              Download Receipt v0.1
+              Verify a Decision Receipt
             </button>
           </div>
           <div className="truth-note">
@@ -321,17 +338,32 @@ export default function Home() {
         </aside>
       </section>
 
+      <section className="answerability-section" aria-label="The four questions every AI decision must answer">
+        <div className="answerability-intro">
+          <span>THE ANSWERABILITY STANDARD</span>
+          <strong>The record AI cannot rewrite after the fact.</strong>
+        </div>
+        <div className="answerability-grid">
+          {answerabilityQuestions.map((item) => (
+            <article key={item.question}>
+              <h2>{item.question}</h2>
+              <p>{item.answer}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="control-section" id="control" aria-labelledby="control-title">
         <div className="section-heading">
           <div>
             <p className="eyebrow">
-              <span aria-hidden="true">02</span> THE LIANS CONTROL LOOP
+              <span aria-hidden="true">01</span> THE LIANS PROOF LOOP
             </p>
-            <h2 id="control-title">From any agent event to a defensible action.</h2>
+            <h2 id="control-title">One system closes the accountability loop.</h2>
             <p>
-              One evidence graph connects capture, cryptographic proof, runtime
-              enforcement, and remediation. Each stage preserves the distinction
-              between what was recorded, what was reachable, and what is estimated.
+              Record the decision boundary before the outcome is known. Bind it
+              to authority before action. Then find every exposed decision when
+              memory, policy, permissions, or models change.
             </p>
           </div>
           <div className="control-standard" aria-label="Supported protocol surfaces">
@@ -429,12 +461,13 @@ export default function Home() {
         <div className="incident-heading">
           <div>
             <p className="eyebrow">
-              <span aria-hidden="true">03</span> CANONICAL LENDING INCIDENT
+              <span aria-hidden="true">02</span> ANSWERABLE DECISION CASE
             </p>
-            <h2 id="incident-title">Why was Application 8127 declined?</h2>
+            <h2 id="incident-title">A decision becomes a case, not a mystery.</h2>
             <p>
-              Start with the immutable decision record. Move forward to see what
-              changed later without rewriting what was known on July 12.
+              Ask why Application 8127 was declined, inspect the immutable
+              boundary, and move forward through later changes without rewriting
+              what the system knew on July 12.
             </p>
           </div>
           <div className="incident-statuses" aria-label="Incident status">
@@ -605,12 +638,13 @@ export default function Home() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">
-              <span aria-hidden="true">04</span> CHANGE IMPACT
+              <span aria-hidden="true">03</span> IMPACT INTELLIGENCE
             </p>
-            <h2 id="impact-title">What needs attention now?</h2>
+            <h2 id="impact-title">When truth changes, find every decision at risk.</h2>
             <p>
               Lians separates recorded use from possible access and sandboxed
-              estimates, so a review queue never overstates causality.
+              estimates, turning change into a prioritized remediation queue
+              without overstating causality.
             </p>
           </div>
           <div className="impact-summary" aria-label="Impact summary">
@@ -690,12 +724,13 @@ export default function Home() {
         <div className="section-heading receipt-heading">
           <div>
             <p className="eyebrow">
-              <span aria-hidden="true">06</span> VERIFY &amp; REVIEW
+              <span aria-hidden="true">05</span> PORTABLE PROOF
             </p>
-            <h2 id="receipt-title">A receipt another team can inspect.</h2>
+            <h2 id="receipt-title">Proof that travels across teams, models, and regulators.</h2>
             <p>
               The downloadable JSON freezes the recorded boundary, completeness
-              disclosure, later change links, and integrity material.
+              disclosure, later change links, and integrity material in a format
+              another system can independently inspect.
             </p>
           </div>
           <button className="primary-button light" type="button" onClick={downloadReceipt}>
@@ -770,8 +805,8 @@ export default function Home() {
           <span className="brand-mark" aria-hidden="true">L</span>
           <span className="brand-name">Lians</span>
         </a>
-        <p>Prove what your AI knew when it acted.</p>
-        <span>Decision evidence infrastructure · Synthetic demonstration</span>
+        <p>Make every AI decision answerable.</p>
+        <span>Memory · Authority · Evidence · Action</span>
       </footer>
 
       {notice && <div className="toast" role="status" aria-live="polite"><span aria-hidden="true">✓</span>{notice}</div>}

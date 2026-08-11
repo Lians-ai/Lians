@@ -3,11 +3,12 @@
 This is the evidence packet Lians should hand to financial institutions, medical
 organizations, legal teams, vendor-risk reviewers, and security architects.
 
-Lians should be pitched as a regulated-memory control plane, not as a generic
-vector-memory library. The product claim is simple:
+Lians should be pitched as the system of record and control for consequential
+AI decisions, not as generic infrastructure or a vector-memory library. The
+product claim is simple:
 
-> Lians proves what an AI agent knew, when it knew it, who could see it, and
-> whether that memory was allowed to influence a regulated decision.
+> Lians makes an AI decision answerable: what the system knew, why it acted,
+> who authorized it, and what changed afterward.
 
 ## 1. Procurement Narrative
 

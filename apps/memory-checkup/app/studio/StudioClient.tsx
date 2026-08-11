@@ -476,7 +476,7 @@ export default function StudioClient() {
   return (
     <main className="studio-app">
       <header className="studio-topbar">
-        <Link className="studio-brand" href="/" aria-label="Lians Investigator home">
+        <Link className="studio-brand" href="/" aria-label="Lians home">
           <span aria-hidden="true">L</span>
           <strong>Lians</strong>
           <small>Studio</small>
@@ -487,19 +487,19 @@ export default function StudioClient() {
         </div>
         <nav aria-label="Studio navigation">
           <Link className="active" href="/studio">Memory</Link>
-          <Link href="/#backtest">Evidence</Link>
+          <Link href="/#backtest">Falsifiable proof</Link>
           <Link href="/#control">Controls</Link>
-          <Link href="/">Investigator</Link>
+          <Link href="/">Decision System</Link>
         </nav>
       </header>
 
       <section className="studio-intro">
         <div>
-          <p className="studio-kicker">MEMORY OPERATIONS / LIVE INVENTORY</p>
-          <h1>See what your AI remembers—and why.</h1>
+          <p className="studio-kicker">THE MEMORY BEHIND ANSWERABLE AI</p>
+          <h1>Know what your AI remembers—and why it matters.</h1>
           <p>
-            Inspect durable preferences, trace their provenance, and correct the working
-            set without erasing the history behind earlier decisions.
+            Inspect durable preferences, trace every source, and correct the
+            working set without erasing the decision history it influenced.
           </p>
         </div>
         <form className="connection-card" onSubmit={connect}>

@@ -210,7 +210,7 @@ export default function LookaheadExplorer() {
       <div className="backtest-heading">
         <div>
           <p className="eyebrow">
-            <span aria-hidden="true">05</span> TRACK E0 / DECISION EXPLORER
+            <span aria-hidden="true">04</span> TRACK E0 / FALSIFIABLE PROOF
           </p>
           <h2 id="backtest-title">See exactly how a backtest cheated.</h2>
           <p>

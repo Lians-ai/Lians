@@ -24,33 +24,33 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase,
-    title: "Lians | Decision Evidence Infrastructure for AI",
+    title: "Lians | Make Every AI Decision Answerable",
     description:
-      "Record agent evidence, issue signed Decision Receipts, enforce identity-bound runtime policy, and investigate change impact with Lians.",
+      "The system of record and control for consequential AI decisions: memory, authority, verifiable evidence, and change impact across every model and agent.",
     icons: {
       icon: "/favicon.svg",
       shortcut: "/favicon.svg",
     },
     openGraph: {
-      title: "Prove what your AI knew when it acted.",
+      title: "Make every AI decision answerable.",
       description:
-        "Universal recording, verifiable Decision Receipts, runtime policy gates, and evidence-led investigations in one control loop.",
+        "Know what AI knew, why it acted, who authorized it, and what changed next—with one portable decision record.",
       type: "website",
       images: [
         {
-          url: "/og-product.png",
+          url: "/og.png",
           width: 1731,
           height: 909,
-          alt: "Lians inspectable memory system connected to verifiable evidence",
+          alt: "Lians makes every AI decision answerable with memory, authority, evidence, and impact intelligence",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Lians | Decision Evidence Infrastructure",
+      title: "Lians | Make Every AI Decision Answerable",
       description:
-        "Verify the recorded evidence boundary, acting authority, and policy basis for an AI action.",
-      images: ["/og-product.png"],
+        "The system of record and control for consequential AI decisions.",
+      images: ["/og.png"],
     },
   };
 }

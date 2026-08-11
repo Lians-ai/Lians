@@ -1,7 +1,14 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/logo-blue.png" width="420" alt="Lians">
+    <img src="apps/memory-checkup/public/og.png" width="900" alt="Lians — Make every AI decision answerable">
   </a>
+</p>
+
+<h1 align="center">Make every AI decision answerable.</h1>
+
+<p align="center">
+  <strong>The open-source system of record and control for consequential AI.</strong><br />
+  Memory. Authority. Evidence. Action.
 </p>
 
 <p align="center">
@@ -46,42 +53,36 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **cross-platform
-decision evidence and reconstruction layer for regulated AI**. It gives
-compliance, model-risk, and operational-risk teams one record of what an agent
-knew, what it retrieved, which policy governed it, which tools ran, who
-reviewed it, and what changed later.
+[Lians](https://github.com/Lians-ai/Lians) gives developers and institutions
+one portable record of what AI knew, why it acted, who authorized it, and what
+changed afterward. It works across models, agents, frameworks, and providers,
+so the system responsible for proving a decision is never controlled by the
+runtime that made it.
 
-The durable moat is neutrality. A firm can run agents across Bedrock, Azure
-OpenAI, Anthropic direct, and open-source runtimes while keeping one portable
-evidence record outside every provider.
+| The question | Lians primitive | What teams gain |
+|---|---|---|
+| **What did it know?** | Point-in-time memory with provenance and supersession | The exact context available before the outcome was known |
+| **Why did it act?** | Decision Envelopes and signed Decision Receipts | A portable, independently verifiable evidence boundary |
+| **Who authorized it?** | Identity-bound policy, scopes, barriers, and approval gates | Control tied to the real principal and exact action |
+| **What changed next?** | Impact Intelligence and historical reconstruction | Every exposed decision, prioritized without overstating causality |
 
-Every write is preserved as a governed temporal record and compiled into a
-typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
-mode and returns a content-addressed receipt that can bind automatically to a
-Decision Envelope. See
-[decision evidence and reconstruction](docs/decision-evidence.md), the
-[normative completeness grades](docs/completeness-grades.md),
-[Evidence Pack signing key custody](docs/evidence-signing-key-custody.md), the
-[governed memory engine](docs/memory-engine.md) and
-[reproducible evidence gates](docs/benchmarks/README.md).
+Lians does not infer hidden chain-of-thought or promise impossible deterministic
+replay. It records the material boundary, names what is missing, and makes the
+result independently inspectable. That is the difference between another AI
+dashboard and a system of record.
 
-The platform exposes one evidence workflow:
+The proof loop is continuous:
 
-- **Capture**: open a Decision Envelope and bind memory, traces, policy
-  decisions, prompts, tools, and human review as the action happens.
-- **Reconstruct**: reproduce the point-in-time knowledge and execution path even
-  when exact deterministic replay is impossible.
-- **Verify**: grade every decision as Recorded, Reconstructable, Verifiable, or
-  Replayable, with every missing requirement named.
-- **Monitor**: when a source, policy, or model changes, identify every exposed
-  decision and emit a blast-radius alert.
+- **Record** memory, prompts, tools, policy decisions, identity, and human review
+  as the action happens.
+- **Prove** the declared boundary with content-addressed receipts, completeness
+  grades, and tamper-evident integrity.
+- **Govern** consequential actions with identity-bound runtime gates and explicit
+  approval policy.
+- **Improve** by detecting blast radius when a source, policy, permission, or
+  model changes.
 
-Memory remains a core evidence source and performance primitive. It is not the
-commercial category by itself.
-
-The same engine now powers a local Developer Studio and an enterprise control
-plane:
+The same system scales from one developer to an institutional control plane:
 
 - `lians dev` starts a persistent SQLite-backed API for Python and TypeScript
   clients; `lians doctor` checks the local runtime.
@@ -100,7 +101,8 @@ plane:
 - Workspaces, push connectors, and `/v1/control-plane/overview` expose the same
   memory, evidence, compliance, and operational state to teams.
 
-See the [product platform guide](docs/product-platform-guide.md) and
+See the [brand and category position](docs/brand-positioning.md),
+[product platform guide](docs/product-platform-guide.md), and
 [architecture](docs/product-platform-architecture.md).
 
 | | Library | Self-Hosted Server | Cloud |
@@ -115,19 +117,20 @@ See the [product platform guide](docs/product-platform-guide.md) and
 
 ---
 
-## Agent memory should improve without losing the record
+## The memory behind answerable AI
 
-Lians gives agents a durable memory loop across facts, context, decisions, outcomes,
-and reviewed lessons. The Memory product keeps context current and useful; the
-Records product captures behavior and oversight in an open, verifiable event format.
+Lians gives agents a durable memory loop across facts, preferences, context,
+decisions, outcomes, and reviewed lessons. Memory keeps context current and
+useful; the decision record preserves behavior and oversight in an open,
+verifiable format.
 
 Most memory layers stop at storage and retrieval. Lians is built for teams that
 also need to know what the agent knew, when it knew it, where the fact came from,
 which outcomes followed, who was allowed to see it, and whether stale or erased
 content was kept out of future context.
 
-That is the gap between a memory demo and a memory system teams can trust in
-production, especially in financial, medical, and legal environments.
+That is the gap between a memory feature and an answerable decision system,
+especially in financial, medical, and legal environments.
 
 ### What regulated memory must prove
 

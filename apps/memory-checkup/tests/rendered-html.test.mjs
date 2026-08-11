@@ -29,7 +29,7 @@ test("server-renders the live Lians Studio memory workspace", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
 
-  assert.match(html, /See what your AI remembers—and why\./i);
+  assert.match(html, /Know what your AI remembers—and why it matters\./i);
   assert.match(html, /Connect securely/i);
   assert.match(html, /Memory directory/i);
   assert.match(html, /Durable/i);
@@ -48,8 +48,10 @@ test("server-renders the Lians Investigator incident", async () => {
   const html = await response.text();
   assert.match(
     html,
-    /Every consequential AI action gets a verifiable receipt\./i,
+    /Make every AI decision answerable\./i,
   );
+  assert.match(html, /What did it know\?/i);
+  assert.match(html, /Who authorized it\?/i);
   assert.match(html, /Synthetic demo/i);
   assert.match(html, /synthetic canonical incident/i);
   assert.match(html, /Application 8127/i);
@@ -93,7 +95,7 @@ test("server-renders the deterministic Track E0 entry point", async () => {
   const response = await render();
   const html = await response.text();
 
-  assert.match(html, /TRACK E0 \/ DECISION EXPLORER/i);
+  assert.match(html, /TRACK E0 \/ FALSIFIABLE PROOF/i);
   assert.match(html, /See exactly how a backtest cheated\./i);
   assert.match(html, /Load the committed evidence run/i);
   assert.match(html, /744 ticker decisions/i);
@@ -154,7 +156,7 @@ test("keeps download, cryptographic verification, and metadata contracts in sour
   assert.match(fixture, /json-sort-keys-utf8-v1/);
   assert.match(fixture, /public_key/);
   assert.doesNotMatch(fixture, /evidence-pack\/v1|packHash|publicKeySpki/);
-  assert.match(layout, /Lians \| Decision Evidence Infrastructure for AI/);
+  assert.match(layout, /Lians \| Make Every AI Decision Answerable/);
   assert.doesNotMatch(layout, /Memory Checkup|Starter Project|codex-preview/);
 });
 

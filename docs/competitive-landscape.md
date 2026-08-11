@@ -17,14 +17,13 @@ The memory market is splitting into five lanes:
 | Temporal / graph memory | Zep/Graphiti, Hindsight, Supermemory, MemoryLake | Better long-horizon recall and relationship reasoning | Respect their graph/context strengths; win on regulated evidence and deterministic controls |
 | Personal memory passport | MemoryLake, Supermemory personal app, OpenMemory-style tools | One user memory across many AIs | Mostly not Lians' lane |
 | Self-improving agents | Letta, Honcho, Hindsight | Agents that learn, reflect, dream, and adapt | Integrate or coexist; do not position Lians as an agent identity product |
-| Regulated decision-evidence layer | Lians | Teams that must reconstruct consequential AI decisions | Differentiation target; independent leadership evidence is still gated |
+| Answerable AI decision systems | Lians | Teams that must record, govern, verify, and improve consequential AI decisions | Differentiation target; lead with the complete proof loop, not another infrastructure layer |
 
 The simplest message:
 
-> Temporal memory is now table stakes. Lians is differentiated when one receipt
-> can bind a named decision to event-time and knowledge-time cutoffs, included
-> and excluded source versions, future-leak checks, policy state, and erasure
-> state — then verify that record offline.
+> Temporal memory is now table stakes. Lians is differentiated when one system
+> can show what AI knew, why it acted, who authorized it, and what changed next,
+> then bind that answer to a receipt another team can verify offline.
 
 Do not position ordinary temporal memory, provenance, or audit logging as unique.
 Graphiti is bitemporal, Mem0 documents temporal/as-of reasoning and history,

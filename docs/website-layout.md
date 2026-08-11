@@ -1,12 +1,13 @@
 # Lians Website Layout
 
-> **One-line positioning:** Lians is the **memory layer for regulated AI** — bitemporal,
-> auditable, and crypto-shreddable, so teams in finance, healthcare, and the public
-> sector can give agents long-term memory without failing an audit.
+> **One-line positioning:** Lians is the **system of record and control for
+> consequential AI decisions**—preserving what the system knew, why it acted,
+> who authorized it, and what changed next.
 
-The site has **one job on the home page**: make a technical buyer believe Lians is the
-only memory layer they can put in front of a compliance officer. Everything below serves
-that. Core software is the hero — not the company, not the blog.
+The site has **one job on the home page**: make a buyer experience an answerable
+AI decision. Every claim should resolve to an inspectable receipt, incident,
+policy, memory record, or reproducible benchmark. Core software and proof are
+the hero—not adjectives, company mythology, or generic infrastructure language.
 
 ---
 
@@ -14,7 +15,7 @@ that. Core software is the hero — not the company, not the blog.
 
 Keep it lean. Primary nav (left → right):
 
-- **Product** (dropdown: How it works · Audit & compliance · Security · SDKs)
+- **Decision System** (dropdown: Proof loop · Memory Studio · Authority Gate · Impact Intelligence)
 - **Solutions** (dropdown by vertical: Financial services · Healthcare · Public sector)
 - **Docs**
 - **Pricing**
@@ -29,19 +30,20 @@ Docs · Changelog · Status · Legal.
 ## 2. Home page (top to bottom)
 
 ### 2.1 Hero
-- **Headline:** "AI memory your auditor can trust."
-- **Subhead:** Bitemporal memory with a tamper-evident audit chain (SEC 17a-4 / WORM)
-  and GDPR crypto-shred — for agents that operate in regulated environments.
-- **Primary CTA:** Get an API key · **Secondary CTA:** Read the architecture
-- **Code-in-hero:** a 5-line install + write/recall snippet, language-tabbed
-  (`pip install lians-sdk`, `npm i @lians-ai/lians`, `go get`). Show it actually working.
-- Trust strip beneath: "Five-language SDKs · OIDC-signed releases · RLS tenant isolation."
+- **Headline:** "Make every AI decision answerable."
+- **Subhead:** Lians gives teams the memory, authority, evidence, and controls to
+  understand what AI knew, why it acted, who authorized it, and what changed
+  next—across every model, agent, and provider.
+- **Primary CTA:** See a decision investigated · **Secondary CTA:** Open Memory Studio
+- **Proof object:** a real, downloadable Decision Receipt with visible integrity state.
+- Standard beneath: "What did it know? · Why did it act? · Who authorized it? · What changed next?"
 
-### 2.2 The problem (one screen)
-Three short columns naming what generic memory (mem0/Zep/vector DBs) can't do:
-1. **No audit trail** — you can't prove what the agent knew, and when.
-2. **No right-to-be-forgotten** — deleting a user means re-indexing everything.
-3. **No tenant isolation guarantees** — one query bug leaks across customers.
+### 2.2 The answerability standard (one screen)
+Four compact questions define the category:
+1. **What did it know?** Point-in-time memory and provenance.
+2. **Why did it act?** A complete decision evidence graph.
+3. **Who authorized it?** Identity-bound policy and approval.
+4. **What changed next?** Blast-radius detection and remediation.
 
 ### 2.3 How Lians works (the core software — the centerpiece)
 A labeled architecture diagram + 4 capability cards. This is the most important section:
@@ -98,8 +100,9 @@ Three cards (Financial services · Healthcare · Public sector) → solution pag
 2. **Every compliance claim links to evidence** — a doc, the audit-chain verifier, or the
    eval harness. No unbacked "enterprise-grade."
 3. **Show real code that runs.** Hero snippet and quickstarts must be copy-paste correct.
-4. **Differentiate on the regulated wedge** — audit chain, crypto-shred, admission control,
-   tenant isolation. That's the moat; say it on every page.
+4. **Differentiate on answerability**—memory, authority, evidence, and impact
+   belong to one decision record. Regulated controls prove the depth of that
+   category rather than becoming the whole brand.
 5. **Honest install matrix.** Don't imply Maven Central until Java actually ships there.
 
 ---

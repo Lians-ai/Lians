@@ -3,9 +3,9 @@ import StudioClient from "./StudioClient";
 import "./studio.css";
 
 export const metadata: Metadata = {
-  title: "Lians Studio | Inspect and govern agent memory",
+  title: "Lians Memory Studio | Govern What AI Knows",
   description:
-    "Inspect, explain, correct, and verify durable AI memory without rewriting its history.",
+    "Inspect, explain, correct, and verify the memory behind consequential AI decisions without rewriting history.",
 };
 
 export default function StudioPage() {

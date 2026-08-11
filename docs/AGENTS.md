@@ -4,9 +4,23 @@ This file gives AI coding assistants (Claude Code, Cursor, Codex, Windsurf) the 
 
 ## What Lians is
 
-Lians is a **financial-grade memory layer for AI agents**. It solves the stale-fact problem: when an agent writes "NVDA guidance is $35B" and later writes "NVDA guidance revised to $40B", naive memory systems return both — contaminating LLM context. Lians uses a bitemporal model to suppress superseded facts at the database layer.
+Lians is the **system of record and control for consequential AI decisions**.
+It makes a decision answerable by preserving what the system knew, why it
+acted, who authorized it, and what changed afterward. Governed bitemporal
+memory is a core primitive: when an agent writes "NVDA guidance is $35B" and
+later writes "NVDA guidance revised to $40B", naive memory systems return both
+and contaminate context. Lians suppresses the superseded fact while preserving
+the historical decision record.
+
+Use the canonical positioning and product vocabulary in
+`docs/brand-positioning.md`. Do not reduce Lians to generic AI infrastructure or
+an agent-memory layer when writing product-facing copy.
 
 Key capabilities:
+- **Universal decision recording** — memory, prompts, tools, policy, identity, and review in one neutral record
+- **Decision Receipts** — portable evidence boundaries with explicit completeness and independent verification
+- **Authority Gates** — identity-bound policy, scopes, barriers, approvals, and action release
+- **Impact Intelligence** — blast-radius detection, remediation queues, and attested closure
 - **Bitemporal facts** — `event_time` (when it happened) + `valid_from/valid_to` (when we knew it)
 - **Supersession pipeline** — three-stage detection (metadata overlap → deterministic rules → optional LLM)
 - **Tamper-evident audit chain** — SHA-256 hash chain on every write; SEC 17a-4 deployments additionally require configured WORM storage and policy controls
@@ -27,7 +41,7 @@ agentmem/                   Core server (FastAPI + Postgres + pgvector + Redis)
     audit_chain.py          SHA-256 Merkle audit chain
     crypto.py               AES-256-GCM per-subject encryption
     config.py               Pydantic settings (all env vars documented here)
-  tests/                    557+ pytest tests (all run with local embeddings)
+  tests/                    1,200+ pytest tests (all run with local embeddings)
   alembic/versions/         DB migrations — read these to understand the schema
   sdk/python/lians/         Full SDK with framework integrations
   sdk/typescript/src/       TypeScript SDK

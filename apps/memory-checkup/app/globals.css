@@ -299,6 +299,81 @@ a:focus-visible {
   color: var(--ink);
 }
 
+.answerability-section {
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto 88px;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.8fr);
+  background: var(--ink);
+  color: var(--white);
+  border-top: 3px solid var(--blue);
+  box-shadow: var(--shadow);
+}
+
+.answerability-intro {
+  min-height: 232px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(145deg, rgba(49, 86, 217, 0.18), transparent 58%),
+    var(--ink);
+}
+
+.answerability-intro span {
+  color: #93a8ff;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 780;
+  letter-spacing: 0.14em;
+}
+
+.answerability-intro strong {
+  max-width: 270px;
+  font-size: clamp(24px, 2.5vw, 34px);
+  font-weight: 560;
+  line-height: 1.06;
+  letter-spacing: -0.045em;
+}
+
+.answerability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.answerability-grid article {
+  min-height: 116px;
+  padding: 29px 30px;
+  border-right: 1px solid rgba(255, 255, 255, 0.11);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.answerability-grid article:nth-child(even) {
+  border-right: 0;
+}
+
+.answerability-grid article:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.answerability-grid h2 {
+  margin: 0;
+  color: var(--white);
+  font-size: 18px;
+  font-weight: 640;
+  letter-spacing: -0.025em;
+}
+
+.answerability-grid p {
+  margin: 9px 0 0;
+  color: #aeb9c6;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .receipt-preview {
   position: relative;
   overflow: hidden;
@@ -2930,6 +3005,20 @@ footer > span:last-child {
     display: none;
   }
 
+  .answerability-section {
+    grid-template-columns: 1fr;
+  }
+
+  .answerability-intro {
+    min-height: 170px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  .answerability-intro strong {
+    max-width: 620px;
+  }
+
   .decision-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -3011,6 +3100,32 @@ footer > span:last-child {
 }
 
 @media (max-width: 780px) {
+  .answerability-section {
+    width: calc(100% - 28px);
+    margin-bottom: 60px;
+  }
+
+  .answerability-intro {
+    min-height: 190px;
+    padding: 24px;
+  }
+
+  .answerability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .answerability-grid article,
+  .answerability-grid article:nth-child(even),
+  .answerability-grid article:nth-last-child(-n + 2) {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+  }
+
+  .answerability-grid article:last-child {
+    border-bottom: 0;
+  }
+
   .backtest-section {
     padding-left: 14px;
     padding-right: 14px;
