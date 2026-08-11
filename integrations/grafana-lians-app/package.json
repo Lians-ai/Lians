@@ -7,7 +7,7 @@
     "dev": "webpack --config webpack.config.cjs --mode development --watch",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run build",
-    "audit:ci": "npm audit --omit=peer --audit-level=moderate"
+    "audit:ci": "npm audit --audit-level=moderate"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
