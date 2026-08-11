@@ -13,6 +13,10 @@ export interface MemoryAdd {
   metadata?: Record<string, unknown>;
   /** Importance weight 0.0–1.0; default 0.5 */
   importance?: number;
+  /** Hierarchical isolation path, e.g. org/acme/team/platform/project/api. */
+  scope?: string;
+  /** `fast` stores safely first and completes embeddings through the durable worker. */
+  write_mode?: "inline" | "fast";
 }
 
 // ── Core memory object ───────────────────────────────────────────────────────
@@ -86,10 +90,47 @@ export interface MemoryOut {
   content_hash: string;
   erased_at: string | null;
   metadata: Record<string, unknown>;
+  scope?: string | null;
+  enrichment_status?: "pending" | "complete";
   /** Final bounded recall rank. Null/absent on non-recall surfaces. */
   score?: number | null;
   /** Deterministic component scores and ranking provenance for this recall hit. */
   score_breakdown?: MemoryScoreBreakdown | null;
+}
+
+export type MemoryState =
+  | "active"
+  | "historical"
+  | "superseded"
+  | "retired"
+  | "erased"
+  | "all";
+
+export interface MemoryListResult {
+  memories: MemoryOut[];
+  total: number;
+  limit: number;
+  offset: number;
+  state: MemoryState;
+}
+
+export interface MemoryControlRequest {
+  agent_id: string;
+  action: "confirm" | "pin" | "demote" | "retire" | "replace";
+  actor: string;
+  note?: string;
+  correction?: string;
+}
+
+export interface MemoryControlResult {
+  memory_id: string;
+  agent_id: string;
+  action: MemoryControlRequest["action"];
+  status: string;
+  actor: string;
+  importance: number;
+  resolved_at: string;
+  replacement_memory_id: string | null;
 }
 
 // ── Recall ───────────────────────────────────────────────────────────────────
@@ -106,6 +147,8 @@ export interface RecallRequest {
   max_query_variants?: number;
   mode?: "fast" | "deep" | "reconstruct";
   decision_envelope_id?: string;
+  scope?: string;
+  include_parent_scopes?: boolean;
 }
 
 export interface RecallResult {
@@ -140,6 +183,130 @@ export interface ContextRequest {
   max_query_variants?: number;
   mode?: "fast" | "deep" | "reconstruct";
   decision_envelope_id?: string;
+  scope?: string;
+  include_parent_scopes?: boolean;
+}
+
+export interface RecallStreamEvent {
+  event: "started" | "snapshot" | "final" | "done" | "error" | string;
+  data: Record<string, unknown>;
+}
+
+export type PolicyProfileName =
+  | "balanced"
+  | "personal_assistant"
+  | "coding_agent"
+  | "support_agent"
+  | "regulated_analyst";
+
+export interface PolicyProfile {
+  name: PolicyProfileName;
+  version: string;
+  description: string;
+  capture: Record<string, unknown>;
+  recall: Record<string, unknown>;
+  lifecycle: Record<string, unknown>;
+}
+
+export interface PolicyProfileList {
+  profiles: PolicyProfile[];
+  total: number;
+}
+
+export interface AgentPolicy {
+  agent_id: string;
+  profile: PolicyProfileName;
+  profile_version: string;
+  revision: number;
+  effective: Record<string, unknown>;
+  overrides: Record<string, unknown>;
+  assigned_at: string | null;
+  assigned_by: string | null;
+}
+
+export interface AgentPolicyUpdate {
+  profile: PolicyProfileName;
+  actor: string;
+  expected_revision?: number;
+  overrides?: Record<string, unknown>;
+}
+
+export interface Workspace {
+  namespace: string;
+  display_name: string;
+  plan: "developer" | "team" | "enterprise";
+  region: string | null;
+  settings: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+  stats: { memories: number; agents: number; connectors: number };
+}
+
+export interface WorkspaceUpdate {
+  display_name: string;
+  plan?: Workspace["plan"];
+  region?: string;
+  settings?: Record<string, unknown>;
+}
+
+export type ConnectorKind =
+  | "direct"
+  | "github"
+  | "slack"
+  | "notion"
+  | "google_drive"
+  | "webhook";
+
+export interface Connector {
+  id: string;
+  kind: ConnectorKind;
+  name: string;
+  agent_id: string;
+  scope: string | null;
+  status: "active" | "paused" | "disabled";
+  config: Record<string, unknown>;
+  cursor: string | null;
+  last_sync_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConnectorCreate {
+  kind: ConnectorKind;
+  name: string;
+  agent_id: string;
+  scope?: string;
+  config?: Record<string, unknown>;
+}
+
+export interface ConnectorEvent {
+  external_id: string;
+  content: string;
+  event_time: string;
+  subject_id?: string;
+  metadata?: Record<string, unknown>;
+  importance?: number;
+}
+
+export interface ConnectorIngestResult {
+  connector_id: string;
+  accepted: number;
+  duplicates: number;
+  memory_ids: string[];
+  cursor: string | null;
+}
+
+export interface ControlPlaneOverview {
+  namespace: string;
+  generated_at: string;
+  posture: Record<string, unknown>;
+  memory: Record<string, number>;
+  governance: Record<string, number>;
+  evidence: Record<string, unknown>;
+  operations: Record<string, unknown>;
+  retention: Record<string, unknown>;
+  attention: Array<Record<string, unknown>>;
 }
 
 export interface ContextResult {
@@ -372,6 +539,7 @@ export interface MessageIngestRequest {
   roles?: Array<"user" | "assistant" | "system" | "tool">;
   /** Retain durable user preferences/facts even when `roles` omits user. */
   capture_durable_user_memories?: boolean;
+  scope?: string;
 }
 
 // ── Erasure (GDPR Art. 17 / CCPA) ───────────────────────────────────────────

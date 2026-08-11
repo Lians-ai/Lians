@@ -1,0 +1,44 @@
+{
+  "name": "lians-sample-memory-eval",
+  "description": "A small multi-session fixture covering recall, durable preferences, safety facts, and temporal supersession.",
+  "samples": [
+    {
+      "sessions": [
+        {
+          "date": "2026-01-10",
+          "turns": [
+            {"speaker": "user", "text": "I work at Acme Corp as a data scientist."},
+            {"speaker": "user", "text": "My salary at Acme is 120000 dollars per year.", "metadata": {"ticker": "USER_SALARY", "metric": "amount"}}
+          ]
+        },
+        {
+          "date": "2026-03-15",
+          "turns": [
+            {"speaker": "user", "text": "My salary at Acme is now 140000 dollars per year.", "metadata": {"ticker": "USER_SALARY", "metric": "amount"}},
+            {"speaker": "user", "text": "I moved to the analytics team at Acme."}
+          ]
+        }
+      ],
+      "questions": [
+        {"question": "What is the user's current salary at Acme?", "answer": "140000", "stale": "120000", "category": "temporal-supersession"},
+        {"question": "Where does the user work?", "answer": "Acme", "category": "multi-session"},
+        {"question": "Which team did the user move to?", "answer": "analytics", "category": "multi-session"}
+      ]
+    },
+    {
+      "sessions": [
+        {
+          "date": "2026-02-01",
+          "turns": [
+            {"speaker": "user", "text": "My favorite programming language is Python."},
+            {"speaker": "user", "text": "Please remember that I am allergic to peanuts."}
+          ]
+        }
+      ],
+      "questions": [
+        {"question": "What is the user's favorite programming language?", "answer": "Python", "category": "preference"},
+        {"question": "What food is the user allergic to?", "answer": "peanuts", "category": "safety-profile"}
+      ]
+    }
+  ]
+}

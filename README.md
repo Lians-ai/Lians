@@ -80,6 +80,29 @@ The platform exposes one evidence workflow:
 Memory remains a core evidence source and performance primitive. It is not the
 commercial category by itself.
 
+The same engine now powers a local Developer Studio and an enterprise control
+plane:
+
+- `lians dev` starts a persistent SQLite-backed API for Python and TypeScript
+  clients; `lians doctor` checks the local runtime.
+- `lians eval` measures recall@k, stale-memory leakage, p50/p95 latency,
+  deadline misses, and prompt-token cost from a customer-owned dataset. Failed
+  thresholds return a non-zero exit code for CI.
+- `/studio` inspects active and historical memories, explains why they were
+  retained, and supports audited confirm, pin, demote, retire, and replace
+  controls.
+- Versioned `balanced`, `personal_assistant`, `coding_agent`, `support_agent`,
+  and `regulated_analyst` policy profiles keep capture behavior explicit.
+- Hierarchical `org/.../team/.../project/...` scopes inherit parent knowledge
+  without exposing sibling-project memory.
+- `write_mode="fast"` durably stores a memory before deferred embedding work;
+  `/v1/recall/stream` emits a fast snapshot before deeper retrieval completes.
+- Workspaces, push connectors, and `/v1/control-plane/overview` expose the same
+  memory, evidence, compliance, and operational state to teams.
+
+See the [product platform guide](docs/product-platform-guide.md) and
+[architecture](docs/product-platform-architecture.md).
+
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
 | **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production (early access) |
@@ -198,6 +221,14 @@ No environment variables are needed for local mode. Set `LIANS_URL`, `LIANS_API_
 
 ```bash
 pip install lians-sdk[local]   # SQLite plus real local semantic embeddings, no Docker
+```
+
+Start a persistent local API that every supported SDK can share:
+
+```bash
+lians doctor
+lians dev --api-key local-development-key
+lians eval --max-p95-latency-ms 500
 ```
 
 ```python

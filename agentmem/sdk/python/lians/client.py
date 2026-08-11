@@ -3,9 +3,10 @@ Lians Python SDK — async HTTP client for the REST API.
 """
 from __future__ import annotations
 import asyncio
+import json
 import random
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 import httpx
 
 
@@ -103,6 +104,8 @@ class AsyncLiansClient:
         metadata: Optional[dict[str, Any]] = None,
         importance: float = 0.5,
         idempotency_key: Optional[str] = None,
+        scope: Optional[str] = None,
+        write_mode: str = "inline",
     ) -> dict:
         """
         Store a financial fact.  Returns the created MemoryOut as a dict.
@@ -112,7 +115,7 @@ class AsyncLiansClient:
         """
         import uuid as _uuid
         key = idempotency_key or str(_uuid.uuid4())
-        return await self._req("POST", "/v1/memories", json={
+        body = {
             "agent_id": agent_id,
             "content": content,
             "event_time": event_time.isoformat(),
@@ -120,7 +123,17 @@ class AsyncLiansClient:
             "subject_id": subject_id,
             "metadata": metadata or {},
             "importance": importance,
-        }, extra_headers={"Idempotency-Key": key})
+        }
+        if scope is not None:
+            body["scope"] = scope
+        if write_mode != "inline":
+            body["write_mode"] = write_mode
+        return await self._req(
+            "POST",
+            "/v1/memories",
+            json=body,
+            extra_headers={"Idempotency-Key": key},
+        )
 
     async def batch_add(self, memories: list[dict[str, Any]]) -> dict:
         """
@@ -151,6 +164,7 @@ class AsyncLiansClient:
         importance: float = 0.5,
         roles: Optional[list[str]] = None,
         capture_durable_user_memories: bool = True,
+        scope: Optional[str] = None,
     ) -> dict:
         """
         Extract and store facts from a conversation message list.
@@ -219,8 +233,11 @@ class AsyncLiansClient:
             "subject_id": subject_id,
             "metadata": metadata or {},
             "importance": importance,
+            "scope": scope,
+            "write_mode": write_mode,
             "roles": roles or ["assistant"],
             "capture_durable_user_memories": capture_durable_user_memories,
+            "scope": scope,
         })
 
     # ── Read ──────────────────────────────────────────────────────────────────
@@ -237,6 +254,8 @@ class AsyncLiansClient:
         max_query_variants: int = 4,
         mode: str = "fast",
         decision_envelope_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        include_parent_scopes: bool = True,
     ) -> dict:
         """
         Retrieve the most relevant *current* memories for a query.
@@ -255,6 +274,8 @@ class AsyncLiansClient:
             "max_query_variants": max_query_variants,
             "mode": mode,
             "decision_envelope_id": decision_envelope_id,
+            "scope": scope,
+            "include_parent_scopes": include_parent_scopes,
         })
 
     async def context(
@@ -272,6 +293,8 @@ class AsyncLiansClient:
         max_query_variants: int = 4,
         mode: str = "deep",
         decision_envelope_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        include_parent_scopes: bool = True,
     ) -> dict:
         """
         Build a token-budgeted, ready-to-inject context block from recall.
@@ -290,12 +313,157 @@ class AsyncLiansClient:
             "strategy": strategy, "max_query_variants": max_query_variants,
             "mode": mode,
             "decision_envelope_id": decision_envelope_id,
+            "scope": scope,
+            "include_parent_scopes": include_parent_scopes,
         }
         if as_of:
             body["as_of"] = as_of.isoformat()
         if header:
             body["header"] = header
         return await self._req("POST", "/v1/context", json=body)
+
+    async def stream_recall(
+        self,
+        agent_id: str,
+        query: str,
+        **options: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield progressive SSE events: started, optional fast snapshot, final, done."""
+        payload = {"agent_id": agent_id, "query": query, **options}
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{self._base}/v1/recall/stream",
+                headers=self._headers,
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                event_name = "message"
+                async for line in response.aiter_lines():
+                    if line.startswith("event: "):
+                        event_name = line[7:]
+                    elif line.startswith("data: "):
+                        yield {"event": event_name, "data": json.loads(line[6:])}
+
+    async def list_memories(
+        self,
+        *,
+        agent_id: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        state: str = "active",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """Inspect the current or historical memory inventory."""
+        return await self._req("GET", "/v1/memories", params={
+            "agent_id": agent_id,
+            "subject_id": subject_id,
+            "scope": scope,
+            "state": state,
+            "limit": limit,
+            "offset": offset,
+        })
+
+    async def control_memory(
+        self,
+        memory_id: str,
+        *,
+        agent_id: str,
+        action: str,
+        actor: str,
+        note: Optional[str] = None,
+        correction: Optional[str] = None,
+    ) -> dict:
+        """Confirm, pin, demote, retire, or replace a memory without losing history."""
+        return await self._req("POST", f"/v1/memories/{memory_id}/control", json={
+            "agent_id": agent_id,
+            "action": action,
+            "actor": actor,
+            "note": note,
+            "correction": correction,
+        })
+
+    async def policy_profiles(self) -> dict:
+        return await self._req("GET", "/v1/policy-profiles")
+
+    async def get_agent_policy(self, agent_id: str) -> dict:
+        return await self._req("GET", f"/v1/agents/{agent_id}/policy")
+
+    async def set_agent_policy(
+        self,
+        agent_id: str,
+        *,
+        profile: str,
+        actor: str,
+        expected_revision: Optional[int] = None,
+        overrides: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        return await self._req("PUT", f"/v1/agents/{agent_id}/policy", json={
+            "profile": profile,
+            "actor": actor,
+            "expected_revision": expected_revision,
+            "overrides": overrides or {},
+        })
+
+    async def workspace(self) -> dict:
+        return await self._req("GET", "/v1/workspace")
+
+    async def update_workspace(
+        self,
+        *,
+        display_name: str,
+        plan: str = "developer",
+        region: Optional[str] = None,
+        settings: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        return await self._req("PUT", "/v1/workspace", json={
+            "display_name": display_name,
+            "plan": plan,
+            "region": region,
+            "settings": settings or {},
+        })
+
+    async def connectors(self) -> list[dict]:
+        return await self._req("GET", "/v1/connectors")
+
+    async def create_connector(
+        self,
+        *,
+        kind: str,
+        name: str,
+        agent_id: str,
+        scope: Optional[str] = None,
+        config: Optional[dict[str, Any]] = None,
+    ) -> dict:
+        return await self._req("POST", "/v1/connectors", json={
+            "kind": kind,
+            "name": name,
+            "agent_id": agent_id,
+            "scope": scope,
+            "config": config or {},
+        })
+
+    async def ingest_connector_events(
+        self,
+        connector_id: str,
+        events: list[dict[str, Any]],
+        *,
+        cursor: Optional[str] = None,
+        write_mode: str = "fast",
+    ) -> dict:
+        return await self._req(
+            "POST",
+            f"/v1/connectors/{connector_id}/events",
+            json={"events": events, "cursor": cursor, "write_mode": write_mode},
+        )
+
+    async def control_plane_overview(self, *, verify_audit: bool = False) -> dict:
+        return await self._req(
+            "GET",
+            "/v1/control-plane/overview",
+            params={"verify_audit": verify_audit},
+        )
 
     async def recall_at(
         self,

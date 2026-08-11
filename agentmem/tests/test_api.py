@@ -178,6 +178,131 @@ async def test_add_pii_memory_with_subject_id(client):
 
 
 # ---------------------------------------------------------------------------
+# Studio inventory and controls
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_memory_inventory_separates_active_and_historical_versions(client):
+    await client.post("/v1/memories", headers=_h(), json={
+        "agent_id": AGENT,
+        "content": "The user prefers the dark theme",
+        "event_time": T0.isoformat(),
+        "metadata": {"entity": "profile", "field": "theme"},
+    })
+    await client.post("/v1/memories", headers=_h(), json={
+        "agent_id": AGENT,
+        "content": "The user prefers the light theme",
+        "event_time": T1.isoformat(),
+        "metadata": {"entity": "profile", "field": "theme"},
+    })
+
+    active = await client.get(
+        f"/v1/memories?agent_id={AGENT}&state=active",
+        headers=_h(READ_KEY),
+    )
+    assert active.status_code == 200
+    assert active.json()["state"] == "active"
+    assert any("light theme" in (m["content"] or "") for m in active.json()["memories"])
+    assert not any("dark theme" in (m["content"] or "") for m in active.json()["memories"])
+
+    historical = await client.get(
+        f"/v1/memories?agent_id={AGENT}&state=historical",
+        headers=_h(READ_KEY),
+    )
+    assert historical.status_code == 200
+    assert historical.json()["total"] >= 1
+    assert any("dark theme" in (m["content"] or "") for m in historical.json()["memories"])
+
+
+@pytest.mark.asyncio
+async def test_memory_control_pin_is_visible_and_audited(client):
+    created = await client.post("/v1/memories", headers=_h(), json={
+        "agent_id": AGENT,
+        "content": "Always return concise explanations",
+        "event_time": T0.isoformat(),
+        "metadata": {"entity": "profile", "field": "response_style"},
+        "importance": 0.6,
+    })
+    memory_id = created.json()["id"]
+
+    denied = await client.post(
+        f"/v1/memories/{memory_id}/control",
+        headers=_h(READ_KEY),
+        json={"agent_id": AGENT, "action": "pin", "actor": "developer@example.com"},
+    )
+    assert denied.status_code == 403
+
+    controlled = await client.post(
+        f"/v1/memories/{memory_id}/control",
+        headers=_h(),
+        json={
+            "agent_id": AGENT,
+            "action": "pin",
+            "actor": "developer@example.com",
+            "note": "Explicit product preference",
+        },
+    )
+    assert controlled.status_code == 200
+    assert controlled.json()["status"] == "pinned"
+    assert controlled.json()["importance"] == 1.0
+
+    inventory = await client.get(
+        f"/v1/memories?agent_id={AGENT}&state=active", headers=_h()
+    )
+    pinned = next(m for m in inventory.json()["memories"] if m["id"] == memory_id)
+    assert pinned["importance"] == 1.0
+    assert pinned["metadata"]["_pinned"] is True
+    assert pinned["metadata"]["_studio_control"]["actor"] == "developer@example.com"
+
+    audit = await client.get(
+        "/v1/audit/reconstruct",
+        headers=_h(),
+        params={"agent_id": AGENT, "as_of": AUDIT_AS_OF.isoformat()},
+    )
+    assert audit.status_code == 200
+    assert any(row["op"] == "memory_control" for row in audit.json()["event_trail"])
+
+
+@pytest.mark.asyncio
+async def test_memory_control_replace_preserves_history(client):
+    created = await client.post("/v1/memories", headers=_h(), json={
+        "agent_id": AGENT,
+        "content": "The user's preferred editor is Vim",
+        "event_time": T0.isoformat(),
+        "metadata": {"entity": "profile", "field": "editor"},
+        "importance": 0.8,
+    })
+    memory_id = created.json()["id"]
+
+    replaced = await client.post(
+        f"/v1/memories/{memory_id}/control",
+        headers=_h(),
+        json={
+            "agent_id": AGENT,
+            "action": "replace",
+            "actor": "developer@example.com",
+            "correction": "The user's preferred editor is VS Code",
+        },
+    )
+    assert replaced.status_code == 200
+    replacement_id = replaced.json()["replacement_memory_id"]
+    assert replacement_id
+
+    active = await client.get(
+        f"/v1/memories?agent_id={AGENT}&state=active", headers=_h()
+    )
+    assert any(m["id"] == replacement_id for m in active.json()["memories"])
+    assert not any(m["id"] == memory_id for m in active.json()["memories"])
+
+    historical = await client.get(
+        f"/v1/memories?agent_id={AGENT}&state=historical", headers=_h()
+    )
+    original = next(m for m in historical.json()["memories"] if m["id"] == memory_id)
+    assert original["content"] == "The user's preferred editor is Vim"
+    assert original["superseded_by"] == replacement_id
+
+
+# ---------------------------------------------------------------------------
 # POST /v1/recall
 # ---------------------------------------------------------------------------
 
@@ -439,3 +564,305 @@ async def test_erase_shreds_embedding_and_metadata(db, client):
 
     lf = (await db.execute(select(LiveFact).where(LiveFact.memory_id == mem_id))).scalar_one_or_none()
     assert lf is None, "live_facts read-model row must be purged on erase"
+
+
+# ---------------------------------------------------------------------------
+# Policy profiles and hierarchical scopes
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_agent_policy_profile_is_versioned_and_applied_to_capture(client):
+    catalog = await client.get("/v1/policy-profiles", headers=_h())
+    assert catalog.status_code == 200
+    assert {item["name"] for item in catalog.json()["profiles"]} >= {
+        "balanced", "personal_assistant", "coding_agent", "regulated_analyst",
+    }
+
+    default = await client.get(f"/v1/agents/{AGENT}/policy", headers=_h())
+    assert default.status_code == 200
+    assert default.json()["profile"] == "balanced"
+    assert default.json()["revision"] == 0
+
+    assigned = await client.put(
+        f"/v1/agents/{AGENT}/policy",
+        headers=_h(),
+        json={
+            "profile": "personal_assistant",
+            "actor": "product-owner",
+            "expected_revision": 0,
+        },
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["revision"] == 1
+
+    added = await client.post(
+        "/v1/memories",
+        headers=_h(),
+        json=_mem("I prefer concise answers with a short example."),
+    )
+    assert added.status_code == 200
+    body = added.json()
+    assert body["importance"] >= 0.94
+    assert body["metadata"]["_policy"] == {
+        "profile": "personal_assistant",
+        "profile_version": assigned.json()["profile_version"],
+        "revision": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_policy_assignment_uses_optimistic_revision_check(client):
+    first = await client.put(
+        f"/v1/agents/{AGENT}/policy",
+        headers=_h(),
+        json={"profile": "coding_agent", "actor": "owner", "expected_revision": 0},
+    )
+    assert first.status_code == 200
+    stale = await client.put(
+        f"/v1/agents/{AGENT}/policy",
+        headers=_h(),
+        json={"profile": "balanced", "actor": "owner", "expected_revision": 0},
+    )
+    assert stale.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_scoped_recall_inherits_parents_without_cross_project_leakage(client):
+    memories = [
+        ("The organization uses UTC for release timestamps.", "org/acme"),
+        ("The platform team requires signed release artifacts.", "org/acme/team/platform"),
+        ("Project Atlas deploys from the main branch.", "org/acme/team/platform/project/atlas"),
+        ("Project Nova deploys only on Fridays.", "org/acme/team/platform/project/nova"),
+    ]
+    for content, scope in memories:
+        response = await client.post(
+            "/v1/memories",
+            headers=_h(),
+            json={**_mem(content), "scope": scope},
+        )
+        assert response.status_code == 200
+        assert response.json()["scope"] == scope
+
+    recalled = await client.post(
+        "/v1/recall",
+        headers=_h(),
+        json={
+            "agent_id": AGENT,
+            "query": "What are the release and deployment rules?",
+            "k": 20,
+            "scope": "org/acme/team/platform/project/atlas",
+            "include_parent_scopes": True,
+        },
+    )
+    assert recalled.status_code == 200
+    contents = [item["content"] for item in recalled.json()["memories"]]
+    assert any("organization uses UTC" in content for content in contents)
+    assert any("platform team requires" in content for content in contents)
+    assert any("Project Atlas" in content for content in contents)
+    assert all("Project Nova" not in content for content in contents)
+    assert recalled.json()["receipt"]["scope"].endswith("project/atlas")
+
+
+@pytest.mark.asyncio
+async def test_scope_path_validation_rejects_ambiguous_values(client):
+    response = await client.post(
+        "/v1/memories",
+        headers=_h(),
+        json={**_mem("invalid scope"), "scope": "org/acme/project"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_fast_write_defers_embedding_without_putting_plaintext_in_job(db, client):
+    from sqlalchemy import select
+    from src.lians.memory_enrichment import (
+        MEMORY_ENRICHMENT_JOB,
+        handle_memory_enrichment_job,
+    )
+    from src.lians.models import DurableJob, Memory
+
+    response = await client.post(
+        "/v1/memories",
+        headers=_h(),
+        json={**_mem("Remember that release notes must include migration steps."), "write_mode": "fast"},
+    )
+    assert response.status_code == 200
+    assert response.json()["enrichment_status"] == "pending"
+
+    job = (
+        await db.execute(
+            select(DurableJob).where(DurableJob.kind == MEMORY_ENRICHMENT_JOB)
+        )
+    ).scalar_one()
+    assert set(job.payload) == {"memory_id"}
+    assert "release notes" not in str(job.payload)
+
+    from uuid import UUID
+
+    memory = await db.get(Memory, UUID(response.json()["id"]))
+    assert memory.embedding is None
+    await handle_memory_enrichment_job(db, job)
+    await db.refresh(memory)
+    assert memory.embedding is not None
+    assert memory.metadata_["_enrichment"]["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_progressive_recall_stream_emits_fast_snapshot_before_deep_result(client):
+    added = await client.post(
+        "/v1/memories",
+        headers=_h(),
+        json=_mem("The Atlas release policy requires signed artifacts."),
+    )
+    assert added.status_code == 200
+
+    async with client.stream(
+        "POST",
+        "/v1/recall/stream",
+        headers=_h(),
+        json={
+            "agent_id": AGENT,
+            "query": "What does the Atlas release policy require?",
+            "mode": "deep",
+            "k": 5,
+        },
+    ) as response:
+        body = (await response.aread()).decode()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert body.index("event: started") < body.index("event: snapshot")
+    assert body.index("event: snapshot") < body.index("event: final")
+    assert body.index("event: final") < body.index("event: done")
+    assert '"phase":"fast"' in body
+    assert '"phase":"deep"' in body
+
+
+# ---------------------------------------------------------------------------
+# Hosted workspace and connector ingestion
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_workspace_metadata_and_stats_are_namespace_scoped(client):
+    initial = await client.get("/v1/workspace", headers=_h())
+    assert initial.status_code == 200
+    assert initial.json()["namespace"] == TEST_NS
+    assert initial.json()["plan"] == "developer"
+
+    updated = await client.put(
+        "/v1/workspace",
+        headers=_h(),
+        json={
+            "display_name": "API product team",
+            "plan": "team",
+            "region": "us-east",
+            "settings": {"default_scope": "org/acme/team/api"},
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["display_name"] == "API product team"
+    assert updated.json()["stats"]["connectors"] == 0
+
+
+@pytest.mark.asyncio
+async def test_connector_rejects_credentials_and_ingests_idempotently(client):
+    rejected = await client.post(
+        "/v1/connectors",
+        headers=_h(),
+        json={
+            "kind": "github",
+            "name": "unsafe",
+            "agent_id": AGENT,
+            "config": {"oauth": {"access_token": "must-not-live-here"}},
+        },
+    )
+    assert rejected.status_code == 422
+
+    created = await client.post(
+        "/v1/connectors",
+        headers=_h(),
+        json={
+            "kind": "github",
+            "name": "product-repository",
+            "agent_id": AGENT,
+            "scope": "org/acme/team/platform/project/atlas",
+            "config": {"repository": "Lians-ai/Lians", "event_types": ["pull_request"]},
+        },
+    )
+    assert created.status_code == 201
+    connector_id = created.json()["id"]
+
+    event = {
+        "events": [{
+            "external_id": "pr-42:merged",
+            "content": "Pull request 42 established signed release artifacts as project policy.",
+            "event_time": T1.isoformat(),
+            "metadata": {"pull_request": 42},
+            "importance": 0.8,
+        }],
+        "cursor": "github-cursor-9",
+        "write_mode": "fast",
+    }
+    first = await client.post(
+        f"/v1/connectors/{connector_id}/events", headers=_h(), json=event,
+    )
+    second = await client.post(
+        f"/v1/connectors/{connector_id}/events", headers=_h(), json=event,
+    )
+    assert first.status_code == 200
+    assert first.json()["accepted"] == 1
+    assert first.json()["duplicates"] == 0
+    assert second.status_code == 200
+    assert second.json()["accepted"] == 0
+    assert second.json()["duplicates"] == 1
+    assert second.json()["memory_ids"] == first.json()["memory_ids"]
+
+    inventory = await client.get(
+        "/v1/memories",
+        headers=_h(),
+        params={"scope": "org/acme/team/platform/project/atlas"},
+    )
+    assert inventory.status_code == 200
+    assert inventory.json()["total"] == 1
+    memory = inventory.json()["memories"][0]
+    assert memory["metadata"]["_connector"]["external_id"] == "pr-42:merged"
+    assert memory["enrichment_status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_readonly_key_can_list_but_not_configure_connectors(client):
+    catalog = await client.get("/v1/connector-catalog", headers=_h(READ_KEY))
+    assert catalog.status_code == 200
+    assert catalog.json()["total"] >= 5
+    forbidden = await client.post(
+        "/v1/connectors",
+        headers=_h(READ_KEY),
+        json={"kind": "direct", "name": "nope", "agent_id": AGENT},
+    )
+    assert forbidden.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_control_plane_overview_consolidates_posture_evidence_and_queues(client):
+    await client.post(
+        "/v1/memories",
+        headers=_h(),
+        json=_mem("The control-plane fixture is active."),
+    )
+    response = await client.get(
+        "/v1/control-plane/overview",
+        headers=_h(),
+        params={"verify_audit": "true"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["namespace"] == TEST_NS
+    assert body["memory"]["active"] == 1
+    assert body["posture"]["audit_chain"]["status"] == "ok"
+    assert set(body["operations"]["jobs"]) == {"pending", "leased", "dead", "completed"}
+    assert "replayable_rate" in body["evidence"]
+    assert body["retention"]["audit_retention_days"] == 1825
+
+    forbidden = await client.get("/v1/control-plane/overview", headers=_h(READ_KEY))
+    assert forbidden.status_code == 403

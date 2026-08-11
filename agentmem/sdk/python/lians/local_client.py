@@ -380,6 +380,8 @@ class LocalLiansClient:
         strategy: str = "standard",
         max_query_variants: int = 4,
         mode: str = "fast",
+        scope: Optional[str] = None,
+        include_parent_scopes: bool = True,
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict.
 
@@ -392,6 +394,7 @@ class LocalLiansClient:
             filters=filters or {}, include_context=include_context,
             strategy=strategy, max_query_variants=max_query_variants,
             mode=mode,
+            scope=scope, include_parent_scopes=include_parent_scopes,
         ))
 
     async def _async_recall(self, **kwargs) -> dict:
@@ -417,6 +420,8 @@ class LocalLiansClient:
         strategy: str = "adaptive",
         max_query_variants: int = 4,
         mode: str = "deep",
+        scope: Optional[str] = None,
+        include_parent_scopes: bool = True,
     ) -> dict:
         """Build model-ready, token-budgeted adaptive memory context locally."""
         return self._run(self._async_context(
@@ -426,6 +431,7 @@ class LocalLiansClient:
             surface_conflicts=surface_conflicts, max_conflicts=max_conflicts,
             strategy=strategy, max_query_variants=max_query_variants,
             mode=mode,
+            scope=scope, include_parent_scopes=include_parent_scopes,
         ))
 
     async def _async_context(self, **kwargs) -> dict:
@@ -436,6 +442,65 @@ class LocalLiansClient:
         req = ContextRequest(**kwargs)
         async with self._session_factory() as db:
             result = await assemble_context(db, self._namespace, req)
+        return result.model_dump(mode="json")
+
+    def list_memories(self, **kwargs) -> dict:
+        return self._run(self._async_list_memories(**kwargs))
+
+    async def _async_list_memories(self, **kwargs) -> dict:
+        from src.lians.memory_service import list_memories
+
+        async with self._session_factory() as db:
+            result = await list_memories(db, self._namespace, **kwargs)
+        return result.model_dump(mode="json")
+
+    def control_memory(self, memory_id: str, **kwargs) -> dict:
+        return self._run(self._async_control_memory(memory_id, **kwargs))
+
+    async def _async_control_memory(self, memory_id: str, **kwargs) -> dict:
+        from uuid import UUID
+        from src.lians.feedback_service import apply_memory_control
+        from src.lians.schemas import MemoryControlRequest
+
+        async with self._session_factory() as db:
+            result = await apply_memory_control(
+                db,
+                self._namespace,
+                UUID(str(memory_id)),
+                MemoryControlRequest(**kwargs),
+            )
+        return result.model_dump(mode="json")
+
+    def policy_profiles(self) -> dict:
+        from src.lians.policy_profiles import list_policy_profiles
+
+        profiles = list_policy_profiles()
+        return {"profiles": [item.model_dump(mode="json") for item in profiles], "total": len(profiles)}
+
+    def get_agent_policy(self, agent_id: str) -> dict:
+        return self._run(self._async_get_agent_policy(agent_id))
+
+    async def _async_get_agent_policy(self, agent_id: str) -> dict:
+        from src.lians.policy_profiles import get_agent_policy
+
+        async with self._session_factory() as db:
+            result = await get_agent_policy(db, self._namespace, agent_id)
+        return result.model_dump(mode="json")
+
+    def set_agent_policy(self, agent_id: str, **kwargs) -> dict:
+        return self._run(self._async_set_agent_policy(agent_id, **kwargs))
+
+    async def _async_set_agent_policy(self, agent_id: str, **kwargs) -> dict:
+        from src.lians.policy_profiles import set_agent_policy
+        from src.lians.schemas import AgentPolicyUpdate
+
+        async with self._session_factory() as db:
+            result = await set_agent_policy(
+                db,
+                self._namespace,
+                agent_id,
+                AgentPolicyUpdate(**kwargs),
+            )
         return result.model_dump(mode="json")
 
     def feedback(self, memory_id: str, **kwargs) -> dict:

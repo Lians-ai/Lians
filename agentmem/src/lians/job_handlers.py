@@ -11,6 +11,7 @@ from .cache_invalidation import (
     RECALL_INVALIDATION_JOB,
     handle_recall_invalidation_job,
 )
+from .memory_enrichment import MEMORY_ENRICHMENT_JOB, handle_memory_enrichment_job
 
 
 def default_job_handlers() -> dict[str, JobHandler]:
@@ -21,4 +22,5 @@ def default_job_handlers() -> dict[str, JobHandler]:
         "supersession.adjudicate": handle_llm_adjudication_job,
         "webhook.delivery": handle_webhook_job,
         RECALL_INVALIDATION_JOB: handle_recall_invalidation_job,
+        MEMORY_ENRICHMENT_JOB: handle_memory_enrichment_job,
     }

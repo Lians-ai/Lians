@@ -15,12 +15,14 @@ from .cache_invalidation import (
     invalidation_reference,
     queue_recall_invalidation,
 )
+from .current_facts import remove_live_facts
 from .models import LiveFact, Memory, MemoryFeedback
 from .session_cache import invalidate_working_set
 from .schemas import (
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
     MemoryMaintenanceResult,
+    MemoryControlRequest, MemoryControlResult,
 )
 
 
@@ -259,6 +261,144 @@ async def resolve_memory_review(
         action=req.action,
         status=status,
         reviewer=req.reviewer,
+        resolved_at=resolved_at,
+        replacement_memory_id=replacement_id,
+    )
+
+
+async def apply_memory_control(
+    db: AsyncSession,
+    namespace: str,
+    memory_id: UUID,
+    req: MemoryControlRequest,
+) -> MemoryControlResult:
+    """Apply an explicit human control without rewriting memory history.
+
+    Content correction creates a new memory and closes the old validity
+    interval. All other actions retain the original content hash and append a
+    control event to the audit chain.
+    """
+
+    memory = await db.get(Memory, memory_id)
+    if memory is None or memory.namespace != namespace or memory.agent_id != req.agent_id:
+        raise LookupError("memory not found")
+    if memory.erased_at is not None:
+        raise ValueError("erased memory cannot be controlled")
+    if req.action in {"retire", "replace"} and memory.valid_to is not None:
+        raise ValueError("memory is already inactive")
+    if req.action == "replace" and not req.correction:
+        raise ValueError("correction is required when action='replace'")
+
+    resolved_at = _utcnow()
+    replacement_id = None
+    metadata = dict(memory.metadata_ or {})
+    previous_importance = float(memory.importance)
+    status = {
+        "confirm": "confirmed",
+        "pin": "pinned",
+        "demote": "demoted",
+        "retire": "retired",
+        "replace": "replaced",
+    }[req.action]
+
+    if req.action == "replace":
+        from .memory_service import add_memory
+        from .schemas import MemoryAdd
+
+        replacement_metadata = dict(metadata)
+        replacement_metadata.pop("_studio_control", None)
+        replacement_metadata.update({
+            "_corrects": str(memory.id),
+            "_correction_actor": req.actor,
+        })
+        replacement = await add_memory(
+            db,
+            namespace,
+            MemoryAdd(
+                agent_id=req.agent_id,
+                content=str(req.correction),
+                event_time=resolved_at,
+                source="human_correction",
+                subject_id=memory.subject_id,
+                metadata=replacement_metadata,
+                importance=max(0.85, previous_importance),
+            ),
+            barrier_override=memory.barrier_group,
+        )
+        replacement_id = replacement.id
+        memory = await db.get(Memory, memory_id)
+        if memory is None:
+            raise LookupError("memory not found")
+        metadata = dict(memory.metadata_ or {})
+
+    control_history = list(metadata.get("_studio_control_history") or [])
+    control_event = {
+        "action": req.action,
+        "actor": req.actor,
+        "note": req.note,
+        "at": resolved_at.isoformat(),
+        "replacement_memory_id": str(replacement_id) if replacement_id else None,
+    }
+    control_history.append(control_event)
+    metadata["_studio_control_history"] = control_history[-20:]
+    metadata["_studio_control"] = control_event
+
+    if req.action == "confirm":
+        memory.importance = max(0.85, previous_importance)
+    elif req.action == "pin":
+        memory.importance = 1.0
+        metadata["_pinned"] = True
+    elif req.action == "demote":
+        memory.importance = min(0.25, previous_importance)
+        metadata["_pinned"] = False
+    elif req.action in {"retire", "replace"}:
+        memory.valid_to = resolved_at
+        if replacement_id is not None:
+            memory.superseded_by = replacement_id
+        await remove_live_facts(db, [memory_id])
+
+    memory.metadata_ = metadata
+    if req.action in {"confirm", "pin", "demote"}:
+        await db.execute(
+            update(LiveFact)
+            .where(LiveFact.memory_id == memory_id)
+            .values(importance=float(memory.importance), metadata_=metadata)
+        )
+
+    await chain_log(
+        db,
+        namespace=namespace,
+        agent_id=req.agent_id,
+        op="memory_control",
+        memory_id=memory_id,
+        content_hash=memory.content_hash,
+        payload={
+            **control_event,
+            "status": status,
+            "previous_importance": previous_importance,
+            "importance": float(memory.importance),
+        },
+    )
+    invalidation_job = await queue_recall_invalidation(
+        db,
+        namespace,
+        req.agent_id,
+        operation="memory.control",
+        operation_ref=invalidation_reference(
+            "memory.control", memory_id, req.action, resolved_at.isoformat()
+        ),
+        memory_ids=[memory_id, *([replacement_id] if replacement_id else [])],
+    )
+    await db.commit()
+    invalidate_working_set(namespace, req.agent_id)
+    await flush_recall_invalidation(db, invalidation_job)
+    return MemoryControlResult(
+        memory_id=memory_id,
+        agent_id=req.agent_id,
+        action=req.action,
+        status=status,
+        actor=req.actor,
+        importance=float(memory.importance),
         resolved_at=resolved_at,
         replacement_memory_id=replacement_id,
     )

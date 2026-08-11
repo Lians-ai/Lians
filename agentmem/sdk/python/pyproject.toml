@@ -39,6 +39,7 @@ local         = [
     "pgvector>=0.2.5",
     "numpy>=1.26",
     "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
     # engine's db module builds its (unused-in-local-mode) default engine at
     # import time, which requires the asyncpg dialect to be importable
     "asyncpg>=0.29",
@@ -79,6 +80,7 @@ all           = [
 ]
 
 [project.scripts]
+lians = "lians.cli:main"
 lians-mcp = "lians.mcp_server:main"
 lians-memory-mcp = "lians.memory_plugin_mcp:main"
 lians-bge-onnx-export = "lians.bge_onnx_export:main"

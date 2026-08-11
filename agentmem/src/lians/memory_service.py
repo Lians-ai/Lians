@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, update, text
+from sqlalchemy import select, and_, or_, update, text, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +48,7 @@ from .schemas import (
     LineageNode, LineageEdge, MemoryLineageResult,
     ConflictFlagOut, ConflictListResult, ConflictResolveRequest, ConflictResolveResult,
     ContextRequest, ContextResult,
+    MemoryListResult,
 )
 from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, unwrap_subject_key
@@ -87,6 +88,83 @@ _RRF_K = 60.0
 
 class IdempotencyMemoryErasedError(RuntimeError):
     """An idempotency mapping points to a memory that is no longer available."""
+
+
+async def list_memories(
+    db: AsyncSession,
+    namespace: str,
+    *,
+    agent_id: Optional[str] = None,
+    subject_id: Optional[str] = None,
+    scope: Optional[str] = None,
+    state: str = "active",
+    limit: int = 50,
+    offset: int = 0,
+    barrier_override: Optional[str] = None,
+) -> MemoryListResult:
+    """Return an encrypted-tenant-safe inventory for Studio and SDK consumers.
+
+    ``state`` is deliberately explicit so the default surface only exposes the
+    present working set. Historical and erased records remain inspectable when
+    an authorized reviewer asks for them, but they never leak into the default
+    view by accident.
+    """
+
+    conditions = [Memory.namespace == namespace]
+    if agent_id is not None:
+        conditions.append(Memory.agent_id == agent_id)
+    if subject_id is not None:
+        conditions.append(Memory.subject_id == subject_id)
+    if scope is not None:
+        conditions.append(Memory.metadata_["_scope_path"].as_string() == scope)
+    if barrier_override is not None:
+        conditions.append(
+            or_(Memory.barrier_group == barrier_override, Memory.barrier_group.is_(None))
+        )
+
+    if state == "active":
+        conditions.extend([Memory.erased_at.is_(None), Memory.valid_to.is_(None)])
+    elif state == "historical":
+        conditions.extend([Memory.erased_at.is_(None), Memory.valid_to.is_not(None)])
+    elif state == "superseded":
+        conditions.extend([Memory.erased_at.is_(None), Memory.superseded_by.is_not(None)])
+    elif state == "retired":
+        conditions.extend([
+            Memory.erased_at.is_(None),
+            Memory.valid_to.is_not(None),
+            Memory.superseded_by.is_(None),
+        ])
+    elif state == "erased":
+        conditions.append(Memory.erased_at.is_not(None))
+    elif state != "all":
+        raise ValueError("unsupported memory state")
+
+    total = int(
+        (await db.execute(select(func.count()).select_from(Memory).where(*conditions))).scalar_one()
+    )
+    rows = list(
+        (
+            await db.execute(
+                select(Memory)
+                .where(*conditions)
+                .order_by(Memory.ingestion_time.desc(), Memory.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    from .ranking import _decrypt
+
+    return MemoryListResult(
+        memories=[_memory_to_out(row, _decrypt(row, subject_keys)) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+        state=state,
+    )
 
     def __init__(self) -> None:
         super().__init__(
@@ -148,6 +226,8 @@ def _recall_receipt(
         "as_of": req.as_of.isoformat() if req.as_of else None,
         "reference_time": _utc(reference_time).isoformat(),
         "filters": req.filters,
+        "scope": req.scope,
+        "include_parent_scopes": req.include_parent_scopes,
         "policy": policy,
         "retrieval_degraded": retrieval_degraded,
         "results": provenance_items,
@@ -625,6 +705,12 @@ def _memory_to_out(mem: Memory, content: Optional[str]) -> MemoryOut:
         content_hash=mem.content_hash,
         erased_at=mem.erased_at,
         metadata=dict(mem.metadata_ or {}),
+        scope=(dict(mem.metadata_ or {})).get("_scope_path"),
+        enrichment_status=(
+            (dict(mem.metadata_ or {})).get("_enrichment", {}).get("status", "complete")
+            if isinstance((dict(mem.metadata_ or {})).get("_enrichment"), dict)
+            else "complete"
+        ),
         score_breakdown=getattr(mem, "_score_breakdown", None),
     )
 
@@ -866,6 +952,19 @@ async def add_memory(
                 source=req.source,
             )
 
+        defer_enrichment = (
+            req.write_mode == "fast"
+            and precomputed_embedding is None
+            and not _audit_privacy_minimal
+        )
+        if defer_enrichment:
+            metadata = dict(req.metadata or {})
+            metadata["_enrichment"] = {
+                "status": "pending",
+                "schema": "lians.memory-enrichment.v1",
+            }
+            req.metadata = metadata
+
         # Interjection extraction (see interjection.py): durable-fact clauses
         # buried in a conversational turn become derived memories beside the
         # raw turn. Extraction + embedding happen before the write lock; the
@@ -875,6 +974,7 @@ async def add_memory(
             settings.interjection_extraction_enabled
             and not _audit_privacy_minimal
             and not (req.metadata or {}).get("_derived")
+            and not defer_enrichment
         ):
             try:
                 from .interjection import extract_interjections
@@ -888,11 +988,13 @@ async def add_memory(
         # in that case only derived clauses need provider work.
         provider = (
             get_embedding_provider()
-            if precomputed_embedding is None or clause_texts
+            if not defer_enrichment and (precomputed_embedding is None or clause_texts)
             else None
         )
         derived_clauses: list[tuple[str, list[float]]] = []
-        if precomputed_embedding is not None:
+        if defer_enrichment:
+            embedding = []
+        elif precomputed_embedding is not None:
             embedding = precomputed_embedding
             if clause_texts:
                 try:
@@ -976,7 +1078,7 @@ async def add_memory(
                 agent_id=req.agent_id,
                 content_encrypted=stored_bytes,
                 subject_id=req.subject_id,
-                embedding=embedding,
+                embedding=None if defer_enrichment else embedding,
                 metadata_=req.metadata,
                 event_time=req.event_time,
                 ingestion_time=now,
@@ -998,6 +1100,11 @@ async def add_memory(
             )
             db.add(mem)
             await db.flush()
+
+            if defer_enrichment:
+                from .memory_enrichment import enqueue_memory_enrichment
+
+                await enqueue_memory_enrichment(db, mem)
 
             # Commit the retry key in the same transaction as the memory and
             # its durable cache-invalidation barrier. If Redis is unavailable
@@ -1282,6 +1389,7 @@ async def _attach_context(
     as_of: Optional[datetime] = None,
     reference_time: Optional[datetime] = None,
     barrier_group: Optional[str] = None,
+    allowed_scope_paths: Optional[list[str]] = None,
 ) -> None:
     """Populate ``context_before``/``context_after`` on recall hits.
 
@@ -1307,6 +1415,10 @@ async def _attach_context(
     if barrier_group is not None:
         conditions.append(
             or_(Memory.barrier_group == barrier_group, Memory.barrier_group.is_(None))
+        )
+    if allowed_scope_paths:
+        conditions.append(
+            Memory.metadata_["_scope_path"].as_string().in_(allowed_scope_paths)
         )
     decrypted: dict[UUID, Optional[str]] = {}
 
@@ -1483,6 +1595,7 @@ async def _assemble_context_legacy(
         agent_id=req.agent_id, query=req.query, k=req.k, as_of=req.as_of, filters=filters,
         include_context=True, strategy=req.strategy,
         max_query_variants=req.max_query_variants, mode=req.mode,
+        scope=req.scope, include_parent_scopes=req.include_parent_scopes,
     )
     result = await recall_memories(db, namespace, recall_req, barrier_override=barrier_override)
 
@@ -1579,6 +1692,8 @@ async def assemble_context(
             strategy=req.strategy,
             max_query_variants=req.max_query_variants,
             mode=req.mode,
+            scope=req.scope,
+            include_parent_scopes=req.include_parent_scopes,
         ),
         barrier_override=barrier_override,
         audit_privacy_minimal=audit_privacy_minimal,
@@ -1859,6 +1974,11 @@ async def recall_memories(
         span.set_attribute("mode", execution["mode"])
         span.set_attribute("latency_budget_ms", execution["latency_budget_ms"])
         request_filters = dict(req.filters or {})
+        from .policy_profiles import scope_paths
+
+        allowed_scope_paths = scope_paths(req.scope, req.include_parent_scopes)
+        if allowed_scope_paths:
+            request_filters["_allowed_scope_paths"] = allowed_scope_paths
         plan = (
             plan_query(
                 req.query,
@@ -1985,7 +2105,7 @@ async def recall_memories(
         span.set_attribute("cache_hit", False)
 
         # Change 2: keyed router — exact lookup if filters resolve to a known predicate
-        if not req.as_of and request_filters:
+        if not req.as_of and request_filters and not allowed_scope_paths:
             predicate_key = compute_predicate_key(request_filters)
             if predicate_key:
                 with tracer.start_as_current_span("recall.keyed_lookup") as ks:
@@ -2294,6 +2414,7 @@ async def recall_memories(
                     as_of=req.as_of,
                     reference_time=reference_time,
                     barrier_group=effective_barrier,
+                    allowed_scope_paths=allowed_scope_paths,
                 )
 
         receipt, provenance_coverage, receipt_payload = _recall_receipt(

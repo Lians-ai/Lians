@@ -125,11 +125,14 @@ async def enforce_memory_admission(
 ) -> AdmissionDecision:
     """Canonical storage-boundary admission check for every untrusted write."""
     from .config import get_settings
+    from .policy_profiles import evaluate_profiled_admission
 
     settings = get_settings()
-    decision = evaluate_memory_admission(
+    decision = await evaluate_profiled_admission(
+        db,
+        namespace,
         req,
-        mode=settings.admission_mode,
+        configured_mode=settings.admission_mode,
         blocked_sources=settings.admission_blocked_sources,
     )
     if decision.action == "reject":

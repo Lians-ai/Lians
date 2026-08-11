@@ -41,6 +41,9 @@ from .api.routes_otlp import router as otlp_router
 from .api.routes_validmind import legacy_router as validmind_legacy_router
 from .api.routes_validmind import router as validmind_router
 from .api.routes_learning import router as learning_router
+from .api.routes_policies import router as policies_router
+from .api.routes_workspaces import router as workspaces_router
+from .api.routes_control_plane import router as control_plane_router
 from .telemetry import instrument_fastapi, instrument_sqlalchemy
 from .middleware import (
     setup_logging,
@@ -65,6 +68,8 @@ _HOSTED_RLS_TABLES = (
     "conflict_flags",
     "idempotency_keys",
     "durable_jobs",
+    "workspaces",
+    "connectors",
 )
 
 
@@ -534,6 +539,9 @@ app.include_router(otlp_router)
 app.include_router(validmind_router)
 app.include_router(validmind_legacy_router)
 app.include_router(learning_router)
+app.include_router(policies_router)
+app.include_router(workspaces_router)
+app.include_router(control_plane_router)
 
 
 def _build_sha() -> str:

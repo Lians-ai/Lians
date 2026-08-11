@@ -22,6 +22,18 @@ pip install lians-sdk[autogen]       # AutoGen v0.4
 pip install lians-sdk[all]           # Everything
 ```
 
+## Developer workflow
+
+```bash
+lians doctor
+lians dev --api-key local-development-key
+lians eval --output .lians/evaluation.json
+```
+
+`lians eval` is judge-free and CI-safe: it reports recall@k, stale-memory
+leakage, latency percentiles, deadline misses, and estimated prompt cost. It
+returns exit code 1 when a configured quality or latency threshold fails.
+
 ## Quickstart
 
 ```python
@@ -36,10 +48,19 @@ mem.add(
     event_time=datetime(2025, 11, 19, 16, tzinfo=timezone.utc),
     metadata={"ticker": "NVDA", "metric": "revenue_guidance"},
     importance=0.9,
+    scope="org/acme/team/platform/project/api",
 )
 
 # Superseded facts are excluded before they reach the model
 current = mem.recall(agent_id="analyst-1", query="NVDA revenue guidance")
+
+# A latency-sensitive write stores first, then enriches through the durable worker
+mem.add(
+    agent_id="analyst-1",
+    content="I prefer concise answers with one example.",
+    event_time=datetime.now(timezone.utc),
+    write_mode="fast",
+)
 
 # Reconstruct what was known on a past date
 past = mem.recall_at(

@@ -651,7 +651,10 @@ async def _fetch_live_candidates(
         )
     if filters:
         for key, val in filters.items():
-            conditions.append(LiveFact.metadata_[key].as_string() == str(val))
+            if key == "_allowed_scope_paths":
+                conditions.append(LiveFact.metadata_["_scope_path"].as_string().in_(list(val)))
+            else:
+                conditions.append(LiveFact.metadata_[key].as_string() == str(val))
 
     base_stmt = select(LiveFact).where(and_(*conditions))
 
@@ -713,7 +716,10 @@ async def _fetch_historical_candidates(
         )
     if filters:
         for key, val in filters.items():
-            conditions.append(Memory.metadata_[key].as_string() == str(val))
+            if key == "_allowed_scope_paths":
+                conditions.append(Memory.metadata_["_scope_path"].as_string().in_(list(val)))
+            else:
+                conditions.append(Memory.metadata_[key].as_string() == str(val))
 
     base_stmt = select(Memory).where(and_(*conditions))
 
@@ -1074,7 +1080,14 @@ async def hybrid_recall(
             if filters:
                 facts = [
                     f for f in facts
-                    if all((dict(f.metadata_ or {})).get(key) == str(val) for key, val in filters.items())
+                    if all(
+                        (
+                            (dict(f.metadata_ or {})).get("_scope_path") in val
+                            if key == "_allowed_scope_paths"
+                            else (dict(f.metadata_ or {})).get(key) == str(val)
+                        )
+                        for key, val in filters.items()
+                    )
                 ]
         else:
             facts = await _fetch_live_candidates(

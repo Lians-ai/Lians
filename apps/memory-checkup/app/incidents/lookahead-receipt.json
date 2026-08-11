@@ -1,0 +1,188 @@
+{
+  "$schema": "https://lians.ai/specs/decision-receipt/v0.1/schema.json",
+  "receipt_version": "0.1",
+  "receipt_id": "urn:lians:decision-receipt:lookahead-bias-seed42-20260204-hlio",
+  "issued_at": "2026-06-26T21:00:01Z",
+  "issuer": {
+    "name": "Lians",
+    "category": "decision_evidence_infrastructure",
+    "key_id": "lians-lookahead-synthetic-2026-01"
+  },
+  "decision": {
+    "id": "LB42-20260204-HLIO",
+    "namespace": "synthetic-lookahead-demo",
+    "type": "backtest_position",
+    "outcome": "short",
+    "reason_codes": [
+      "FUTURE_EVENT_RETRIEVAL"
+    ],
+    "regime": "research_integrity",
+    "subject_id": "HLIO",
+    "decided_at": "2026-02-04T21:00:00Z",
+    "recorded_at": "2026-06-26T21:00:00Z",
+    "knowledge_as_of": "2026-02-04T21:00:00Z",
+    "knowledge_recorded_as_of": "2026-06-26T21:00:00Z",
+    "record_hash": "42bcafb020d21abc924708d3bd3db24079a22a2918c68345fabeec1cb939cd12",
+    "record_hash_version": 2,
+    "record_integrity_status": "verified",
+    "supersedes_id": null
+  },
+  "actor": {
+    "agent_id": "strategy",
+    "claimed_agent_id": "strategy",
+    "principal": null,
+    "recorded_by": {
+      "principal_ref": null,
+      "auth_method": null,
+      "credential_ref": null
+    }
+  },
+  "model": {
+    "provider": "deterministic",
+    "id": "keyword-position-strategy",
+    "version": "seed42-v1",
+    "system_instruction_hash": "e927d16548a2cf197ac17843c4220ca5e96ca1aeb35737c3bda98c96e87139b2",
+    "configuration_hash": "1f89d95bb73a67cd5f10210b1c290e9845147cdde9c08fb97c51b3beda097df7"
+  },
+  "artifacts": {
+    "input_hash": "ba1775fd1eace53acb33032865ca687d46f30c1754f70099274fe61cec8bfbb2",
+    "output_hash": "bc59b9af0e214f65ed25f00486383b761aef633bc4b0b9c58bd5a961a090faca"
+  },
+  "tools": [
+    {
+      "name": "LocalLiansClient.recall",
+      "tool_id": "lians-local-recall-v1",
+      "definition_hash": "7cdbee9405f1a6cb1cc6fc0bd8d64465305e2da0ac83ded4de31946183aaf13c",
+      "result_hash": "e2be616c81701c4c00b4ab33f170e83dd407fe91f935ee0d8fea25cfa63354eb"
+    }
+  ],
+  "sources": [
+    {
+      "memory_id": "lb42-4b20f39cc874b701c75fa5d2",
+      "source": "research-desk",
+      "source_version": "HLIO-guidance-2026-04-10",
+      "content": "HLIO raises FY outlook in an unscheduled April update; cites strong demand and expanding margins.",
+      "content_hash": "7eef2f153b7672f0d259ceb72a8ac21507a4ef28ea63a470da675ae781cc356c",
+      "valid_from": "2026-04-10T12:00:00Z",
+      "valid_to": null,
+      "recorded_at": "2026-06-26T21:00:00Z",
+      "erased_at": null
+    },
+    {
+      "memory_id": "lb42-fbbd6e6e50a170cd6aa8ad4b",
+      "source": "research-desk",
+      "source_version": "HLIO-earnings-2026-02-05",
+      "content": "Sell-side downgrades HLIO to Underweight after the February news; price targets cut across the street.",
+      "content_hash": "80d862931682beb10ff69cab473d1cc318f60a94a0fd075688030fa627b37412",
+      "valid_from": "2026-02-06T13:30:00Z",
+      "valid_to": null,
+      "recorded_at": "2026-06-26T21:00:00Z",
+      "erased_at": null
+    }
+  ],
+  "policy": {
+    "version": "lookahead-seed42-v1",
+    "evaluation": {
+      "retrieval_mode": "present_time_contaminated",
+      "position": -1,
+      "future_evidence_count": 2,
+      "next_day_return": -0.09556,
+      "historical_reconstruction": {
+        "retrieval_mode": "recall_at(as_of=decision_time)",
+        "position": 0,
+        "future_evidence_count": 0
+      }
+    }
+  },
+  "authorization": null,
+  "human_review": {
+    "status": "not_requested",
+    "reviewer": null,
+    "reviewed_at": null
+  },
+  "correlation": {
+    "session_id": "lookahead-seed42-2026h1",
+    "trace_id": "42b142b142b142b142b142b142b142b1",
+    "span_id": "0204210000000001"
+  },
+  "reconstruction": {
+    "knowledge_as_of": "2026-02-04T21:00:00Z",
+    "knowledge_recorded_as_of": "2026-06-26T21:00:00Z",
+    "snapshot_count": 2,
+    "cited_source_count": 2,
+    "snapshot_manifest": [
+      {
+        "memory_id": "lb42-4b20f39cc874b701c75fa5d2",
+        "content_hash": "7eef2f153b7672f0d259ceb72a8ac21507a4ef28ea63a470da675ae781cc356c",
+        "valid_from": "2026-04-10T12:00:00Z",
+        "valid_to": null
+      },
+      {
+        "memory_id": "lb42-fbbd6e6e50a170cd6aa8ad4b",
+        "content_hash": "80d862931682beb10ff69cab473d1cc318f60a94a0fd075688030fa627b37412",
+        "valid_from": "2026-02-06T13:30:00Z",
+        "valid_to": null
+      }
+    ]
+  },
+  "audit_chain": {
+    "status": "ok",
+    "rows_checked": 2,
+    "violations": [],
+    "hash_version": 2
+  },
+  "completeness": {
+    "score": 100,
+    "grade": "A",
+    "status": "complete",
+    "checks": [
+      {
+        "id": "boundary.cutoff",
+        "label": "Historical decision cutoff",
+        "weight": 20,
+        "status": "present",
+        "evidence": "decision.knowledge_as_of"
+      },
+      {
+        "id": "sources.provenance",
+        "label": "Versioned future evidence",
+        "weight": 20,
+        "status": "present",
+        "evidence": "sources"
+      },
+      {
+        "id": "comparison.deterministic",
+        "label": "Byte-identical strategy comparison",
+        "weight": 20,
+        "status": "present",
+        "evidence": "policy.evaluation"
+      },
+      {
+        "id": "capture.exclusions",
+        "label": "Declared capture boundary",
+        "weight": 20,
+        "status": "present",
+        "evidence": "reconstruction"
+      },
+      {
+        "id": "integrity.signature",
+        "label": "Portable deployment signature",
+        "weight": 20,
+        "status": "present",
+        "evidence": "integrity.signature"
+      }
+    ],
+    "missing": []
+  },
+  "integrity": {
+    "hash_algorithm": "sha-256",
+    "canonicalization": "json-sort-keys-utf8-v1",
+    "receipt_hash": "35e795a7c5f70a5e2e8700c783d103953ae35e6e7b116f207b76cea557dd0808",
+    "signature": {
+      "algorithm": "ed25519",
+      "key_id": "lians-lookahead-synthetic-2026-01",
+      "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+      "value": "cHo0jMKWkpC27PwG1U7e2cVWbDOGbdBUfkoDzhZKlFrvnBsXAjIQZX5yp8wC+uOx8DRhAFImi2YjxEZrhzQiAA=="
+    }
+  }
+}

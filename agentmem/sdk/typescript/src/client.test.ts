@@ -136,6 +136,119 @@ describe("batchAdd()", () => {
   });
 });
 
+// ── Studio inventory and controls ───────────────────────────────────────────
+
+describe("memory inventory and controls", () => {
+  it("GET /v1/memories with explicit state and pagination", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        memories: [MEMORY_FIXTURE],
+        total: 1,
+        limit: 25,
+        offset: 0,
+        state: "historical",
+      },
+    });
+
+    const result = await client.listMemories({
+      agentId: "agent-1",
+      state: "historical",
+      limit: 25,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe("/v1/memories");
+    expect(parsed.searchParams.get("agent_id")).toBe("agent-1");
+    expect(parsed.searchParams.get("state")).toBe("historical");
+    expect(parsed.searchParams.get("limit")).toBe("25");
+    expect(init.method).toBe("GET");
+    expect(result.memories).toHaveLength(1);
+  });
+
+  it("POSTs a history-preserving memory control", async () => {
+    const fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: {
+        memory_id: "mem-uuid-1",
+        agent_id: "agent-1",
+        action: "pin",
+        status: "pinned",
+        actor: "developer@example.com",
+        importance: 1,
+        resolved_at: "2026-08-11T12:00:00Z",
+        replacement_memory_id: null,
+      },
+    });
+
+    const result = await client.controlMemory("mem-uuid-1", {
+      agent_id: "agent-1",
+      action: "pin",
+      actor: "developer@example.com",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://mem.example.com/v1/memories/mem-uuid-1/control");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string).action).toBe("pin");
+    expect(result.importance).toBe(1);
+  });
+});
+
+describe("scopes and policy profiles", () => {
+  it("serializes a hierarchical scope on inventory and recall", async () => {
+    let fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: { memories: [], total: 0, limit: 50, offset: 0, state: "active" },
+    });
+    await client.listMemories({ scope: "org/acme/team/platform/project/api" });
+    let [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).searchParams.get("scope")).toBe(
+      "org/acme/team/platform/project/api",
+    );
+
+    fetchMock = mockFetch({ ok: true, status: 200, body: { memories: [] } });
+    await client.recall({
+      agent_id: "agent-1",
+      query: "release rules",
+      scope: "org/acme/team/platform/project/api",
+      include_parent_scopes: true,
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).include_parent_scopes).toBe(true);
+  });
+
+  it("gets and atomically assigns an agent policy", async () => {
+    let fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: { agent_id: "agent-1", profile: "balanced", revision: 0 },
+    });
+    await client.agentPolicy("agent-1");
+    let [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).pathname).toBe("/v1/agents/agent-1/policy");
+    expect(init.method).toBe("GET");
+
+    fetchMock = mockFetch({
+      ok: true,
+      status: 200,
+      body: { agent_id: "agent-1", profile: "coding_agent", revision: 1 },
+    });
+    await client.setAgentPolicy("agent-1", {
+      profile: "coding_agent",
+      actor: "developer",
+      expected_revision: 0,
+    });
+    [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string).expected_revision).toBe(0);
+  });
+});
+
 // ── recall ───────────────────────────────────────────────────────────────────
 
 describe("recall()", () => {
@@ -180,6 +293,43 @@ describe("recall()", () => {
     const body = JSON.parse(init.body as string);
     expect(body.decision_envelope_id).toBe("envelope-1");
     expect(body.mode).toBe("reconstruct");
+  });
+});
+
+describe("streamRecall()", () => {
+  it("parses progressive SSE snapshots in order", async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(
+          'event: started\ndata: {"progressive":true}\n\n' +
+          'event: snapshot\ndata: {"phase":"fast"}\n\n' +
+          'event: final\ndata: {"phase":"deep"}\n\n' +
+          'event: done\ndata: {"receipt_sha256":"abc"}\n\n',
+        ));
+        controller.close();
+      },
+    });
+    global.fetch = (jest.fn() as jest.MockedFunction<typeof fetch>).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body,
+    } as Response);
+
+    const events = [];
+    for await (const event of client.streamRecall({
+      agent_id: "agent-1",
+      query: "release rules",
+      mode: "deep",
+    })) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.event)).toEqual([
+      "started", "snapshot", "final", "done",
+    ]);
+    expect(events[1]!.data.phase).toBe("fast");
   });
 });
 

@@ -2,7 +2,25 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _validate_scope_path(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip().strip("/")
+    parts = normalized.split("/") if normalized else []
+    allowed_kinds = {"org", "team", "project", "user", "session", "agent"}
+    if (
+        not parts
+        or len(parts) % 2
+        or any(not part or part in {".", ".."} for part in parts)
+        or any(parts[index] not in allowed_kinds for index in range(0, len(parts), 2))
+    ):
+        raise ValueError(
+            "scope must use kind/id pairs such as org/acme/team/platform/project/api"
+        )
+    return "/".join(parts)
 
 
 class MemoryAdd(BaseModel):
@@ -13,6 +31,10 @@ class MemoryAdd(BaseModel):
     subject_id: Optional[str] = Field(None, max_length=512)
     metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    scope: Optional[str] = Field(default=None, max_length=1000)
+    write_mode: str = Field(default="inline", pattern="^(inline|fast)$")
+
+    _normalize_scope = field_validator("scope")(_validate_scope_path)
 
 
 class MemoryOut(BaseModel):
@@ -33,6 +55,8 @@ class MemoryOut(BaseModel):
     content_hash: str
     erased_at: Optional[datetime]
     metadata: dict[str, Any]
+    scope: Optional[str] = None
+    enrichment_status: str = "complete"
     # Relevance score (hybrid semantic+lexical fusion) — populated on recall
     # responses only; None on write/snapshot surfaces. Additive for API
     # consumers that rank or threshold on similarity (e.g. the Memory Governor).
@@ -70,6 +94,37 @@ class MemoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MemoryListResult(BaseModel):
+    """Paginated memory inventory used by local and hosted Studio surfaces."""
+
+    memories: list[MemoryOut]
+    total: int
+    limit: int
+    offset: int
+    state: str
+
+
+class MemoryControlRequest(BaseModel):
+    """An auditable, history-preserving human control over one memory."""
+
+    agent_id: str = Field(min_length=1, max_length=255)
+    action: str = Field(pattern="^(confirm|pin|demote|retire|replace)$")
+    actor: str = Field(min_length=1, max_length=200)
+    note: Optional[str] = Field(default=None, max_length=2000)
+    correction: Optional[str] = Field(default=None, min_length=1, max_length=100_000)
+
+
+class MemoryControlResult(BaseModel):
+    memory_id: UUID
+    agent_id: str
+    action: str
+    status: str
+    actor: str
+    importance: float
+    resolved_at: datetime
+    replacement_memory_id: Optional[UUID] = None
+
+
 class RecallRequest(BaseModel):
     agent_id: str = Field(min_length=1, max_length=255)
     query: str = Field(min_length=1, max_length=20_000)
@@ -92,6 +147,142 @@ class RecallRequest(BaseModel):
     # When present, the recall receipt and returned memory versions are bound
     # to this decision envelope before the response is returned.
     decision_envelope_id: Optional[UUID] = None
+    scope: Optional[str] = Field(default=None, max_length=1000)
+    include_parent_scopes: bool = True
+
+    _normalize_scope = field_validator("scope")(_validate_scope_path)
+
+
+class PolicyProfileOut(BaseModel):
+    name: str
+    version: str
+    description: str
+    capture: dict[str, Any]
+    recall: dict[str, Any]
+    lifecycle: dict[str, Any]
+
+
+class PolicyProfileList(BaseModel):
+    profiles: list[PolicyProfileOut]
+    total: int
+
+
+class AgentPolicyUpdate(BaseModel):
+    profile: str = Field(min_length=1, max_length=100)
+    actor: str = Field(min_length=1, max_length=200)
+    expected_revision: Optional[int] = Field(default=None, ge=0)
+    overrides: dict[str, Any] = Field(default_factory=dict, max_length=20)
+
+
+class AgentPolicyOut(BaseModel):
+    agent_id: str
+    profile: str
+    profile_version: str
+    revision: int
+    effective: dict[str, Any]
+    overrides: dict[str, Any]
+    assigned_at: Optional[datetime] = None
+    assigned_by: Optional[str] = None
+
+
+class WorkspaceUpdate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=200)
+    plan: str = Field(default="developer", pattern="^(developer|team|enterprise)$")
+    region: Optional[str] = Field(default=None, max_length=100)
+    settings: dict[str, Any] = Field(default_factory=dict, max_length=50)
+
+
+class WorkspaceOut(BaseModel):
+    namespace: str
+    display_name: str
+    plan: str
+    region: Optional[str]
+    settings: dict[str, Any]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
+class ConnectorCatalogItem(BaseModel):
+    kind: str
+    label: str
+    description: str
+    delivery: str
+    config_fields: list[str]
+
+
+class ConnectorCatalog(BaseModel):
+    connectors: list[ConnectorCatalogItem]
+    total: int
+
+
+class ConnectorCreate(BaseModel):
+    kind: str = Field(pattern="^(direct|github|slack|notion|google_drive|webhook)$")
+    name: str = Field(min_length=1, max_length=200)
+    agent_id: str = Field(min_length=1, max_length=255)
+    scope: Optional[str] = Field(default=None, max_length=1000)
+    config: dict[str, Any] = Field(default_factory=dict, max_length=50)
+
+    _normalize_scope = field_validator("scope")(_validate_scope_path)
+
+
+class ConnectorUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    status: Optional[str] = Field(default=None, pattern="^(active|paused|disabled)$")
+    scope: Optional[str] = Field(default=None, max_length=1000)
+    config: Optional[dict[str, Any]] = Field(default=None, max_length=50)
+
+    _normalize_scope = field_validator("scope")(_validate_scope_path)
+
+
+class ConnectorOut(BaseModel):
+    id: UUID
+    kind: str
+    name: str
+    agent_id: str
+    scope: Optional[str]
+    status: str
+    config: dict[str, Any]
+    cursor: Optional[str]
+    last_sync_at: Optional[datetime]
+    last_error: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConnectorEvent(BaseModel):
+    external_id: str = Field(min_length=1, max_length=500)
+    content: str = Field(min_length=1, max_length=100_000)
+    event_time: datetime
+    subject_id: Optional[str] = Field(default=None, max_length=512)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class ConnectorIngestRequest(BaseModel):
+    events: list[ConnectorEvent] = Field(min_length=1, max_length=500)
+    cursor: Optional[str] = Field(default=None, max_length=1000)
+    write_mode: str = Field(default="fast", pattern="^(inline|fast)$")
+
+
+class ConnectorIngestResult(BaseModel):
+    connector_id: UUID
+    accepted: int
+    duplicates: int
+    memory_ids: list[UUID]
+    cursor: Optional[str]
+
+
+class ControlPlaneOverview(BaseModel):
+    namespace: str
+    generated_at: datetime
+    posture: dict[str, Any]
+    memory: dict[str, int]
+    governance: dict[str, int]
+    evidence: dict[str, Any]
+    operations: dict[str, Any]
+    retention: dict[str, Any]
+    attention: list[dict[str, Any]]
 
 
 class RecallResult(BaseModel):
@@ -658,6 +849,9 @@ class MessageIngestRequest(BaseModel):
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     roles: list[str] = Field(default=["assistant"], min_length=1, max_length=4)
     capture_durable_user_memories: bool = True
+    scope: Optional[str] = Field(default=None, max_length=1000)
+
+    _normalize_scope = field_validator("scope")(_validate_scope_path)
 
 
 class SupersessionReviewItem(BaseModel):
@@ -1029,6 +1223,10 @@ class ContextRequest(BaseModel):
     max_query_variants: int = Field(default=4, ge=1, le=4)
     mode: str = Field(default="deep", pattern="^(fast|deep|reconstruct)$")
     decision_envelope_id: Optional[UUID] = None
+    scope: Optional[str] = Field(default=None, max_length=1000)
+    include_parent_scopes: bool = True
+
+    _normalize_scope = field_validator("scope")(_validate_scope_path)
 
 
 class ContextResult(BaseModel):

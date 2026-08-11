@@ -69,18 +69,25 @@ class LiansClient:
         subject_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
         importance: float = 0.5,
+        scope: Optional[str] = None,
+        write_mode: str = "inline",
     ) -> dict:
         """Add a memory. Returns the created MemoryOut as a dict."""
+        kwargs = {
+            "agent_id": agent_id,
+            "content": content,
+            "event_time": event_time,
+            "source": source,
+            "subject_id": subject_id,
+            "metadata": metadata,
+            "importance": importance,
+        }
+        if write_mode != "inline":
+            kwargs["write_mode"] = write_mode
+        if scope is not None:
+            kwargs["scope"] = scope
         return self._loop.run_until_complete(
-            self._async.add(
-                agent_id=agent_id,
-                content=content,
-                event_time=event_time,
-                source=source,
-                subject_id=subject_id,
-                metadata=metadata,
-                importance=importance,
-            )
+            self._async.add(**kwargs)
         )
 
     def batch_add(self, memories: list[dict[str, Any]]) -> dict:
@@ -103,6 +110,7 @@ class LiansClient:
         importance: float = 0.5,
         roles: Optional[list[str]] = None,
         capture_durable_user_memories: bool = True,
+        scope: Optional[str] = None,
     ) -> dict:
         """
         Extract and store facts from a conversation message list.
@@ -143,6 +151,7 @@ class LiansClient:
                 importance=importance,
                 roles=roles,
                 capture_durable_user_memories=capture_durable_user_memories,
+                scope=scope,
             )
         )
 
@@ -160,6 +169,8 @@ class LiansClient:
         max_query_variants: int = 4,
         mode: str = "fast",
         decision_envelope_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        include_parent_scopes: bool = True,
     ) -> dict:
         """Recall memories. Returns RecallResult as a dict."""
         kwargs = {
@@ -178,6 +189,9 @@ class LiansClient:
             kwargs["mode"] = mode
         if decision_envelope_id is not None:
             kwargs["decision_envelope_id"] = decision_envelope_id
+        if scope is not None:
+            kwargs["scope"] = scope
+            kwargs["include_parent_scopes"] = include_parent_scopes
         return self._loop.run_until_complete(self._async.recall(**kwargs))
 
     def context(
@@ -195,6 +209,8 @@ class LiansClient:
         max_query_variants: int = 4,
         mode: str = "deep",
         decision_envelope_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        include_parent_scopes: bool = True,
     ) -> dict:
         """Build a token-budgeted, ready-to-inject context block. Returns a dict
         ``{context, memories, token_estimate, truncated}``. Open conflicts ride
@@ -207,6 +223,8 @@ class LiansClient:
                 strategy=strategy, max_query_variants=max_query_variants,
                 mode=mode,
                 decision_envelope_id=decision_envelope_id,
+                scope=scope,
+                include_parent_scopes=include_parent_scopes,
             )
         )
 
@@ -232,6 +250,49 @@ class LiansClient:
                 k=k,
                 filters=filters,
             )
+        )
+
+    def list_memories(self, **kwargs) -> dict:
+        return self._loop.run_until_complete(self._async.list_memories(**kwargs))
+
+    def control_memory(self, memory_id: str, **kwargs) -> dict:
+        return self._loop.run_until_complete(
+            self._async.control_memory(memory_id, **kwargs)
+        )
+
+    def policy_profiles(self) -> dict:
+        return self._loop.run_until_complete(self._async.policy_profiles())
+
+    def get_agent_policy(self, agent_id: str) -> dict:
+        return self._loop.run_until_complete(self._async.get_agent_policy(agent_id))
+
+    def set_agent_policy(self, agent_id: str, **kwargs) -> dict:
+        return self._loop.run_until_complete(
+            self._async.set_agent_policy(agent_id, **kwargs)
+        )
+
+    def workspace(self) -> dict:
+        return self._loop.run_until_complete(self._async.workspace())
+
+    def update_workspace(self, **kwargs) -> dict:
+        return self._loop.run_until_complete(self._async.update_workspace(**kwargs))
+
+    def connectors(self) -> list[dict]:
+        return self._loop.run_until_complete(self._async.connectors())
+
+    def create_connector(self, **kwargs) -> dict:
+        return self._loop.run_until_complete(self._async.create_connector(**kwargs))
+
+    def ingest_connector_events(
+        self, connector_id: str, events: list[dict[str, Any]], **kwargs,
+    ) -> dict:
+        return self._loop.run_until_complete(
+            self._async.ingest_connector_events(connector_id, events, **kwargs)
+        )
+
+    def control_plane_overview(self, *, verify_audit: bool = False) -> dict:
+        return self._loop.run_until_complete(
+            self._async.control_plane_overview(verify_audit=verify_audit)
         )
 
     def reconstruct(

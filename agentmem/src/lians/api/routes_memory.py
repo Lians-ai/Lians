@@ -1,15 +1,15 @@
 from typing import Optional
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..config import get_settings
 from ..admission_service import (
     enqueue_pending,
-    evaluate_memory_admission,
     record_rejection,
 )
 from ..schemas import (
@@ -20,19 +20,67 @@ from ..schemas import (
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
     MemoryMaintenanceResult,
+    MemoryListResult, MemoryControlRequest, MemoryControlResult,
 )
 from ..memory_service import (
     add_memory_idempotent, recall_memories, batch_add_memories,
-    get_memory_lineage, get_structured_fact_history, assemble_context,
+    get_memory_lineage, get_structured_fact_history, assemble_context, list_memories,
 )
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
 from ..feedback_service import (
     record_memory_feedback, memory_learning_summary, resolve_memory_review,
-    run_memory_maintenance,
+    run_memory_maintenance, apply_memory_control,
 )
+from ..policy_profiles import evaluate_profiled_admission
 
 router = APIRouter(prefix="/v1", tags=["memory"])
+
+
+@router.get("/memories", response_model=MemoryListResult)
+async def memory_inventory(
+    agent_id: Optional[str] = Query(default=None, max_length=255),
+    subject_id: Optional[str] = Query(default=None, max_length=512),
+    scope: Optional[str] = Query(default=None, max_length=1000),
+    state: str = Query(
+        default="active",
+        pattern="^(active|historical|superseded|retired|erased|all)$",
+    ),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Inspect current or historical memories without invoking semantic recall."""
+    auth.require("read")
+    return await list_memories(
+        db,
+        auth.namespace,
+        agent_id=agent_id,
+        subject_id=subject_id,
+        scope=scope,
+        state=state,
+        limit=limit,
+        offset=offset,
+        barrier_override=auth.barrier_group,
+    )
+
+
+@router.post("/memories/{memory_id}/control", response_model=MemoryControlResult)
+async def control_memory(
+    memory_id: UUID,
+    req: MemoryControlRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Confirm, pin, demote, retire, or replace a memory with an audit trail."""
+    auth.require("write")
+    try:
+        return await apply_memory_control(db, auth.namespace, memory_id, req)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 @router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)
@@ -110,9 +158,11 @@ async def create_memory(
     auth.require("write")
 
     settings = get_settings()
-    decision = evaluate_memory_admission(
+    decision = await evaluate_profiled_admission(
+        db,
+        auth.namespace,
         req,
-        mode=settings.admission_mode,
+        configured_mode=settings.admission_mode,
         blocked_sources=settings.admission_blocked_sources,
     )
 
@@ -154,9 +204,11 @@ async def batch_create_memories(
     auth.require("write")
     settings = get_settings()
     for item in req.memories:
-        decision = evaluate_memory_admission(
+        decision = await evaluate_profiled_admission(
+            db,
+            auth.namespace,
             item,
-            mode=settings.admission_mode,
+            configured_mode=settings.admission_mode,
             blocked_sources=settings.admission_blocked_sources,
         )
         if decision.action == "reject":
@@ -234,6 +286,7 @@ async def ingest_messages(
                 subject_id=req.subject_id,
                 metadata=message_metadata,
                 importance=req.importance,
+                scope=req.scope,
             )
         )
     if not memories:
@@ -347,6 +400,95 @@ async def recall(
         )
         await db.commit()
     return result
+
+
+@router.post("/recall/stream")
+async def stream_recall(
+    req: RecallRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream an immediate fast snapshot, then a deeper final result when requested."""
+    auth.require("read")
+    envelope = None
+    if req.decision_envelope_id is not None:
+        auth.require("write")
+        from ..decision_evidence import get_envelope
+
+        envelope = await get_envelope(
+            db,
+            auth.namespace,
+            req.decision_envelope_id,
+            auth.barrier_group,
+        )
+        if envelope is None:
+            raise HTTPException(status_code=422, detail="Decision envelope not found")
+
+    def event(name: str, payload: dict) -> str:
+        return f"event: {name}\ndata: {json.dumps(payload, separators=(',', ':'), default=str)}\n\n"
+
+    async def events():
+        yield event("started", {
+            "mode": req.mode,
+            "progressive": req.mode != "fast",
+            "scope": req.scope,
+        })
+        try:
+            fast_req = req.model_copy(update={
+                "mode": "fast",
+                "strategy": "standard",
+                "max_query_variants": 1,
+                "decision_envelope_id": None,
+            })
+            fast_result = await recall_memories(
+                db,
+                auth.namespace,
+                fast_req,
+                barrier_override=auth.barrier_group,
+            )
+            if req.mode != "fast":
+                yield event("snapshot", {
+                    "phase": "fast",
+                    "result": fast_result.model_dump(mode="json"),
+                })
+                final_result = await recall_memories(
+                    db,
+                    auth.namespace,
+                    req.model_copy(update={"decision_envelope_id": None}),
+                    barrier_override=auth.barrier_group,
+                )
+            else:
+                final_result = fast_result
+
+            if envelope is not None:
+                from ..decision_evidence import attach_recall_receipt
+
+                await attach_recall_receipt(
+                    db,
+                    envelope,
+                    final_result.receipt_sha256,
+                    final_result.receipt,
+                )
+                await db.commit()
+            yield event("final", {
+                "phase": req.mode,
+                "result": final_result.model_dump(mode="json"),
+            })
+            yield event("done", {"receipt_sha256": final_result.receipt_sha256})
+        except Exception as exc:
+            yield event("error", {
+                "code": "recall_stream_failed",
+                "error_type": type(exc).__name__,
+            })
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/context", response_model=ContextResult)

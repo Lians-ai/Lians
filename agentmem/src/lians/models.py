@@ -456,6 +456,45 @@ class Agent(Base):
     config = Column(JSON, nullable=False, server_default="{}")
 
 
+class Workspace(Base):
+    """Hosted or local tenant workspace metadata; namespace remains the boundary."""
+
+    __tablename__ = "workspaces"
+
+    namespace = Column(String, primary_key=True)
+    display_name = Column(String(200), nullable=False)
+    plan = Column(String(50), nullable=False, default="developer")
+    region = Column(String(100), nullable=True)
+    settings = Column(JSON, nullable=False, server_default="{}")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+
+class Connector(Base):
+    """A workspace-scoped source feeding normalized events into governed memory."""
+
+    __tablename__ = "connectors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    namespace = Column(String, nullable=False, index=True)
+    kind = Column(String(50), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    agent_id = Column(String(255), nullable=False, index=True)
+    scope = Column(String(1000), nullable=True)
+    status = Column(String(50), nullable=False, default="active", index=True)
+    config = Column(JSON, nullable=False, server_default="{}")
+    cursor = Column(String(1000), nullable=True)
+    last_sync_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+    __table_args__ = (
+        UniqueConstraint("namespace", "name", name="uq_connector_namespace_name"),
+        Index("ix_connectors_ns_kind_status", "namespace", "kind", "status"),
+    )
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
 

@@ -28,10 +28,25 @@ import type {
   LiansClientOptions,
   MemoryAdd,
   MemoryOut,
+  MemoryListResult,
+  MemoryState,
+  MemoryControlRequest,
+  MemoryControlResult,
+  PolicyProfileList,
+  AgentPolicy,
+  AgentPolicyUpdate,
+  Workspace,
+  WorkspaceUpdate,
+  Connector,
+  ConnectorCreate,
+  ConnectorEvent,
+  ConnectorIngestResult,
+  ControlPlaneOverview,
   MemoryBatchResult,
   MessageIngestRequest,
   RecallRequest,
   RecallResult,
+  RecallStreamEvent,
   ContextRequest,
   ContextResult,
   DecisionEnvelopeOpen,
@@ -191,6 +206,51 @@ export class LiansClient {
     return this._req<RecallResult>("POST", "/v1/recall", { json: req });
   }
 
+  /** Start generation from a fast snapshot while deeper recall continues. */
+  async *streamRecall(req: RecallRequest): AsyncGenerator<RecallStreamEvent> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/v1/recall/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": this.apiKey,
+        },
+        body: JSON.stringify(req),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const body = await response.text().catch(() => response.statusText);
+        throw new LiansError(response.status, body, `Lians recall stream failed: ${body}`);
+      }
+      if (!response.body) throw new Error("Lians recall stream returned no body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          let event = "message";
+          let data: Record<string, unknown> = {};
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event: ")) event = line.slice(7);
+            if (line.startsWith("data: ")) data = JSON.parse(line.slice(6));
+          }
+          yield { event, data };
+        }
+        if (done) break;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Ingest standard chat messages through the server's canonical policy. */
   addMessages(req: MessageIngestRequest): Promise<MemoryBatchResult> {
     return this._req<MemoryBatchResult>("POST", "/v1/memories/messages", {
@@ -198,9 +258,99 @@ export class LiansClient {
     });
   }
 
+  /** Inspect current or historical memory records without running retrieval. */
+  listMemories(opts: {
+    agentId?: string;
+    subjectId?: string;
+    scope?: string;
+    state?: MemoryState;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<MemoryListResult> {
+    return this._req<MemoryListResult>("GET", "/v1/memories", {
+      params: {
+        agent_id: opts.agentId,
+        subject_id: opts.subjectId,
+        scope: opts.scope,
+        state: opts.state ?? "active",
+        limit: opts.limit ?? 50,
+        offset: opts.offset ?? 0,
+      },
+    });
+  }
+
+  /** Apply a history-preserving, audit-chained human memory control. */
+  controlMemory(
+    memoryId: string,
+    req: MemoryControlRequest,
+  ): Promise<MemoryControlResult> {
+    return this._req<MemoryControlResult>(
+      "POST",
+      `/v1/memories/${memoryId}/control`,
+      { json: req },
+    );
+  }
+
   /** Compile bounded, attributed context using the engine's canonical policy. */
   context(req: ContextRequest): Promise<ContextResult> {
     return this._req<ContextResult>("POST", "/v1/context", { json: req });
+  }
+
+  /** List the immutable built-in policy catalog. */
+  policyProfiles(): Promise<PolicyProfileList> {
+    return this._req<PolicyProfileList>("GET", "/v1/policy-profiles");
+  }
+
+  /** Resolve the effective, versioned memory policy for one agent. */
+  agentPolicy(agentId: string): Promise<AgentPolicy> {
+    return this._req<AgentPolicy>("GET", `/v1/agents/${agentId}/policy`);
+  }
+
+  /** Assign a policy with optimistic concurrency and audit provenance. */
+  setAgentPolicy(agentId: string, req: AgentPolicyUpdate): Promise<AgentPolicy> {
+    return this._req<AgentPolicy>("PUT", `/v1/agents/${agentId}/policy`, {
+      json: req,
+    });
+  }
+
+  workspace(): Promise<Workspace> {
+    return this._req<Workspace>("GET", "/v1/workspace");
+  }
+
+  updateWorkspace(req: WorkspaceUpdate): Promise<Workspace> {
+    return this._req<Workspace>("PUT", "/v1/workspace", { json: req });
+  }
+
+  connectors(): Promise<Connector[]> {
+    return this._req<Connector[]>("GET", "/v1/connectors");
+  }
+
+  createConnector(req: ConnectorCreate): Promise<Connector> {
+    return this._req<Connector>("POST", "/v1/connectors", { json: req });
+  }
+
+  ingestConnectorEvents(
+    connectorId: string,
+    events: ConnectorEvent[],
+    opts: { cursor?: string; writeMode?: "inline" | "fast" } = {},
+  ): Promise<ConnectorIngestResult> {
+    return this._req<ConnectorIngestResult>(
+      "POST",
+      `/v1/connectors/${connectorId}/events`,
+      {
+        json: {
+          events,
+          cursor: opts.cursor,
+          write_mode: opts.writeMode ?? "fast",
+        },
+      },
+    );
+  }
+
+  controlPlaneOverview(verifyAudit = false): Promise<ControlPlaneOverview> {
+    return this._req<ControlPlaneOverview>("GET", "/v1/control-plane/overview", {
+      params: { verify_audit: verifyAudit },
+    });
   }
 
   /** Open the evidence correlation boundary before an agent acts. */
