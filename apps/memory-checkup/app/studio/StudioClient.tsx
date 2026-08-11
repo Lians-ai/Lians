@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useCallback, useMemo, useState } from "react";
 
@@ -474,11 +475,10 @@ export default function StudioClient() {
   }
 
   return (
-    <main className="studio-app">
+    <main className="studio-app lians-interactive-graphic">
       <header className="studio-topbar">
         <Link className="studio-brand" href="/" aria-label="Lians home">
-          <span aria-hidden="true">L</span>
-          <strong>Lians</strong>
+          <Image className="studio-logo" src="/logo-blue.png" alt="Lians" width={88} height={32} priority />
           <small>Studio</small>
         </Link>
         <div className="studio-environment">
@@ -662,9 +662,10 @@ export default function StudioClient() {
           </div>
           <div className="state-tabs" role="tablist" aria-label="Memory state">
             {memoryStates.map((option) => (
-              <button
-                type="button"
-                role="tab"
+                <button
+                  type="button"
+                  data-graphic-item
+                  role="tab"
                 aria-selected={state === option.value}
                 className={state === option.value ? "active" : ""}
                 key={option.value}
@@ -694,6 +695,7 @@ export default function StudioClient() {
               return (
                 <button
                   type="button"
+                  data-graphic-item
                   className={`memory-row ${selectedId === memory.id ? "active" : ""}`}
                   aria-pressed={selectedId === memory.id}
                   onClick={() => { setSelectedId(memory.id); setConfirmAction(null); }}

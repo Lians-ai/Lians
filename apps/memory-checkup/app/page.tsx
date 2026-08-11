@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   decisionReceipt,
@@ -226,13 +227,10 @@ export default function Home() {
   }
 
   return (
-    <main id="top">
+    <main id="top" className="lians-interactive-graphic">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="Lians home">
-          <span className="brand-mark" aria-hidden="true">
-            L
-          </span>
-          <span className="brand-name">Lians</span>
+          <Image className="brand-logo" src="/logo-blue.png" alt="Lians" width={88} height={32} priority />
           <span className="brand-product">Decision System</span>
         </a>
         <nav className="topnav" aria-label="Page sections">
@@ -481,6 +479,7 @@ export default function Home() {
                   className={`timeline-event ${event.tone} ${activeEvent === event.id ? "active" : ""}`}
                   type="button"
                   key={event.id}
+                  data-graphic-item
                   aria-pressed={activeEvent === event.id}
                   onClick={() => setActiveEvent(event.id)}
                 >
@@ -641,6 +640,7 @@ export default function Home() {
                 <button
                   type="button"
                   key={filter}
+                  data-graphic-item
                   className={impactFilter === filter ? "active" : ""}
                   aria-pressed={impactFilter === filter}
                   onClick={() => setImpactFilter(filter)}
@@ -759,8 +759,7 @@ export default function Home() {
 
       <footer>
         <a className="brand footer-brand" href="#top">
-          <span className="brand-mark" aria-hidden="true">L</span>
-          <span className="brand-name">Lians</span>
+          <Image className="brand-logo" src="/logo-blue.png" alt="Lians" width={88} height={32} />
         </a>
         <p>Make every AI decision answerable.</p>
         <span>Memory · Authority · Evidence · Action</span>

@@ -17,8 +17,8 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       "Connect Lians to your AI and open any decision to see what happened, why it happened, who approved it, and what needs attention now.",
     icons: {
-      icon: "/favicon.svg",
-      shortcut: "/favicon.svg",
+      icon: "/favicon.png",
+      shortcut: "/favicon.png",
     },
     openGraph: {
       title: "Make every AI decision answerable.",

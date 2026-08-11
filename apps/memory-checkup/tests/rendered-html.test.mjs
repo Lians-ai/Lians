@@ -38,6 +38,25 @@ test("server-renders the live Lians Studio memory workspace", async () => {
   assert.match(html, /Where memory comes from/i);
   assert.match(html, /Test a memory search/i);
   assert.match(html, /Access keys are not saved/i);
+  assert.match(html, /logo-blue\.png/i);
+});
+
+test("shares the public website brand, typography, and interaction system", async () => {
+  const [page, studio, styles, studioStyles] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/studio/StudioClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/studio/studio.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /logo-blue\.png/);
+  assert.match(studio, /logo-blue\.png/);
+  assert.match(styles, /font-family: "Sora"/);
+  assert.match(styles, /font-family: "DM Mono"/);
+  assert.match(styles, /h1,\s*\n+h2,\s*\n+h3,\s*\n+h4/);
+  assert.match(styles, /lians-interactive-graphic/);
+  assert.match(styles, /outline: 2px solid #7188ff/);
+  assert.match(studioStyles, /box-shadow: 4px 4px 0 #7188ff/);
 });
 
 test("server-renders the Lians Investigator incident", async () => {

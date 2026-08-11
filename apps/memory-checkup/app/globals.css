@@ -8,9 +8,34 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "Sora";
+  src: url("/fonts/sora-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DM Mono";
+  src: url("/fonts/dm-mono-400-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DM Mono";
+  src: url("/fonts/dm-mono-500-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
 :root {
-  --font-geist-sans: "Michroma";
-  --font-geist-mono: "Michroma";
+  --font-geist-sans: "Sora";
+  --font-geist-mono: "DM Mono";
+  --font-title: "Michroma";
   --ink: #05070b;
   --ink-soft: #0b1019;
   --paper: #05070b;
@@ -43,7 +68,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--white);
-  font-family: "Michroma", Arial, sans-serif;
+  font-family: "Sora", Arial, sans-serif;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
 }
@@ -88,6 +113,13 @@ a:focus-visible {
   gap: 10px;
   color: var(--ink);
   text-decoration: none;
+}
+
+.brand-logo {
+  width: 88px;
+  height: 32px;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .brand-mark {
@@ -3619,10 +3651,21 @@ body,
 button,
 input,
 select,
-textarea,
+textarea {
+  font-family: "Sora", Arial, sans-serif !important;
+}
+
 code,
 pre {
-  font-family: "Michroma", Arial, sans-serif !important;
+  font-family: "DM Mono", monospace !important;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Michroma", "Arial Black", sans-serif !important;
+  font-weight: 400 !important;
 }
 
 .topbar {
@@ -3650,6 +3693,7 @@ pre {
 .comparison-heading h3,
 .lookahead-receipt h3 {
   color: var(--white);
+  font-family: "Michroma", "Arial Black", sans-serif;
   font-weight: 400;
   letter-spacing: -0.025em;
 }
@@ -4029,6 +4073,147 @@ footer {
   border-top-color: var(--green);
 }
 
+/* Match the public website's living grid, form controls, and blue responses. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: 300vmax;
+  height: 300vmax;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(160, 180, 230, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(160, 180, 230, 0.08) 1px, transparent 1px);
+  background-size: 150px 150px;
+  transform: translate(-50%, -50%);
+  animation: lians-grid-spin 150s linear infinite;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 72% 60% at 50% 32%, transparent 45%, #05070b 92%);
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes lians-grid-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--line-dark) !important;
+  border-radius: 0 !important;
+  background: #080d15 !important;
+  color: var(--white) !important;
+  font-family: "Sora", Arial, sans-serif !important;
+  font-size: 14px !important;
+}
+
+input,
+select {
+  min-height: 46px;
+  padding: 0 14px !important;
+}
+
+textarea {
+  min-height: 110px;
+  padding: 12px 14px !important;
+  line-height: 1.6;
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #7188ff !important;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #7188ff !important;
+  outline-offset: 2px !important;
+}
+
+.primary-button,
+.secondary-button,
+.outline-button,
+.close-incident-button,
+.quiet-button {
+  transition: box-shadow 150ms ease, transform 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.primary-button:hover,
+.primary-button.light:hover {
+  box-shadow: 4px 4px 0 #7188ff;
+  transform: translateY(-1px);
+}
+
+.secondary-button:hover,
+.outline-button:hover,
+.close-incident-button:hover {
+  box-shadow: 4px 4px 0 var(--blue);
+  transform: translateY(-1px);
+}
+
+.lians-interactive-graphic [data-graphic-item] {
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.lians-interactive-graphic [data-graphic-item]:hover,
+.lians-interactive-graphic [data-graphic-item][aria-pressed="true"],
+.lians-interactive-graphic [data-graphic-item][aria-selected="true"] {
+  border-color: #7188ff !important;
+  background-color: rgba(65, 105, 225, 0.14) !important;
+  color: var(--white);
+  transform: translateY(-2px);
+  opacity: 1;
+}
+
+.lians-interactive-graphic [data-graphic-item]:focus-visible {
+  outline: 2px solid #7188ff !important;
+  outline-offset: 3px !important;
+}
+
+.receipt-preview,
+.answerability-grid article,
+.control-stage,
+.boundary-card,
+.assurance-grid article,
+.result-card,
+.backtest-proof-mark {
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+@media (hover: hover) {
+  .receipt-preview:hover,
+  .answerability-grid article:hover,
+  .control-stage:hover,
+  .boundary-card:hover,
+  .assurance-grid article:hover,
+  .result-card:hover,
+  .backtest-proof-mark:hover {
+    border-color: #7188ff !important;
+    background-color: rgba(65, 105, 225, 0.12) !important;
+    box-shadow: 5px 5px 0 rgba(65, 105, 225, 0.35);
+    transform: translateY(-2px);
+  }
+}
+
 @media (max-width: 1050px) {
   .answerability-section {
     grid-template-columns: 1fr;
@@ -4038,5 +4223,11 @@ footer {
     min-height: 0;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
   }
 }

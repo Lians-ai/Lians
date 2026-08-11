@@ -282,6 +282,7 @@ export default function LookaheadExplorer() {
                 {decisionFilters.map((filter) => (
                   <button
                     type="button"
+                    data-graphic-item
                     key={filter.id}
                     className={decisionFilter === filter.id ? "active" : ""}
                     aria-pressed={decisionFilter === filter.id}
@@ -296,6 +297,7 @@ export default function LookaheadExplorer() {
                   <li key={decision.id}>
                     <button
                       type="button"
+                      data-graphic-item
                       className={`backtest-decision-row ${selectedDecision.id === decision.id ? "active" : ""}`}
                       aria-pressed={selectedDecision.id === decision.id}
                       onClick={() => selectDecision(decision)}
