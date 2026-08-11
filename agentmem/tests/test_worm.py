@@ -22,7 +22,7 @@ KEY = "worm-key"
 @pytest_asyncio.fixture
 async def client(db):
     db.add(ApiKey(hashed_key=hashlib.sha256(KEY.encode()).hexdigest(),
-                  namespace=NS, scopes=["read"]))
+                  namespace=NS, scopes=["read", "compliance"]))
     await db.commit()
 
     async def _override():
