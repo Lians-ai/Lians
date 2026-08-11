@@ -80,3 +80,21 @@ updates:
     groups:
       java-sdk:
         patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      runtime-containers:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /agentmem
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      development-containers:
+        patterns: ["*"]

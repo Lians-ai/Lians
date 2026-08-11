@@ -303,13 +303,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 "mcp-anonymous:"
                 + hashlib.sha256(client_host.encode()).hexdigest()[:16]
             )
-        elif request.url.path.startswith("/v1/admin/"):
-            # Admin auth uses a separate header. Keying this bucket by the
+        elif request.url.path.startswith(("/v1/admin/", "/v1/provisioning/")):
+            # Management auth uses separate headers. Keying this bucket by the
             # supplied secret would let an attacker evade throttling by changing
             # every guess, so use the network client identity instead.
             client_host = request.client.host if request.client else "unknown"
+            management_scope = (
+                "admin" if request.url.path.startswith("/v1/admin/") else "provisioning"
+            )
             discriminator = (
-                "admin:"
+                management_scope + ":"
                 + hashlib.sha256(client_host.encode()).hexdigest()[:16]
             )
         else:

@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS builder
 
 WORKDIR /app
 
@@ -54,7 +54,7 @@ RUN mkdir -p "$SENTENCE_TRANSFORMERS_HOME" \
     fi
 
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS runtime
 
 ARG PREDOWNLOAD_MODEL_REVISION=d4aa6901d3a41ba39fb536a557fa166f842b0e09
 
