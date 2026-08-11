@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.pool import StaticPool
 
 ADMIN_SECRET = "test-admin-secret-xyz"
+PROVISIONING_SECRET = "test-provisioning-secret-xyz"
 
 
 # ---------------------------------------------------------------------------
@@ -26,10 +27,12 @@ async def app_client(monkeypatch):
     - ADMIN_SECRET set to a known test value
     """
     monkeypatch.setenv("ADMIN_SECRET", ADMIN_SECRET)
+    monkeypatch.setenv("PROVISIONING_SECRET", PROVISIONING_SECRET)
 
     from src.lians.config import get_settings
     get_settings.cache_clear()
     monkeypatch.setenv("ADMIN_SECRET", ADMIN_SECRET)
+    monkeypatch.setenv("PROVISIONING_SECRET", PROVISIONING_SECRET)
     # Re-clear after setting env var (lru_cache reads env at call time)
     get_settings.cache_clear()
 
@@ -74,6 +77,55 @@ async def app_client(monkeypatch):
 # ---------------------------------------------------------------------------
 # Provisioning
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_provisioning_credential_is_namespace_bound_and_not_an_admin_credential(app_client):
+    namespace = "ns_website-user"
+    headers = {
+        "X-Provisioning-Secret": PROVISIONING_SECRET,
+        "X-Lians-Namespace": namespace,
+    }
+    created = await app_client.post(
+        "/v1/provisioning/api-keys",
+        json={"namespace": namespace, "scopes": ["read", "write"], "label": "website"},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+
+    listed = await app_client.get(
+        "/v1/provisioning/api-keys",
+        params={"namespace": namespace},
+        headers=headers,
+    )
+    assert listed.status_code == 200, listed.text
+    assert [row["id"] for row in listed.json()] == [created.json()["id"]]
+
+    wrong_namespace = await app_client.post(
+        f"/v1/provisioning/api-keys/{created.json()['id']}/rotate",
+        headers={**headers, "X-Lians-Namespace": "ns_other-user"},
+    )
+    assert wrong_namespace.status_code == 404
+
+    admin_export = await app_client.get(
+        "/v1/admin/audit/export",
+        params={"namespace": namespace},
+        headers={"X-Provisioning-Secret": PROVISIONING_SECRET},
+    )
+    assert admin_export.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_provisioning_api_rejects_unscoped_namespaces(app_client):
+    response = await app_client.post(
+        "/v1/provisioning/api-keys",
+        json={"namespace": "customer", "scopes": ["read"]},
+        headers={
+            "X-Provisioning-Secret": PROVISIONING_SECRET,
+            "X-Lians-Namespace": "customer",
+        },
+    )
+    assert response.status_code == 400
 
 
 @pytest.mark.asyncio

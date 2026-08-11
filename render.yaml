@@ -30,7 +30,9 @@ services:
       - key: MASTER_ENCRYPTION_KEY
         generateValue: true  # base64 256-bit — decodes to 32 bytes; pinned forever
       - key: ADMIN_SECRET
-        sync: false          # set this = the website's LIANS_ADMIN_SECRET
+        sync: false          # full administrative control; never share with the website
+      - key: PROVISIONING_SECRET
+        sync: false          # separate namespace-bound website provisioning credential
       - key: API_SECRET_SEED
         generateValue: true  # retained for deployment compatibility
       - key: CORS_ORIGINS

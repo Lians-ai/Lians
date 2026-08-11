@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # Server-side key for non-reversible API-key fingerprints.
     api_secret_seed: str = "dev-seed-change-in-prod"
     admin_secret: str = "dev-admin-secret-change-in-prod"
+    # Narrow credential for the public website's API-key provisioning broker.
+    # It cannot access audit export, billing configuration, retention, or other
+    # administrative routes. Leave empty when the provisioning API is unused.
+    provisioning_secret: str = ""
     # None follows the environment: enabled in development, disabled in production.
     expose_api_docs: bool | None = None
     expose_health_details: bool | None = None
