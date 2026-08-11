@@ -134,7 +134,7 @@ const memoryStates: { value: MemoryState; label: string }[] = [
 function normalizeApiUrl(value: string) {
   const url = new URL(value);
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Use an http:// or https:// Lians API URL.");
+    throw new Error("Enter a Lians address that starts with http:// or https://.");
   }
   return url.toString().replace(/\/$/, "");
 }
@@ -296,7 +296,7 @@ export default function StudioClient() {
     event.preventDefault();
     setError("");
     try {
-      if (!draftConnection.apiKey.trim()) throw new Error("Enter a Lians API key.");
+      if (!draftConnection.apiKey.trim()) throw new Error("Enter your Lians access key.");
       setOffset(0);
       const nextConnection = {
         apiUrl: normalizeApiUrl(draftConnection.apiUrl.trim()),
@@ -487,24 +487,23 @@ export default function StudioClient() {
         </div>
         <nav aria-label="Studio navigation">
           <Link className="active" href="/studio">Memory</Link>
-          <Link href="/#backtest">Falsifiable proof</Link>
-          <Link href="/#control">Controls</Link>
-          <Link href="/">Decision System</Link>
+          <Link href="/#backtest">See an example</Link>
+          <Link href="/#control">How it works</Link>
+          <Link href="/">Home</Link>
         </nav>
       </header>
 
       <section className="studio-intro">
         <div>
-          <p className="studio-kicker">THE MEMORY BEHIND ANSWERABLE AI</p>
-          <h1>Know what your AI remembers—and why it matters.</h1>
+          <h1>See and manage what your AI remembers.</h1>
           <p>
-            Inspect durable preferences, trace every source, and correct the
-            working set without erasing the decision history it influenced.
+            Connect your Lians workspace. Then search, correct, pin, or retire
+            memories from one place.
           </p>
         </div>
         <form className="connection-card" onSubmit={connect}>
           <label>
-            <span>API URL</span>
+            <span>Lians address</span>
             <input
               type="url"
               value={draftConnection.apiUrl}
@@ -516,7 +515,7 @@ export default function StudioClient() {
             />
           </label>
           <label>
-            <span>API key</span>
+            <span>Access key</span>
             <input
               type="password"
               value={draftConnection.apiKey}
@@ -529,7 +528,7 @@ export default function StudioClient() {
             />
           </label>
           <label>
-            <span>Agent filter <em>optional</em></span>
+            <span>Which AI? <em>optional</em></span>
             <input
               value={draftConnection.agentId}
               onChange={(event) =>
@@ -539,7 +538,7 @@ export default function StudioClient() {
             />
           </label>
           <label>
-            <span>Memory scope <em>optional</em></span>
+            <span>Folder <em>optional</em></span>
             <input
               value={draftConnection.scope}
               onChange={(event) =>
@@ -549,7 +548,7 @@ export default function StudioClient() {
             />
           </label>
           <button type="submit" disabled={loading}>
-            {loading ? "Connecting…" : connection ? "Reconnect" : "Connect securely"}
+            {loading ? "Connecting…" : connection ? "Reconnect" : "Connect"}
           </button>
         </form>
       </section>
@@ -559,16 +558,16 @@ export default function StudioClient() {
 
       <section className="studio-metrics" aria-label="Memory inventory summary">
         <article><span>Visible records</span><strong>{inventory?.total ?? "—"}</strong><small>{state} scope</small></article>
-        <article><span>Durable</span><strong>{connection ? pageStats.durable : "—"}</strong><small>on this page</small></article>
-        <article><span>Preferences</span><strong>{connection ? pageStats.preferences : "—"}</strong><small>classified explicitly</small></article>
-        <article><span>Pinned</span><strong>{connection ? pageStats.pinned : "—"}</strong><small>protected ranking priority</small></article>
-        <article><span>Needs review</span><strong>{connection ? pageStats.review : "—"}</strong><small>human decision required</small></article>
+        <article><span>Long-term</span><strong>{connection ? pageStats.durable : "—"}</strong><small>kept for later</small></article>
+        <article><span>Preferences</span><strong>{connection ? pageStats.preferences : "—"}</strong><small>personal choices</small></article>
+        <article><span>Pinned</span><strong>{connection ? pageStats.pinned : "—"}</strong><small>always shown first</small></article>
+        <article><span>Needs review</span><strong>{connection ? pageStats.review : "—"}</strong><small>waiting for a person</small></article>
       </section>
 
       <section className="studio-platform-controls" aria-label="Policy and connector controls">
         <article>
           <div className="platform-control-heading">
-            <div><p>AGENT POLICY</p><h2>Capture and recall behavior</h2></div>
+            <div><h2>How this AI remembers</h2></div>
             {agentPolicy && <span>revision {agentPolicy.revision}</span>}
           </div>
           {!connection?.agentId ? (
@@ -599,7 +598,7 @@ export default function StudioClient() {
 
         <article>
           <div className="platform-control-heading">
-            <div><p>CONNECTORS</p><h2>Governed memory sources</h2></div>
+            <div><h2>Where memory comes from</h2></div>
             <span>{connectors.length} configured</span>
           </div>
           <form className="connector-editor" onSubmit={createConnector}>
@@ -630,8 +629,7 @@ export default function StudioClient() {
       {controlPlane && (
         <section className="enterprise-overview" aria-label="Enterprise control plane">
           <div>
-            <p>CONTROL PLANE</p>
-            <h2>Operational and evidence posture</h2>
+            <h2>System health</h2>
             <span>{controlPlane.attention.length} items need attention</span>
           </div>
           <dl>
@@ -652,7 +650,7 @@ export default function StudioClient() {
       <section className="studio-workspace" aria-label="Memory workspace">
         <aside className="memory-directory">
           <div className="directory-title">
-            <div><p>MEMORY DIRECTORY</p><h2>Recorded knowledge</h2></div>
+            <div><h2>Saved memories</h2></div>
             <button
               type="button"
               onClick={() => connection && fetchInventory(connection, state, offset)}
@@ -684,9 +682,8 @@ export default function StudioClient() {
           <div className="memory-list" aria-busy={loading}>
             {!connection && (
               <div className="directory-empty">
-                <span aria-hidden="true">01</span>
                 <strong>Connect a Lians environment</strong>
-                <p>Your key stays in memory for this browser tab and is sent only to the API URL above.</p>
+                <p>Your access key stays in this browser tab and is sent only to the Lians address above.</p>
               </div>
             )}
             {connection && !loading && inventory?.memories.length === 0 && (
@@ -753,14 +750,13 @@ export default function StudioClient() {
             <>
               <header className="inspector-header">
                 <div>
-                  <p>MEMORY / {shortId(selected.id)}</p>
                   <h2>{priorityFor(selected).kind ?? "Recorded memory"}</h2>
                 </div>
                 <span className={`memory-status ${memoryStatus(selected).toLowerCase()}`}>{memoryStatus(selected)}</span>
               </header>
 
               <div className="inspector-content">
-                <span>RECORDED CONTENT</span>
+                <span>Saved memory</span>
                 <p>{selected.content ?? "Content is cryptographically unavailable."}</p>
               </div>
 
@@ -772,14 +768,14 @@ export default function StudioClient() {
               </div>
 
               <section className="inspector-section">
-                <div className="inspector-section-title"><span>WHY THIS WAS KEPT</span><small>Deterministic signals</small></div>
+                <div className="inspector-section-title"><span>Why Lians saved this</span><small>Recorded reasons</small></div>
                 <div className="signal-list">
                   {(priorityFor(selected).signals ?? ["No priority signals recorded"]).map((signal) => <span key={signal}>{signal}</span>)}
                 </div>
               </section>
 
               <section className="inspector-section">
-                <div className="inspector-section-title"><span>PROVENANCE & VALIDITY</span><small>Bitemporal record</small></div>
+                <div className="inspector-section-title"><span>Where it came from</span><small>History and source</small></div>
                 <dl className="provenance-list">
                   <div><dt>Agent</dt><dd>{selected.agent_id}</dd></div>
                   <div><dt>Subject</dt><dd>{selected.subject_id ?? "Not assigned"}</dd></div>
@@ -796,7 +792,7 @@ export default function StudioClient() {
 
               {selected.metadata._studio_control && (
                 <section className="last-control">
-                  <span>LAST HUMAN CONTROL</span>
+                  <span>Last change</span>
                   <strong>{selected.metadata._studio_control.action}</strong>
                   <p>{selected.metadata._studio_control.actor} · {formatTime(selected.metadata._studio_control.at ?? null)}</p>
                 </section>
@@ -804,7 +800,7 @@ export default function StudioClient() {
 
               {!selected.erased_at && !selected.valid_to && (
                 <section className="control-panel">
-                  <div className="inspector-section-title"><span>MEMORY CONTROLS</span><small>Every action is audited</small></div>
+                  <div className="inspector-section-title"><span>Manage this memory</span><small>Every change is recorded</small></div>
                   <div className="control-fields">
                     <label><span>Actor</span><input value={actor} onChange={(event) => setActor(event.target.value)} /></label>
                     <label><span>Review note</span><input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why are you changing this memory?" /></label>
@@ -838,8 +834,7 @@ export default function StudioClient() {
       <section className="recall-lab" aria-labelledby="recall-lab-title">
         <div className="recall-lab-heading">
           <div>
-            <p className="studio-kicker">RECALL LAB / MEASURED CONTEXT</p>
-            <h2 id="recall-lab-title">Test retrieval quality and latency on the live working set.</h2>
+            <h2 id="recall-lab-title">Test a memory search.</h2>
           </div>
           <span>Results include a content-addressed receipt</span>
         </div>
@@ -904,7 +899,7 @@ export default function StudioClient() {
 
       <footer className="studio-footer">
         <span>Lians Studio / history-preserving memory operations</span>
-        <span>API keys are not persisted by this interface.</span>
+        <span>Access keys are not saved by this page.</span>
       </footer>
     </main>
   );

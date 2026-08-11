@@ -17,50 +17,46 @@ type VerificationState = "verified" | "checking" | "failed" | "unavailable";
 const controlStages = [
   {
     number: "01",
-    name: "Record what mattered",
+    name: "Connect your AI",
     description:
-      "The Universal Recorder captures memory, prompts, tools, policy, identity, and review across native, OTLP, MCP, and A2A events.",
-    proof: "UNIVERSAL RECORDER / OPEN INPUTS",
+      "Add Lians to one workflow without replacing the model or tools you already use.",
   },
   {
     number: "02",
-    name: "Prove the boundary",
+    name: "Let it work",
     description:
-      "A Decision Receipt freezes the declared evidence boundary, completeness disclosure, acting identity, and integrity material.",
-    proof: "DECISION RECEIPT / SHA-256 / ED25519",
+      "Lians quietly records the facts, rules, tools, and approvals behind each decision.",
   },
   {
     number: "03",
-    name: "Govern the action",
+    name: "Open any decision",
     description:
-      "The Authority Gate binds the real principal, scopes, information barrier, policy, and approval quorum before release.",
-    proof: "AUTHORITY GATE / IDENTITY-BOUND",
+      "See what the AI knew, why it acted, and who allowed it in one clear view.",
   },
   {
     number: "04",
-    name: "Learn from change",
+    name: "Fix what changed",
     description:
-      "Impact Intelligence finds exposed decisions, separates proof from reachability, assigns remediation, and attests closure.",
-    proof: "IMPACT INTELLIGENCE / CLOSURE",
+      "When a fact or rule changes, find every affected decision and send it to the right person.",
   },
 ] as const;
 
 const answerabilityQuestions = [
   {
     question: "What did it know?",
-    answer: "Point-in-time memory and provenance",
+    answer: "The facts available at that exact moment.",
   },
   {
     question: "Why did it act?",
-    answer: "A complete decision evidence graph",
+    answer: "The evidence and rules behind the result.",
   },
   {
-    question: "Who authorized it?",
-    answer: "Identity-bound policy and approval",
+    question: "Who approved it?",
+    answer: "The people and policies that allowed it.",
   },
   {
-    question: "What changed next?",
-    answer: "Blast-radius detection and remediation",
+    question: "What needs attention now?",
+    answer: "Every affected decision and its owner.",
   },
 ] as const;
 
@@ -240,12 +236,11 @@ export default function Home() {
           <span className="brand-product">Decision System</span>
         </a>
         <nav className="topnav" aria-label="Page sections">
-          <Link href="/studio">Memory Studio</Link>
-          <a href="#control">Proof loop</a>
-          <a href="#incident">Live case</a>
-          <a href="#impact">Blast radius</a>
-          <a href="#backtest">Lookahead test</a>
-          <a href="#receipt">Verify</a>
+          <a href="#control">How it works</a>
+          <a href="#incident">See an example</a>
+          <a href="#impact">Find changes</a>
+          <a href="#receipt">Download proof</a>
+          <Link href="/studio">Saved memory</Link>
         </nav>
         <div className="topbar-actions">
           <span className="demo-pill">
@@ -259,51 +254,38 @@ export default function Home() {
 
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">
-            THE SYSTEM OF RECORD FOR AI DECISIONS
-          </p>
           <h1>Make every AI decision answerable.</h1>
           <p className="hero-lede">
-            Lians gives teams the memory, authority, evidence, and controls to
-            understand what AI knew, why it acted, who authorized it, and what
-            changed next&mdash;across every model, agent, and provider.
+            Connect Lians to your AI. Open any decision to see what happened,
+            why it happened, who approved it, and what needs attention now.
           </p>
           <div className="hero-actions">
             <a className="primary-button" href="#incident">
-              See a decision investigated <span aria-hidden="true">↓</span>
+              Show me what happened <span aria-hidden="true">↓</span>
             </a>
-            <Link className="secondary-button" href="/studio">Open Memory Studio</Link>
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={downloadReceipt}
-            >
-              Verify a Decision Receipt
-            </button>
+            <Link className="secondary-button" href="/studio">See saved memory</Link>
           </div>
           <div className="truth-note">
             <span className="truth-mark" aria-hidden="true">i</span>
             <p>
-              <strong>This is a synthetic canonical incident.</strong> Lians
-              reconstructs recorded context within a declared capture boundary;
-              it does not claim access to hidden model cognition or universal
-              deterministic replay.
+              <strong>This example uses fictional lending data.</strong> It shows
+              how Lians works without exposing real customer information.
             </p>
           </div>
         </div>
 
         <aside className="receipt-preview" aria-label="Decision Receipt v0.1 preview">
           <div className="receipt-preview-top">
-            <span>DECISION RECEIPT · v0.1</span>
+            <span>AI decision</span>
             <span className="verified-chip">
               <span aria-hidden="true">✓</span> Verified
             </span>
           </div>
           <div className="receipt-number">#8127</div>
           <div className="receipt-outcome">
-            <span>OUTCOME</span>
+            <span>Result</span>
             <strong>Declined</strong>
-            <small>Reason code · DTI_HIGH</small>
+            <small>Debt-to-income ratio was too high</small>
           </div>
           <dl className="receipt-facts">
             <div>
@@ -312,7 +294,7 @@ export default function Home() {
             </div>
             <div>
               <dt>Evidence grade</dt>
-              <dd>A · 12 / 12</dd>
+              <dd>12 of 12 facts</dd>
             </div>
             <div>
               <dt>Policy</dt>
@@ -320,29 +302,26 @@ export default function Home() {
             </div>
             <div>
               <dt>Model</dt>
-              <dd>credit-risk-v3.2</dd>
+              <dd>Credit review AI</dd>
             </div>
           </dl>
           <div className="receipt-integrity">
             <div>
-              <span>RECEIPT HASH</span>
-              <code>{decisionReceipt.integrity.receipt_hash.slice(0, 20)}…</code>
+              <span>Proof</span>
+              <code>Decision record attached</code>
             </div>
             <span className="integrity-seal" aria-label="Hash and signature verified">
               A
             </span>
           </div>
           <p className="receipt-boundary">
-            Canonical JSON · Ed25519 · synthetic demo key
+            Every fact shown is from the moment the decision happened.
           </p>
         </aside>
       </section>
 
       <section className="answerability-section" aria-label="The four questions every AI decision must answer">
-        <div className="answerability-intro">
-          <span>THE ANSWERABILITY STANDARD</span>
-          <strong>The record AI cannot rewrite after the fact.</strong>
-        </div>
+        <h2 className="answerability-heading">Open a decision. Get four clear answers.</h2>
         <div className="answerability-grid">
           {answerabilityQuestions.map((item) => (
             <article key={item.question}>
@@ -356,20 +335,15 @@ export default function Home() {
       <section className="control-section" id="control" aria-labelledby="control-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">
-              <span aria-hidden="true">01</span> THE LIANS PROOF LOOP
-            </p>
-            <h2 id="control-title">One system closes the accountability loop.</h2>
+            <h2 id="control-title">Connect it once. Understand every decision.</h2>
             <p>
-              Record the decision boundary before the outcome is known. Bind it
-              to authority before action. Then find every exposed decision when
-              memory, policy, permissions, or models change.
+              Lians sits beside the AI tools you already use. It records the
+              decision, explains it clearly, and shows you what to do next.
             </p>
           </div>
-          <div className="control-standard" aria-label="Supported protocol surfaces">
-            <span>OPEN PROTOCOL SURFACES</span>
-            <strong>OTLP · MCP · A2A</strong>
-            <small>plus the native Recorder envelope</small>
+          <div className="control-standard" aria-label="Simple integration promise">
+            <strong>Keep your current AI.</strong>
+            <small>Lians works beside your models, agents, and tools.</small>
           </div>
         </div>
 
@@ -382,31 +356,28 @@ export default function Home() {
               </div>
               <h3>{stage.name}</h3>
               <p>{stage.description}</p>
-              <code>{stage.proof}</code>
             </article>
           ))}
         </div>
 
         <div className="gate-simulation">
           <div className="gate-context">
-            <p className="panel-kicker">RUNTIME CONTROL · SYNTHETIC ACTION</p>
-            <h3>Issue adverse-action notice for Application 8127</h3>
+            <h3>Some actions need human approval.</h3>
             <p>
-              The receipt is valid, but this action crosses the consumer-lending
-              barrier. Policy requires independent risk and compliance approvals
-              bound to this exact action, receipt, principal, and evaluation.
+              This example cannot send a lending notice until both risk and
+              compliance approve the exact action.
             </p>
             <dl className="gate-facts">
-              <div><dt>Acting principal</dt><dd>underwriting-agent-prod</dd></div>
-              <div><dt>Barrier</dt><dd>consumer-lending</dd></div>
-              <div><dt>Policy</dt><dd>lending.high-impact.v4</dd></div>
-              <div><dt>Trusted receipt</dt><dd><span className="fact-ok">Verified</span></dd></div>
+              <div><dt>AI system</dt><dd>Credit review AI</dd></div>
+              <div><dt>Workflow</dt><dd>Consumer lending</dd></div>
+              <div><dt>Rule</dt><dd>Two people must approve</dd></div>
+              <div><dt>Decision proof</dt><dd><span className="fact-ok">Verified</span></dd></div>
             </dl>
           </div>
 
           <div className={`gate-console ${gateState}`} aria-live="polite">
             <div className="gate-console-top">
-              <span>GATE EVALUATION · GATE-EVAL-8127</span>
+              <span>Approval status</span>
               <strong>
                 {gateState === "held" && "HELD"}
                 {gateState === "approved" && "QUORUM MET"}
@@ -421,7 +392,7 @@ export default function Home() {
                   {gateState === "approved" && "Eligible for release"}
                   {gateState === "released" && "Action authorized"}
                 </strong>
-                <p>Every approval appends a context-bound attestation; the original receipt is never rewritten.</p>
+                <p>Every approval is recorded. The original decision stays unchanged.</p>
               </div>
             </div>
             <div className="approval-chain" aria-label="Approval chain">
@@ -441,7 +412,7 @@ export default function Home() {
                 onClick={addSyntheticApproval}
                 disabled={gateApprovals >= 2 || actionReleased}
               >
-                {gateApprovals >= 2 ? "Quorum complete" : "Add synthetic approval"}
+                {gateApprovals >= 2 ? "Both approvals added" : "Add review approval"}
               </button>
               <button
                 className="close-incident-button"
@@ -449,7 +420,7 @@ export default function Home() {
                 onClick={releaseSyntheticAction}
                 disabled={gateApprovals < 2 || actionReleased}
               >
-                {actionReleased ? "Action released" : "Release authorized action"}
+                {actionReleased ? "Action allowed" : "Allow action"}
               </button>
             </div>
             <small>Demo controls update local session state only; no production action is taken.</small>
@@ -460,14 +431,10 @@ export default function Home() {
       <section className="incident-shell" id="incident" aria-labelledby="incident-title">
         <div className="incident-heading">
           <div>
-            <p className="eyebrow">
-              <span aria-hidden="true">02</span> ANSWERABLE DECISION CASE
-            </p>
-            <h2 id="incident-title">A decision becomes a case, not a mystery.</h2>
+            <h2 id="incident-title">See exactly what happened.</h2>
             <p>
-              Ask why Application 8127 was declined, inspect the immutable
-              boundary, and move forward through later changes without rewriting
-              what the system knew on July 12.
+              This application was declined. Choose any moment below to see
+              the facts and rules available at that time.
             </p>
           </div>
           <div className="incident-statuses" aria-label="Incident status">
@@ -481,23 +448,23 @@ export default function Home() {
 
         <div className="decision-strip" aria-label="Original decision summary">
           <div>
-            <span>ORIGINAL OUTCOME</span>
+            <span>Original result</span>
             <strong>{incident.outcome}</strong>
           </div>
           <div>
-            <span>RECORDED INCOME</span>
+            <span>Income used</span>
             <strong>{incident.originalIncome}</strong>
           </div>
           <div>
-            <span>RECORDED DTI</span>
+            <span>Debt ratio used</span>
             <strong>{incident.originalDti}</strong>
           </div>
           <div>
-            <span>POLICY AT TIME</span>
+            <span>Rule used</span>
             <strong>Version 4.2</strong>
           </div>
           <div className="grade-cell">
-            <span>COMPLETENESS</span>
+            <span>Proof quality</span>
             <strong>Grade {incident.completeness.grade}</strong>
           </div>
         </div>
@@ -505,7 +472,7 @@ export default function Home() {
         <div className="investigation-grid">
           <div className="timeline-panel">
             <div className="panel-label">
-              <span>INCIDENT TIMELINE</span>
+              <span>Timeline</span>
               <small>Choose a recorded event</small>
             </div>
             <div className="timeline" role="group" aria-label="Incident events">
@@ -523,7 +490,6 @@ export default function Home() {
                     <small>{event.time}</small>
                   </span>
                   <span className="timeline-copy">
-                    <small>{event.eyebrow}</small>
                     <strong>{event.title}</strong>
                     <span>{event.summary}</span>
                   </span>
@@ -536,7 +502,6 @@ export default function Home() {
           <div className="evidence-panel" aria-live="polite">
             <div className="evidence-panel-heading">
               <div>
-                <p>{selectedEvent.eyebrow}</p>
                 <h3>{selectedEvent.title}</h3>
               </div>
               <span className={`event-tone ${selectedEvent.tone}`}>{selectedEvent.step}</span>
@@ -637,14 +602,10 @@ export default function Home() {
       <section className="impact-section" id="impact" aria-labelledby="impact-title">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">
-              <span aria-hidden="true">03</span> IMPACT INTELLIGENCE
-            </p>
-            <h2 id="impact-title">When truth changes, find every decision at risk.</h2>
+            <h2 id="impact-title">When one fact changes, find everything affected.</h2>
             <p>
-              Lians separates recorded use from possible access and sandboxed
-              estimates, turning change into a prioritized remediation queue
-              without overstating causality.
+              Lians shows which decisions definitely used the old fact, which
+              ones may have seen it, and who should review them next.
             </p>
           </div>
           <div className="impact-summary" aria-label="Impact summary">
@@ -723,14 +684,10 @@ export default function Home() {
       <section className="receipt-section" id="receipt" aria-labelledby="receipt-title">
         <div className="section-heading receipt-heading">
           <div>
-            <p className="eyebrow">
-              <span aria-hidden="true">05</span> PORTABLE PROOF
-            </p>
-            <h2 id="receipt-title">Proof that travels across teams, models, and regulators.</h2>
+            <h2 id="receipt-title">Download proof anyone can check.</h2>
             <p>
-              The downloadable JSON freezes the recorded boundary, completeness
-              disclosure, later change links, and integrity material in a format
-              another system can independently inspect.
+              Share one file containing the decision, the facts behind it, later
+              changes, and proof that the record has not been altered.
             </p>
           </div>
           <button className="primary-button light" type="button" onClick={downloadReceipt}>
@@ -740,7 +697,7 @@ export default function Home() {
 
         <div className="assurance-grid">
           <article className="completeness-card">
-            <div className="card-kicker"><span>CAPTURE COMPLETENESS</span><span className="grade-badge">A</span></div>
+            <span className="grade-badge">Grade A</span>
             <div className="score-line"><strong>{incident.completeness.score}</strong><span>required receipt fields recorded</span></div>
             <div className="coverage-bar" aria-label="12 of 12 completeness checks present"><span /></div>
             <h3>{incident.completeness.status}</h3>
@@ -749,7 +706,7 @@ export default function Home() {
           </article>
 
           <article className="verification-card">
-            <div className="card-kicker"><span>INTEGRITY VERIFICATION</span><span className={`verification-dot ${verification}`} /></div>
+            <span className={`verification-dot ${verification}`} aria-label={`Verification ${verification}`} />
             <h3>
               {verification === "verified" && "Hash matched. Signature verified."}
               {verification === "checking" && "Checking receipt integrity…"}
@@ -775,7 +732,7 @@ export default function Home() {
           </article>
 
           <article className="review-card">
-            <div className="card-kicker"><span>HUMAN REVIEW</span><span className={`review-chip ${reviewState}`}>{reviewState === "needs-review" ? "NEEDS REVIEW" : reviewState === "reviewed" ? "REVIEWED" : "CLOSED"}</span></div>
+            <span className={`review-chip ${reviewState}`}>{reviewState === "needs-review" ? "Needs review" : reviewState === "reviewed" ? "Reviewed" : "Closed"}</span>
             <h3>{reviewState === "closed" ? "Incident review closed" : "Resolve the review queue"}</h3>
             <p>
               {reviewState === "needs-review" && "Confirm that direct references were reviewed and reachable workflows were routed to their owners."}

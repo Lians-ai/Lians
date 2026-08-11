@@ -1,17 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -26,7 +15,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase,
     title: "Lians | Make Every AI Decision Answerable",
     description:
-      "The system of record and control for consequential AI decisions: memory, authority, verifiable evidence, and change impact across every model and agent.",
+      "Connect Lians to your AI and open any decision to see what happened, why it happened, who approved it, and what needs attention now.",
     icons: {
       icon: "/favicon.svg",
       shortcut: "/favicon.svg",
@@ -34,14 +23,14 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title: "Make every AI decision answerable.",
       description:
-        "Know what AI knew, why it acted, who authorized it, and what changed next—with one portable decision record.",
+        "See what happened, why it happened, who approved it, and what needs attention next.",
       type: "website",
       images: [
         {
           url: "/og.png",
-          width: 1731,
-          height: 909,
-          alt: "Lians makes every AI decision answerable with memory, authority, evidence, and impact intelligence",
+          width: 1536,
+          height: 1024,
+          alt: "Lians makes every AI decision answerable",
         },
       ],
     },
@@ -49,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Lians | Make Every AI Decision Answerable",
       description:
-        "The system of record and control for consequential AI decisions.",
+        "See what happened. Know what to do next.",
       images: ["/og.png"],
     },
   };
@@ -62,9 +51,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

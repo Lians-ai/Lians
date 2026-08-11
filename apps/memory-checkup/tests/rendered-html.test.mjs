@@ -29,15 +29,15 @@ test("server-renders the live Lians Studio memory workspace", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
 
-  assert.match(html, /Know what your AI remembers—and why it matters\./i);
-  assert.match(html, /Connect securely/i);
-  assert.match(html, /Memory directory/i);
-  assert.match(html, /Durable/i);
+  assert.match(html, /See and manage what your AI remembers\./i);
+  assert.match(html, /Lians address/i);
+  assert.match(html, /Saved memories/i);
+  assert.match(html, /Long-term/i);
   assert.match(html, /Preferences/i);
-  assert.match(html, /Capture and recall behavior/i);
-  assert.match(html, /Governed memory sources/i);
-  assert.match(html, /Recall lab/i);
-  assert.match(html, /API keys are not persisted/i);
+  assert.match(html, /How this AI remembers/i);
+  assert.match(html, /Where memory comes from/i);
+  assert.match(html, /Test a memory search/i);
+  assert.match(html, /Access keys are not saved/i);
 });
 
 test("server-renders the Lians Investigator incident", async () => {
@@ -51,12 +51,12 @@ test("server-renders the Lians Investigator incident", async () => {
     /Make every AI decision answerable\./i,
   );
   assert.match(html, /What did it know\?/i);
-  assert.match(html, /Who authorized it\?/i);
+  assert.match(html, /Who approved it\?/i);
   assert.match(html, /Synthetic demo/i);
-  assert.match(html, /synthetic canonical incident/i);
+  assert.match(html, /fictional lending data/i);
   assert.match(html, /Application 8127/i);
   assert.match(html, /Declined/i);
-  assert.match(html, /DTI_HIGH/i);
+  assert.match(html, /Debt-to-income ratio was too high/i);
   assert.match(html, /income was corrected to \$96,000/i);
   assert.match(html, /Policy 4\.2 was retired/i);
 });
@@ -75,7 +75,7 @@ test("renders an honest recorded boundary and differentiated impact queue", asyn
   assert.match(html, /Reachable/i);
   assert.match(html, /Estimated/i);
   assert.match(html, /Complete within declared boundary/i);
-  assert.match(html, /hidden model cognition/i);
+  assert.match(html, /hidden AI reasoning/i);
   assert.match(html, /Affected-decision queue/i);
 });
 
@@ -95,13 +95,12 @@ test("server-renders the deterministic Track E0 entry point", async () => {
   const response = await render();
   const html = await response.text();
 
-  assert.match(html, /TRACK E0 \/ FALSIFIABLE PROOF/i);
-  assert.match(html, /See exactly how a backtest cheated\./i);
-  assert.match(html, /Load the committed evidence run/i);
-  assert.match(html, /744 ticker decisions/i);
-  assert.match(html, /918-row future-evidence ledger/i);
-  assert.match(html, /No API key, model call, or live market action/i);
-  assert.match(html, /hidden model cognition/i);
+  assert.match(html, /Catch tests that used tomorrow/i);
+  assert.match(html, /Load the example test/i);
+  assert.match(html, /all 744 decisions/i);
+  assert.match(html, /918 places where facts/i);
+  assert.match(html, /Nothing leaves your browser/i);
+  assert.match(html, /hidden AI reasoning/i);
 });
 
 test("lookahead directory preserves exact deterministic benchmark counts", async () => {

@@ -117,16 +117,6 @@ export default function LookaheadExplorer() {
     });
   }, [decisionFilter, query]);
 
-  const steps = [
-    { number: "01", label: "Import", complete: imported },
-    { number: "02", label: "List all decisions", complete: imported },
-    { number: "03", label: "Select contamination", complete: selectedDecision.futureCount > 0 },
-    { number: "04", label: "Disclose future evidence", complete: selectedDecision.evidence.length > 0 },
-    { number: "05", label: "Reconstruct cutoff", complete: reconstructed },
-    { number: "06", label: "Compare outcomes", complete: reconstructed },
-    { number: "07", label: "Verify receipt", complete: verification === "verified" },
-  ];
-
   function importRun() {
     setImported(true);
     setSelectedId(canonicalDecision.id);
@@ -209,71 +199,56 @@ export default function LookaheadExplorer() {
     >
       <div className="backtest-heading">
         <div>
-          <p className="eyebrow">
-            <span aria-hidden="true">04</span> TRACK E0 / FALSIFIABLE PROOF
-          </p>
-          <h2 id="backtest-title">See exactly how a backtest cheated.</h2>
+          <h2 id="backtest-title">Catch tests that used tomorrow&apos;s information.</h2>
           <p>
-            Import one deterministic run, inspect every ticker decision, expose
-            the future evidence that entered context, then rebuild the same
-            decision at its actual historical cutoff.
+            A test can look impressive because it accidentally used facts that
+            were not known yet. Lians finds those mistakes and rebuilds the test
+            using only information available at the time.
           </p>
         </div>
         <div className="backtest-proof-mark" aria-label="Deterministic run identity">
-          <span>REPRODUCIBLE FIXTURE</span>
-          <strong>SEED 42 / 2026 H1</strong>
-          <small>No API key, model call, or live market action</small>
+          <span>Fixed example</span>
+          <strong>Same result every time</strong>
+          <small>Nothing leaves your browser</small>
         </div>
       </div>
 
       <div className="import-console">
         <div className="import-copy">
-          <p className="panel-kicker">01 / DETERMINISTIC IMPORT</p>
-          <h3>{imported ? "Run manifest imported" : "Load the committed evidence run"}</h3>
+          <h3>{imported ? "Example loaded" : "Load the example test"}</h3>
           <p>
-            The manifest binds 75 timestamped notes, six synthetic tickers, 125
-            market days, 744 ticker decisions, and the generated result files.
-            Importing changes only this browser session.
+            This ready-made example shows how a test can look good because it
+            accidentally used facts from the future.
           </p>
         </div>
         <dl className="import-manifest">
-          <div><dt>Dataset</dt><dd>{lookaheadSummary.datasetId}</dd></div>
-          <div><dt>Decision rows</dt><dd>{lookaheadSummary.decisions}</dd></div>
-          <div><dt>Detector checkpoint</dt><dd>{formatTimestamp(lookaheadSummary.checkpoint)}</dd></div>
-          <div><dt>Capture status</dt><dd>Complete with known exclusions</dd></div>
+          <div><dt>Example</dt><dd>Seed 42</dd></div>
+          <div><dt>Decisions</dt><dd>{lookaheadSummary.decisions}</dd></div>
+          <div><dt>Last checked</dt><dd>{formatTimestamp(lookaheadSummary.checkpoint)}</dd></div>
+          <div><dt>Included</dt><dd>Full test history</dd></div>
         </dl>
         <button className="primary-button" type="button" onClick={importRun}>
-          {imported ? "Re-import deterministic run" : "Import deterministic run"}
+          {imported ? "Reset example" : "Open example"}
         </button>
       </div>
 
       <div className="capture-disclosure">
-        <strong>Declared boundary</strong>
+        <strong>What this shows</strong>
         <p>
-          Directly observed: committed seed-42 notes, prices, strategy settings,
-          retrieval rows, and result files. Excluded: hidden model cognition,
-          live brokerage execution, and claims about future performance.
+          Lians checks the saved facts, dates, choices, and results. It does not
+          claim to read hidden AI reasoning or predict future performance.
         </p>
-        <span>Instrumentation: lookahead-seed42-v1</span>
+        <span>Fictional data</span>
       </div>
-
-      <ol className="e0-progress" aria-label="Track E0 workflow progress">
-        {steps.map((step) => (
-          <li className={step.complete ? "complete" : "pending"} key={step.number}>
-            <span>{step.complete ? "OK" : step.number}</span>
-            <strong>{step.label}</strong>
-          </li>
-        ))}
-      </ol>
 
       {!imported ? (
         <div className="backtest-empty-state">
           <span aria-hidden="true">42</span>
           <div>
-            <h3>The evidence directory is ready to import.</h3>
+            <h3>Open the example to see the mistake.</h3>
             <p>
-              The run is deterministic and local. Import it to render all 744
-              decisions and the complete 918-row future-evidence ledger.
+              Open it to see all 744 decisions and the 918 places where facts
+              from the future appeared.
             </p>
           </div>
         </div>
@@ -290,8 +265,7 @@ export default function LookaheadExplorer() {
             <aside className="backtest-directory" aria-labelledby="decision-directory-title">
               <div className="directory-heading">
                 <div>
-                  <p className="panel-kicker">02 / FULL DECISION LIST</p>
-                  <h3 id="decision-directory-title">Every ticker decision</h3>
+                  <h3 id="decision-directory-title">Every decision in the test</h3>
                 </div>
                 <span>{visibleDecisions.length} / {lookaheadSummary.decisions}</span>
               </div>
@@ -350,7 +324,6 @@ export default function LookaheadExplorer() {
             <article className="backtest-decision-detail" aria-live="polite">
               <div className="selected-decision-heading">
                 <div>
-                  <p className="panel-kicker">03 / SELECTED DECISION</p>
                   <h3>{selectedDecision.ticker} at {formatTimestamp(selectedDecision.decisionAt)}</h3>
                   <code>{selectedDecision.id}</code>
                 </div>
@@ -376,8 +349,7 @@ export default function LookaheadExplorer() {
               <div className="future-evidence-panel">
                 <div className="future-evidence-heading">
                   <div>
-                    <p className="panel-kicker">04 / FUTURE EVIDENCE DISCLOSURE</p>
-                    <h4>Information that did not exist at decision time</h4>
+                    <h4>Information learned later</h4>
                   </div>
                   <span>{selectedDecision.futureCount} rows</span>
                 </div>
@@ -407,8 +379,7 @@ export default function LookaheadExplorer() {
 
               <div className={`cutoff-reconstruction ${reconstructed ? "reconstructed" : "recorded"}`}>
                 <div>
-                  <p className="panel-kicker">05 / HISTORICAL CUTOFF</p>
-                  <h4>{reconstructed ? "Point-in-time context reconstructed" : "Present-time context recorded"}</h4>
+                  <h4>{reconstructed ? "View rebuilt using only what was known then" : "Current view includes later information"}</h4>
                   <p>
                     {reconstructed
                       ? `recall_at(as_of=${selectedDecision.decisionAt}) excludes every item whose event time is later than the cutoff.`
@@ -420,7 +391,7 @@ export default function LookaheadExplorer() {
                   type="button"
                   onClick={() => setReconstructed((value) => !value)}
                 >
-                  {reconstructed ? "Show recorded contaminated context" : "Reconstruct at decision cutoff"}
+                  {reconstructed ? "Show the original test" : "Rebuild without future facts"}
                 </button>
                 {reconstructed && (
                   <div className="reconstruction-result">
@@ -453,8 +424,7 @@ export default function LookaheadExplorer() {
           <section className="backtest-comparison" aria-labelledby="comparison-title">
             <div className="comparison-heading">
               <div>
-                <p className="panel-kicker">06 / DETERMINISTIC COMPARISON</p>
-                <h3 id="comparison-title">One parameter changed the result.</h3>
+                <h3 id="comparison-title">The same test, using only what was known then.</h3>
               </div>
               <code>recall() -&gt; recall_at(as_of=decision_time)</code>
             </div>
@@ -491,8 +461,7 @@ export default function LookaheadExplorer() {
 
           <section className="lookahead-receipt" aria-labelledby="lookahead-receipt-title">
             <div className="lookahead-receipt-copy">
-              <p className="panel-kicker">07 / OPEN RECEIPT</p>
-              <h3 id="lookahead-receipt-title">Verify the proof without trusting this page.</h3>
+              <h3 id="lookahead-receipt-title">Download the proof and check it yourself.</h3>
               <p>
                 The portable Decision Receipt v0.1 is bound to the canonical
                 HLIO decision. Browser verification recomputes canonical JSON,
