@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-11",
+  "source": {
+    "repository": "Lians-ai/Lians",
+    "branch": "master"
+  },
+  "product": {
+    "name": "Lians",
+    "category": "Decision evidence and reconstruction for regulated AI",
+    "summary": "Lians keeps a portable, provider-neutral record of what an AI system knew, retrieved, did, and reviewed so consequential decisions can be reconstructed and verified later.",
+    "workflow": [
+      {
+        "label": "Capture",
+        "detail": "Record prompts, retrieved context, tool calls, outputs, policies, and review events as a decision is made."
+      },
+      {
+        "label": "Reconstruct",
+        "detail": "Replay the evidence trail to show what the system knew and why it produced a consequential result."
+      },
+      {
+        "label": "Verify",
+        "detail": "Check evidence integrity, policy application, reviewer actions, and the exact chain behind a decision."
+      },
+      {
+        "label": "Monitor",
+        "detail": "Track later changes to evidence, policies, models, and outcomes without losing the original record."
+      }
+    ],
+    "surfaces": [
+      {
+        "label": "Library",
+        "status": "Available",
+        "detail": "Local-first Python library backed by SQLite for embedding decision evidence directly in an application."
+      },
+      {
+        "label": "Self-hosted server",
+        "status": "Available",
+        "detail": "Team deployment backed by Postgres and pgvector for shared evidence, controls, and investigation workflows."
+      },
+      {
+        "label": "Cloud",
+        "status": "Early access",
+        "detail": "Managed Lians service for teams that want the evidence layer operated for them."
+      }
+    ]
+  }
+}
