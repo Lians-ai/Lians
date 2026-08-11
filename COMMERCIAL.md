@@ -13,7 +13,7 @@ party responsible for delivery and support.
 
 | Plan | Monthly price | Hosted value |
 |---|---:|---|
-| Free | $0 | 10K writes and recalls, point-in-time memory, API keys, and playground |
+| Free | $0 | Token-reduced context, 10K writes and recalls, point-in-time memory, API keys, and playground |
 | Starter | $15 | 100K writes, domain adapters, audit history, and lineage |
 | Growth | $69 | Governance review, graph, conflicts, webhooks, and operational reporting |
 | Pro | $199 | Adaptive recall, experience learning, backtest checks, metrics, and priority support |

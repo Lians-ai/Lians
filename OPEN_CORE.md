@@ -36,7 +36,8 @@ its server verifies the customer's subscription and issues API keys with only
 the scopes included in that plan.
 
 The hosted free tier exposes the five-second path: write memory, recall it at a
-point in time, inspect the result, and integrate through an API key. Paid hosted
+point in time, compile only the relevant memories into a token-budgeted context
+block, inspect the result, and integrate through an API key. Paid hosted
 plans add operated capacity and increasingly advanced scopes such as audit,
 governance, graph, webhooks, compliance reporting, adaptive learning, and
 enterprise deployment controls. A browser lock is never treated as an
