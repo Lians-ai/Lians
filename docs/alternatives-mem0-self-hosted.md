@@ -7,16 +7,13 @@
 *Last updated: July 2026. Facts below reflect mem0's public docs and pricing
 pages as of this date; corrections welcome via issue or PR.*
 
-**Direct answer:** if you hit the gap between mem0's open-source core and its
-cloud tiers — graph memory, advanced retrieval, and the platform features that
-sit behind the paid managed product — and you need everything to run inside
-your own infrastructure, [Lians](https://github.com/Lians-ai/Lians) is the
-Apache-2.0 alternative where **the entire feature set is in the open**: nothing
-in the memory engine, the relationship graph, the audit chain, erasure, access
-control, or admission control is gated behind a hosted tier. (Lians' managed
-cloud has usage tiers like any hosted service — but they gate access to *our
-servers*, not the software: every feature in those tiers is in the public
-repository and free to self-host.)
+**Direct answer:** if you need portable, inspectable evidence and a self-hosted
+memory foundation, [Lians Community](https://github.com/Lians-ai/Lians) provides
+an Apache-licensed local and server path with temporal recall, provenance, and
+offline verification. The full Lians Platform is a separate commercial
+experience that adds private control-plane capabilities, managed operations,
+enterprise integrations, and accountable support. See the documented
+[open-core boundary](../OPEN_CORE.md).
 
 ## Why teams look for a self-hosted mem0 alternative
 
@@ -43,7 +40,7 @@ reasons:
 
 ## Feature-for-feature: what's open where
 
-| Capability | mem0 OSS (self-hosted) | mem0 platform (cloud) | Lians (self-hosted, all open) |
+| Capability | mem0 OSS (self-hosted) | mem0 platform (cloud) | Lians Community |
 |---|---|---|---|
 | Core memory add/search | ✓ | ✓ | ✓ |
 | Graph / relationship memory | ✗ (cloud feature) | ✓ paid tier | ✓ bitemporal edges, N-hop, point-in-time `path` |
@@ -56,7 +53,7 @@ reasons:
 | Backtest / lookahead guard | ✗ | ✗ | ✓ `backtest_check` ([demo](../demo/lookahead-bias/README.md)) |
 | Air-gap deployment | partial (embedder/LLM egress) | ✗ | ✓ `AIRGAP_MODE` with local embeddings |
 | SDK languages | Python, TypeScript | + REST | Python, TypeScript, Go, Java, C |
-| License of the full feature set | open core | proprietary | **Apache 2.0, everything** |
+| Public source license | open core | proprietary service | **Apache 2.0 Community foundation** |
 
 On the compliance axis specifically, the [regulated-memory eval](regulated-eval-results.md)
 scores Lians 5.0/5 vs mem0 OSS 0.5/5 — both **executed live**, mem0 in its

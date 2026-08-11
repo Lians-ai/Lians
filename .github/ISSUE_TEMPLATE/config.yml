@@ -1,4 +1,4 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
     url: https://github.com/Lians-ai/Lians/security/policy
@@ -6,3 +6,6 @@ contact_links:
   - name: Documentation
     url: https://www.lians.ai/docs
     about: Read setup, SDK, MCP, and deployment documentation.
+  - name: Commercial deployment or private integration
+    url: https://www.lians.ai/
+    about: Discuss Lians Platform, proof sprints, design partnerships, managed deployments, or customer-specific work privately.

@@ -1,6 +1,23 @@
 # Contributing to Lians
 
-Thank you for your interest in contributing. Lians is a financial-grade memory layer for AI agents — contributions that improve correctness, compliance coverage, or integration breadth are especially welcome.
+Thank you for your interest in contributing. Lians Community is the public
+decision-evidence foundation for AI agents. Contributions that improve
+correctness, portable verification, integration breadth, or reproducible
+evidence are especially welcome.
+
+## Public contribution boundary
+
+This repository is the Apache-licensed Community project. Public work belongs
+here when it improves formats, SDKs, framework hooks, the local or self-hosted
+engine, verifiers, documentation, tests, or reproducible benchmarks.
+
+Do not submit customer-specific code or data, production configurations,
+commercial control-plane code, private connectors, internal strategy, pricing
+negotiations, or proprietary evaluation material. Read
+[../OPEN_CORE.md](../OPEN_CORE.md) before proposing a large feature.
+
+Commercial product requests and private deployment work should be discussed
+with Lians through [lians.ai](https://www.lians.ai/), not in a public issue.
 
 ## Before you start
 
@@ -70,12 +87,18 @@ docs: add GDPR erasure example to README
 test: cover conflict detection edge case
 ```
 
+By submitting a contribution, you agree that it may be distributed under the
+Apache License 2.0 that covers this repository. You must have the right to
+submit every part of the contribution.
+
 ## Pull request checklist
 
 - [ ] Tests pass locally (`pytest -v`)
 - [ ] New behaviour is covered by a test
 - [ ] Documentation updated for any user-facing change
 - [ ] No secrets, credentials, or real API keys in the diff
+- [ ] No customer, commercial-control-plane, deployment, or internal strategy material
+- [ ] The change belongs on the public side of `OPEN_CORE.md`
 - [ ] PR description links the relevant issue (`Closes #123`)
 
 ## Reporting a security issue

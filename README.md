@@ -13,6 +13,10 @@
   -
   <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
   -
+  <a href="OPEN_CORE.md">Open core</a>
+  -
+  <a href="COMMERCIAL.md">Commercial</a>
+  -
   <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
 </p>
 
@@ -46,8 +50,9 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **cross-platform
-decision evidence and reconstruction layer for regulated AI**. It gives
+[Lians Community](https://github.com/Lians-ai/Lians) is the open foundation for
+the **cross-platform decision evidence and reconstruction layer for regulated
+AI**. It gives
 compliance, model-risk, and operational-risk teams one record of what an agent
 knew, what it retrieved, which policy governed it, which tools ran, who
 reviewed it, and what changed later.
@@ -80,15 +85,28 @@ The platform exposes one evidence workflow:
 Memory remains a core evidence source and performance primitive. It is not the
 commercial category by itself.
 
-| | Library | Self-Hosted Server | Cloud |
+| | Library | Self-Hosted Community | Lians Platform |
 |---|---|---|---|
-| **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production (early access) |
-| **Setup** | `pip install lians-sdk[local]` | `docker compose up --build` | `pip install lians-sdk` + API key |
-| **Database** | SQLite (zero setup) | Postgres 16 + pgvector | Managed |
-| **Audit chain** | Yes | Yes | Yes |
-| **Crypto-shred erasure** | Yes | Yes | Yes |
-| **Information barriers** | Local checks | PostgreSQL RLS | Managed policy |
-| **Air-gap capable** | No | Yes | No |
+| **Best for** | Testing and prototyping | Teams operating their own evidence service | Organizations buying an operated and supported system |
+| **Setup** | `pip install lians-sdk[local]` | `docker compose up --build` | Contracted managed or private deployment |
+| **Database** | SQLite | Postgres 16 + pgvector | Managed by Lians or jointly operated |
+| **Evidence formats and verification** | Apache 2.0 | Apache 2.0 | Included plus commercial operations |
+| **Operations and support** | Community | Customer-owned | Lians-owned scope and service commitments |
+| **Private control plane** | No | No | Available by contracted release |
+
+## Community software and the full Lians experience
+
+The public repository is a useful, production-capable foundation, but it is not
+the whole company. Every file published here remains under its stated open
+source license. Lians Platform adds commercial software and delivery that is
+not distributed in this repository, including managed fleet operations,
+private control-plane capabilities, enterprise integrations, deployment
+automation, evidence operations, support, and service-level commitments.
+
+We do not retroactively restrict released Apache-licensed code. Instead, new
+work is placed on the correct side of a documented boundary. Read
+[OPEN_CORE.md](OPEN_CORE.md) for the exact source boundary and
+[COMMERCIAL.md](COMMERCIAL.md) for current paid offers.
 
 ---
 
@@ -595,28 +613,27 @@ Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and
 
 ## Packaging & Pricing
 
-Lians is open-source and fully self-hostable — **the entire feature set,
-including every compliance primitive, is in this repository under Apache 2.0.**
-Paid packages sell deployment support, hardening review, and evidence
-packets around the open core, not license keys. A managed cloud is in early
-access for customers whose compliance posture allows hosted processing
-(contact us); regulated buyers should choose the package by deployment
-boundary and evidence requirements, not by a consumer-style monthly tier.
+Lians uses an open-core model. Community provides the portable formats, SDKs,
+local and self-hosted evidence engine, verifiers, integrations, tests, and
+benchmarks published in this repository under Apache 2.0. The commercial Lians
+experience adds private product capabilities and accountable delivery around
+that foundation.
 
 | Package | Best for | Deployment | Commercial model |
 |---|---|---|---|
-| **Developer** | Local prototypes, benchmarks, integrations | Local library or single-node server | Free / usage-based |
-| **Team** | Internal pilots and non-production agent workflows | Docker or small Kubernetes deployment | Usage-based or team plan |
-| **Regulated Production** | Sensitive, audited, time-dependent agent workloads | Customer cloud, private VPC, or on-prem | Annual contract |
-| **Enterprise / Air-Gap** | Banks, hospitals, law firms, insurers, government | Private cloud, on-prem, or air-gapped | Custom annual contract |
-| **Managed Cloud** | Zero-ops production where hosted processing is approved | Lians-managed environment | Contract or usage-based |
+| **Community** | Local prototypes, integrations, independent verification, and customer-operated deployments | Local library or self-hosted server | Free under Apache 2.0 |
+| **Diagnostic** | One evidence request blocking one consequential workflow | Five-business-day engagement | $2,500 fixed |
+| **Proof Sprint** | Production-representative validation of one qualified workflow | Customer or Lians-supported environment | $7,500 fixed |
+| **Design Partnership** | One protected workflow with a named sponsor and decision date | Contracted deployment boundary | $20,000 fixed |
+| **Annual Infrastructure** | Operated or supported consequential workflows | Managed, customer cloud, private VPC, on-prem, or air-gapped | Target $60,000 to $75,000 ACV |
 
 Healthcare customers require an executed BAA before PHI is processed in a
 managed environment. Financial and legal customers may require customer-managed
 keys, private networking, regional residency, dedicated environments, or
 air-gapped deployment.
 
-Full packaging documentation: [docs/pricing-tiers.md](docs/pricing-tiers.md) and [docs/billing.md](docs/billing.md)
+Full packaging documentation: [COMMERCIAL.md](COMMERCIAL.md) and
+[docs/pricing-tiers.md](docs/pricing-tiers.md)
 
 **Switching from another system?** [Migrate from mem0](docs/migrate-from-mem0.md) or [Migrate from Zep CE](docs/migrate-from-zep.md)
 
@@ -624,6 +641,9 @@ Full packaging documentation: [docs/pricing-tiers.md](docs/pricing-tiers.md) and
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Source in this repository is Apache 2.0 unless a file says otherwise. See
+[LICENSE](LICENSE), [NOTICE](NOTICE), and [OPEN_CORE.md](OPEN_CORE.md).
+The software license does not grant rights to Lians names, logos, or the Lotus
+design; see [TRADEMARKS.md](TRADEMARKS.md).
 
 <!-- mcp-name: io.github.ebeirne/lians -->

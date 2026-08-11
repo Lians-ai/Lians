@@ -44,6 +44,28 @@ Thumbs.db
 SCALE.md
 BUILD.md
 MARKET.md
+/lians-gtm-plan.md
+/docs/gtm/
+/docs/internal/
+/apps/
+/artifacts/
+/outreach_research/
+/outputs/
+/tmp/
+
+# Commercial and customer-delivery source belongs in private repositories.
+/enterprise/
+/platform/
+/deployments/customers/
+/customer-delivery/
+/.private/
+
+# Private deployment state and credentials.
+*.tfstate
+*.tfstate.*
+*.pem
+*.p12
+*.pfx
 
 # Personal files
 *.pdf

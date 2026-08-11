@@ -1,6 +1,12 @@
 * @Lians-ai @Ds6826 @ebeirne
 
 /.github/ @Lians-ai @Ds6826 @ebeirne
+/LICENSE @Lians-ai @Ds6826 @ebeirne
+/NOTICE @Lians-ai @Ds6826 @ebeirne
+/OPEN_CORE.md @Lians-ai @Ds6826 @ebeirne
+/COMMERCIAL.md @Lians-ai @Ds6826 @ebeirne
+/TRADEMARKS.md @Lians-ai @Ds6826 @ebeirne
+/scripts/check_public_boundary.py @Lians-ai @Ds6826 @ebeirne
 /Dockerfile @Lians-ai @Ds6826 @ebeirne
 /fly.toml @Lians-ai @Ds6826 @ebeirne
 /agentmem/alembic/ @Lians-ai @Ds6826 @ebeirne

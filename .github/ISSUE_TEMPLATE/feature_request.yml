@@ -1,0 +1,46 @@
+name: Community feature request
+description: Propose an improvement to the Apache-licensed Lians Community project.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This tracker is public. Do not include customer information, private architecture, credentials, contract terms, or production data. Commercial platform and private deployment requests should go through https://www.lians.ai/.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Community problem
+      description: What public SDK, format, verifier, integration, local engine, self-hosted engine, test, or documentation problem should be solved?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the behavior and the smallest useful public interface.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Public surface
+      options:
+        - Evidence format or verifier
+        - SDK or API contract
+        - MCP or framework integration
+        - Local or self-hosted engine
+        - Benchmark or test
+        - Documentation
+        - Other Community surface
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Public boundary checks
+      options:
+        - label: I read OPEN_CORE.md and this belongs in the public Community repository.
+          required: true
+        - label: This request contains no customer, confidential, security-sensitive, or contract information.
+          required: true
