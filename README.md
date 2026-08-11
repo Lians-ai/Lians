@@ -46,15 +46,35 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **cross-platform
-decision evidence and reconstruction layer for regulated AI**. It gives
-compliance, model-risk, and operational-risk teams one record of what an agent
-knew, what it retrieved, which policy governed it, which tools ran, who
-reviewed it, and what changed later.
+[Lians](https://github.com/Lians-ai/Lians) is the **memory and decision
+intelligence layer that helps AI do more useful work with less context**. It
+gives a model the right memories instead of forcing it to reread the entire
+history, then preserves the evidence needed to understand important decisions.
 
-The durable moat is neutrality. A firm can run agents across Bedrock, Azure
-OpenAI, Anthropic direct, and open-source runtimes while keeping one portable
-evidence record outside every provider.
+This is not another generic AI infrastructure layer. Lians is built around a
+user outcome: AI that remembers what matters, responds with less prompt bloat,
+improves from outcomes, and can still explain what it knew and did.
+
+**Measured token efficiency.** In the published
+[LoCoMo token-efficiency benchmark](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md),
+Lians top-50 reached **90.0% judged accuracy with 2,656 mean context tokens**,
+compared with 18,218 tokens for full-conversation context: an **85.4% context
+token reduction**. The benchmark measures context efficiency rather than a
+universal end-to-end latency guarantee; shorter, more relevant inputs are
+designed to reduce the processing latency and cost created by repeated context.
+
+Lians is being built for the full range of AI users:
+
+- **Everyday people**: portable memory for assistants that should remember
+  preferences, projects, and past decisions across sessions (early access).
+- **Developers**: local-first and server tools for adding token-budgeted memory,
+  learning loops, and evidence to an application.
+- **Organizations**: governed, provider-neutral memory and decision records for
+  teams that need privacy, scale, investigation, and defensible oversight.
+
+For organizations, the durable moat is neutrality. A firm can run agents across
+Bedrock, Azure OpenAI, Anthropic direct, and open-source runtimes while keeping
+one portable memory and evidence record outside every provider.
 
 Every write is preserved as a governed temporal record and compiled into a
 typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
@@ -77,8 +97,8 @@ The platform exposes one evidence workflow:
 - **Monitor**: when a source, policy, or model changes, identify every exposed
   decision and emit a blast-radius alert.
 
-Memory remains a core evidence source and performance primitive. It is not the
-commercial category by itself.
+Memory is the performance primitive. Decision intelligence and verifiable
+evidence turn it into a product that people and organizations can trust.
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
