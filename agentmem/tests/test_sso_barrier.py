@@ -28,8 +28,9 @@ def _sha(k):
 @pytest_asyncio.fixture
 async def client(db):
     # Three keys in one namespace: two walled desks + one unbarriered (compliance).
-    db.add(ApiKey(hashed_key=_sha("kA"), namespace=NS, scopes=["read", "write"], barrier_group="deskA"))
-    db.add(ApiKey(hashed_key=_sha("kB"), namespace=NS, scopes=["read", "write"], barrier_group="deskB"))
+    desk_scopes = ["read", "write", "compliance", "backtest", "graph", "webhooks"]
+    db.add(ApiKey(hashed_key=_sha("kA"), namespace=NS, scopes=desk_scopes, barrier_group="deskA"))
+    db.add(ApiKey(hashed_key=_sha("kB"), namespace=NS, scopes=desk_scopes, barrier_group="deskB"))
     db.add(ApiKey(hashed_key=_sha("kC"), namespace=NS, scopes=["read", "write", "admin"]))  # unbarriered
     await db.commit()
 
