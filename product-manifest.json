@@ -7,41 +7,46 @@
   },
   "product": {
     "name": "Lians",
-    "category": "Decision evidence and reconstruction for regulated AI",
-    "summary": "Lians keeps a portable, provider-neutral record of what an AI system knew, retrieved, did, and reviewed so consequential decisions can be reconstructed and verified later.",
+    "category": "Smarter AI memory: more useful work per token",
+    "summary": "On the published LoCoMo benchmark, Lians reached 90.0% judged accuracy with 85.4% fewer context tokens than full-context prompting. Lians applies that less-but-better context approach to help AI reduce prompt bloat and processing latency while preserving trustworthy memory and evidence from personal assistants to enterprise systems.",
     "workflow": [
       {
-        "label": "Capture",
-        "detail": "Record prompts, retrieved context, tool calls, outputs, policies, and review events as a decision is made."
+        "label": "Remember",
+        "detail": "Keep the facts, preferences, decisions, outcomes, and reviewed lessons that matter across conversations and applications."
       },
       {
-        "label": "Reconstruct",
-        "detail": "Replay the evidence trail to show what the system knew and why it produced a consequential result."
+        "label": "Focus",
+        "detail": "Retrieve the smallest useful context instead of making a model reread everything, reducing token waste and avoidable processing latency."
       },
       {
-        "label": "Verify",
-        "detail": "Check evidence integrity, policy application, reviewer actions, and the exact chain behind a decision."
+        "label": "Improve",
+        "detail": "Carry forward outcomes and reviewed lessons so AI can make better use of every token without keeping stale facts alive."
       },
       {
-        "label": "Monitor",
-        "detail": "Track later changes to evidence, policies, models, and outcomes without losing the original record."
+        "label": "Prove",
+        "detail": "Preserve the evidence, policies, tools, and review trail needed to explain important decisions at personal or enterprise scale."
       }
     ],
     "surfaces": [
       {
-        "label": "Library",
-        "status": "Available",
-        "detail": "Local-first Python library backed by SQLite for embedding decision evidence directly in an application."
-      },
-      {
-        "label": "Self-hosted server",
-        "status": "Available",
-        "detail": "Team deployment backed by Postgres and pgvector for shared evidence, controls, and investigation workflows."
-      },
-      {
-        "label": "Cloud",
+        "label": "Everyday AI",
         "status": "Early access",
-        "detail": "Managed Lians service for teams that want the evidence layer operated for them."
+        "detail": "Portable memory for personal assistants that should remember preferences, projects, and past decisions across sessions."
+      },
+      {
+        "label": "Developer library",
+        "status": "Available",
+        "detail": "Local-first Python and multi-language tools for adding token-budgeted memory and decision evidence to an application."
+      },
+      {
+        "label": "Enterprise platform",
+        "status": "Available",
+        "detail": "Self-hosted Postgres and pgvector deployment with governance, information barriers, audit chains, and investigation workflows."
+      },
+      {
+        "label": "Managed cloud",
+        "status": "Early access",
+        "detail": "A managed path for individuals and organizations that want Lians operated for them rather than running the platform themselves."
       }
     ]
   }
