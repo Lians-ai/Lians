@@ -27,6 +27,25 @@ under Apache License 2.0. The Community software includes:
 Community is intentionally useful. It is not a trial, a time-limited binary, or
 a crippled client that requires a Lians account to verify its own evidence.
 
+## How hosted access is paid without crippling Community
+
+The source boundary and the hosted-service boundary solve different problems.
+Community operators control their own deployment and can use the Apache-licensed
+features available in the version they run. Lians Cloud is an operated service:
+its server verifies the customer's subscription and issues API keys with only
+the scopes included in that plan.
+
+The hosted free tier exposes the five-second path: write memory, recall it at a
+point in time, inspect the result, and integrate through an API key. Paid hosted
+plans add operated capacity and increasingly advanced scopes such as audit,
+governance, graph, webhooks, compliance reporting, adaptive learning, and
+enterprise deployment controls. A browser lock is never treated as an
+authorization boundary; the service and data plane enforce the scopes.
+
+This lets an individual developer prove value without a sales call while
+preserving commercial value in managed operation, private modules, enterprise
+controls, service levels, and accountability.
+
 ## Lians Platform and commercial delivery
 
 The following categories belong to Lians' commercial product and delivery

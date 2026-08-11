@@ -60,7 +60,7 @@ async def knowledge_snapshot(
     committees and regulators.  mem0 has no temporal model.  Graphiti/Zep has
     temporal graph queries but no tamper-evident hash chain or compliance export API.
     """
-    auth.require("read")
+    auth.require_all("read", "compliance")
     items = await get_knowledge_snapshot(
         db, auth.namespace, agent_id, as_of, limit,
         barrier_override=auth.barrier_group,
@@ -102,7 +102,7 @@ async def snapshot_markdown(
     developer) can read exactly what the system knows and prove the statement
     was not altered after generation.
     """
-    auth.require("read")
+    auth.require_all("read", "compliance")
     result = await export_memory_markdown(
         db, auth.namespace, agent_id, as_of, limit,
         barrier_override=auth.barrier_group,

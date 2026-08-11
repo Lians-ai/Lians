@@ -52,7 +52,7 @@ def test_extract_empty_on_plain_text():
 @pytest_asyncio.fixture
 async def client(db):
     db.add(ApiKey(hashed_key=hashlib.sha256(KEY.encode()).hexdigest(),
-                  namespace=NS, scopes=["read", "write"]))
+                  namespace=NS, scopes=["read", "write", "graph"]))
     await db.commit()
 
     async def _override():

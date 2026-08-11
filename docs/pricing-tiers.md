@@ -30,6 +30,21 @@ The source boundary is defined in [../OPEN_CORE.md](../OPEN_CORE.md).
 Community operators own deployment, upgrades, backups, security configuration,
 availability, capacity, incident response, and regulatory assessment.
 
+## Lians Cloud for developers and teams
+
+| Plan | Monthly price | Included hosted capabilities |
+|---|---:|---|
+| Free | $0 | 10K writes and recalls, point-in-time memory, API keys, and playground |
+| Starter | $15 | 100K writes, domain adapters, audit history, and lineage |
+| Growth | $69 | Governance review, graph, conflicts, webhooks, and reports |
+| Pro | $199 | Adaptive recall, experience learning, backtest checks, metrics, and priority support |
+| Enterprise | Custom | SSO, governed access, KMS, private or air-gapped deployment, security review, and SLA |
+
+Lians-operated services enforce plan scopes on the server. The web interface
+mirrors those permissions for clarity, but hiding a button is never treated as
+authorization. Self-hosted Community deployments are administered by their
+operator and do not call Lians for a license check.
+
 ## Decision Evidence Diagnostic: $2,500 fixed
 
 Five business days for one synthetic or sanitized fraud, identity, AML,

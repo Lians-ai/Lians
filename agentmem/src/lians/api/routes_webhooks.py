@@ -97,7 +97,7 @@ async def create_webhook(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "webhooks")
     secret = req.secret or secrets.token_hex(32)
     try:
         ep = await register_webhook(
@@ -119,7 +119,7 @@ async def get_webhooks(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("read")
+    auth.require_all("read", "webhooks")
     endpoints = await list_webhooks(
         db, auth.namespace, barrier_override=auth.barrier_group
     )
@@ -133,7 +133,7 @@ async def patch_webhook(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "webhooks")
     try:
         ep = await update_webhook(
             db, auth.namespace, endpoint_id,
@@ -155,7 +155,7 @@ async def remove_webhook(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "webhooks")
     deleted = await delete_webhook(
         db, auth.namespace, endpoint_id,
         barrier_override=auth.barrier_group,
@@ -171,7 +171,7 @@ async def webhook_deliveries(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("read")
+    auth.require_all("read", "webhooks")
     ep = await db.get(WebhookEndpoint, endpoint_id)
     if (
         ep is None

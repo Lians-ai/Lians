@@ -56,7 +56,7 @@ async def get_conflicts(
     Each conflict includes the decrypted content of both conflicting memories
     so the reviewer can decide which source to trust.
     """
-    auth.require("read")
+    auth.require_all("read", "conflicts")
     # Empty string query param → no status filter (all conflicts)
     effective_status = status if status else None
     return await list_conflicts(
@@ -85,7 +85,7 @@ async def resolve_conflict_endpoint(
     regardless of which resolution is chosen, recording the decision and
     optional reviewer note for regulatory examination.
     """
-    auth.require("write")
+    auth.require_all("write", "conflicts")
     return await resolve_conflict(
         db, auth.namespace, conflict_id, req,
         barrier_override=auth.barrier_group,

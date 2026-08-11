@@ -28,6 +28,8 @@ async def client(db):
     db.add(ApiKey(hashed_key=_sha("ro"), namespace=NS, scopes=[], role="readonly"))
     db.add(ApiKey(hashed_key=_sha("an"), namespace=NS, scopes=[], role="analyst"))
     db.add(ApiKey(hashed_key=_sha("co"), namespace=NS, scopes=[], role="compliance"))
+    db.add(ApiKey(hashed_key=_sha("basic"), namespace=NS, scopes=["read", "write"]))
+    db.add(ApiKey(hashed_key=_sha("graph"), namespace=NS, scopes=["read", "write", "graph"]))
     await db.commit()
 
     async def _override():
@@ -71,3 +73,14 @@ async def test_compliance_can_read_not_write(client):
     assert rd.status_code == 200
     wr = await client.post("/v1/memories", headers=_h("co"), json=_mem())
     assert wr.status_code == 403  # compliance inspects/certifies; it does not author
+
+
+@pytest.mark.asyncio
+async def test_hosted_feature_scope_is_enforced(client):
+    params = {"agent_id": AGENT, "entity": "Lians"}
+    denied = await client.get("/v1/graph/neighbors", headers=_h("basic"), params=params)
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Scope 'graph' required"
+
+    allowed = await client.get("/v1/graph/neighbors", headers=_h("graph"), params=params)
+    assert allowed.status_code == 200

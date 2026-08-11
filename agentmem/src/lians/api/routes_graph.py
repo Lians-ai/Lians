@@ -35,7 +35,7 @@ async def relate(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "graph")
     edge = await graph_service.relate(
         db, auth.namespace,
         agent_id=req.agent_id,
@@ -72,7 +72,7 @@ async def extract(
     deterministic by default (auditable), with opt-in LLM extraction. Every
     extracted edge lands in the audit chain and inside the information barrier.
     """
-    auth.require("write")
+    auth.require_all("write", "graph")
     result = await graph_service.extract_and_relate(
         db, auth.namespace,
         agent_id=req.agent_id, text=req.text, event_time=req.event_time,
@@ -88,7 +88,7 @@ async def unrelate(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "graph")
     count = await graph_service.unrelate(
         db, auth.namespace,
         agent_id=req.agent_id,
@@ -114,7 +114,7 @@ async def neighbors(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("read")
+    auth.require_all("read", "graph")
     result = await graph_service.neighbors(
         db, auth.namespace, agent_id, entity,
         depth=depth, as_of=as_of, rel_types=rel_type,
@@ -140,7 +140,7 @@ async def path(
     Shortest connection between two entities — the conflict-of-interest /
     related-party reachability query. ``connected: false`` is the clean result.
     """
-    auth.require("read")
+    auth.require_all("read", "graph")
     result = await graph_service.path(
         db, auth.namespace, agent_id, src, dst,
         max_depth=max_depth, as_of=as_of, rel_types=rel_type, normalize=normalize,

@@ -62,7 +62,7 @@ async def backtest_contamination_check(
     have seen. The agent's alpha may be entirely illusory. This endpoint makes
     that auditable in a single call.
     """
-    auth.require("read")
+    auth.require_all("read", "backtest")
     report = await check_contamination(
         db, auth.namespace, req.agent_id, req.simulation_as_of,
         barrier_override=auth.barrier_group,

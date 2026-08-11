@@ -21,7 +21,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 ROLE_SCOPES: dict[str, list[str]] = {
     "owner":      ["read", "write", "admin"],
     "analyst":    ["read", "write"],
-    "compliance": ["read", "admin"],
+    "compliance": ["read", "admin", "audit", "compliance", "erasure"],
     "readonly":   ["read"],
 }
 
@@ -39,15 +39,32 @@ def _effective_scopes(key_row: ApiKey) -> list[str]:
 
 
 class AuthContext:
-    def __init__(self, namespace: str, scopes: list[str], barrier_group: Optional[str] = None):
+    def __init__(
+        self,
+        namespace: str,
+        scopes: list[str],
+        barrier_group: Optional[str] = None,
+        role: Optional[str] = None,
+    ):
         self.namespace = namespace
         self.scopes = scopes
+        self.role = role
         # Information barrier the calling key is scoped to (None = unbarriered).
         self.barrier_group = barrier_group
 
     def require(self, scope: str):
-        if scope not in self.scopes:
+        # An owner/admin key is the self-hosted escape hatch: Community
+        # operators control their own deployment and can use every local
+        # feature. Lians Cloud issues narrower plan-derived scopes and never
+        # relies on this class alone for subscription verification.
+        admin_override = "admin" in self.scopes and self.role != "compliance"
+        if scope not in self.scopes and not admin_override:
             raise HTTPException(status_code=403, detail=f"Scope '{scope}' required")
+
+    def require_all(self, *scopes: str) -> None:
+        """Require every named capability while preserving admin ownership."""
+        for scope in scopes:
+            self.require(scope)
 
     def require_unbarriered(self) -> None:
         if self.barrier_group is not None:
@@ -127,4 +144,5 @@ async def get_auth(
         namespace=key_row.namespace,
         scopes=_effective_scopes(key_row),
         barrier_group=barrier_group,
+        role=getattr(key_row, "role", None),
     )

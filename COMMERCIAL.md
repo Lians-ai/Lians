@@ -9,7 +9,21 @@ Buying Lians is not a fee for downloading this repository. It adds a defined
 workflow, an owned deployment boundary, measurable acceptance criteria, and a
 party responsible for delivery and support.
 
-## Current entry offers
+## Hosted plans for developers and teams
+
+| Plan | Monthly price | Hosted value |
+|---|---:|---|
+| Free | $0 | 10K writes and recalls, point-in-time memory, API keys, and playground |
+| Starter | $15 | 100K writes, domain adapters, audit history, and lineage |
+| Growth | $69 | Governance review, graph, conflicts, webhooks, and operational reporting |
+| Pro | $199 | Adaptive recall, experience learning, backtest checks, metrics, and priority support |
+| Enterprise | Custom | SSO, governed access, KMS, private or air-gapped deployment, security review, and SLA |
+
+Hosted availability is enforced by server-verified plan scopes. The Community
+repository remains self-hostable; the paid product is the operated experience,
+private product surface, capacity, support, and enterprise control boundary.
+
+## Service engagements
 
 | Offer | Scope | Price |
 |---|---|---:|

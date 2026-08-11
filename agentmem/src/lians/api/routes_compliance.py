@@ -110,7 +110,7 @@ async def worm_posture(
     UPDATE/DELETE on the audit tables — see docs/worm-storage.md).
     """
     from ..config import get_settings
-    auth.require("read")
+    auth.require_all("read", "compliance")
     auth.require_unbarriered()
     chain = await verify_chain(db, auth.namespace)
     worm_mode = get_settings().worm_mode
@@ -144,7 +144,7 @@ async def compliance_report(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("read")
+    auth.require_all("read", "compliance")
     auth.require_unbarriered()
     ns = auth.namespace
 

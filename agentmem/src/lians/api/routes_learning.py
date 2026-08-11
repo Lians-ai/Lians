@@ -38,7 +38,7 @@ async def add_experience(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "learning")
     return await create_experience(db, auth.namespace, req)
 
 
@@ -50,7 +50,7 @@ async def get_experiences(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("read")
+    auth.require_all("read", "learning")
     rows, total = await list_experiences(
         db,
         auth.namespace,
@@ -68,7 +68,7 @@ async def add_experience_outcome(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "learning")
     row = await record_experience_outcome(db, auth.namespace, experience_id, req)
     if row is None:
         raise HTTPException(status_code=404, detail="Open experience not found")
@@ -81,7 +81,7 @@ async def create_reflections(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("write")
+    auth.require_all("write", "learning")
     rows = await generate_reflections(db, auth.namespace, req)
     return ReflectionListResult(proposals=rows, total=len(rows))
 
@@ -92,7 +92,7 @@ async def get_reflections(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("read")
+    auth.require_all("read", "learning")
     rows = await list_reflections(db, auth.namespace, status)
     return ReflectionListResult(proposals=rows, total=len(rows))
 
@@ -104,7 +104,7 @@ async def resolve_reflection(
     auth: AuthContext = Depends(get_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    auth.require("admin")
+    auth.require_all("admin", "learning")
     row = await review_reflection(
         db,
         auth.namespace,
