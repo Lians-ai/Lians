@@ -71,8 +71,16 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str], float], ...] = (
     (
         "preference",
         re.compile(
-            r"\b(prefer(?:s|red)?|favorite|favourite|likes?|dislikes?|"
-            r"hates?|would rather|doesn'?t like|do not like)\b",
+            r"\b(?:I|we)\s+(?:(?:really|generally|usually|typically|always|strongly)\s+)?"
+            r"(?:prefer|like|love|enjoy|dislike|hate|avoid|would rather)\b"
+            r"|\bmy\s+(?:favorite|favourite|preference|preferred|communication style|"
+            r"working style)\b"
+            r"|\b(?:user|customer|client|they|he|she)\s+"
+            r"(?:prefers?|likes?|loves?|enjoys?|dislikes?|hates?|avoids?)\b"
+            r"|\b\w+\s+(?:prefers|preferred|dislikes|hates)\b"
+            r"|\b(?:please\s+)?(?:always|never)\s+"
+            r"(?:use|call|address|write|respond|reply|format|include|omit|avoid)\b"
+            r"|\b(?:call|address)\s+me\s+(?:as\s+)?\b",
             re.I,
         ),
         0.92,

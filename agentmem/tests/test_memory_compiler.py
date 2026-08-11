@@ -85,3 +85,10 @@ def test_entity_extraction_is_bounded_and_deduplicated():
     )
     assert entities.count("Alice") == 1
     assert entities.count("NVDA") == 1
+
+
+def test_incidental_like_is_not_misclassified_as_a_preference():
+    kind, _confidence, _method = classify_memory(
+        "It looks like the database migration completed successfully."
+    )
+    assert kind == "outcome"

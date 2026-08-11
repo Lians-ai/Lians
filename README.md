@@ -453,6 +453,7 @@ from lians import AsyncLiansClient     # async, for FastAPI / async frameworks
 from lians import LocalLiansClient     # local SQLite, no server needed
 
 client.add(agent_id, content, event_time, metadata={}, importance=0.5)
+# Role filters still apply; durable user preferences/facts are auto-captured by default.
 client.add_from_messages(agent_id, messages=[{"role": "user", "content": "..."}])
 client.recall(agent_id, query, k=5)
 client.recall_at(agent_id, query, as_of=datetime(...))   # point-in-time

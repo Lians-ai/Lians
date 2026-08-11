@@ -188,3 +188,49 @@ async def test_message_ingestion_role_scope_is_enforced_by_engine(client):
     assert body["memories"][0]["content"] == "My preferred timezone is UTC."
     assert body["memories"][0]["metadata"]["role"] == "user"
     assert body["memories"][0]["metadata"]["message_index"] == 0
+
+
+@pytest.mark.asyncio
+async def test_message_ingestion_auto_captures_durable_user_preferences(client):
+    response = await client.post(
+        "/v1/memories/messages",
+        headers=headers(),
+        json={
+            "agent_id": f"{AGENT}-preferences",
+            "messages": [
+                {"role": "user", "content": "Can you review this pull request?"},
+                {"role": "assistant", "content": "I will review the pull request."},
+                {
+                    "role": "user",
+                    "content": "I prefer concise answers with the decision first.",
+                },
+            ],
+            "roles": ["assistant"],
+            "metadata": {"conversation_id": "thread-preferences"},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["added"] == 2
+    by_content = {memory["content"]: memory for memory in body["memories"]}
+    preference = by_content["I prefer concise answers with the decision first."]
+    assert preference["importance"] == 0.9
+    assert preference["metadata"]["_auto_capture"]["reason"] == "durable-user-memory"
+    assert preference["metadata"]["_memory_priority"]["tier"] == "durable"
+    assert "Can you review this pull request?" not in by_content
+
+    # A later chat/request can retrieve the preference without the original
+    # conversation being present in model context.
+    recalled = await client.post(
+        "/v1/recall",
+        headers=headers(),
+        json={
+            "agent_id": f"{AGENT}-preferences",
+            "query": "How does the user prefer answers to be written?",
+            "k": 3,
+        },
+    )
+    assert recalled.status_code == 200, recalled.text
+    recalled_contents = [memory["content"] for memory in recalled.json()["memories"]]
+    assert "I prefer concise answers with the decision first." in recalled_contents

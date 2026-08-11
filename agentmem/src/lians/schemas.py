@@ -657,6 +657,7 @@ class MessageIngestRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     roles: list[str] = Field(default=["assistant"], min_length=1, max_length=4)
+    capture_durable_user_memories: bool = True
 
 
 class SupersessionReviewItem(BaseModel):

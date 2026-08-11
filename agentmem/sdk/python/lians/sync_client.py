@@ -102,6 +102,7 @@ class LiansClient:
         metadata: Optional[dict[str, Any]] = None,
         importance: float = 0.5,
         roles: Optional[list[str]] = None,
+        capture_durable_user_memories: bool = True,
     ) -> dict:
         """
         Extract and store facts from a conversation message list.
@@ -141,6 +142,7 @@ class LiansClient:
                 metadata=metadata,
                 importance=importance,
                 roles=roles,
+                capture_durable_user_memories=capture_durable_user_memories,
             )
         )
 

@@ -52,3 +52,20 @@ def test_distill_off_keeps_legacy_behavior():
         # default (no distill): assistant messages only, no derived facts
         assert out["added"] == 1
         assert out["memories"][0]["metadata"]["role"] == "assistant"
+
+
+def test_local_ingest_auto_captures_durable_user_preferences():
+    messages = [
+        {"role": "user", "content": "Can you help with this?"},
+        {"role": "assistant", "content": "Yes, I can help."},
+        {"role": "user", "content": "I prefer answers that start with the decision."},
+    ]
+    with LocalLiansClient(embedding_provider="local") as mem:
+        out = mem.add_from_messages(agent_id="preferences", messages=messages)
+
+        assert out["added"] == 2
+        by_content = {memory["content"]: memory for memory in out["memories"]}
+        preference = by_content["I prefer answers that start with the decision."]
+        assert preference["importance"] == 0.9
+        assert preference["metadata"]["_auto_capture"]["reason"] == "durable-user-memory"
+        assert "Can you help with this?" not in by_content

@@ -196,10 +196,35 @@ async def ingest_messages(
     if not roles <= allowed:
         raise HTTPException(status_code=422, detail="roles contains an unsupported role")
     default_time = req.event_time or datetime.now(timezone.utc)
+    from ..memory_priority import assess_memory_priority
+
     memories = []
     for index, message in enumerate(req.messages):
-        if message.role not in roles:
+        message_metadata = {
+            **req.metadata,
+            **message.metadata,
+            "role": message.role,
+            "message_index": index,
+        }
+        selected = message.role in roles
+        priority = assess_memory_priority(
+            message.content,
+            message_metadata,
+            req.importance,
+        )
+        auto_captured = (
+            req.capture_durable_user_memories
+            and message.role == "user"
+            and priority.durable
+            and not selected
+        )
+        if not selected and not auto_captured:
             continue
+        if auto_captured:
+            message_metadata["_auto_capture"] = {
+                "reason": "durable-user-memory",
+                "schema": 1,
+            }
         memories.append(
             MemoryAdd(
                 agent_id=req.agent_id,
@@ -207,12 +232,7 @@ async def ingest_messages(
                 event_time=message.event_time or default_time,
                 source=req.source,
                 subject_id=req.subject_id,
-                metadata={
-                    **req.metadata,
-                    **message.metadata,
-                    "role": message.role,
-                    "message_index": index,
-                },
+                metadata=message_metadata,
                 importance=req.importance,
             )
         )

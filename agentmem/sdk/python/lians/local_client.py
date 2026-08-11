@@ -623,6 +623,7 @@ class LocalLiansClient:
         importance: float = 0.5,
         roles: Optional[list[str]] = None,
         distill: bool = False,
+        capture_durable_user_memories: bool = True,
     ) -> dict:
         """
         Extract and store facts from a conversation message list.
@@ -632,7 +633,9 @@ class LocalLiansClient:
 
         Each message whose role matches *roles* (default: ``["assistant"]``;
         with ``distill=True``: user and assistant) is stored as a separate
-        memory with supersession and audit-chain writes applied.
+        memory with supersession and audit-chain writes applied. Durable user
+        preferences and personal facts are captured by default even when the
+        role filter omits other user chatter.
 
         ``distill=True`` additionally runs LLM fact distillation over the
         whole transcript (``src.lians.enrichment``): every atomic, dated,
@@ -657,6 +660,8 @@ class LocalLiansClient:
             facts always have their raw provenance stored).
         distill:
             Also store LLM-distilled fact memories for the transcript.
+        capture_durable_user_memories:
+            Preserve durable user preferences/facts omitted by *roles*.
         source, subject_id, metadata, importance:
             Same as ``add()``.
 
@@ -672,19 +677,37 @@ class LocalLiansClient:
         _event_time = event_time or datetime.now(_tz.utc)
         _meta_base = dict(metadata or {})
 
+        from src.lians.memory_priority import assess_memory_priority
+
         batch = []
         for i, msg in enumerate(messages):
             role = (msg.get("role") or "").lower()
             content = (msg.get("content") or "").strip()
-            if role not in _roles or not content:
+            if not content:
                 continue
+            message_meta = {**_meta_base, "role": role, "message_index": i}
+            selected = role in _roles
+            priority = assess_memory_priority(content, message_meta, importance)
+            auto_captured = (
+                capture_durable_user_memories
+                and role == "user"
+                and priority.durable
+                and not selected
+            )
+            if not selected and not auto_captured:
+                continue
+            if auto_captured:
+                message_meta["_auto_capture"] = {
+                    "reason": "durable-user-memory",
+                    "schema": 1,
+                }
             batch.append({
                 "agent_id":   agent_id,
                 "content":    content,
                 "event_time": _event_time.isoformat(),
                 "source":     source,
                 "subject_id": subject_id,
-                "metadata":   {**_meta_base, "role": role, "message_index": i},
+                "metadata":   message_meta,
                 "importance": importance,
             })
 

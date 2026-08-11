@@ -16,7 +16,6 @@ import hashlib
 import hmac
 import json
 import logging
-import math
 import weakref
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -83,7 +82,6 @@ from .admission_service import attach_memory_admission, enforce_memory_admission
 
 logger = logging.getLogger("agentmem.memory_service")
 
-_IMPORTANCE_RECENCY_HALF_LIFE_DAYS = 90.0
 _RRF_K = 60.0
 
 
@@ -502,12 +500,19 @@ async def _acquire_pg_advisory_lock(db: AsyncSession, namespace: str, agent_id: 
 
 
 def _compute_importance(event_time: datetime, caller_salience: float) -> float:
-    now = datetime.now(timezone.utc)
-    if event_time.tzinfo is None:
-        event_time = event_time.replace(tzinfo=timezone.utc)
-    age_days = (now - event_time).total_seconds() / 86400
-    recency = math.exp(-math.log(2) * age_days / _IMPORTANCE_RECENCY_HALF_LIFE_DAYS)
-    return round(0.4 * recency + 0.6 * caller_salience, 4)
+    """Persist stable salience; recall already scores freshness separately.
+
+    The former write-time recency blend made every newly-written chat message
+    look important and then counted recency a second time during recall.  Keep
+    the timestamp argument for call-site compatibility while storing only the
+    normalized priority resolved at admission.
+    """
+    del event_time
+    try:
+        numeric = float(caller_salience)
+    except (TypeError, ValueError):
+        numeric = 0.5
+    return round(min(1.0, max(0.0, numeric)), 4)
 
 
 async def _get_barrier_group(
@@ -828,12 +833,6 @@ async def add_memory(
                 safety_status="approved",
             )
 
-        if precomputed_embedding is not None:
-            embedding = precomputed_embedding
-        else:
-            provider = get_embedding_provider()
-            embedding = await provider.embed_one(req.content)
-
         # Auto-metadata (auto-supersession parity): when the caller supplied no
         # structured keys, derive them from the content so the deterministic
         # keyed-supersession fast path can fire on a plain-text write. Opt-in
@@ -871,7 +870,7 @@ async def add_memory(
         # buried in a conversational turn become derived memories beside the
         # raw turn. Extraction + embedding happen before the write lock; the
         # derived rows are ingested inside it. Fail-open, like auto-metadata.
-        derived_clauses: list[tuple[str, list[float]]] = []
+        clause_texts: list[str] = []
         if (
             settings.interjection_extraction_enabled
             and not _audit_privacy_minimal
@@ -879,12 +878,51 @@ async def add_memory(
         ):
             try:
                 from .interjection import extract_interjections
-                clauses = extract_interjections(req.content)
-                if clauses:
-                    vectors = await get_embedding_provider().embed(clauses)
-                    derived_clauses = list(zip(clauses, vectors))
+                clause_texts = extract_interjections(req.content)
             except Exception:
                 logger.warning("interjection extraction failed — storing raw turn only", exc_info=True)
+
+        # Embed the raw memory and every extracted durable clause together.
+        # This removes a second provider/network round-trip on the successful
+        # interjection path. Batch writers may already supply the raw vector;
+        # in that case only derived clauses need provider work.
+        provider = (
+            get_embedding_provider()
+            if precomputed_embedding is None or clause_texts
+            else None
+        )
+        derived_clauses: list[tuple[str, list[float]]] = []
+        if precomputed_embedding is not None:
+            embedding = precomputed_embedding
+            if clause_texts:
+                try:
+                    assert provider is not None
+                    clause_vectors = await provider.embed(clause_texts)
+                    if len(clause_vectors) != len(clause_texts):
+                        raise RuntimeError("embedding provider returned an incomplete clause batch")
+                    derived_clauses = list(zip(clause_texts, clause_vectors))
+                except Exception:
+                    logger.warning(
+                        "interjection embedding failed; storing raw turn only",
+                        exc_info=True,
+                    )
+        else:
+            assert provider is not None
+            texts_to_embed = [req.content, *clause_texts]
+            try:
+                vectors = await provider.embed(texts_to_embed)
+                if len(vectors) != len(texts_to_embed):
+                    raise RuntimeError("embedding provider returned an incomplete memory batch")
+                embedding = vectors[0]
+                derived_clauses = list(zip(clause_texts, vectors[1:]))
+            except Exception:
+                if not clause_texts:
+                    raise
+                logger.warning(
+                    "combined memory embedding failed; retrying raw turn only",
+                    exc_info=True,
+                )
+                embedding = await provider.embed_one(req.content)
 
         # Change 6: DEK resolved through cache
         subject_key: Optional[bytes] = None
@@ -2416,10 +2454,52 @@ async def batch_add_memories(
     reqs: list[MemoryAdd],
     barrier_override: Optional[str] = None,
 ) -> MemoryBatchResult:
-    """Add multiple memories sequentially — later items can supersede earlier ones."""
+    """Add in order while batching raw-text embeddings across the request."""
+    if not reqs:
+        return MemoryBatchResult(added=0, memories=[])
+
+    # Supersession and commits stay sequential, but document embedding is one
+    # provider-neutral batch call. In enforce mode, candidates that would be
+    # rejected or held keep the legacy path so unadmitted text is not embedded.
+    precomputed: list[list[float]] | None = None
+    if len(reqs) > 1:
+        from .admission import evaluate
+
+        settings = get_settings()
+        blocked_sources = {
+            value.strip().lower()
+            for value in str(
+                getattr(settings, "admission_blocked_sources", "")
+            ).split(",")
+            if value.strip()
+        }
+        decisions = [
+            evaluate(
+                req.content,
+                req.source,
+                mode=getattr(settings, "admission_mode", "monitor"),
+                blocked_sources=blocked_sources,
+            )
+            for req in reqs
+        ]
+        if all(decision.action == "admit" for decision in decisions):
+            precomputed = await get_embedding_provider().embed(
+                [req.content for req in reqs]
+            )
+            if len(precomputed) != len(reqs):
+                raise RuntimeError(
+                    "embedding provider returned a different number of vectors than inputs"
+                )
+
     out: list[MemoryOut] = []
-    for req in reqs:
-        out.append(await add_memory(db, namespace, req, barrier_override=barrier_override))
+    for index, req in enumerate(reqs):
+        out.append(await add_memory(
+            db,
+            namespace,
+            req,
+            barrier_override=barrier_override,
+            precomputed_embedding=(precomputed[index] if precomputed is not None else None),
+        ))
     return MemoryBatchResult(added=len(out), memories=out)
 
 

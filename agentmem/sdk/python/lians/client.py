@@ -150,6 +150,7 @@ class AsyncLiansClient:
         metadata: Optional[dict[str, Any]] = None,
         importance: float = 0.5,
         roles: Optional[list[str]] = None,
+        capture_durable_user_memories: bool = True,
     ) -> dict:
         """
         Extract and store facts from a conversation message list.
@@ -158,7 +159,8 @@ class AsyncLiansClient:
         ``[{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]``
 
         Each message whose role matches *roles* (default: ``["assistant"]``) is
-        stored as a separate memory with supersession applied automatically. This
+        stored as a separate memory. Durable user preferences and personal facts
+        are also captured by default even when ``"user"`` is not in *roles*. This
         is the same pattern as ``mem0.add(messages=[...])``, but with bitemporal
         event time, structured supersession, and an audit-chain write per message.
 
@@ -173,6 +175,9 @@ class AsyncLiansClient:
         roles:
             Which roles to extract memories from. Defaults to ``["assistant"]``.
             Pass ``["user", "assistant"]`` to store both sides of the conversation.
+        capture_durable_user_memories:
+            Preserve durable user preferences/facts omitted by *roles*. Disable
+            only when the caller intentionally does not want that behavior.
         source:
             Source label for all extracted memories. Defaults to ``"conversation"``.
         subject_id:
@@ -215,6 +220,7 @@ class AsyncLiansClient:
             "metadata": metadata or {},
             "importance": importance,
             "roles": roles or ["assistant"],
+            "capture_durable_user_memories": capture_durable_user_memories,
         })
 
     # ── Read ──────────────────────────────────────────────────────────────────

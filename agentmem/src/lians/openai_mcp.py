@@ -521,8 +521,11 @@ def build_openai_mcp_runtime(settings: Any) -> HostedMCPRuntime:
             event_time=datetime.now(UTC),
             source=_SOURCE,
             subject_id=subject_id,
-            metadata={"_openai_mcp": {"schema": 1}},
-            importance=0.5,
+            metadata={
+                "_openai_mcp": {"schema": 1},
+                "_explicit_memory": True,
+            },
+            importance=0.9,
         )
         try:
             async with asyncio.timeout(settings.hosted_mcp_tool_timeout_seconds):

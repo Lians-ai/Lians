@@ -27,6 +27,14 @@ asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
 - Runtime, webhook, artifact, and workflow security hardening.
 - Runtime Docker contexts now exclude nested dependency/build trees; the test
   harness accepts an explicit `TEST_REDIS_URL` for isolated local and CI runs.
+- Conversation ingestion now auto-captures durable user preferences and
+  personal facts even when role filtering omits routine user chatter. Every
+  retained item receives deterministic durable/significant/standard/contextual/
+  transient priority metadata, and stable importance no longer double-counts
+  write-time recency.
+- Batch writes share document-embedding calls, and single writes embed a parent
+  turn plus extracted durable clauses together, reducing provider round-trips
+  without adding an LLM classifier to the hot path.
 
 ## 0.4.2 — 2026-07-18 (Python SDK only)
 

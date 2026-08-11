@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .admission import AdmissionDecision, evaluate
 from .audit_chain import chain_log
 from .models import PendingAdmission
+from .memory_priority import apply_memory_priority
 from .scoring import score_memory
 from .schemas import MemoryAdd
 from .secret_storage import PENDING_CONTENT_PURPOSE, seal_text, unseal_text
@@ -90,6 +91,11 @@ def evaluate_memory_admission(
     one canonical safety boundary, so callers cannot forge an eligible score
     or a prior approval through any published write path.
     """
+    # Priority is resolved at the same storage boundary as safety admission so
+    # HTTP, MCP, SDK, and embedded clients cannot drift into different memory
+    # behavior. The operation is deterministic and idempotent.
+    apply_memory_priority(req)
+
     if isinstance(blocked_sources, str):
         source_values: Iterable[str] = blocked_sources.split(",")
     else:

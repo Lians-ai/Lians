@@ -370,6 +370,8 @@ export interface MessageIngestRequest {
   metadata?: Record<string, unknown>;
   importance?: number;
   roles?: Array<"user" | "assistant" | "system" | "tool">;
+  /** Retain durable user preferences/facts even when `roles` omits user. */
+  capture_durable_user_memories?: boolean;
 }
 
 // ── Erasure (GDPR Art. 17 / CCPA) ───────────────────────────────────────────
