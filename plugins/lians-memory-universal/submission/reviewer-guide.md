@@ -82,4 +82,4 @@ Related materials:
 - [`metadata.json`](./metadata.json)
 - [`release-notes.md`](./release-notes.md)
 - [`data-handling.md`](./data-handling.md)
-- [Production checklist](../../../docs/openai-universal-plugin-production.md)
+- [Public production evidence](../../../docs/openai-plugin-public-evidence.md)

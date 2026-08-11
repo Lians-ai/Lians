@@ -42,7 +42,8 @@ Before deploying a new migration head, complete the guarded staging database
 workflow and verify the exact revision required by the production workflow.
 
 For the exact Fly.io production gate, release sequence, abort criteria, and
-application rollback procedure, use `docs/production-release.md`.
+Lians-operated production release and rollback procedures are maintained in the
+private deployments repository.
 
 ### Required extensions
 
@@ -244,4 +245,4 @@ deploy job.
 Do not downgrade the production database during incident response. Restore
 the prior application image with release migrations skipped, verify health,
 and investigate with the failed release logs and pre-deploy snapshot intact.
-See `docs/production-release.md`.
+Lians-operated release and rollback runbooks are maintained privately.

@@ -81,6 +81,6 @@ These facts satisfy the current operator policy gate. They must be reverified if
 - Encryption implementation: [`crypto.py`](../../../agentmem/src/lians/crypto.py)
 - Retention, audit, and erasure behavior: [`memory_service.py`](../../../agentmem/src/lians/memory_service.py)
 - Reviewer workflow: [`reviewer-guide.md`](./reviewer-guide.md)
-- Production checklist: [`openai-universal-plugin-production.md`](../../../docs/openai-universal-plugin-production.md)
+- Public production evidence: [`openai-plugin-public-evidence.md`](../../../docs/openai-plugin-public-evidence.md)
 
 This disclosure must be rechecked whenever storage providers, retention settings, identity derivation, audit fields, encryption, or the public tool contract changes.

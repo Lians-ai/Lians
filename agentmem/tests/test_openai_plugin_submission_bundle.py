@@ -297,8 +297,7 @@ def test_live_deployment_evidence_is_consistent_across_submission_materials():
     schema_revision = "0030_force_hosted_mcp_rls"
     newest_run_url = "https://github.com/Lians-ai/Lians/actions/runs/31349405257"
     build_materials = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
-        ROOT / "docs" / "production-release.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
         BUNDLE / "README.md",
         BUNDLE / "skills" / "lians-memory" / "agents" / "openai.yaml",
         BUNDLE / "submission" / "data-handling.md",
@@ -311,8 +310,7 @@ def test_live_deployment_evidence_is_consistent_across_submission_materials():
         assert build_sha in text, path
 
     schema_materials = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
-        ROOT / "docs" / "production-release.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
         BUNDLE / "submission" / "data-handling.md",
         BUNDLE / "submission" / "reviewer-guide.md",
         BUNDLE / "submission" / "release-notes.md",
@@ -322,8 +320,7 @@ def test_live_deployment_evidence_is_consistent_across_submission_materials():
         assert schema_revision in text, path
 
     production_docs = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
-        ROOT / "docs" / "production-release.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
     )
     for path in production_docs:
         text = path.read_text(encoding="utf-8")
@@ -349,7 +346,6 @@ def test_live_deployment_evidence_is_consistent_across_submission_materials():
         BUNDLE / "submission" / "data-handling.md",
         BUNDLE / "submission" / "reviewer-guide.md",
         BUNDLE / "submission" / "release-notes.md",
-        ROOT / "docs" / "openai-universal-plugin-production.md",
     )
     stale_live_claims = (
         "mcp route not live",
@@ -428,8 +424,7 @@ def test_authenticated_oauth_e2e_evidence_is_consistent_and_sanitized():
     assert normalized_evidence_keys.isdisjoint(unsafe_evidence_keys)
 
     verification_materials = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
-        ROOT / "docs" / "production-release.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
         BUNDLE / "README.md",
         BUNDLE / "submission" / "data-handling.md",
         BUNDLE / "submission" / "reviewer-guide.md",
@@ -444,8 +439,7 @@ def test_authenticated_oauth_e2e_evidence_is_consistent_and_sanitized():
         assert re.search(r"\bBearer\s+[A-Za-z0-9._~-]{12,}", text, re.IGNORECASE) is None, path
 
     reviewer_materials = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
-        ROOT / "docs" / "production-release.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
         BUNDLE / "README.md",
         BUNDLE / "submission" / "reviewer-guide.md",
         BUNDLE / "submission" / "release-notes.md",
@@ -454,8 +448,7 @@ def test_authenticated_oauth_e2e_evidence_is_consistent_and_sanitized():
         assert "2026-08-10T03:40:58Z" in path.read_text(encoding="utf-8"), path
 
     timestamp_provenance_materials = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
-        ROOT / "docs" / "production-release.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
         BUNDLE / "submission" / "reviewer-guide.md",
     )
     for path in timestamp_provenance_materials:
@@ -481,7 +474,7 @@ def test_initial_launch_countries_are_consistent_across_submission_materials():
     }
 
     materials = (
-        ROOT / "docs" / "openai-universal-plugin-production.md",
+        ROOT / "docs" / "openai-plugin-public-evidence.md",
         BUNDLE / "submission" / "reviewer-guide.md",
         BUNDLE / "submission" / "release-notes.md",
     )

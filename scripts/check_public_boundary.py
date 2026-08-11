@@ -36,6 +36,7 @@ FORBIDDEN_PREFIXES = (
 FORBIDDEN_PATHS = {
     "lians-gtm-plan.md",
     "docs/openai-universal-plugin-production.md",
+    "docs/production-release.md",
     "docs/website-layout.md",
 }
 
