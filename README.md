@@ -520,6 +520,7 @@ client.erase(subject_id, request_ref)                    # GDPR crypto-shred
 | `MASTER_ENCRYPTION_KEY` | — | Base64 32-byte key; blank disables PII encryption |
 | `KMS_PROVIDER` | `env` | `env` · `aws` · `azure` · `vault` |
 | `ADMIN_SECRET` | — | Protects `/v1/admin/*` — **change in production** |
+| `PROVISIONING_SECRET` | — | Optional separate credential for namespace-bound `/v1/provisioning/*` key management |
 | `SUPERSESSION_LLM_STAGE` | `false` | Enables Stage 3 LLM adjudication (Claude Haiku) |
 | `AIRGAP_MODE` | `false` | Hard-fails at startup if any config would send data externally |
 | `ADMISSION_MODE` | `monitor` | Admission control: `off` · `monitor` (tag+audit) · `enforce` (reject injection/blocked source, hold PII/PHI/MNPI for review) |
