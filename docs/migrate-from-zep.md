@@ -2,7 +2,11 @@
 
 In September 2024, Zep shut down its Community Edition — the free, self-hosted open-source server. If you were running Zep CE, your options were to pay for Zep Cloud or find a replacement.
 
-Lians is a fully open-source, self-hostable alternative. It runs on the same Postgres + pgvector stack and adds capabilities Zep CE never had: bitemporal memory, tamper-evident audit chains, GDPR crypto-shred, and information barriers.
+Lians Community is an Apache-licensed, self-hostable foundation. It runs on the
+same Postgres + pgvector stack and adds capabilities Zep CE never had:
+bitemporal memory, tamper-evident audit chains, GDPR crypto-shred, and
+information barriers. The managed and private Lians Platform is commercially
+separate; see [the open-core boundary](../OPEN_CORE.md).
 
 ## Why Lians instead of Zep Cloud
 

@@ -178,7 +178,7 @@ Common questions from bank information security and vendor risk management teams
 |----------|----------|
 | Where is data stored? | Self-hosted: your Postgres + Redis on your infrastructure. No data leaves your network. |
 | Who has access to encryption keys? | Customer controls the master key (KMS_PROVIDER). Lians never sees the plaintext key in cloud deployment. |
-| Is the codebase auditable? | Yes — fully open source. Security teams can audit the full implementation before deployment. |
+| Is the Community codebase auditable? | Yes. The Community implementation in this repository is Apache-licensed and inspectable before deployment. Commercial Platform code and managed-service controls are reviewed under the applicable agreement. |
 | Is there a SOC 2 report? | Not currently; planned. The compliance controls mapped here are technically equivalent to many SOC 2 CC requirements. Enterprise customers may conduct their own audit of the self-hosted deployment. |
 | Can we do a penetration test? | Yes — self-hosted deployment is your environment; no approval needed. |
 | Can you sign an NDA before reviewing the system? | Yes — contact via GitHub (etanbuns). |

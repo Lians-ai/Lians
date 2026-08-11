@@ -54,6 +54,8 @@ CLAIM_FILES = (
     "docs/pricing-tiers.md",
     "docs/billing.md",
     "docs/alternatives-mem0-self-hosted.md",
+    "docs/compliance.md",
+    "docs/migrate-from-zep.md",
 )
 
 RETIRED_CLAIMS = (
