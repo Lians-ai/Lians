@@ -527,26 +527,31 @@ export default function StudioClient() {
               required
             />
           </label>
-          <label>
-            <span>Which AI? <em>optional</em></span>
-            <input
-              value={draftConnection.agentId}
-              onChange={(event) =>
-                setDraftConnection((value) => ({ ...value, agentId: event.target.value }))
-              }
-              placeholder="support-agent"
-            />
-          </label>
-          <label>
-            <span>Folder <em>optional</em></span>
-            <input
-              value={draftConnection.scope}
-              onChange={(event) =>
-                setDraftConnection((value) => ({ ...value, scope: event.target.value }))
-              }
-              placeholder="org/acme/team/platform/project/api"
-            />
-          </label>
+          <details className="connection-advanced">
+            <summary>Advanced options</summary>
+            <div>
+              <label>
+                <span>Which AI? <em>optional</em></span>
+                <input
+                  value={draftConnection.agentId}
+                  onChange={(event) =>
+                    setDraftConnection((value) => ({ ...value, agentId: event.target.value }))
+                  }
+                  placeholder="support-agent"
+                />
+              </label>
+              <label>
+                <span>Folder <em>optional</em></span>
+                <input
+                  value={draftConnection.scope}
+                  onChange={(event) =>
+                    setDraftConnection((value) => ({ ...value, scope: event.target.value }))
+                  }
+                  placeholder="org/acme/team/platform/project/api"
+                />
+              </label>
+            </div>
+          </details>
           <button type="submit" disabled={loading}>
             {loading ? "Connecting…" : connection ? "Reconnect" : "Connect"}
           </button>
@@ -556,6 +561,26 @@ export default function StudioClient() {
       {error && <div className="studio-alert error" role="alert">{error}</div>}
       {notice && <div className="studio-alert success" role="status">{notice}</div>}
 
+      {!connection ? (
+        <section className="studio-start" aria-label="What happens after connecting">
+          <article>
+            <span>1</span>
+            <h2>Connect</h2>
+            <p>Your access key stays in this browser tab.</p>
+          </article>
+          <article>
+            <span>2</span>
+            <h2>See saved memories</h2>
+            <p>Find preferences, facts, and history in one place.</p>
+          </article>
+          <article>
+            <span>3</span>
+            <h2>Search and correct</h2>
+            <p>Fix what changed without erasing the original record.</p>
+          </article>
+        </section>
+      ) : (
+        <>
       <section className="studio-metrics" aria-label="Memory inventory summary">
         <article><span>Visible records</span><strong>{inventory?.total ?? "—"}</strong><small>{state} scope</small></article>
         <article><span>Long-term</span><strong>{connection ? pageStats.durable : "—"}</strong><small>kept for later</small></article>
@@ -898,6 +923,8 @@ export default function StudioClient() {
           </div>
         )}
       </section>
+        </>
+      )}
 
       <footer className="studio-footer">
         <span>Lians Studio / history-preserving memory operations</span>

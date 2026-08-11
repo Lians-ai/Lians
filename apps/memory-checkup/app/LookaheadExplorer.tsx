@@ -213,6 +213,9 @@ export default function LookaheadExplorer() {
         </div>
       </div>
 
+      <details className="progressive-panel advanced-proof">
+        <summary>Open the detailed test</summary>
+        <div className="progressive-content">
       <div className="import-console">
         <div className="import-copy">
           <h3>{imported ? "Example loaded" : "Load the example test"}</h3>
@@ -513,6 +516,8 @@ export default function LookaheadExplorer() {
           </section>
         </>
       )}
+        </div>
+      </details>
     </section>
   );
 }

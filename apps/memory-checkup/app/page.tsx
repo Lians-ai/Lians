@@ -30,15 +30,9 @@ const controlStages = [
   },
   {
     number: "03",
-    name: "Open any decision",
+    name: "Understand and act",
     description:
-      "See what the AI knew, why it acted, and who allowed it in one clear view.",
-  },
-  {
-    number: "04",
-    name: "Fix what changed",
-    description:
-      "When a fact or rule changes, find every affected decision and send it to the right person.",
+      "Open any decision, understand it, and find everything affected when a fact changes.",
   },
 ] as const;
 
@@ -216,16 +210,6 @@ export default function Home() {
     notify("Gate released the synthetic action with its approval chain attached.");
   }
 
-  function resetDemo() {
-    setActiveEvent("decision");
-    setImpactFilter("All");
-    setReviewState("needs-review");
-    setVerification("verified");
-    setGateApprovals(0);
-    setActionReleased(false);
-    notify("Synthetic incident restored.");
-  }
-
   return (
     <main id="top" className="lians-interactive-graphic">
       <header className="topbar">
@@ -235,19 +219,9 @@ export default function Home() {
         </a>
         <nav className="topnav" aria-label="Page sections">
           <a href="#control">How it works</a>
-          <a href="#incident">See an example</a>
-          <a href="#impact">Find changes</a>
-          <a href="#receipt">Download proof</a>
+          <a href="#incident">Example</a>
           <Link href="/studio">Saved memory</Link>
         </nav>
-        <div className="topbar-actions">
-          <span className="demo-pill">
-            <span aria-hidden="true" /> Synthetic demo
-          </span>
-          <button className="quiet-button" type="button" onClick={resetDemo}>
-            Reset
-          </button>
-        </div>
       </header>
 
       <section className="hero">
@@ -358,7 +332,10 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="gate-simulation">
+        <details className="progressive-panel">
+          <summary>Try a human approval</summary>
+          <div className="progressive-content">
+          <div className="gate-simulation">
           <div className="gate-context">
             <h3>Some actions need human approval.</h3>
             <p>
@@ -423,7 +400,9 @@ export default function Home() {
             </div>
             <small>Demo controls update local session state only; no production action is taken.</small>
           </div>
-        </div>
+          </div>
+          </div>
+        </details>
       </section>
 
       <section className="incident-shell" id="incident" aria-labelledby="incident-title">
@@ -614,6 +593,9 @@ export default function Home() {
           </div>
         </div>
 
+        <details className="progressive-panel">
+          <summary>See the affected decisions</summary>
+          <div className="progressive-content">
         <div className="impact-legend" aria-label="Impact label definitions">
           <div>
             <span className="legend-mark direct-reference" />
@@ -677,6 +659,8 @@ export default function Home() {
             </table>
           </div>
         </div>
+          </div>
+        </details>
       </section>
 
       <LookaheadExplorer />
@@ -695,6 +679,9 @@ export default function Home() {
           </button>
         </div>
 
+        <details className="progressive-panel">
+          <summary>See proof and review details</summary>
+          <div className="progressive-content">
         <div className="assurance-grid">
           <article className="completeness-card">
             <span className="grade-badge">Grade A</span>
@@ -755,6 +742,8 @@ export default function Home() {
             <small>Demo controls update local session state only; no external action is taken.</small>
           </article>
         </div>
+          </div>
+        </details>
       </section>
 
       <footer>

@@ -16,25 +16,9 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: "DM Mono";
-  src: url("/fonts/dm-mono-400-latin.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "DM Mono";
-  src: url("/fonts/dm-mono-500-latin.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
-
 :root {
   --font-geist-sans: "Sora";
-  --font-geist-mono: "DM Mono";
+  --font-geist-mono: "Sora";
   --font-title: "Michroma";
   --ink: #05070b;
   --ink-soft: #0b1019;
@@ -3657,7 +3641,7 @@ textarea {
 
 code,
 pre {
-  font-family: "DM Mono", monospace !important;
+  font-family: "Sora", Arial, sans-serif !important;
 }
 
 h1,
@@ -4229,5 +4213,109 @@ textarea:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   body::before {
     animation: none;
+  }
+}
+
+/* Keep the first view calm; deeper evidence appears only when requested. */
+body::before {
+  opacity: 0.28;
+  animation: none;
+}
+
+.topbar {
+  min-height: 64px;
+}
+
+.topnav {
+  gap: 24px;
+}
+
+.hero {
+  padding-top: 112px;
+  padding-bottom: 112px;
+}
+
+.answerability-heading {
+  min-height: 0;
+  align-items: center;
+}
+
+.control-stage-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.progressive-panel {
+  width: 100%;
+  margin-top: 28px;
+  border: 1px solid var(--line-dark);
+  background: #080d15;
+}
+
+.progressive-panel > summary {
+  min-height: 68px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--white);
+  font-family: "Sora", Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.progressive-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.progressive-panel > summary::after {
+  content: "+";
+  color: var(--blue);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.progressive-panel[open] > summary::after {
+  content: "−";
+}
+
+.progressive-panel > summary:hover {
+  background: var(--blue-soft);
+}
+
+.progressive-panel > summary:focus-visible {
+  outline: 2px solid #7188ff;
+  outline-offset: 3px;
+}
+
+.progressive-content {
+  padding: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.progressive-content > .gate-simulation,
+.progressive-content > .impact-legend,
+.progressive-content > .queue-panel,
+.progressive-content > .assurance-grid,
+.progressive-content > .import-console {
+  margin-top: 0;
+}
+
+.advanced-proof {
+  margin-top: 32px;
+}
+
+@media (max-width: 820px) {
+  .control-stage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .progressive-panel > summary,
+  .progressive-content {
+    padding-left: 18px;
+    padding-right: 18px;
   }
 }
