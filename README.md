@@ -46,14 +46,18 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **memory and decision
-intelligence layer that helps AI do more useful work with less context**. It
-gives a model the right memories instead of forcing it to reread the entire
-history, then preserves the evidence needed to understand important decisions.
+[Lians](https://github.com/Lians-ai/Lians) is **verifiable AI memory: the trust
+layer between what AI knows and what AI does**.
 
-This is not another generic AI infrastructure layer. Lians is built around a
-user outcome: AI that remembers what matters, responds with less prompt bloat,
-improves from outcomes, and can still explain what it knew and did.
+> **Remember the right things. Forget the wrong ones. Prove every important
+> answer.**
+
+Most memory products stop when retrieval works. Lians makes memory inspectable,
+correctable, forgettable, and provable. A Memory Firewall governs what can enter
+or re-enter context. A human-readable Memory Receipt shows the authorized
+memories that shaped an answer and binds to a canonical, content-addressed
+receipt. For higher-stakes work, the Decision Ledger reconstructs the complete
+point-in-time evidence behind an action across model providers.
 
 **Measured token efficiency.** In the published
 [LoCoMo token-efficiency benchmark](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md),
@@ -63,30 +67,30 @@ token reduction**. The benchmark measures context efficiency rather than a
 universal end-to-end latency guarantee; shorter, more relevant inputs are
 designed to reduce the processing latency and cost created by repeated context.
 
-Lians is being built for the full range of AI users:
+The same product contract scales from one person to a global organization:
 
-- **Everyday people**: portable memory for assistants that should remember
-  preferences, projects, and past decisions across sessions (early access).
-- **Developers**: local-first and server tools for adding token-budgeted memory,
-  learning loops, and evidence to an application.
-- **Organizations**: governed, provider-neutral memory and decision records for
-  teams that need privacy, scale, investigation, and defensible oversight.
+| For people | For organizations |
+|---|---|
+| See what an assistant remembers and what it used | Reconstruct exactly what an agent knew at decision time |
+| Correct a memory without erasing its history | Keep teams, matters, desks, and care groups isolated |
+| Forget an individual record or crypto-shred a subject | Verify signed evidence and find decisions exposed to a change |
+| Carry portable memory across applications and models | Keep a provider-neutral memory and evidence record |
 
-For organizations, the durable moat is neutrality. A firm can run agents across
-Bedrock, Azure OpenAI, Anthropic direct, and open-source runtimes while keeping
-one portable memory and evidence record outside every provider.
+Developers get the same contract through a local-first library, hosted API,
+Python and TypeScript SDKs, and MCP tools. See the
+[verifiable-memory product contract](docs/verifiable-memory.md).
 
-Every write is preserved as a governed temporal record and compiled into a
-typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
-mode and returns a content-addressed receipt that can bind automatically to a
-Decision Envelope. See
+Every accepted write is preserved as a governed temporal record and compiled
+into a typed memory artifact. Every recall can run in `fast`, `deep`, or
+`reconstruct` mode and returns both a human-readable view and a canonical
+receipt that can bind automatically to a Decision Envelope. See
 [decision evidence and reconstruction](docs/decision-evidence.md), the
 [normative completeness grades](docs/completeness-grades.md),
 [Evidence Pack signing key custody](docs/evidence-signing-key-custody.md), the
 [governed memory engine](docs/memory-engine.md) and
 [reproducible evidence gates](docs/benchmarks/README.md).
 
-The platform exposes one evidence workflow:
+The enterprise evidence workflow is:
 
 - **Capture**: open a Decision Envelope and bind memory, traces, policy
   decisions, prompts, tools, and human review as the action happens.
@@ -97,8 +101,8 @@ The platform exposes one evidence workflow:
 - **Monitor**: when a source, policy, or model changes, identify every exposed
   decision and emit a blast-radius alert.
 
-Memory is the performance primitive. Decision intelligence and verifiable
-evidence turn it into a product that people and organizations can trust.
+Efficient retrieval is a performance advantage. Verifiability is the product
+promise.
 
 | | Library | Self-Hosted Server | Cloud |
 |---|---|---|---|
@@ -250,8 +254,17 @@ results = mem.recall_at(
     as_of=datetime(2025, 3, 1, tzinfo=timezone.utc),
 )
 
-# Every result includes receipt_sha256, provenance_coverage, and the
-# resolved serving mode and latency budget.
+# See the human receipt while retaining its canonical verification hash.
+print(results["receipt_view"]["headline"])
+print(results["receipt_sha256"])
+
+# Build a memory-control screen from the same local or hosted contract.
+memories = mem.list_memories(agent_id="analyst-1", state="current")
+corrected = mem.correct_memory(
+    memories["items"][0]["id"],
+    "NVDA FY2026 revenue guidance raised to $42B",
+)
+mem.forget_memory(corrected["id"], confirm=True)  # irreversible record erasure
 ```
 
 Switch to the hosted server with one line: `from lians import LiansClient as LocalLiansClient`
@@ -539,6 +552,9 @@ Full reference: [agentmem/.env.example](agentmem/.env.example)
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/memories` | Add a memory (admission control; supersession check; `Idempotency-Key` for exactly-once retries) |
+| `GET` | `/v1/memories` | List current, superseded, erased, or all visible memory versions for a control surface |
+| `POST` | `/v1/memories/{id}/correct` | Append a user-confirmed correction while preserving version history |
+| `POST` | `/v1/memories/{id}/forget` | Irreversibly clear one memory's content after explicit confirmation; preserve an audit tombstone |
 | `GET`/`POST` | `/v1/admissions` · `/{id}/resolve` | Review queue for held writes (PII/PHI/MNPI) — approve / reject |
 | `POST` | `/v1/memories/batch` | Batch ingest |
 | `POST` | `/v1/recall` | Hybrid BM25+cosine recall; optional `as_of`, MMR rerank (`filters._rerank=mmr`) |

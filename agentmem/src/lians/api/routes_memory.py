@@ -1,5 +1,5 @@
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Header, HTTPException
 from fastapi.responses import JSONResponse
@@ -20,10 +20,13 @@ from ..schemas import (
     MemoryFeedbackCreate, MemoryFeedbackOut, MemoryLearningSummary,
     MemoryReviewResolve, MemoryReviewResult,
     MemoryMaintenanceResult,
+    MemoryCorrectionCreate, MemoryForgetRequest, MemoryForgetResult,
+    MemoryListResult,
 )
 from ..memory_service import (
     add_memory_idempotent, recall_memories, batch_add_memories,
     get_memory_lineage, get_structured_fact_history, assemble_context,
+    correct_memory, forget_memory, list_memories,
 )
 from ..adapters import get_adapter
 from .deps import get_auth, AuthContext
@@ -33,6 +36,95 @@ from ..feedback_service import (
 )
 
 router = APIRouter(prefix="/v1", tags=["memory"])
+
+
+@router.get("/memories", response_model=MemoryListResult)
+async def list_controlled_memories(
+    agent_id: str = Query(..., min_length=1, max_length=255),
+    state: str = Query(default="current", pattern="^(current|superseded|erased|all)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """List the memory versions an authorized user can inspect and control."""
+    auth.require("read")
+    return await list_memories(
+        db,
+        auth.namespace,
+        agent_id,
+        state=state,
+        limit=limit,
+        offset=offset,
+        barrier_override=auth.barrier_group,
+    )
+
+
+@router.post("/memories/{memory_id}/correct", response_model=MemoryOut)
+async def correct_controlled_memory(
+    memory_id: UUID,
+    req: MemoryCorrectionCreate,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Append a user-confirmed correction without rewriting memory history."""
+    auth.require("write")
+    try:
+        return await correct_memory(
+            db,
+            auth.namespace,
+            memory_id,
+            req,
+            barrier_override=auth.barrier_group,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
+    except ValueError as exc:
+        from ..admission_service import (
+            MemoryAdmissionRejected,
+            MemoryAdmissionReviewRequired,
+        )
+
+        if isinstance(exc, MemoryAdmissionRejected):
+            raise HTTPException(status_code=422, detail={
+                "status": "rejected",
+                "risk_tags": exc.decision.risk_tags,
+                "reasons": exc.decision.reasons,
+            }) from None
+        if isinstance(exc, MemoryAdmissionReviewRequired):
+            return JSONResponse(status_code=202, content={
+                "status": "held_for_review",
+                "pending_id": str(exc.pending_id),
+                "risk_tags": exc.decision.risk_tags,
+                "reasons": exc.decision.reasons,
+            })
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@router.post("/memories/{memory_id}/forget", response_model=MemoryForgetResult)
+async def forget_controlled_memory(
+    memory_id: UUID,
+    req: MemoryForgetRequest,
+    auth: AuthContext = Depends(get_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Forget one memory after explicit confirmation, preserving an audit tombstone."""
+    auth.require("write")
+    if not req.confirm:
+        raise HTTPException(
+            status_code=422,
+            detail="confirm must be true because record-level forgetting is irreversible",
+        )
+    try:
+        return await forget_memory(
+            db,
+            auth.namespace,
+            memory_id,
+            request_ref=req.request_ref or f"memory-control:{uuid4()}",
+            barrier_override=auth.barrier_group,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Memory not found") from None
 
 
 @router.post("/memories/{memory_id}/feedback", response_model=MemoryFeedbackOut)

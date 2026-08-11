@@ -7,46 +7,46 @@
   },
   "product": {
     "name": "Lians",
-    "category": "Smarter AI memory: more useful work per token",
-    "summary": "On the published LoCoMo benchmark, Lians reached 90.0% judged accuracy with 85.4% fewer context tokens than full-context prompting. Lians applies that less-but-better context approach to help AI reduce prompt bloat and processing latency while preserving trustworthy memory and evidence from personal assistants to enterprise systems.",
+    "category": "Verifiable AI memory",
+    "summary": "AI that remembers right—and can show you why. Lians gives people control over what AI remembers, uses less context to do useful work, and gives organizations point-in-time evidence of what shaped important decisions. On the published LoCoMo benchmark, Lians reached 90.0% judged accuracy with 85.4% fewer context tokens than full-context prompting.",
     "workflow": [
       {
         "label": "Remember",
         "detail": "Keep the facts, preferences, decisions, outcomes, and reviewed lessons that matter across conversations and applications."
       },
       {
-        "label": "Focus",
-        "detail": "Retrieve the smallest useful context instead of making a model reread everything, reducing token waste and avoidable processing latency."
-      },
-      {
-        "label": "Improve",
-        "detail": "Carry forward outcomes and reviewed lessons so AI can make better use of every token without keeping stale facts alive."
+        "label": "Control",
+        "detail": "Inspect, correct, and forget memory. The Memory Firewall keeps stale, superseded, erased, or unauthorized records out of present context."
       },
       {
         "label": "Prove",
-        "detail": "Preserve the evidence, policies, tools, and review trail needed to explain important decisions at personal or enterprise scale."
+        "detail": "A Memory Receipt shows which authorized memories were used or excluded, when they were learned, and where they came from."
+      },
+      {
+        "label": "Improve",
+        "detail": "Carry forward outcomes and reviewed lessons, then retrieve the smallest useful context so AI can do more useful work per token."
       }
     ],
     "surfaces": [
       {
-        "label": "Everyday AI",
-        "status": "Early access",
-        "detail": "Portable memory for personal assistants that should remember preferences, projects, and past decisions across sessions."
+        "label": "Memory Receipts",
+        "status": "Available",
+        "detail": "Human-readable recall and context evidence alongside canonical content-addressed receipts in the API, SDKs, and hosted AI tools."
       },
       {
-        "label": "Developer library",
-        "status": "Available",
-        "detail": "Local-first Python and multi-language tools for adding token-budgeted memory and decision evidence to an application."
+        "label": "Memory Controls",
+        "status": "API and SDK preview",
+        "detail": "List current or historical memories, make append-only corrections, and explicitly forget individual records from local or hosted applications."
       },
       {
-        "label": "Enterprise platform",
+        "label": "Decision Ledger",
         "status": "Available",
-        "detail": "Self-hosted Postgres and pgvector deployment with governance, information barriers, audit chains, and investigation workflows."
+        "detail": "Point-in-time reconstruction, signed Evidence Packs, completeness grades, information barriers, and change blast-radius analysis for organizations."
       },
       {
         "label": "Managed cloud",
         "status": "Early access",
-        "detail": "A managed path for individuals and organizations that want Lians operated for them rather than running the platform themselves."
+        "detail": "A managed path for people and organizations that want portable, provider-neutral memory operated for them instead of self-hosting."
       }
     ]
   }

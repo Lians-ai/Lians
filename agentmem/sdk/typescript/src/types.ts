@@ -92,6 +92,63 @@ export interface MemoryOut {
   score_breakdown?: MemoryScoreBreakdown | null;
 }
 
+export interface MemoryReceiptMemory {
+  id: string;
+  content: string | null;
+  source: string | null;
+  event_time: string;
+  valid_from: string;
+  valid_to: string | null;
+  score?: number | null;
+  reasons: string[];
+}
+
+export interface MemoryReceiptView {
+  schema_version: "lians.memory-receipt-view.v1";
+  receipt_sha256: string;
+  receipt_kind: "recall" | "context";
+  integrity_status: "complete" | "partial";
+  retrieval_status: "standard" | "degraded";
+  headline: string;
+  reference_time: string | null;
+  as_of: string | null;
+  memories_used: MemoryReceiptMemory[];
+  memories_excluded: Array<Record<string, unknown>>;
+  exclusion_scope: "not_evaluated" | "context_budget_and_policy";
+  open_conflicts: number;
+  token_estimate: number;
+  provenance_coverage: number;
+}
+
+export interface MemoryListResult {
+  items: MemoryOut[];
+  total: number;
+  limit: number;
+  offset: number;
+  state: "current" | "superseded" | "erased" | "all";
+}
+
+export interface MemoryCorrectionCreate {
+  content: string;
+  event_time?: string;
+  source?: string;
+  metadata?: Record<string, unknown>;
+  importance?: number;
+}
+
+export interface MemoryForgetRequest {
+  confirm: boolean;
+  request_ref?: string;
+}
+
+export interface MemoryForgetResult {
+  status: "forgotten" | "already_forgotten";
+  memory_id: string;
+  erased_at: string;
+  audit_event_id: string | null;
+  audit_event_hash: string | null;
+}
+
 // ── Recall ───────────────────────────────────────────────────────────────────
 
 export interface RecallRequest {
@@ -124,6 +181,7 @@ export interface RecallResult {
   receipt_sha256: string;
   receipt: Record<string, unknown>;
   provenance_coverage: number;
+  receipt_view: MemoryReceiptView | null;
 }
 
 export interface ContextRequest {
@@ -165,6 +223,7 @@ export interface ContextResult {
   provenance: Record<string, unknown>;
   learning_applied: boolean;
   ranking_policy: string;
+  receipt_view: MemoryReceiptView | null;
 }
 
 // ── Decision evidence ────────────────────────────────────────────────────────

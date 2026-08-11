@@ -369,6 +369,98 @@ class LocalLiansClient:
                 out.append(result.model_dump(mode="json"))
         return out
 
+    def list_memories(
+        self,
+        agent_id: str,
+        state: str = "current",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """List memory versions for an inspect/correct/forget control surface."""
+        return self._run(
+            self._async_list_memories(agent_id, state, limit, offset)
+        )
+
+    async def _async_list_memories(
+        self, agent_id: str, state: str, limit: int, offset: int
+    ) -> dict:
+        from src.lians.memory_service import list_memories
+
+        async with self._session_factory() as db:
+            result = await list_memories(
+                db,
+                self._namespace,
+                agent_id,
+                state=state,
+                limit=limit,
+                offset=offset,
+            )
+        return result.model_dump(mode="json")
+
+    def correct_memory(
+        self,
+        memory_id: str,
+        content: str,
+        *,
+        event_time: Optional[datetime] = None,
+        source: Optional[str] = "user_correction",
+        metadata: Optional[dict[str, Any]] = None,
+        importance: Optional[float] = None,
+    ) -> dict:
+        """Append a user-confirmed correction without rewriting history."""
+        return self._run(
+            self._async_correct_memory(
+                memory_id,
+                content,
+                event_time=event_time,
+                source=source,
+                metadata=metadata,
+                importance=importance,
+            )
+        )
+
+    async def _async_correct_memory(self, memory_id: str, content: str, **kwargs) -> dict:
+        from uuid import UUID
+        from src.lians.memory_service import correct_memory
+        from src.lians.schemas import MemoryCorrectionCreate
+
+        kwargs["metadata"] = kwargs.get("metadata") or {}
+        req = MemoryCorrectionCreate(content=content, **kwargs)
+        async with self._session_factory() as db:
+            result = await correct_memory(
+                db, self._namespace, UUID(str(memory_id)), req
+            )
+        return result.model_dump(mode="json")
+
+    def forget_memory(
+        self,
+        memory_id: str,
+        *,
+        confirm: bool = False,
+        request_ref: Optional[str] = None,
+    ) -> dict:
+        """Irreversibly forget one memory while preserving its audit tombstone."""
+        if not confirm:
+            raise ValueError("confirm must be true because forgetting is irreversible")
+        return self._run(
+            self._async_forget_memory(
+                memory_id, request_ref=request_ref or f"local-memory-control:{memory_id}"
+            )
+        )
+
+    async def _async_forget_memory(self, memory_id: str, *, request_ref: str) -> dict:
+        from uuid import UUID
+        from src.lians.memory_service import forget_memory
+
+        async with self._session_factory() as db:
+            result = await forget_memory(
+                db,
+                self._namespace,
+                UUID(str(memory_id)),
+                request_ref=request_ref,
+            )
+        return result.model_dump(mode="json")
+
     def recall(
         self,
         agent_id: str,
