@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -70,6 +70,76 @@ class MemoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MemoryReceiptMemory(BaseModel):
+    """Human-readable view of one memory selected for an AI response.
+
+    This is deliberately separate from the canonical content-addressed receipt:
+    it may include plaintext for an authorized UI while ``receipt_sha256`` keeps
+    binding the privacy-minimal evidence payload used for later verification.
+    """
+
+    id: UUID
+    content: Optional[str]
+    source: Optional[str]
+    event_time: datetime
+    valid_from: datetime
+    valid_to: Optional[datetime]
+    score: Optional[float] = None
+    reasons: list[str] = Field(default_factory=list)
+
+
+class MemoryReceiptView(BaseModel):
+    """Consumer-ready explanation of what memory shaped a recall/context call."""
+
+    schema_version: Literal["lians.memory-receipt-view.v1"] = (
+        "lians.memory-receipt-view.v1"
+    )
+    receipt_sha256: str
+    receipt_kind: Literal["recall", "context"]
+    integrity_status: Literal["complete", "partial"]
+    retrieval_status: Literal["standard", "degraded"]
+    headline: str
+    reference_time: Optional[datetime] = None
+    as_of: Optional[datetime] = None
+    memories_used: list[MemoryReceiptMemory] = Field(default_factory=list)
+    memories_excluded: list[dict[str, Any]] = Field(default_factory=list)
+    exclusion_scope: Literal["not_evaluated", "context_budget_and_policy"] = (
+        "not_evaluated"
+    )
+    open_conflicts: int = 0
+    token_estimate: int = 0
+    provenance_coverage: float = 0.0
+
+
+class MemoryListResult(BaseModel):
+    items: list[MemoryOut]
+    total: int
+    limit: int
+    offset: int
+    state: Literal["current", "superseded", "erased", "all"]
+
+
+class MemoryCorrectionCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=100_000)
+    event_time: Optional[datetime] = None
+    source: Optional[str] = Field(default="user_correction", max_length=512)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=100)
+    importance: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class MemoryForgetRequest(BaseModel):
+    confirm: bool = False
+    request_ref: Optional[str] = Field(default=None, min_length=1, max_length=255)
+
+
+class MemoryForgetResult(BaseModel):
+    status: Literal["forgotten", "already_forgotten"]
+    memory_id: UUID
+    erased_at: datetime
+    audit_event_id: Optional[UUID] = None
+    audit_event_hash: Optional[str] = None
+
+
 class RecallRequest(BaseModel):
     agent_id: str = Field(min_length=1, max_length=255)
     query: str = Field(min_length=1, max_length=20_000)
@@ -120,6 +190,9 @@ class RecallResult(BaseModel):
     # independently reproduce receipt_sha256 without exposing the raw query.
     receipt: dict[str, Any] = Field(default_factory=dict)
     provenance_coverage: float = 0.0
+    # Human-readable, authorized projection for product UIs. This is not part
+    # of the canonical receipt hash and never changes receipt verification.
+    receipt_view: Optional[MemoryReceiptView] = None
 
 
 class MemoryFeedbackCreate(BaseModel):
@@ -1056,6 +1129,7 @@ class ContextResult(BaseModel):
     provenance: dict[str, Any] = Field(default_factory=dict)
     learning_applied: bool = False
     ranking_policy: str = "relevance-only-v1"
+    receipt_view: Optional[MemoryReceiptView] = None
 
 
 # ── Graph extraction ────────────────────────────────────────────────────────────

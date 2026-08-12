@@ -51,6 +51,32 @@ class TestLocalClient:
             result = mem.recall(agent_id="a", query="AAPL gross margin")
         assert len(result["memories"]) >= 1
         assert "AAPL" in result["memories"][0]["content"]
+        assert result["receipt_view"]["receipt_sha256"] == result["receipt_sha256"]
+        assert result["receipt_view"]["memories_used"][0]["content"]
+
+    def test_local_memory_control_lists_corrects_and_forgets(self):
+        with LocalLiansClient() as mem:
+            original = mem.add(
+                agent_id="a",
+                content="I prefer aisle seats",
+                event_time=T0,
+                metadata={"entity": "traveler", "field": "seat_preference"},
+            )
+            assert mem.list_memories("a")["items"][0]["id"] == original["id"]
+
+            replacement = mem.correct_memory(
+                original["id"], "I now prefer window seats"
+            )
+            assert replacement["metadata"]["_correction_of"] == original["id"]
+            assert mem.list_memories("a", state="superseded")["items"][0]["id"] == original["id"]
+
+            with pytest.raises(ValueError, match="confirm must be true"):
+                mem.forget_memory(replacement["id"])
+            forgotten = mem.forget_memory(replacement["id"], confirm=True)
+            assert forgotten["status"] == "forgotten"
+            assert len(forgotten["audit_event_hash"]) == 64
+            assert mem.list_memories("a", state="current")["items"] == []
+            assert mem.list_memories("a", state="erased")["items"][0]["content"] is None
 
     def test_supersession_closes_old_memory(self):
         with LocalLiansClient() as mem:

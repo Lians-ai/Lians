@@ -109,6 +109,53 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  lians-easy:
+    name: Lians Easy (${{ matrix.os }})
+    needs: release-context
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Build standalone desktop runtime
+        run: |
+          python -m pip install pyinstaller==6.22.0
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name LiansMemory \
+            --paths packages/lians-easy \
+            packages/lians-easy/entrypoint.py
+        shell: bash
+      - name: Name platform artifact and write checksum
+        run: |
+          set -euo pipefail
+          platform="$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')"
+          architecture="$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            asset="LiansMemory-${platform}-${architecture}.exe"
+            mv dist/LiansMemory.exe "${asset}"
+          else
+            executable="LiansMemory-${platform}-${architecture}"
+            mv dist/LiansMemory "${executable}"
+            chmod 0755 "${executable}"
+            asset="${executable}.tar.gz"
+            tar -czf "${asset}" "${executable}"
+            rm "${executable}"
+          fi
+          python -c "import hashlib, pathlib; p=pathlib.Path('${asset}'); pathlib.Path(str(p)+'.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\\n')"
+        shell: bash
+      - name: Attach Lians Easy to release
+        run: gh release upload "${RELEASE_TAG}" LiansMemory-* --clobber
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   go-tag:
     name: Tag Go module for go get
     needs: release-context

@@ -1,0 +1,45 @@
+name: Memory workflow problem
+description: Report a confusing install, recall, correction, or cross-client workflow.
+title: "memory workflow: "
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where did the workflow break down?
+      options:
+        - Install or client setup
+        - Remember
+        - Recall
+        - Inspect or correct
+        - Confirmed forget
+        - Use across clients or sessions
+        - Upgrade to a team deployment
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened instead?
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and AI client
+      placeholder: Windows 11 and Claude Desktop
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, and confidential records.
+          required: true

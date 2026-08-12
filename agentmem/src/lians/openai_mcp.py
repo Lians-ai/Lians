@@ -125,6 +125,9 @@ class RecallOutput(BaseModel):
     result_count: int
     token_estimate: int
     truncated: bool
+    receipt_sha256: str = ""
+    provenance_coverage: float = 0.0
+    receipt_view: dict[str, Any] = Field(default_factory=dict)
 
 
 class ForgetOutput(BaseModel):
@@ -719,6 +722,13 @@ def build_openai_mcp_runtime(settings: Any) -> HostedMCPRuntime:
             result_count=len(memory_refs),
             token_estimate=result.token_estimate,
             truncated=result.truncated,
+            receipt_sha256=result.receipt_sha256,
+            provenance_coverage=result.provenance_coverage,
+            receipt_view=(
+                result.receipt_view.model_dump(mode="json")
+                if result.receipt_view is not None
+                else {}
+            ),
         ).model_dump(mode="json")
         return CallToolResult(
             content=[TextContent(type="text", text=context)],

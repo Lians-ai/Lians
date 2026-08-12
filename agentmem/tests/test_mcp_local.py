@@ -1,7 +1,7 @@
 """Unit coverage for zero-config MCP routing into LocalLiansClient."""
+import sys
 from datetime import datetime
 from pathlib import Path
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
 
@@ -23,6 +23,18 @@ class _FakeLocalClient:
     def memory_lineage(self, memory_id):
         self.calls.append(("memory_lineage", {"memory_id": memory_id}))
         return {"nodes": [], "edges": []}
+
+    def list_memories(self, **kwargs):
+        self.calls.append(("list_memories", kwargs))
+        return {"items": [], "total": 0}
+
+    def correct_memory(self, memory_id, content, **kwargs):
+        self.calls.append(("correct_memory", {"memory_id": memory_id, "content": content, **kwargs}))
+        return {"id": "replacement-1", "content": content}
+
+    def forget_memory(self, memory_id, **kwargs):
+        self.calls.append(("forget_memory", {"memory_id": memory_id, **kwargs}))
+        return {"memory_id": memory_id, "status": "forgotten"}
 
     def fact_history(self, **kwargs):
         self.calls.append(("fact_history", kwargs))
@@ -105,3 +117,51 @@ def test_local_query_routes_parse_query_strings(monkeypatch):
         "limit": 12,
     })
     assert history == {"ticker": "NVDA", "items": []}
+
+
+def test_local_memory_control_routes_map_to_client(monkeypatch):
+    fake = _FakeLocalClient()
+    monkeypatch.setattr(mcp_server, "_LOCAL_CLIENT", fake)
+
+    listed = mcp_server._local_api(
+        "GET", "/v1/memories?agent_id=research&state=current&limit=8&offset=2"
+    )
+    corrected = mcp_server._local_api(
+        "POST",
+        "/v1/memories/memory-1/correct",
+        {"content": "Updated finding", "source": "user_correction"},
+    )
+    forgotten = mcp_server._local_api(
+        "POST",
+        "/v1/memories/replacement-1/forget",
+        {"confirm": True, "request_ref": "user-confirmed"},
+    )
+
+    assert listed["total"] == 0
+    assert corrected["id"] == "replacement-1"
+    assert forgotten["status"] == "forgotten"
+    assert fake.calls == [
+        (
+            "list_memories",
+            {"agent_id": "research", "state": "current", "limit": 8, "offset": 2},
+        ),
+        (
+            "correct_memory",
+            {
+                "memory_id": "memory-1",
+                "content": "Updated finding",
+                "event_time": None,
+                "source": "user_correction",
+                "metadata": {},
+                "importance": None,
+            },
+        ),
+        (
+            "forget_memory",
+            {
+                "memory_id": "replacement-1",
+                "confirm": True,
+                "request_ref": "user-confirmed",
+            },
+        ),
+    ]
