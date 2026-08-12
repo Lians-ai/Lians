@@ -36,10 +36,34 @@ same; Lians gives them a place to remember.
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
 </p>
 
-## Start here: add memory through MCP
+## Install Lians without a terminal
 
-MCP is the simplest path for most people because the same setup works with
-Claude Desktop, Cursor, Windsurf, VS Code, and other MCP-compatible agents.
+Download **LiansMemory** for Windows, macOS, or Linux from
+[GitHub Releases](https://github.com/Lians-ai/Lians/releases), open it, choose
+the AI clients found on your computer, and select **Install Lians**.
+
+The desktop setup:
+
+- needs no Lians account, API key, Python installation, or model download;
+- safely backs up existing client settings before changing them;
+- gives supported clients one shared local memory profile; and
+- includes a diagnostic command and silent install mode for managed devices.
+
+Restart the selected AI client, then try:
+
+```text
+Remember that I am researching sustainable packaging for independent retailers.
+```
+
+The first standalone builds support Claude Desktop, Cursor, Windsurf, Gemini
+CLI, and Codex. ChatGPT does not load local stdio MCP servers, so the installer
+does not modify ChatGPT; it requires a hosted connector. See the
+[guided install and IT deployment guide](docs/easy-install.md).
+
+## Developer setup: add memory through MCP
+
+Use this path when you prefer a package-managed MCP server or want the full
+temporal and governance engine.
 
 Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/), then add
 this server to your agent's MCP configuration:
@@ -51,7 +75,7 @@ this server to your agent's MCP configuration:
       "command": "uvx",
       "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
       "env": {
-        "LIANS_MCP_ENABLED_TOOLS": "remember,recall"
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,list_memories,correct_memory,forget_memory"
       }
     }
   }
@@ -69,12 +93,15 @@ What Python version and test runner does this project use?
 ```
 
 Local MCP memory is stored in `~/.lians/mcp.db`. The starter configuration
-exposes only the two tools needed for the basic loop:
+exposes the basic loop plus the controls needed to trust it:
 
 | Tool | What it does |
 |---|---|
 | `remember` | Store one durable fact, preference, constraint, or decision. |
 | `recall` | Retrieve a small set of relevant, current memories. |
+| `list_memories` | Inspect what Lians currently knows. |
+| `correct_memory` | Replace a stale fact without hiding its history. |
+| `forget_memory` | Permanently erase one memory after explicit confirmation. |
 
 Use the exact setup guide for
 [Cursor](integrations/cursor),
@@ -147,7 +174,8 @@ Java, C, framework adapters, and self-hosting.
 
 | You want to... | Start with |
 |---|---|
-| Give an existing AI client memory | [MCP setup](#start-here-add-memory-through-mcp) |
+| Add memory without a terminal | [Lians Easy](docs/easy-install.md) |
+| Give an existing AI client memory from a terminal | [MCP setup](#developer-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
 | Use LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
@@ -187,6 +215,7 @@ them; they are not required to get started.
 agentmem/src/lians/          Core engine and HTTP service
 agentmem/sdk/python/        Python SDK, local client, and MCP server
 agentmem/sdk/typescript/    TypeScript SDK
+packages/lians-easy/        Dependency-free desktop runtime and installer
 integrations/               Agent and framework integrations
 plugins/                    Installable agent plugins
 docs/                       Setup, architecture, security, and operations

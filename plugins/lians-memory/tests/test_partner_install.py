@@ -550,7 +550,9 @@ def test_static_hook_launcher_scrubs_hostile_local_provider_and_egress_environme
     assert child["PYTHONHOME"] == ""
     assert child["PYTHONNOUSERSITE"] == "1"
     assert child["PYTHONSAFEPATH"] == "1"
-    assert child["LIANS_MCP_ENABLED_TOOLS"] == "remember,recall"
+    assert child["LIANS_MCP_ENABLED_TOOLS"] == (
+        "remember,recall,list_memories,correct_memory,forget_memory"
+    )
     assert child["LIANS_MCP_SCHEMA_PROFILE"] == "compact"
     assert child["LIANS_MCP_RECALL_K"] == "20"
     assert child["LIANS_MCP_CONTEXT_MAX_TOKENS"] == "768"
@@ -716,7 +718,9 @@ def test_runtime_launcher_leaves_malicious_project_dotenv_before_exec(
     assert environment["PYTHONHOME"] == ""
     assert environment["PYTHONNOUSERSITE"] == "1"
     assert environment["PYTHONSAFEPATH"] == "1"
-    assert environment["LIANS_MCP_ENABLED_TOOLS"] == "remember,recall"
+    assert environment["LIANS_MCP_ENABLED_TOOLS"] == (
+        "remember,recall,list_memories,correct_memory,forget_memory"
+    )
     assert environment["LIANS_MCP_SCHEMA_PROFILE"] == "compact"
     assert environment["LIANS_MCP_RECALL_K"] == "20"
     assert environment["LIANS_MCP_CONTEXT_MAX_TOKENS"] == "768"

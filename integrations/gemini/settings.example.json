@@ -11,7 +11,10 @@
       "trust": false,
       "includeTools": [
         "remember",
-        "recall"
+        "recall",
+        "list_memories",
+        "correct_memory",
+        "forget_memory"
       ]
     }
   }

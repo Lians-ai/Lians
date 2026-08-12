@@ -445,8 +445,8 @@ if _runtime_settings.hosted_mcp_enabled:
 app = FastAPI(
     title="Lians",
     description=(
-        "Cross-platform decision evidence, reconstruction, and governed memory "
-        "for regulated AI"
+        "Verifiable AI memory: inspect, correct, forget, and prove what shaped "
+        "an AI response"
     ),
     version="0.5.0",
     lifespan=lifespan,

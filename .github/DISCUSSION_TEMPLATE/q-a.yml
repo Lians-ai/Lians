@@ -1,0 +1,31 @@
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: Never include credentials, personal data, or confidential records.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What happened?
+      description: Include safe configuration or code if it helps.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Lians path
+      options:
+        - Lians Easy desktop installer
+        - MCP package setup
+        - Local Python SDK
+        - Hosted or self-hosted service
+        - Framework integration
+        - Other
+    validations:
+      required: true

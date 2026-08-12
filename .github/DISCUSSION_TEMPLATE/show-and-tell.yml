@@ -1,0 +1,22 @@
+title: "[Show and tell] "
+body:
+  - type: textarea
+    id: project
+    attributes:
+      label: What did you build or test?
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Results, surprises, and failures are all useful.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can someone reproduce it?
+      description: Link code or include the smallest useful sequence of steps.
+    validations:
+      required: true

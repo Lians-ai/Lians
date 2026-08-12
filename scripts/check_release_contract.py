@@ -80,6 +80,7 @@ def main() -> int:
     versions = {
         "root Python package": _toml("pyproject.toml")["project"]["version"],
         "Python SDK": _toml("agentmem/sdk/python/pyproject.toml")["project"]["version"],
+        "Lians Easy": _toml("packages/lians-easy/pyproject.toml")["project"]["version"],
         "Python runtime": _match(
             "agentmem/src/lians/__init__.py", r'__version__\s*=\s*"([^"]+)"'
         ),
