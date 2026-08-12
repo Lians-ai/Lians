@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-11",
+  "source": {
+    "repository": "Lians-ai/Lians",
+    "branch": "master"
+  },
+  "product": {
+    "name": "Lians",
+    "category": "Smarter AI memory: more useful work per token",
+    "summary": "On the published LoCoMo benchmark, Lians reached 90.0% judged accuracy with 85.4% fewer context tokens than full-context prompting. Lians applies that less-but-better context approach to help AI reduce prompt bloat and processing latency while preserving trustworthy memory and evidence from personal assistants to enterprise systems.",
+    "workflow": [
+      {
+        "label": "Remember",
+        "detail": "Keep the facts, preferences, decisions, outcomes, and reviewed lessons that matter across conversations and applications."
+      },
+      {
+        "label": "Focus",
+        "detail": "Retrieve the smallest useful context instead of making a model reread everything, reducing token waste and avoidable processing latency."
+      },
+      {
+        "label": "Improve",
+        "detail": "Carry forward outcomes and reviewed lessons so AI can make better use of every token without keeping stale facts alive."
+      },
+      {
+        "label": "Prove",
+        "detail": "Preserve the evidence, policies, tools, and review trail needed to explain important decisions at personal or enterprise scale."
+      }
+    ],
+    "surfaces": [
+      {
+        "label": "Everyday AI",
+        "status": "Early access",
+        "detail": "Portable memory for personal assistants that should remember preferences, projects, and past decisions across sessions."
+      },
+      {
+        "label": "Developer library",
+        "status": "Available",
+        "detail": "Local-first Python and multi-language tools for adding token-budgeted memory and decision evidence to an application."
+      },
+      {
+        "label": "Enterprise platform",
+        "status": "Available",
+        "detail": "Self-hosted Postgres and pgvector deployment with governance, information barriers, audit chains, and investigation workflows."
+      },
+      {
+        "label": "Managed cloud",
+        "status": "Early access",
+        "detail": "A managed path for individuals and organizations that want Lians operated for them rather than running the platform themselves."
+      }
+    ]
+  }
+}

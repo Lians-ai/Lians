@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import secrets
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import lru_cache
 
@@ -22,6 +23,7 @@ from .api.routes_memory import router as memory_router
 from .api.routes_audit import router as audit_router
 from .api.routes_privacy import router as privacy_router
 from .api.routes_admin import router as admin_router
+from .api.routes_provisioning import router as provisioning_router
 from .api.routes_supersessions import router as supersessions_router
 from .api.routes_metrics import router as metrics_router
 from .api.routes_conflicts import router as conflicts_router
@@ -108,6 +110,12 @@ def _validate_production_secrets(settings) -> None:
         errors.append("AGENTMEM_ALLOW_UNENCRYPTED must be disabled in production")
     if settings.admin_secret in _DEV_SECRETS or len(settings.admin_secret) < 32:
         errors.append("ADMIN_SECRET must be a random value of at least 32 characters")
+    provisioning_secret = getattr(settings, "provisioning_secret", "")
+    if provisioning_secret:
+        if len(provisioning_secret) < 32:
+            errors.append("PROVISIONING_SECRET must be at least 32 characters when configured")
+        if secrets.compare_digest(provisioning_secret, settings.admin_secret):
+            errors.append("PROVISIONING_SECRET must be different from ADMIN_SECRET")
     origins = {o.strip() for o in settings.cors_origins.split(",") if o.strip()}
     if "*" in origins:
         errors.append("CORS_ORIGINS must list trusted origins instead of '*'")
@@ -479,6 +487,8 @@ app.add_middleware(
         "Authorization",
         "X-API-Key",
         "X-Admin-Secret",
+        "X-Provisioning-Secret",
+        "X-Lians-Namespace",
         "Idempotency-Key",
         "X-Request-ID",
         "MCP-Protocol-Version",
@@ -516,6 +526,7 @@ app.include_router(memory_router)
 app.include_router(audit_router)
 app.include_router(privacy_router)
 app.include_router(admin_router)
+app.include_router(provisioning_router)
 app.include_router(supersessions_router)
 app.include_router(conflicts_router)
 app.include_router(webhooks_router)

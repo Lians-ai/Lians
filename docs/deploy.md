@@ -18,7 +18,8 @@ Copy `.env.example` to `.env` and fill every value:
 ```env
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/Lians
 MASTER_ENCRYPTION_KEY=<base64-encoded 32-byte key>
-ADMIN_SECRET=<long random string — never expose in client traffic>
+ADMIN_SECRET=<long random string — never expose in client traffic or the public website>
+PROVISIONING_SECRET=<different long random string for the website provisioning broker>
 ANTHROPIC_API_KEY=<required when SUPERSESSION_LLM_STAGE=true>
 VOYAGE_API_KEY=<required when EMBEDDING_PROVIDER=voyage>
 ```
@@ -104,7 +105,7 @@ Readiness check: `curl http://localhost:8000/readyz`
 ```bash
 # Production releases use the protected GitHub "Production deploy" workflow.
 # Do not deploy the production app directly from a workstation.
-fly secrets set MASTER_ENCRYPTION_KEY=<value> ADMIN_SECRET=<value> ...
+fly secrets set MASTER_ENCRYPTION_KEY=<value> ADMIN_SECRET=<value> PROVISIONING_SECRET=<different-value> ...
 ```
 
 ### Kubernetes
