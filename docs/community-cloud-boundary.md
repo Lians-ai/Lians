@@ -9,15 +9,16 @@ Community is a useful, self-managed product rather than a crippled demo:
 
 - local or customer-operated memory;
 - durable `remember` and bounded `recall` workflows;
-- connectors and setup paths for Codex, Claude, Gemini, and MCP-compatible
+- connectors and setup paths for Codex, Cursor, Claude, Gemini, and MCP-compatible
   clients;
 - existing temporal, provenance, and technical-evidence primitives published
   in this repository;
 - community documentation and reproducible public benchmarks.
 
 The Community connectors default to the smallest useful surface where
-practical. For example, the Gemini starter profile exposes only `remember` and
-`recall`, and the Codex plugin injects a score-gated, bounded slice of memory.
+practical. For example, the Cursor and Gemini starter profiles expose only
+`remember` and `recall`, and the Codex plugin injects a score-gated, bounded
+slice of memory.
 
 ## Lians Cloud and enterprise packages
 
@@ -51,8 +52,8 @@ repository already grants under Apache 2.0.
 Approved language:
 
 > Lians is provider-neutral memory and evidence infrastructure. It can sit
-> beside Codex, Claude, Gemini, and other MCP-compatible or instrumentable AI
-> workflows without changing the underlying model.
+> beside Codex, Cursor, Claude, Gemini, and other MCP-compatible or
+> instrumentable AI workflows without changing the underlying model.
 
 > Lians can reduce repeated context and improve useful work per input token when
 > a smaller relevant recall replaces context that would otherwise be resent.

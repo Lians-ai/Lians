@@ -17,6 +17,23 @@ def test_gemini_starter_profile_is_bounded_and_requires_confirmation():
     assert server["trust"] is False
 
 
+def test_cursor_starter_profile_is_local_bounded_stdio():
+    server = _json("integrations/cursor/mcp.example.json")["mcpServers"]["lians"]
+
+    assert server["command"] == "uvx"
+    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-mcp"]
+    assert server["env"] == {"LIANS_MCP_ENABLED_TOOLS": "remember,recall"}
+
+
+def test_cursor_guide_documents_project_and_global_install_without_credentials():
+    guide = (ROOT / "integrations/cursor/README.md").read_text(encoding="utf-8")
+
+    assert ".cursor/mcp.json" in guide
+    assert "~/.cursor/mcp.json" in guide
+    assert "needs no Lians account or API key" in guide
+    assert "LIANS_API_KEY=" not in guide
+
+
 def test_codex_plugin_is_available_from_repository_marketplace():
     marketplace = _json(".agents/plugins/marketplace.json")
     plugin = marketplace["plugins"][0]
@@ -43,3 +60,4 @@ def test_commercial_boundary_preserves_public_license_and_reserves_services():
     assert "hosted continuity across supported clients and devices" in boundary
     assert "higher managed storage, write, recall, and operational limits" in boundary
     assert "does not include a production Lians-hosted tenant" in boundary
+    assert "Codex, Cursor, Claude, Gemini" in boundary
