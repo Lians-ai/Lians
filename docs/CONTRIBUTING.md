@@ -1,6 +1,13 @@
 # Contributing to Lians
 
-Thank you for your interest in contributing. Lians is a financial-grade memory layer for AI agents — contributions that improve correctness, compliance coverage, or integration breadth are especially welcome.
+Thank you for your interest in contributing. Lians is time-aware, verifiable
+memory for AI agents — contributions that improve temporal correctness,
+developer experience, reproducible evidence, or integration breadth are
+especially welcome.
+
+New to the project? Start with the [community guide](community.md), the
+[public roadmap](../ROADMAP.md), or an issue labeled
+[`good first issue`](https://github.com/Lians-ai/Lians/labels/good%20first%20issue).
 
 ## Before you start
 

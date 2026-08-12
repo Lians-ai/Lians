@@ -1,0 +1,40 @@
+title: "[Show and tell] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Show the community what you built, measured, or learned with Lians.
+        Screenshots, small repositories, benchmark results, and honest failure reports are welcome.
+  - type: input
+    id: project
+    attributes:
+      label: Project or experiment
+      description: What did you build or test?
+      placeholder: A point-in-time customer-support evaluation
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Share the result, including surprises or failures.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can another developer reproduce it?
+      description: Link to code or provide the smallest useful set of commands.
+    validations:
+      required: true
+  - type: dropdown
+    id: help
+    attributes:
+      label: What would help next?
+      options:
+        - Feedback on the approach
+        - Help reproducing the result
+        - An integration or example
+        - Nothing; I am sharing the result
+    validations:
+      required: true

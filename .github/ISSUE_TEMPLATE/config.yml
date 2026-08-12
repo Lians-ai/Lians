@@ -1,5 +1,11 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
+  - name: Ask a question
+    url: https://github.com/Lians-ai/Lians/discussions/categories/q-a
+    about: Get implementation help from maintainers and other developers.
+  - name: Propose an idea
+    url: https://github.com/Lians-ai/Lians/discussions/categories/ideas
+    about: Discuss the developer problem before turning it into implementation work.
   - name: Security vulnerability
     url: https://github.com/Lians-ai/Lians/security/policy
     about: Report security vulnerabilities through the private process in our security policy.

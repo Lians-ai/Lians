@@ -1,0 +1,32 @@
+title: "[Idea] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Developer problem
+      description: Describe the workflow or failure before proposing the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction
+      description: What would make the workflow simpler, safer, or easier to verify?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Examples or evidence
+      description: Link to related tools, specifications, reproductions, or benchmarks.
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution interest
+      options:
+        - I can help implement this
+        - I can test a proposed implementation
+        - I am looking for design feedback
+        - I am only proposing the idea
+    validations:
+      required: true

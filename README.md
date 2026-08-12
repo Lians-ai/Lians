@@ -1,114 +1,141 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/logo-blue.png" width="420" alt="Lians">
+    <img src="docs/assets/logo-blue.png" width="320" alt="Lians">
   </a>
 </p>
 
+<h3 align="center">Time-aware, verifiable memory for AI agents</h3>
+
 <p align="center">
-  <a href="https://www.lians.ai/">Website</a>
-  -
-  <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a>
-  -
-  <a href="docs/install.md">Install</a>
-  -
-  <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
-  -
-  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
+  Recall current facts. Reconstruct past context. Verify what an agent knew when it acted.
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/lians-sdk">
-    <img src="https://img.shields.io/pypi/v/lians-sdk?color=%2334D058&label=pypi%20package" alt="PyPI version">
+  <a href="#try-lians-locally">Quickstart</a> ·
+  <a href="demo/lookahead-bias">Live failure demo</a> ·
+  <a href="https://www.lians.ai/docs">Docs</a> ·
+  <a href="https://github.com/Lians-ai/Lians/discussions">Discussions</a> ·
+  <a href="docs/community.md">Community</a> ·
+  <a href="ROADMAP.md">Roadmap</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Lians-ai/Lians/stargazers">
+    <img src="https://img.shields.io/github/stars/Lians-ai/Lians?style=flat-square&logo=github&label=stars" alt="GitHub stars">
+  </a>
+  <a href="https://github.com/Lians-ai/Lians/actions/workflows/test.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Lians-ai/Lians/test.yml?branch=master&style=flat-square&label=tests" alt="CI status">
+  </a>
+  <a href="https://github.com/Lians-ai/Lians/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Lians-ai/Lians?style=flat-square" alt="Latest release">
   </a>
   <a href="https://pypi.org/project/lians-sdk">
-    <img src="https://img.shields.io/pypi/dm/lians-sdk?label=pypi%20downloads" alt="PyPI downloads">
-  </a>
-  <a href="https://github.com/Lians-ai/Lians">
-    <img src="https://img.shields.io/github/commit-activity/m/Lians-ai/Lians/master?style=flat-square" alt="GitHub commit activity">
+    <img src="https://img.shields.io/pypi/v/lians-sdk?style=flat-square&label=pypi" alt="PyPI version">
   </a>
   <a href="https://www.npmjs.com/package/@lians-ai/lians">
-    <img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?label=npm" alt="npm version">
+    <img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?style=flat-square&label=npm" alt="npm version">
   </a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians">
-    <img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry">
+    <img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet?style=flat-square" alt="MCP Official Registry">
   </a>
   <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="License: Apache 2.0">
   </a>
-</p>
-
-<p align="center">
-  <a href="docs/benchmarks/README.md"><strong>Reproducible benchmark evidence and offline quality gates</strong></a>
-  <br />
-  <a href="docs/benchmarks/riad-1.md"><strong>RIAD-1: decision reconstruction benchmark</strong></a>
-  · <a href="https://github.com/Lians-ai/Lians/actions/workflows/riad-1.yml"><strong>CI receipts</strong></a>
 </p>
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **memory and decision
-intelligence layer that helps AI do more useful work with less context**. It
-gives a model the right memories instead of forcing it to reread the entire
-history, then preserves the evidence needed to understand important decisions.
+[Lians](https://github.com/Lians-ai/Lians) gives AI agents memory that can
+answer a harder question than _"what is relevant?"_: **what was knowable at the
+moment this action happened?**
 
-This is not another generic AI infrastructure layer. Lians is built around a
-user outcome: AI that remembers what matters, responds with less prompt bloat,
-improves from outcomes, and can still explain what it knew and did.
+- **Recall without stale facts** — superseded memories are excluded before they
+  reach the model.
+- **Travel back to decision time** — bitemporal `recall_at(...)` reconstructs
+  the facts available at a historical cutoff.
+- **Keep receipts** — provenance, policy, tools, review, and memory can bind to
+  one content-addressed decision record.
+- **Run locally or self-host** — SQLite for a prototype; Postgres, RLS, and
+  air-gap deployment for production.
 
-**Measured token efficiency.** In the published
-[LoCoMo token-efficiency benchmark](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md),
-Lians top-50 reached **90.0% judged accuracy with 2,656 mean context tokens**,
-compared with 18,218 tokens for full-conversation context: an **85.4% context
-token reduction**. The benchmark measures context efficiency rather than a
-universal end-to-end latency guarantee; shorter, more relevant inputs are
-designed to reduce the processing latency and cost created by repeated context.
+## See a memory bug change the result
 
-Lians is being built for the full range of AI users:
+The same synthetic strategy, data, and memory store appear profitable when
+ordinary recall leaks future information. Pin retrieval to the decision time
+and the apparent edge disappears.
 
-- **Everyday people**: portable memory for assistants that should remember
-  preferences, projects, and past decisions across sessions (early access).
-- **Developers**: local-first and server tools for adding token-budgeted memory,
-  learning loops, and evidence to an application.
-- **Organizations**: governed, provider-neutral memory and decision records for
-  teams that need privacy, scale, investigation, and defensible oversight.
+<p align="center">
+  <a href="demo/lookahead-bias">
+    <img src="demo/lookahead-bias/results/equity_curves.png" width="900" alt="Lookahead-bias demo: contaminated recall produces Sharpe 3.9 while point-in-time recall produces Sharpe -0.1">
+  </a>
+</p>
 
-For organizations, the durable moat is neutrality. A firm can run agents across
-Bedrock, Azure OpenAI, Anthropic direct, and open-source runtimes while keeping
-one portable memory and evidence record outside every provider.
+| Run | Retrieval boundary | Total return | Sharpe |
+|---|---|---:|---:|
+| **Contaminated** | Naive recall over the complete memory history | **+41.3%** | **3.9** |
+| **Honest** | Point-in-time recall at each simulated decision | −0.9% | −0.1 |
+| Buy and hold | No memory | +1.4% | 0.4 |
 
-Every write is preserved as a governed temporal record and compiled into a
-typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
-mode and returns a content-addressed receipt that can bind automatically to a
-Decision Envelope. See
-[decision evidence and reconstruction](docs/decision-evidence.md), the
-[normative completeness grades](docs/completeness-grades.md),
-[Evidence Pack signing key custody](docs/evidence-signing-key-custody.md), the
-[governed memory engine](docs/memory-engine.md) and
-[reproducible evidence gates](docs/benchmarks/README.md).
+The demo is deterministic, uses fictional market data, needs no API key, and
+logs all **880 future-information retrievals**. [Run it and inspect every
+receipt →](demo/lookahead-bias)
 
-The platform exposes one evidence workflow:
+## Try Lians locally
 
-- **Capture**: open a Decision Envelope and bind memory, traces, policy
-  decisions, prompts, tools, and human review as the action happens.
-- **Reconstruct**: reproduce the point-in-time knowledge and execution path even
-  when exact deterministic replay is impossible.
-- **Verify**: grade every decision as Recorded, Reconstructable, Verifiable, or
-  Replayable, with every missing requirement named.
-- **Monitor**: when a source, policy, or model changes, identify every exposed
-  decision and emit a blast-radius alert.
+```bash
+pip install "lians-sdk[local]"
+```
 
-Memory is the performance primitive. Decision intelligence and verifiable
-evidence turn it into a product that people and organizations can trust.
+```python
+from datetime import datetime, timezone
+from lians import LocalLiansClient
 
-| | Library | Self-Hosted Server | Cloud |
-|---|---|---|---|
-| **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production (early access) |
-| **Setup** | `pip install lians-sdk[local]` | `docker compose up --build` | `pip install lians-sdk` + API key |
-| **Database** | SQLite (zero setup) | Postgres 16 + pgvector | Managed |
-| **Audit chain** | Yes | Yes | Yes |
-| **Crypto-shred erasure** | Yes | Yes | Yes |
-| **Information barriers** | Local checks | PostgreSQL RLS | Managed policy |
-| **Air-gap capable** | No | Yes | No |
+mem = LocalLiansClient()
+mem.add(
+    agent_id="research-agent",
+    content="Guidance was raised to $40B",
+    event_time=datetime(2026, 2, 10, tzinfo=timezone.utc),
+    metadata={"ticker": "ACME", "metric": "revenue_guidance"},
+)
+
+current = mem.recall(agent_id="research-agent", query="current guidance")
+historical = mem.recall_at(
+    agent_id="research-agent",
+    query="guidance",
+    as_of=datetime(2026, 2, 1, tzinfo=timezone.utc),
+)
+
+print(len(current["memories"]))     # 1 — available now
+print(len(historical["memories"]))  # 0 — not knowable on February 1
+```
+
+Prefer an AI client? Lians is in the official MCP Registry:
+
+```bash
+uvx --from "lians-sdk[mcp]" lians-mcp
+```
+
+No Lians account, hosted service, or API key is required for local mode.
+
+## Evidence you can reproduce
+
+| Proof | Result | Reproduce |
+|---|---|---|
+| Lookahead-bias demo | 880 future-information retrievals turn Sharpe −0.1 into 3.9 | [Run the demo](demo/lookahead-bias) |
+| LoCoMo token efficiency | 90.0% judged accuracy with 85.4% fewer context tokens than full history | [Read the methodology](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md) |
+| RIAD-1 decision reconstruction | Offline, deterministic reconstruction gates run in CI | [Inspect the benchmark](docs/benchmarks/riad-1.md) |
+
+If this failure mode matters in your stack, [star Lians](https://github.com/Lians-ai/Lians/stargazers)
+so other developers can find the project. If you can break the temporal
+boundary, [open an issue](https://github.com/Lians-ai/Lians/issues/new/choose)
+with the smallest reproduction you have.
+
+| Start here | Best for |
+|---|---|
+| [`pip install "lians-sdk[local]"`](docs/install.md) | Local prototypes and evaluations |
+| [MCP setup](#mcp---native-tool-in-any-ai-client) | Claude, Cursor, VS Code, Windsurf, and other MCP hosts |
+| [Self-hosted quickstart](#self-hosted-quickstart) | Private and regulated deployments |
+| [Decision evidence](docs/decision-evidence.md) | Reconstructing production AI actions |
 
 ---
 
@@ -410,7 +437,7 @@ and independent-reproduction evidence. See [docs/competitive-landscape.md](docs/
 and the runnable claim policy in
 [`agentmem/benchmarks/release_claims.py`](agentmem/benchmarks/release_claims.py).
 
-→ **Lookahead-bias demo** — the same agent backtest with naive vs point-in-time retrieval (Sharpe 4.6 vs −0.6, every leak logged): [ebeirne/lookahead-bias-demo](https://github.com/ebeirne/lookahead-bias-demo) · [in-repo](demo/lookahead-bias/README.md)
+→ **Lookahead-bias demo** — the same agent backtest with naive vs point-in-time retrieval (Sharpe 3.9 vs −0.1, every leak logged): [run it in this repository](demo/lookahead-bias/README.md)
 → Full benchmark numbers: [docs/benchmark.md](docs/benchmark.md)
 → Regulated-eval head-to-head (five compliance invariants, Lians **5.0** / Zep–Graphiti **2.0** / mem0 **0.5**): [docs/regulated-eval-results.md](docs/regulated-eval-results.md) — Lians, Graphiti OSS, and mem0 OSS all **executed live** in their default configurations (per-cell evidence in the appendix); remaining columns scored from their public API surface via runnable adapters you can re-run with keys.
 
@@ -424,8 +451,8 @@ verify the machine-readable [published release status](docs/published-release-st
 
 | Language | Install | Client | Docs |
 |----------|---------|--------|------|
-| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
-| **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
+| **Python 0.5.0** | `pip install lians-sdk==0.5.0` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
+| **TypeScript / Node 0.5.0** | `npm install @lians-ai/lians@0.5.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
 | **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
 | **Java 0.4.1** (JVM 11+) | `ai.lians:lians-sdk:0.4.1` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
 | **C 0.4.1** (C99 + libcurl) | build from the `v0.4.1` source tag | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |

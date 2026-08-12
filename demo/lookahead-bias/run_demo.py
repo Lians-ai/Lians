@@ -23,7 +23,7 @@ Outputs (results/):
   receipts.md         the receipts table, formatted
   summary.md          metrics + the backtest_check() report
 
-Run:  python run_demo.py            (~30s, no API keys, no network)
+Run:  python run_demo.py            (local CPU, no API keys, no network)
 """
 from __future__ import annotations
 
@@ -251,7 +251,12 @@ def main() -> None:
     days, tickers, returns = load_prices()
 
     print("ingesting notes into Lians (local, in-memory) ...")
-    with LocalLiansClient(namespace="lookahead-demo") as mem:
+    # Pin the deterministic local provider so the committed receipts and
+    # metrics reproduce even when optional embedding packages are installed.
+    with LocalLiansClient(
+        namespace="lookahead-demo",
+        embedding_provider="local",
+    ) as mem:
         n = ingest(mem)
         print(f"  {n} notes ingested")
 

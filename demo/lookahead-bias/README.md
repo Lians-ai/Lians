@@ -1,14 +1,14 @@
 # Your Agent's Memory Is Contaminating Your Backtest
 
 **A reproducible demo of lookahead bias in agent memory — and the one-parameter fix.**
-No API keys. No network. `python run_demo.py`, ~30 seconds.
+No API keys. No network. `python run_demo.py` on local CPU.
 
 ![Equity curves: contaminated vs honest vs buy-and-hold](results/equity_curves.png)
 
 | run | retrieval | total return | Sharpe |
 |---|---|---:|---:|
-| **Contaminated** | `recall()` — present-time recall over the full history | **+44.0%** | **4.6** |
-| **Honest** | `recall_at(as_of=decision_time)` | −4.2% | −0.6 |
+| **Contaminated** | `recall()` — present-time recall over the full history | **+41.3%** | **3.9** |
+| **Honest** | `recall_at(as_of=decision_time)` | −0.9% | −0.1 |
 | Buy & hold | — | +1.4% | 0.4 |
 
 Same strategy. Same data. Same memory store. The entire diff between the two
@@ -50,7 +50,7 @@ warning — just a strategy that "works" in simulation and evaporates live.
      to what was knowable at decision time.
 4. **Prints the receipts.** Every contaminated retrieval is logged: decision
    timestamp, the note that was retrieved, the note's timestamp, and how many
-   days in the future it was created. In this run: **918 retrievals of
+   days in the future it was created. In this run: **880 retrievals of
    future information** across 124 decision days ([receipts.md](results/receipts.md)).
 
 The synthetic market is the point, not a limitation: because we control exactly
@@ -107,7 +107,7 @@ memory as infrastructure, not as a feature flag.
 ```bash
 pip install lians-sdk[local]      # or run from the Lians monorepo checkout
 python generate_dataset.py        # optional — data/ is committed, seed=42
-python run_demo.py                # writes results/ (~30s, CPU only)
+python run_demo.py                # writes results/ on local CPU
 ```
 
 Everything is deterministic: same seed, same local embedding provider, same

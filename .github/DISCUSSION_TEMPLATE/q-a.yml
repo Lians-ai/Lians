@@ -1,0 +1,34 @@
+title: "[Question] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask implementation and design questions here. Use a public issue instead when you have a reproducible bug.
+        Never include credentials, personal data, or confidential production records.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to build?
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Include safe configuration or code when it helps explain the question.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Lians surface
+      options:
+        - Local Python library
+        - MCP server
+        - Hosted API
+        - Self-hosted server
+        - Framework integration
+        - Benchmark or evaluation
+        - Other
+    validations:
+      required: true

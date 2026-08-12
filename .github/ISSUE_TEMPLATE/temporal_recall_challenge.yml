@@ -1,0 +1,58 @@
+name: Temporal recall challenge
+description: Show a stale-fact, future-information, or point-in-time recall failure.
+title: "challenge: "
+labels: [community]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Temporal bugs are most useful when another developer can reproduce them.
+        Please remove secrets, personal data, and confidential records before posting.
+  - type: dropdown
+    id: failure_class
+    attributes:
+      label: Failure class
+      options:
+        - Future information appeared in a historical replay
+        - A superseded or stale fact appeared in current recall
+        - A late correction was available before it was learned
+        - Recall crossed a namespace or information barrier
+        - Another temporal or provenance failure
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest safe script, fixture, or sequence of API calls that demonstrates the behavior.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected temporal boundary
+      description: What should have been knowable at the query or decision time?
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed result
+      description: What memory, timestamp, or receipt crossed the expected boundary?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Lians version or commit
+      placeholder: lians-sdk 0.5.0 or commit SHA
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, and confidential records.
+          required: true
