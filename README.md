@@ -5,702 +5,216 @@
 </p>
 
 <p align="center">
-  <a href="https://www.lians.ai/">Website</a>
-  -
-  <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a>
-  -
-  <a href="docs/install.md">Install</a>
-  -
-  <a href="https://github.com/Lians-ai/Lians#self-hosted-quickstart">Quickstart</a>
-  -
+  <a href="https://www.lians.ai/">Website</a> ·
+  <a href="docs/install.md">Install</a> ·
+  <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
+  <a href="https://github.com/Lians-ai/Lians/issues">Issues</a> ·
   <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/lians-sdk">
-    <img src="https://img.shields.io/pypi/v/lians-sdk?color=%2334D058&label=pypi%20package" alt="PyPI version">
-  </a>
-  <a href="https://pypi.org/project/lians-sdk">
-    <img src="https://img.shields.io/pypi/dm/lians-sdk?label=pypi%20downloads" alt="PyPI downloads">
-  </a>
-  <a href="https://github.com/Lians-ai/Lians">
-    <img src="https://img.shields.io/github/commit-activity/m/Lians-ai/Lians/master?style=flat-square" alt="GitHub commit activity">
-  </a>
-  <a href="https://www.npmjs.com/package/@lians-ai/lians">
-    <img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?label=npm" alt="npm version">
-  </a>
-  <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians">
-    <img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0">
-  </a>
+  <a href="https://pypi.org/project/lians-sdk"><img src="https://img.shields.io/pypi/v/lians-sdk?label=PyPI" alt="PyPI version"></a>
+  <a href="https://www.npmjs.com/package/@lians-ai/lians"><img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?label=npm" alt="npm version"></a>
+  <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians"><img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
 </p>
+
+# Memory for any AI agent.
+
+Lians gives AI agents durable memory across chats, sessions, tools, and models.
+Your agent can remember a useful fact now and recall it when it matters later.
+
+- **Works with the AI you already use** through MCP, plugins, or an SDK.
+- **Runs locally by default** with SQLite and no Lians account or API key.
+- **Keeps memory focused** by returning a small, relevant set of current facts.
+- **Stays provider-neutral** so memory is not trapped inside one model vendor.
+
+Lians is a memory layer, not another assistant. Your agent and model stay the
+same; Lians gives them a place to remember.
 
 <p align="center">
-  <a href="docs/benchmarks/README.md"><strong>Reproducible benchmark evidence and offline quality gates</strong></a>
-  <br />
-  <a href="docs/benchmarks/riad-1.md"><strong>RIAD-1: decision reconstruction benchmark</strong></a>
-  · <a href="https://github.com/Lians-ai/Lians/actions/workflows/riad-1.yml"><strong>CI receipts</strong></a>
+  <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
 </p>
 
----
+## Start here: add memory through MCP
 
-# Give the AI you already use a memory.
+MCP is the simplest path for most people because the same setup works with
+Claude Desktop, Cursor, Windsurf, VS Code, and other MCP-compatible agents.
 
-[Lians](https://github.com/Lians-ai/Lians) is a local-first memory add-on for
-**Codex, Cursor, Claude, Gemini, and any MCP-compatible assistant**. Keep your
-AI and your workflow. Lians remembers important facts and decisions across
-chats, recalls only the relevant slice, and preserves where that memory came
-from.
-
-- **Remember what matters**: preferences, project facts, constraints, and
-  decisions survive the next chat.
-- **Use less repeated context**: recall a small relevant slice instead of
-  resending the whole history.
-- **Keep the evidence**: source, time, supersession, and decision records remain
-  available when an answer needs to be checked.
-
-Start with [Codex](#install-a-community-connector-from-github),
-[Cursor](integrations/cursor), [Claude Code](integrations/lians-plugin),
-[Gemini CLI](integrations/gemini), or [any MCP host](#any-other-mcp-host).
-
-**Measured token efficiency.** In the published
-[LoCoMo token-efficiency benchmark](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md),
-Lians top-50 reached **90.0% judged accuracy with 2,656 mean context tokens**,
-compared with 18,218 tokens for full-conversation context: an **85.4% context
-token reduction**. The benchmark measures context efficiency rather than a
-universal end-to-end latency guarantee; shorter, more relevant inputs are
-designed to reduce the processing latency and cost created by repeated context.
-
-Lians is being built for the full range of AI users:
-
-- **Everyday people**: portable memory for assistants that should remember
-  preferences, projects, and past decisions across sessions (early access).
-- **Developers**: local-first and server tools for adding token-budgeted memory,
-  learning loops, and evidence to an application.
-- **Organizations**: governed, provider-neutral memory and decision records for
-  teams that need privacy, scale, investigation, and defensible oversight.
-
-For organizations, the durable moat is neutrality. A firm can run agents across
-Bedrock, Azure OpenAI, Anthropic direct, and open-source runtimes while keeping
-one portable memory and evidence record outside every provider.
-
-Every write is preserved as a governed temporal record and compiled into a
-typed memory artifact. Every recall can run in `fast`, `deep`, or `reconstruct`
-mode and returns a content-addressed receipt that can bind automatically to a
-Decision Envelope. See
-[decision evidence and reconstruction](docs/decision-evidence.md), the
-[normative completeness grades](docs/completeness-grades.md),
-[Evidence Pack signing key custody](docs/evidence-signing-key-custody.md), the
-[governed memory engine](docs/memory-engine.md) and
-[reproducible evidence gates](docs/benchmarks/README.md).
-
-The platform exposes one evidence workflow:
-
-- **Capture**: open a Decision Envelope and bind memory, traces, policy
-  decisions, prompts, tools, and human review as the action happens.
-- **Reconstruct**: reproduce the point-in-time knowledge and execution path even
-  when exact deterministic replay is impossible.
-- **Verify**: grade every decision as Recorded, Reconstructable, Verifiable, or
-  Replayable, with every missing requirement named.
-- **Monitor**: when a source, policy, or model changes, identify every exposed
-  decision and emit a blast-radius alert.
-
-Memory is the performance primitive. Decision intelligence and verifiable
-evidence turn it into a product that people and organizations can trust.
-
-| | Library | Self-Hosted Server | Cloud |
-|---|---|---|---|
-| **Best for** | Testing, prototyping | Regulated teams, private deployments | Zero-ops production (early access) |
-| **Setup** | `pip install lians-sdk[local]` | `docker compose up --build` | `pip install lians-sdk` + API key |
-| **Database** | SQLite (zero setup) | Postgres 16 + pgvector | Managed |
-| **Audit chain** | Yes | Yes | Yes |
-| **Crypto-shred erasure** | Yes | Yes | Yes |
-| **Information barriers** | Local checks | PostgreSQL RLS | Managed policy |
-| **Air-gap capable** | No | Yes | No |
-
-### Install a community connector from GitHub
-
-The GitHub Community edition gives an individual developer durable, bounded
-memory without tying it to one model provider. The same memory pattern can sit
-beside Codex, Cursor, Claude, Gemini, or another MCP-compatible client. Model
-access, context-window size, and provider quotas do not change; Lians can reduce
-repeated context when relevant memory replaces material that would otherwise
-be resent.
-
-**Codex**
-
-```text
-git clone https://github.com/Lians-ai/Lians.git
-codex plugin marketplace add /absolute/path/to/Lians
-codex plugin add lians-memory@lians
-```
-
-**Cursor**
-
-Copy [`integrations/cursor/mcp.example.json`](integrations/cursor/mcp.example.json)
-to `.cursor/mcp.json` for one project, or merge it into `~/.cursor/mcp.json` for
-all projects. The starter profile is local, needs no API key, and exposes only
-`remember` and `recall`; see the [Cursor setup guide](integrations/cursor/README.md).
-
-**Claude Code**
-
-```text
-/plugin marketplace add Lians-ai/Lians
-/plugin install lians@lians-plugins
-```
-
-**Gemini CLI**
-
-Copy [`integrations/gemini/settings.example.json`](integrations/gemini/settings.example.json)
-into your Gemini CLI settings. The starter profile exposes only `remember` and
-`recall`; see the [Gemini setup guide](integrations/gemini/README.md).
-
-Community is intentionally self-managed. Lians Cloud and enterprise packages
-reserve hosted continuity across clients and devices, shared/team memory,
-higher managed limits, administration, managed evidence operations, and
-support. See the [public/paid product boundary](docs/community-cloud-boundary.md).
-
----
-
-## Agent memory should improve without losing the record
-
-Lians gives agents a durable memory loop across facts, context, decisions, outcomes,
-and reviewed lessons. The Memory product keeps context current and useful; the
-Records product captures behavior and oversight in an open, verifiable event format.
-
-Most memory layers stop at storage and retrieval. Lians is built for teams that
-also need to know what the agent knew, when it knew it, where the fact came from,
-which outcomes followed, who was allowed to see it, and whether stale or erased
-content was kept out of future context.
-
-That is the gap between a memory demo and a memory system teams can trust in
-production, especially in financial, medical, and legal environments.
-
-### What regulated memory must prove
-
-Generic agent memory optimizes for personalization and recall. Regulated agent
-memory has a different job: it must keep the agent's context correct, current,
-segregated, reproducible, and defensible under review.
-
-Lians is designed for the failure modes that matter in institutions:
-
-- **Stale fact contamination** - old rates, old guidance, old medication doses,
-  old damages estimates, or old client facts must not silently enter context.
-- **Point-in-time reconstruction** - an examiner, clinician, partner, or risk
-  committee may ask what the agent knew at a specific timestamp.
-- **Information barriers** - one desk, care team, or matter team must not read
-  another team's memory because of an application-layer bug.
-- **Erasure with audit survival** - private content must be removable without
-  breaking custody records, audit hashes, or legal retention evidence.
-- **Relational compliance checks** - conflicts of interest, related-party
-  exposure, and referral networks are graph questions, not plain vector search.
-
-The short competitive frame:
-
-> Runtime vendors explain their own cloud. Lians preserves portable decision
-> evidence across all of them.
-
-### Built for regulated verticals
-
-| Vertical | What Lians proves | Product primitives |
-|---|---|---|
-| **Financial institutions** | No stale or future facts influenced a decision; desk barriers held; audit state is reconstructable | Bitemporal recall, backtest contamination checks, SEC/FINRA audit export, RLS information barriers, related-party graph paths |
-| **Healthcare organizations** | PHI access is scoped; care-team memory is reconstructable; patient erasure is provable | Per-subject encryption, crypto-shred certificates, HIPAA safeguard mapping, care-network graph, air-gap mode |
-| **Legal institutions** | Matter walls held; privilege cutoffs are reproducible; chain-of-custody survives erasure | Matter-level barriers, `recall_at` for privilege dates, audit reconstruction, conflict-of-interest graph paths |
-
-Procurement and technical review materials:
-
-- [Institutional proof kit](docs/institutional-proof-kit.md)
-- [Vertical pitch guide](docs/verticals.md)
-- [Competitive landscape](docs/competitive-landscape.md)
-- [Security whitepaper](docs/security-whitepaper.md)
-- [SOC 2 / HIPAA readiness](docs/soc2-hipaa-readiness.md)
-- [Threat model](docs/threat-model.md)
-- [Production deploy checklist](docs/deploy.md)
-
----
-
-## MCP - Native tool in any AI client
-
-Lians is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians). Any MCP-compatible host - Claude Desktop, Cursor, VS Code, Windsurf, and others - can use local persistent memory immediately or connect to a hosted Lians server. No SDK code, custom adapter, Docker service, URL, or API key is required for local mode.
-
-Your agents get eight tools automatically:
-
-| Tool | What it does |
-|------|-------------|
-| `remember` | Store a fact with event time and metadata |
-| `recall` | Retrieve current (non-stale) facts by semantic query |
-| `recall_at` | Point-in-time recall — what did we know on date X? |
-| `reconstruct` | Full audit reconstruction for regulatory submissions |
-| `list_conflicts` | Surface facts where two sources disagree |
-| `memory_lineage` | Full supersession history of any fact |
-| `fact_history` | Time-series view of a ticker+metric (e.g. AAPL EPS) |
-| `backtest_check` | Detect lookahead bias before a backtest runs |
-
-### Claude Desktop / Windsurf
-
-Add to your `claude_desktop_config.json` (or equivalent MCP config):
+Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/), then add
+this server to your agent's MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "lians": {
       "command": "uvx",
-      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"]
+      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
+      "env": {
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall"
+      }
     }
   }
 }
 ```
 
-Restart your client and Lians memory tools appear immediately. Local mode persists to `~/.lians/mcp.db`. To use a hosted deployment instead, set `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID`.
+Restart your agent and try two prompts in separate chats:
 
-### Any other MCP host
-
-```bash
-uvx --from 'lians-sdk[mcp]' lians-mcp
+```text
+Remember that this project uses Python 3.12 and pytest.
 ```
 
-No environment variables are needed for local mode. Set `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID` to use a remote server.
+```text
+What Python version and test runner does this project use?
+```
 
----
+Local MCP memory is stored in `~/.lians/mcp.db`. The starter configuration
+exposes only the two tools needed for the basic loop:
 
-## Quickstart
+| Tool | What it does |
+|---|---|
+| `remember` | Store one durable fact, preference, constraint, or decision. |
+| `recall` | Retrieve a small set of relevant, current memories. |
+
+Use the exact setup guide for
+[Cursor](integrations/cursor),
+[Gemini CLI](integrations/gemini),
+[Claude Code](integrations/lians-plugin), or
+[Codex](plugins/lians-memory). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
+the advanced temporal and audit tools too.
+
+## How it works
+
+```text
+you → your AI agent → remember / recall → Lians → local SQLite
+```
+
+1. You or your agent explicitly saves something worth keeping.
+2. A later session asks Lians for memory related to the current task.
+3. Lians returns bounded context instead of replaying every old conversation.
+4. When a fact changes, Lians can supersede the stale version instead of
+   sending both versions back to the model.
+
+No model provider owns the memory. You can point another compatible agent at
+the same Lians store and continue from the same context.
+
+## Use Lians in Python
+
+For an application, notebook, or agent loop that needs in-process memory:
 
 ```bash
-pip install lians-sdk[local]   # SQLite plus real local semantic embeddings, no Docker
+pip install "lians-sdk[local]"
 ```
 
 ```python
+from datetime import datetime, timezone
 from lians import LocalLiansClient
-from datetime import datetime, timezone
 
-mem = LocalLiansClient()
+memory = LocalLiansClient(db_path=".lians/memory.db")
 
-mem.add(
-    agent_id="analyst-1",
-    content="NVDA FY2026 revenue guidance raised to $40B",
-    event_time=datetime(2025, 11, 19, 16, tzinfo=timezone.utc),
-    metadata={"ticker": "NVDA", "metric": "revenue_guidance"},
+memory.add(
+    agent_id="my-agent",
+    content="The project uses Python 3.12 and pytest.",
+    event_time=datetime.now(timezone.utc),
+    metadata={"project": "demo", "topic": "tooling"},
 )
 
-# Superseded facts are excluded at the DB layer — never reach the LLM
-results = mem.recall(agent_id="analyst-1", query="NVDA revenue guidance")
-
-# Deeper multi-facet recall for planning and research
-results = mem.recall(
-    agent_id="analyst-1",
-    query="What changed in the guidance and why?",
-    mode="deep",
+result = memory.recall(
+    agent_id="my-agent",
+    query="Which Python version and test runner should I use?",
 )
 
-# Point-in-time: what did we know on March 1? (compliance-grade answer)
-results = mem.recall_at(
-    agent_id="analyst-1",
-    query="NVDA revenue guidance",
-    as_of=datetime(2025, 3, 1, tzinfo=timezone.utc),
-)
-
-# Every result includes receipt_sha256, provenance_coverage, and the
-# resolved serving mode and latency budget.
+for item in result["memories"]:
+    print(item["content"])
 ```
 
-Switch to the hosted server with one line: `from lians import LiansClient as LocalLiansClient`
+Local mode needs no server, Docker container, or API key. The first run may
+download the local embedding model.
 
-### Decision evidence quickstart
+## Install from this repository
 
-```python
-from datetime import datetime, timezone
-from lians import AsyncLiansClient
-
-async with AsyncLiansClient(base_url=LIANS_URL, api_key=LIANS_API_KEY) as lians:
-    envelope = await lians.open_decision_envelope(
-        agent_id="underwriter-1",
-        decision_type="credit_application",
-        regime="ECOA_REG_B",
-        completeness_profile="regulated_recordkeeping",
-        knowledge_as_of=datetime.now(timezone.utc),
-    )
-
-    context = await lians.recall(
-        agent_id="underwriter-1",
-        query="verified applicant income",
-        decision_envelope_id=envelope["id"],
-    )
-
-    sealed = await lians.seal_decision_envelope(
-        envelope["id"],
-        outcome="manual_review",
-        decided_at=datetime.now(timezone.utc),
-        input_hash=INPUT_SHA256,
-        output_hash=OUTPUT_SHA256,
-    )
-
-    # No overclaiming: every missing requirement names the grade it blocks.
-    print(sealed["completeness"])
+```bash
+git clone https://github.com/Lians-ai/Lians.git
+cd Lians
+python -m pip install -e "agentmem/sdk/python[local,mcp]"
 ```
 
----
+That editable install includes the local Python client and the `lians-mcp`
+entry point. See the [full install guide](docs/install.md) for TypeScript, Go,
+Java, C, framework adapters, and self-hosting.
 
-## Agent harness — drop-in memory loop
+## Choose the interface that fits
 
-`LiansMemoryHarness` wraps the two operations every memory-augmented agent needs —
-recall-before and remember-after — into one object, with the compliance scoping
-(subject, source, event-time, information barrier) regulated deployments require.
-Works with any sync client (`LiansClient` or `LocalLiansClient`) and any model.
-
-```python
-from lians import LiansClient, LiansMemoryHarness
-
-harness = LiansMemoryHarness(mem, agent_id="research-desk", domain="finance")
-
-# One call: recall context, run your model, persist the response.
-answer = harness.run_turn(
-    "What is NVDA's current revenue guidance?",
-    generate=lambda context, query: call_model(f"{context}\n\nUser: {query}"),
-)
-
-# Or control each step:
-context = harness.recall_context("NVDA revenue guidance")   # ready to inject
-harness.remember("Desk note: guidance now $40B")            # write after the turn
-```
-
-Regulated scoping ties every write to one data subject and an information barrier:
-
-```python
-harness = LiansMemoryHarness(
-    mem, agent_id="care-team-3",
-    subject_id="MRN-00042",       # per-subject key — the crypto-shred target
-    barrier_group="oncology",     # information-barrier tag
-    domain="healthcare",
-)
-```
-
-Runnable end-to-end demo: [`agentmem/examples/harness_demo.py`](agentmem/examples/harness_demo.py).
-
----
-
-## Relationship graph — compliance questions that are inherently relational
-
-Some compliance checks *are* graph queries. Lians stores **bitemporal relationship
-edges** alongside facts — same audit chain, same information barriers, no graph
-database — so you can answer them point-in-time:
-
-- **Legal** — conflict-of-interest reachability (ABA 1.7/1.9): is an attorney
-  connected to an adverse party?
-- **Finance** — related-party / beneficial-ownership (SEC, AML/KYC): is a
-  counterparty within N hops of a restricted entity?
-- **Healthcare** — care-network / referral-pattern (anti-kickback) analysis.
-
-```python
-mem.relate("analyst-1", src_entity="Attorney", rel_type="represented",
-           dst_entity="ClientX", event_time=datetime(2026, 1, 1, tzinfo=timezone.utc))
-mem.relate("analyst-1", src_entity="ClientX", rel_type="adverse_to",
-           dst_entity="PartyY", event_time=datetime(2026, 1, 1, tzinfo=timezone.utc))
-
-# Conflict-of-interest check — is there a connection, and through what?
-path = mem.path("analyst-1", src_entity="Attorney", dst_entity="PartyY")
-# → {"connected": True, "hops": 2, "path": [...]}
-
-# Point-in-time: who was connected on the day of the trade?
-mem.neighbors("analyst-1", entity="FundA", depth=2, as_of=datetime(2025, 6, 1, tzinfo=timezone.utc))
-
-# Graph-proximity reranking — boost recalls about entities near an anchor
-mem.recall_near("analyst-1", query="earnings", near_entity="FundA", near_key="ticker")
-```
-
-Endpoints: `POST /v1/graph/relate` · `/v1/graph/unrelate` · `/v1/graph/extract` (text → edges, rule-based or opt-in LLM) · `GET /v1/graph/neighbors` · `/v1/graph/path` (all `as_of`-capable). Inspired by [Zep/Graphiti](docs/compare-zep.md), built on our compliance spine.
-
----
-
-## Agent integrations — Codex, Cursor, Claude, Gemini, MCP
-
-Give any coding agent persistent, compliance-grade memory:
-
-| Host | How |
-|------|-----|
-| **Codex** | GitHub marketplace plugin with bounded automatic recall and compact memory tools — [`plugins/lians-memory`](plugins/lians-memory) |
-| **Cursor** | Project or global MCP profile with local memory and explicit tool approval — [`integrations/cursor`](integrations/cursor) |
-| **Claude Code** | GitHub marketplace plugin with memory, integration, and technical-evidence commands — [`integrations/lians-plugin`](integrations/lians-plugin) |
-| **Gemini CLI** | Provider-neutral MCP starter profile exposing `remember` and `recall` — [`integrations/gemini`](integrations/gemini) |
-| **Skills standard** | `npx skills add https://github.com/Lians-ai/Lians --skill lians` — works in Claude Code, Codex, Cursor — [`skills/`](skills) |
-| **Any MCP host** | One-time config; eight native memory tools — see [MCP section](#mcp--native-tool-in-any-ai-client) above |
-
----
+| You want to... | Start with |
+|---|---|
+| Give an existing AI client memory | [MCP setup](#start-here-add-memory-through-mcp) |
+| Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
+| Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
+| Use LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
+| Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
 
 ## Why Lians
 
-Institutional AI agents accumulate facts that **change over time**: rate decisions
-supersede prior ones, guidance gets revised, medication doses change, care plans
-evolve, damages estimates move, and matter facts are corrected during discovery.
-Systems that return every version with equal rank contaminate the LLM context with
-stale facts.
+Most memory demos store text and run vector search. Lians also handles the
+problems that appear when an agent keeps memory for more than a few sessions:
 
-Lians fixes this with a bitemporal model:
-- **event_time** — when the fact happened (business time)
-- **valid_from / valid_to** — when it was known (system time)
+- **Current over stale:** corrected facts can supersede earlier versions.
+- **Small over noisy:** recall is bounded so the model gets useful context.
+- **Local over locked-in:** local mode keeps data on your machine.
+- **Portable over provider-specific:** MCP and SDKs work across agent stacks.
+- **Inspectable over opaque:** memories can retain timestamps, sources, and
+  lineage.
 
-Superseded facts are excluded at the database layer. Every write is recorded in a tamper-evident SHA-256 hash chain; physical immutability and SEC 17a-4 deployment claims require separately configured WORM storage and policy controls. Per-subject keys can be destroyed for governed erasure while the audit trail survives. Information barriers are enforced at PostgreSQL RLS, not only at the application layer.
+<details>
+<summary><strong>Advanced capabilities</strong></summary>
 
-### How Lians compares
+Lians also supports point-in-time recall, conflict inspection, memory lineage,
+tamper-evident audit history, governed erasure, information barriers, and
+decision reconstruction. These capabilities are available when a project needs
+them; they are not required to get started.
 
-Temporal memory is no longer unique: Graphiti documents a bitemporal knowledge
-graph, Mem0 documents temporal reasoning and history, Hindsight documents
-query-time temporal recall and audit controls, and Supermemory documents content
-versioning and a temporal graph. Lians should be evaluated on the compound
-decision-evidence boundary it implements:
+- [Memory engine](docs/memory-engine.md)
+- [Decision evidence](docs/decision-evidence.md)
+- [Security model](docs/security-whitepaper.md)
+- [Benchmarks and reproducible evidence](docs/benchmarks/README.md)
+- [Community and managed product boundary](docs/community-cloud-boundary.md)
 
-- reconstruct a named decision at both event-time and knowledge-time cutoffs;
-- enumerate the source versions included and excluded at those cutoffs;
-- detect post-cutoff leakage before a result is accepted;
-- emit a content-addressed Evidence Pack that can be verified offline; and
-- preserve the surrounding chain when subject content is crypto-erased.
+</details>
 
-The repository's regulated-memory harness is useful product evidence, not an
-independent general-product leaderboard. Current leadership language remains
-gated on production load, isolation, restore, failure-injection, public benchmark,
-and independent-reproduction evidence. See [docs/competitive-landscape.md](docs/competitive-landscape.md)
-and the runnable claim policy in
-[`agentmem/benchmarks/release_claims.py`](agentmem/benchmarks/release_claims.py).
+## Repository map
 
-→ **Lookahead-bias demo** — the same agent backtest with naive vs point-in-time retrieval (Sharpe 4.6 vs −0.6, every leak logged): [ebeirne/lookahead-bias-demo](https://github.com/ebeirne/lookahead-bias-demo) · [in-repo](demo/lookahead-bias/README.md)
-→ Full benchmark numbers: [docs/benchmark.md](docs/benchmark.md)
-→ Regulated-eval head-to-head (five compliance invariants, Lians **5.0** / Zep–Graphiti **2.0** / mem0 **0.5**): [docs/regulated-eval-results.md](docs/regulated-eval-results.md) — Lians, Graphiti OSS, and mem0 OSS all **executed live** in their default configurations (per-cell evidence in the appendix); remaining columns scored from their public API surface via runnable adapters you can re-run with keys.
+```text
+agentmem/src/lians/          Core engine and HTTP service
+agentmem/sdk/python/        Python SDK, local client, and MCP server
+agentmem/sdk/typescript/    TypeScript SDK
+integrations/               Agent and framework integrations
+plugins/                    Installable agent plugins
+docs/                       Setup, architecture, security, and operations
+```
 
----
-
-## Language SDKs
-
-Lians maintains client implementations across **five languages**. Public package
-versions currently differ by ecosystem; use the explicit coordinates below and
-verify the machine-readable [published release status](docs/published-release-status.json).
-
-| Language | Install | Client | Docs |
-|----------|---------|--------|------|
-| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` | [sdk/python](agentmem/sdk/python) |
-| **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` | [sdk/typescript](agentmem/sdk/typescript) |
-| **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` | [sdk/go](agentmem/sdk/go) |
-| **Java 0.4.1** (JVM 11+) | `ai.lians:lians-sdk:0.4.1` (Maven Central) | `new LiansClient(opts)` | [sdk/java](agentmem/sdk/java) |
-| **C 0.4.1** (C99 + libcurl) | build from the `v0.4.1` source tag | `lians_client_new(...)` | [sdk/c](agentmem/sdk/c) |
-
-→ **One-page install + 30-second quickstart for every language: [docs/install.md](docs/install.md)**
-
-All five cover core memory operations. Python and TypeScript currently expose a
-broader advanced surface than Go, Java, and C; verify the client you plan to use
-against the OpenAPI contract before a pilot.
-
----
-
-## Framework integrations
-
-| Framework | Install | Import |
-|-----------|---------|--------|
-| **LangChain** | `pip install lians-sdk[langchain]` | `from lians.langchain_integration import LiansChatHistory, build_tools` |
-| **LangGraph** | `pip install lians-sdk[langgraph]` | `from lians.langgraph_integration import create_recall_node, create_remember_node` |
-| **CrewAI** | `pip install lians-sdk[crewai]` | `from lians.crewai_integration import build_crewai_tools` |
-| **OpenAI Agents SDK** | `pip install lians-sdk[openai-agents]` | `from lians.openai_agents_integration import build_openai_agent_tools` |
-| **AutoGen v0.4** | `pip install lians-sdk[autogen]` | `from lians.autogen_integration import build_autogen_tools` |
-| **TypeScript / Node** | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` |
-
----
-
-## Self-hosted quickstart
+## Development
 
 ```bash
-git clone https://github.com/Lians-ai/Lians.git && cd Lians/agentmem
-cp .env.demo .env
-docker compose up --build -d
-python scripts/seed_demo.py   # prints a demo API key; open demo/index.html
-```
-
-Deploy to Fly.io, Kubernetes, or bare Docker: [docs/deploy.md](docs/deploy.md)
-
----
-
-## SDK reference
-
-```python
-# All three clients share the same API surface
-from lians import LiansClient          # sync, connects to hosted/self-hosted server
-from lians import AsyncLiansClient     # async, for FastAPI / async frameworks
-from lians import LocalLiansClient     # local SQLite, no server needed
-
-client.add(agent_id, content, event_time, metadata={}, importance=0.5)
-client.add_from_messages(agent_id, messages=[{"role": "user", "content": "..."}])
-client.recall(agent_id, query, k=5)
-client.recall_at(agent_id, query, as_of=datetime(...))   # point-in-time
-client.snapshot(agent_id, as_of=datetime(...))           # full state export
-client.backtest_check(agent_id, simulation_as_of=...)    # lookahead-bias detection
-client.erase(subject_id, request_ref)                    # GDPR crypto-shred
-```
-
----
-
-## Architecture
-
-```
-                    ┌──────────────┐
-                    │  LLM / Agent │
-                    └──────┬───────┘
-                           │  REST / MCP
-               ┌───────────▼────────────┐
-               │        Lians API        │   FastAPI · rate-limit · OTEL
-               └──┬────────────────┬────┘
-          ┌───────▼──────┐  ┌──────▼───────┐
-          │   memories    │  │  event_log   │
-          │  (encrypted)  │  │ (hash chain) │
-          │  bitemporal   │  │  append-only │
-          └───────┬───────┘  └──────────────┘
-                  │
-          ┌───────▼───────┐
-          │  subject_keys  │   AES-256-GCM per subject
-          │  (crypto-shred)│   destroy key = content unrecoverable
-          └───────────────┘
-
-  Postgres 16 + pgvector (HNSW)      Redis (recall hot cache)
-```
-
-**Recall pipeline:** BM25 + cosine (Voyage Finance-2) → recency decay → validity gate (`valid_to IS NULL` for present; `valid_from ≤ as_of < valid_to` for point-in-time)
-
-**Supersession pipeline:** Stage 1 (metadata key overlap) → Stage 2 (deterministic: SUPERSEDES / CONFIRMS / ADDS) → Stage 3 (optional LLM adjudication for paraphrase detection)
-
----
-
-## Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EMBEDDING_PROVIDER` | `local` | `voyage` · `openai` · `sentence-transformers` · `local` |
-| `VOYAGE_API_KEY` | — | Required when `EMBEDDING_PROVIDER=voyage` |
-| `MASTER_ENCRYPTION_KEY` | — | Base64 32-byte key; blank disables PII encryption |
-| `KMS_PROVIDER` | `env` | `env` · `aws` · `azure` · `vault` |
-| `ADMIN_SECRET` | — | Protects `/v1/admin/*` — **change in production** |
-| `PROVISIONING_SECRET` | — | Optional separate credential for namespace-bound `/v1/provisioning/*` key management |
-| `SUPERSESSION_LLM_STAGE` | `false` | Enables Stage 3 LLM adjudication (Claude Haiku) |
-| `AIRGAP_MODE` | `false` | Hard-fails at startup if any config would send data externally |
-| `ADMISSION_MODE` | `monitor` | Admission control: `off` · `monitor` (tag+audit) · `enforce` (reject injection/blocked source, hold PII/PHI/MNPI for review) |
-| `SIEM_URL` | — | Stream every audit event to a SIEM collector (Splunk HEC / Datadog / Elastic) |
-| `WORM_MODE` | `false` | Attest write-once-read-many storage for SEC 17a-4 (object-locked audit, no UPDATE/DELETE on `event_log`) |
-| `STRIPE_API_KEY` | — | Enables per-namespace usage metering |
-
-Full reference: [agentmem/.env.example](agentmem/.env.example)
-
----
-
-## Key endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/v1/memories` | Add a memory (admission control; supersession check; `Idempotency-Key` for exactly-once retries) |
-| `GET`/`POST` | `/v1/admissions` · `/{id}/resolve` | Review queue for held writes (PII/PHI/MNPI) — approve / reject |
-| `POST` | `/v1/memories/batch` | Batch ingest |
-| `POST` | `/v1/recall` | Hybrid BM25+cosine recall; optional `as_of`, MMR rerank (`filters._rerank=mmr`) |
-| `POST` | `/v1/context` | Token-budgeted, ready-to-inject context block (point-in-time + MMR aware) |
-| `POST` | `/v1/erase` | GDPR crypto-shred by `subject_id` |
-| `GET`  | `/v1/audit/reconstruct` | Reconstruct agent state at any past date |
-| `GET`  | `/v1/admin/audit/verify` | Verify SHA-256 hash chain integrity |
-| `GET`  | `/v1/admin/audit/export` | Export audit log (SEC/FINRA/CFTC) |
-| `GET`  | `/livez` | Liveness probe (cheap; process up) |
-| `GET`  | `/readyz` · `/health` | Readiness / deep health check (DB + Redis) |
-
-Interactive docs: `http://localhost:8000/docs`
-
----
-
-## Running tests
-
-```bash
-pip install -e ".[dev]"
+git clone https://github.com/Lians-ai/Lians.git
+cd Lians
+python -m pip install -e ".[dev]"
 python scripts/test_all.py
-
-# Benchmarks only (no API keys required)
-PYTHONPATH=agentmem/src python -m pytest \
-  agentmem/tests/test_supersession_benchmark.py \
-  agentmem/tests/test_recall_quality.py -v
 ```
 
-See [docs/testing.md](docs/testing.md) for the six named invariants (temporal soundness, audit immutability, erasure, etc.).
+Focused test runs and development conventions are in
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). Published package and registry
+versions are tracked in
+[docs/published-release-status.json](docs/published-release-status.json).
 
----
+## Community
 
-## Production & operations
+- Ask a question or report a bug in [GitHub Issues](https://github.com/Lians-ai/Lians/issues).
+- Request a new agent or framework integration with the
+  [integration template](https://github.com/Lians-ai/Lians/issues/new?template=integration_request.yml).
+- Read the [security policy](docs/SECURITY.md) before reporting a vulnerability.
 
-Built to run in a regulated production environment, not just to demo:
-
-- **Exactly-once writes** — `Idempotency-Key` on `POST /v1/memories`; the SDKs send a stable key automatically, so a retried write never duplicates.
-- **Resilient clients** — built-in retry with exponential backoff on transport errors / 5xx / 429.
-- **Kubernetes probes** — cheap `/livez` (liveness) and deep `/readyz` (readiness), so a dependency blip doesn't restart healthy pods.
-- **Rate limiting** — per-API-key sliding window (Redis), fails open.
-- **Access control** — namespace-scoped keys, `read`/`write`/`admin` scopes, **RBAC roles** (`owner`/`analyst`/`compliance`/`readonly`), and SSO via gateway forward-auth.
-- **DB-layer information barriers** — `RESTRICTIVE` PostgreSQL RLS, **proven in CI** against a non-superuser role. *Run the app as a non-superuser DB role* — superusers bypass RLS.
-- **Memory admission control** — govern what's *allowed into* memory: PII/PHI/MNPI detection, source-trust, prompt-injection quarantine, and a high-risk review queue (`ADMISSION_MODE`). No other memory layer does this.
-- **SIEM streaming** — every audit event forwarded to Splunk HEC / Datadog / Elastic (`SIEM_URL`), fire-and-forget.
-- **Observability** — Prometheus metrics + Grafana, OpenTelemetry traces, JSON access logs with a request ID.
-- **Evaluation** — a judge-free memory-eval harness (`agentmem/benchmarks/memory_eval.py`) in the LoCoMo/LongMemEval shape.
-
-Security & procurement docs: [security-whitepaper.md](docs/security-whitepaper.md) · [threat-model.md](docs/threat-model.md) · [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md) · [sso.md](docs/sso.md) · [publishing.md](docs/publishing.md)
-
----
-
-## Compliance
-
-| Requirement | Feature |
-|-------------|---------|
-| SEC 17a-4 tamper-evidence | SHA-256 hash chain on every audit row |
-| FINRA 4511 recordkeeping | Append-only `event_log` |
-| GDPR Art. 17 erasure | AES-256-GCM per-subject keys; crypto-shred |
-| MiFID II point-in-time | Bitemporal: `event_time` + `valid_from/valid_to` |
-| Information barriers | `barrier_group` column; PostgreSQL RLS |
-| HIPAA §164.312 | Per-subject encryption, audit controls, transmission security |
-
-> **Scope of these claims:** Lians provides the *technical controls* mapped
-> above — it is software, not a certification. Regulatory compliance is a
-> property of your deployment and organization (retention configuration,
-> policies, attestations such as SOC 2 or a HIPAA assessment), and several
-> controls require operator configuration (WORM object-lock, non-superuser DB
-> role, KMS). Every claim links to the doc that says exactly what is and
-> isn't covered — start with [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md).
-
-Full documentation: [compliance.md](docs/compliance.md) · [hipaa.md](docs/hipaa.md) · [security-whitepaper.md](docs/security-whitepaper.md) · [threat-model.md](docs/threat-model.md) · [soc2-hipaa-readiness.md](docs/soc2-hipaa-readiness.md) · [sso.md](docs/sso.md) · [worm-storage.md](docs/worm-storage.md)
-
-Access control: namespace-scoped API keys with `read`/`write`/`admin` scopes and RBAC roles (`owner`/`analyst`/`compliance`/`readonly`); SSO via gateway forward-auth (any OIDC/SAML IdP).
-
----
-
-## Packaging & Pricing
-
-Code already published in this repository remains available under Apache 2.0.
-The Community edition is a useful, self-managed memory and technical-evidence
-foundation, not a time-limited trial. Paid Lians packages monetize the service
-boundary: managed hosting and continuity, higher hosted limits, organization
-and policy administration, managed evidence operations, deployment review,
-support, and contractual commitments. Future hosted control-plane services may
-ship outside this public repository.
-
-The managed cloud is in early access for customers whose compliance posture
-allows hosted processing (contact us). Do not describe a paid feature, quota,
-or SLA as generally available until it is enabled in the customer's contract
-and environment.
-
-| Package | Best for | Deployment | Commercial model |
-|---|---|---|---|
-| **Developer** | Local prototypes, benchmarks, integrations | Local library or single-node server | Free / usage-based |
-| **Team** | Internal pilots and non-production agent workflows | Docker or small Kubernetes deployment | Usage-based or team plan |
-| **Regulated Production** | Sensitive, audited, time-dependent agent workloads | Customer cloud, private VPC, or on-prem | Annual contract |
-| **Enterprise / Air-Gap** | Banks, hospitals, law firms, insurers, government | Private cloud, on-prem, or air-gapped | Custom annual contract |
-| **Managed Cloud** | Zero-ops production where hosted processing is approved | Lians-managed environment | Contract or usage-based |
-
-Healthcare customers require an executed BAA before PHI is processed in a
-managed environment. Financial and legal customers may require customer-managed
-keys, private networking, regional residency, dedicated environments, or
-air-gapped deployment.
-
-Full packaging documentation: [public/paid product boundary](docs/community-cloud-boundary.md), [package guide](docs/pricing-tiers.md), and [managed billing design](docs/billing.md)
-
-**Switching from another system?** [Migrate from mem0](docs/migrate-from-mem0.md) or [Migrate from Zep CE](docs/migrate-from-zep.md)
-
----
+If Lians is useful to you, [star the repository](https://github.com/Lians-ai/Lians/stargazers).
+It helps other agent developers find the project.
 
 ## License
 
