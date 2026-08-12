@@ -19,6 +19,15 @@ is stored in a local SQLite file under the operating system's per-user Lians
 data directory. Selected clients use the same `personal` profile, so a fact
 saved in one can be recalled in another.
 
+## Release trust gate
+
+Do not promote the desktop installer broadly until its Windows builds are
+code-signed and its macOS builds are signed with an Apple Developer ID and
+notarized. Until those credentials and release steps are in place, treat the
+standalone artifacts as prerelease builds for technical evaluation; Windows
+SmartScreen and macOS Gatekeeper may otherwise show operating-system trust
+warnings.
+
 The core tools are intentionally understandable:
 
 | Tool | Purpose |
