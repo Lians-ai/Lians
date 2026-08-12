@@ -24,6 +24,10 @@ body:
         - Java SDK
         - C SDK
         - MCP server
+        - Codex plugin
+        - Cursor integration
+        - Claude integration
+        - Gemini integration
         - HTTP API
         - Local engine
         - Documentation

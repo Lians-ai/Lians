@@ -65,6 +65,10 @@ if ($Action -eq "hook") {
     $startInfo.Arguments = '-B "' + $launcher + '" ' + $Action
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardInput = $true
+    # Process.StandardInput is a StreamWriter backed by Console.InputEncoding
+    # on Windows PowerShell's .NET Framework. Select BOM-less UTF-8 before that
+    # writer is created so BaseStream forwarding remains byte-for-byte exact.
+    [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
     try {

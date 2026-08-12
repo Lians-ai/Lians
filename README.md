@@ -46,14 +46,24 @@
 
 ---
 
-[Lians](https://github.com/Lians-ai/Lians) is the **memory and decision
-intelligence layer that helps AI do more useful work with less context**. It
-gives a model the right memories instead of forcing it to reread the entire
-history, then preserves the evidence needed to understand important decisions.
+# Give the AI you already use a memory.
 
-This is not another generic AI infrastructure layer. Lians is built around a
-user outcome: AI that remembers what matters, responds with less prompt bloat,
-improves from outcomes, and can still explain what it knew and did.
+[Lians](https://github.com/Lians-ai/Lians) is a local-first memory add-on for
+**Codex, Cursor, Claude, Gemini, and any MCP-compatible assistant**. Keep your
+AI and your workflow. Lians remembers important facts and decisions across
+chats, recalls only the relevant slice, and preserves where that memory came
+from.
+
+- **Remember what matters**: preferences, project facts, constraints, and
+  decisions survive the next chat.
+- **Use less repeated context**: recall a small relevant slice instead of
+  resending the whole history.
+- **Keep the evidence**: source, time, supersession, and decision records remain
+  available when an answer needs to be checked.
+
+Start with [Codex](#install-a-community-connector-from-github),
+[Cursor](integrations/cursor), [Claude Code](integrations/lians-plugin),
+[Gemini CLI](integrations/gemini), or [any MCP host](#any-other-mcp-host).
 
 **Measured token efficiency.** In the published
 [LoCoMo token-efficiency benchmark](agentmem/docs/benchmarks/locomo-token-efficiency-2026-07-10.md),
@@ -114,8 +124,8 @@ evidence turn it into a product that people and organizations can trust.
 
 The GitHub Community edition gives an individual developer durable, bounded
 memory without tying it to one model provider. The same memory pattern can sit
-beside Codex, Claude, Gemini, or another MCP-compatible client. Model access,
-context-window size, and provider quotas do not change; Lians can reduce
+beside Codex, Cursor, Claude, Gemini, or another MCP-compatible client. Model
+access, context-window size, and provider quotas do not change; Lians can reduce
 repeated context when relevant memory replaces material that would otherwise
 be resent.
 
@@ -126,6 +136,13 @@ git clone https://github.com/Lians-ai/Lians.git
 codex plugin marketplace add /absolute/path/to/Lians
 codex plugin add lians-memory@lians
 ```
+
+**Cursor**
+
+Copy [`integrations/cursor/mcp.example.json`](integrations/cursor/mcp.example.json)
+to `.cursor/mcp.json` for one project, or merge it into `~/.cursor/mcp.json` for
+all projects. The starter profile is local, needs no API key, and exposes only
+`remember` and `recall`; see the [Cursor setup guide](integrations/cursor/README.md).
 
 **Claude Code**
 
@@ -222,7 +239,7 @@ Your agents get eight tools automatically:
 | `fact_history` | Time-series view of a ticker+metric (e.g. AAPL EPS) |
 | `backtest_check` | Detect lookahead bias before a backtest runs |
 
-### Claude Desktop / Cursor / Windsurf
+### Claude Desktop / Windsurf
 
 Add to your `claude_desktop_config.json` (or equivalent MCP config):
 
@@ -397,14 +414,15 @@ Endpoints: `POST /v1/graph/relate` · `/v1/graph/unrelate` · `/v1/graph/extract
 
 ---
 
-## Agent integrations — Claude Code, Codex, Gemini, MCP
+## Agent integrations — Codex, Cursor, Claude, Gemini, MCP
 
 Give any coding agent persistent, compliance-grade memory:
 
 | Host | How |
 |------|-----|
-| **Claude Code** | GitHub marketplace plugin with memory, integration, and technical-evidence commands — [`integrations/lians-plugin`](integrations/lians-plugin) |
 | **Codex** | GitHub marketplace plugin with bounded automatic recall and compact memory tools — [`plugins/lians-memory`](plugins/lians-memory) |
+| **Cursor** | Project or global MCP profile with local memory and explicit tool approval — [`integrations/cursor`](integrations/cursor) |
+| **Claude Code** | GitHub marketplace plugin with memory, integration, and technical-evidence commands — [`integrations/lians-plugin`](integrations/lians-plugin) |
 | **Gemini CLI** | Provider-neutral MCP starter profile exposing `remember` and `recall` — [`integrations/gemini`](integrations/gemini) |
 | **Skills standard** | `npx skills add https://github.com/Lians-ai/Lians --skill lians` — works in Claude Code, Codex, Cursor — [`skills/`](skills) |
 | **Any MCP host** | One-time config; eight native memory tools — see [MCP section](#mcp--native-tool-in-any-ai-client) above |
