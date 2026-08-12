@@ -1,129 +1,155 @@
 # Install Lians
 
-One memory API, five client implementations, and a self-hostable server. Pick your
-language for the core memory contract; advanced decision-evidence, learning, and
-webhook coverage currently varies by client.
+Lians is a memory tool for AI agents. Use MCP to add memory to an existing AI
+client, use the local Python SDK inside an application, or connect an SDK to a
+self-hosted Lians server.
 
-> **Just want to try it?** The fastest path is Python local mode — no server, no
-> Docker, no API key:
-> ```bash
-> pip install lians-sdk[local]
-> ```
+## Existing AI client: use MCP
 
-## Install matrix
+This is the recommended path for Claude Desktop, Cursor, Windsurf, VS Code,
+Gemini CLI, and other MCP-compatible agents.
 
-| Language | Install | Import / entry point |
-|----------|---------|----------------------|
-| **Python 0.4.2** | `pip install lians-sdk==0.4.2` | `from lians import LiansClient` |
-| **Python 0.4.2 (local, no server)** | `pip install "lians-sdk[local]==0.4.2"` | `from lians import LocalLiansClient` |
-| **TypeScript / Node 0.4.0** | `npm install @lians-ai/lians@0.4.0` | `import { LiansClient } from "@lians-ai/lians"` |
-| **Go 0.4.1** | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1` | `lians.NewClient(url, key)` |
-| **Java 0.4.1** (JVM 11+) | Maven `ai.lians:lians-sdk:0.4.1` | `new LiansClient(opts)` |
-| **C 0.4.1** (C99 + libcurl) | check out `v0.4.1`, then `cmake -S agentmem/sdk/c -B build` | `lians_client_new(...)` |
+Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/), then add
+this server to your client's MCP configuration:
 
-Published versions currently differ by ecosystem. The exact registry state is
-tracked in [`published-release-status.json`](published-release-status.json) and
-can be checked with `python scripts/check_published_artifacts.py` from the repo root.
-
-## Run the server
-
-The SDKs (except Python local mode) talk to a Lians server. Self-host it:
-
-```bash
-git clone https://github.com/Lians-ai/Lians
-cd Lians
-docker compose up --build        # Postgres + pgvector + API on :8000
+```json
+{
+  "mcpServers": {
+    "lians": {
+      "command": "uvx",
+      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
+      "env": {
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall"
+      }
+    }
+  }
+}
 ```
 
-Health check: `curl localhost:8000/livez`. See [DEPLOY.md](../DEPLOY.md) for
-production (KMS, non-superuser DB role for RLS, air-gap mode, WORM storage).
+Restart the client. Local mode needs no Lians account, API key, or Docker
+service and stores memory in `~/.lians/mcp.db`.
 
-## 30-second hello, by language
+The starter configuration exposes only `remember` and `recall`. Remove the
+`LIANS_MCP_ENABLED_TOOLS` setting to expose the complete tool set, including
+point-in-time recall, reconstruction, lineage, conflict, and backtest tools.
 
-### Python (local — no server)
+Client-specific examples:
+
+- [Cursor](../integrations/cursor)
+- [Gemini CLI](../integrations/gemini)
+- [Claude Code](../integrations/lians-plugin)
+- [Codex](../plugins/lians-memory)
+
+## Python: local memory
+
+Use this path for a Python application, notebook, or custom agent loop:
+
+```bash
+pip install "lians-sdk[local]"
+```
+
 ```python
-from lians import LocalLiansClient
 from datetime import datetime, timezone
+from lians import LocalLiansClient
 
-mem = LocalLiansClient()
-mem.add(agent_id="desk", content="NVDA guidance raised to $40B",
-        event_time=datetime(2025, 11, 19, tzinfo=timezone.utc),
-        metadata={"ticker": "NVDA", "metric": "guidance"})
-print(mem.recall(agent_id="desk", query="NVDA guidance")["memories"])
+memory = LocalLiansClient(db_path=".lians/memory.db")
+
+memory.add(
+    agent_id="my-agent",
+    content="The project uses Python 3.12 and pytest.",
+    event_time=datetime.now(timezone.utc),
+    metadata={"project": "demo", "topic": "tooling"},
+)
+
+result = memory.recall(
+    agent_id="my-agent",
+    query="Which Python version and test runner should I use?",
+)
+
+print([item["content"] for item in result["memories"]])
 ```
 
-### Python (server)
-```python
-from lians import LiansClient
-mem = LiansClient(base_url="https://mem.yourfirm.internal", api_key="...")
-```
+The first run may download the local embedding model. Use a persistent
+`db_path` to keep memory between application runs.
 
-### TypeScript / Node
-```ts
-import { LiansClient } from "@lians-ai/lians";
-const client = new LiansClient({ baseUrl: "http://localhost:8000", apiKey: process.env.LIANS_API_KEY! });
-await client.addMemory({ agent_id: "desk", content: "NVDA guidance raised to $40B",
-                         event_time: "2025-11-19T16:00:00Z", metadata: { ticker: "NVDA" } });
-const { memories } = await client.recall({ agent_id: "desk", query: "NVDA guidance" });
-```
-
-### Go
-```go
-import "github.com/Lians-ai/Lians/agentmem/sdk/go"
-
-c := lians.NewClient("http://localhost:8000", os.Getenv("LIANS_API_KEY"))
-_, _ = c.AddMemory(ctx, lians.AddMemoryRequest{
-    AgentID: "desk", Content: "NVDA guidance raised to $40B",
-    EventTime: time.Date(2025, 11, 19, 16, 0, 0, 0, time.UTC),
-    Metadata: map[string]any{"ticker": "NVDA"},
-})
-```
-
-### Java
-```xml
-<dependency>
-  <groupId>ai.lians</groupId>
-  <artifactId>lians-sdk</artifactId>
-  <version>0.4.1</version>
-</dependency>
-```
-```java
-var client = new LiansClient(LiansOptions.builder()
-        .baseUrl("http://localhost:8000").apiKey(System.getenv("LIANS_API_KEY")).build());
-```
-
-### C
-```bash
-cd agentmem/sdk/c && cmake -B build && cmake --build build   # needs libcurl
-```
-```c
-#include "lians.h"
-lians_client *c = lians_client_new("http://localhost:8000", getenv("LIANS_API_KEY"));
-```
-
-## MCP — use Lians as a native tool
-
-Any MCP host (Claude Desktop, Cursor, Windsurf) can use Lians directly. See the
-[MCP section of the README](../README.md#mcp---native-tool-in-any-ai-client).
-
-## Framework integrations (Python)
+## Install from source
 
 ```bash
-pip install lians-sdk[langchain]    # LangChain chat history & tools
-pip install lians-sdk[langgraph]    # LangGraph node factories
-pip install lians-sdk[crewai]       # CrewAI tools
-pip install lians-sdk[all]          # everything
+git clone https://github.com/Lians-ai/Lians.git
+cd Lians
+python -m pip install -e "agentmem/sdk/python[local,mcp]"
 ```
 
-## Verify a release
+The editable install provides `LocalLiansClient` and the `lians-mcp` command.
+Developers who want the complete service and test dependencies can instead run:
 
 ```bash
-pip install lians-sdk==0.4.2
-npm view @lians-ai/lians version
-go list -m github.com/Lians-ai/Lians/agentmem/sdk/go@v0.4.1
-curl -fsSL https://repo1.maven.org/maven2/ai/lians/lians-sdk/maven-metadata.xml
+python -m pip install -e ".[dev]"
+```
+
+## Language SDKs
+
+The current release line is `0.5.0`. The Python and TypeScript packages are
+published to registries; Go, Java, and C clients are versioned with the repository.
+
+| Language | Install | Client |
+|---|---|---|
+| Python | `pip install lians-sdk` | `from lians import LiansClient` |
+| TypeScript / Node | `npm install @lians-ai/lians` | `import { LiansClient } from "@lians-ai/lians"` |
+| Go | `go get github.com/Lians-ai/Lians/agentmem/sdk/go@v0.5.0` | `lians.NewClient(url, key)` |
+| Java 11+ | Maven `ai.lians:lians-sdk:0.5.0` | `new LiansClient(options)` |
+| C99 | Check out `v0.5.0`, then build `agentmem/sdk/c` | `lians_client_new(...)` |
+
+The non-local clients connect to a hosted or self-hosted Lians HTTP service.
+See each SDK directory for the exact API surface:
+
+- [Python](../agentmem/sdk/python)
+- [TypeScript](../agentmem/sdk/typescript)
+- [Go](../agentmem/sdk/go)
+- [Java](../agentmem/sdk/java)
+- [C](../agentmem/sdk/c)
+
+## Framework integrations
+
+```bash
+pip install "lians-sdk[langchain]"
+pip install "lians-sdk[langgraph]"
+pip install "lians-sdk[crewai]"
+pip install "lians-sdk[openai-agents]"
+pip install "lians-sdk[autogen]"
+```
+
+Or install every optional integration:
+
+```bash
+pip install "lians-sdk[all]"
+```
+
+## Self-host Lians
+
+Use the full service when multiple agents or users need a shared deployment:
+
+```bash
+git clone https://github.com/Lians-ai/Lians.git
+cd Lians/agentmem
+cp .env.demo .env
+docker compose up --build -d
+python scripts/seed_demo.py
+```
+
+The API is available at `http://localhost:8000`; interactive documentation is
+at `http://localhost:8000/docs`. See the [deployment guide](deploy.md) before
+running a production environment.
+
+## Verify published versions
+
+The machine-readable release matrix lives in
+[`published-release-status.json`](published-release-status.json). Verify it
+against live registries with:
+
+```bash
 python scripts/check_published_artifacts.py
 ```
 
-Maintainers: see [RELEASING.md](../RELEASING.md). A tag starts the release train;
-do not call it complete until every registry check passes.
+Maintainers should follow [RELEASING.md](../RELEASING.md) for the complete release
+process.

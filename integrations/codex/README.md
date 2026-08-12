@@ -1,49 +1,52 @@
 # Lians for Codex
 
-Persistent, financial-grade memory for the [Codex](https://github.com/openai/codex)
-agent — with inspectable controls regulated teams can validate (bitemporal recall,
-a tamper-evident audit chain, crypto-shred erasure, and information barriers).
+Give Codex memory across tasks without changing the model or your workflow.
+The default setup runs locally, needs no Lians account or API key, and exposes
+only `remember` and `recall`.
 
-## Two ways to wire it in
+## Install
 
-### 1. AGENTS.md (recommended)
+1. Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/).
+2. Copy the block from [`config.example.toml`](config.example.toml) into
+   `~/.codex/config.toml`.
+3. Restart Codex.
 
-Copy [`AGENTS.md`](./AGENTS.md) to your project root (or merge it into an existing
-`AGENTS.md`). Codex reads it automatically and learns when and how to recall and
-remember through the Lians SDK / harness.
+Try:
 
-```bash
-cp integrations/codex/AGENTS.md ./AGENTS.md
-pip install lians-sdk          # or lians-sdk[local] for zero-setup SQLite
+```text
+Remember that this repository uses Python 3.12 and pytest.
 ```
 
-Set `LIANS_URL`, `LIANS_API_KEY`, and `LIANS_AGENT_ID` in your environment (free
-key in the [Lians Console](https://www.lians.ai/login)). Local mode needs no env vars.
+Then open another task and ask:
 
-### 2. MCP server (native tools)
-
-Add the block from [`config.example.toml`](./config.example.toml) to
-`~/.codex/config.toml`. Codex gains eight native memory tools (`remember`,
-`recall`, `recall_at`, `reconstruct`, `list_conflicts`, `memory_lineage`,
-`fact_history`, `backtest_check`) with no SDK code in your project.
-
-## Install via the skills standard
-
-Lians ships cross-tool skills installable with `npx skills add` (works for Codex,
-Claude Code, Cursor, and other skills-standard hosts):
-
-```bash
-npx skills add https://github.com/Lians-ai/Lians --skill lians
-npx skills add https://github.com/Lians-ai/Lians --skill lians-integrate
+```text
+What Python version and test runner does this repository use?
 ```
 
-See [`../../skills/`](../../skills) for the skill definitions.
+Memory is stored in `~/.lians/mcp.db`. Set `LIANS_LOCAL_DB` if you want a
+different location.
 
-## Why Lians over a plain vector store
+## Add project instructions
 
-Codex agents that touch financial, clinical, or legal facts accumulate data that
-**changes over time** — guidance revisions, dosage changes, matter status. A plain
-vector store returns every version with equal rank and contaminates your context.
-Lians excludes superseded facts at the database layer and can reconstruct exactly
-what the agent knew at any past date. See the
-[mem0 comparison](../../docs/compare-mem0.md).
+Copy [`AGENTS.md`](AGENTS.md) to a project root, or merge its memory rules into
+an existing `AGENTS.md`. It tells Codex what is worth remembering and what
+should never be stored.
+
+## Install the Lians plugin
+
+The repository also includes the [`lians-memory`](../../plugins/lians-memory)
+plugin for a packaged Codex experience:
+
+```text
+git clone https://github.com/Lians-ai/Lians.git
+codex plugin marketplace add /absolute/path/to/Lians
+codex plugin add lians-memory@lians
+```
+
+## Advanced tools
+
+Remove the `LIANS_MCP_ENABLED_TOOLS` line from the MCP configuration to expose
+point-in-time recall, reconstruction, conflicts, lineage, fact history, and
+backtest checks.
+
+For the complete product overview, see the [root README](../../README.md).
