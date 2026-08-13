@@ -2,11 +2,21 @@
 
 | run | retrieval | total return | Sharpe | max drawdown |
 |---|---|---:|---:|---:|
-| **Contaminated** | `recall()` — present-time, full history visible | +44.0% | **4.6** | -4.3% |
-| **Honest** | `recall_at(as_of=decision_time)` | -4.2% | -0.6 | -12.8% |
+| **Contaminated** | `recall()` — present-time, full history visible | +41.3% | **3.9** | -4.3% |
+| **Honest** | `recall_at(as_of=decision_time)` | -0.9% | -0.1 | -10.1% |
 | Buy & hold | — | +1.4% | 0.4 | -5.4% |
 
-Contaminated retrievals: **918** (see `receipts.md` / `receipts.csv`).
+Contaminated retrievals: **858** (see `receipts.md` / `receipts.csv`).
+
+## Reproduction contract
+
+- embedding provider: `local` (deterministic test provider)
+- dataset: committed synthetic `data/` fixture, seed 42
+- external services and API keys: none
+
+The provider is pinned because this demo measures temporal leakage, not semantic
+model quality. Production local recall should use the SDK's normal semantic
+provider selection.
 
 ## The programmatic proof: `backtest_check()`
 
