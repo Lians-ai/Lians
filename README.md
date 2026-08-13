@@ -9,7 +9,8 @@
   <a href="docs/install.md">Install</a> ·
   <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
   <a href="https://github.com/Lians-ai/Lians/issues">Issues</a> ·
-  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
+  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a> ·
+  <a href="https://github.com/Lians-ai"><strong>Follow @Lians-ai</strong></a>
 </p>
 
 <p align="center">
