@@ -20,10 +20,13 @@ practical. For example, the Cursor and Gemini starter profiles expose only
 `remember` and `recall`, and the Codex plugin injects a score-gated, bounded
 slice of memory.
 
-## Lians Cloud and enterprise packages
+## Lians Personal and organization packages
 
 Commercial value sits at the managed service and organizational boundary:
 
+- Lians Personal at $10 per month for one managed account, a private memory
+  workspace, 100,000 writes and 50,000 recalls per month, memory controls, and
+  email setup support;
 - hosted continuity across supported clients and devices;
 - shared/team memory and organization administration;
 - higher managed storage, write, recall, and operational limits;
@@ -33,9 +36,11 @@ Commercial value sits at the managed service and organizational boundary:
 - private networking, residency, customer-managed keys, dedicated deployment,
   or air-gap assistance where contracted.
 
-Availability and limits are contract- and environment-specific. A capability
-must not be presented as generally available until it is operating in the
-customer's environment and covered by the applicable order form or plan.
+The public Lians Personal allowance is enforced through the production
+subscription entitlement. Organization capabilities and limits are contract-
+and environment-specific. A capability must not be presented as generally
+available until it is operating in the customer's environment and covered by
+the applicable order form or plan.
 
 ## Licensing boundary
 

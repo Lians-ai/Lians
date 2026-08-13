@@ -5,8 +5,9 @@ published under Apache 2.0 stays under Apache 2.0; commercial packages sell
 managed capacity, organizational operation, evidence services, deployment
 assurance, and contractual commitments.
 
-This is a packaging guide, not a public price list. Confirm availability,
-limits, pricing, and contractual terms before quoting a customer.
+Community and Lians Personal below are public self-serve offers. Confirm the
+current checkout before quoting a price or allowance. Organization packages
+remain scoped to the deployment, workflow, evidence, and support boundary.
 
 ## Community
 
@@ -27,19 +28,25 @@ Community does not include a Lians-hosted production tenant, cross-device
 account, team administration, higher hosted limits, an SLA, or managed evidence
 review.
 
-## Managed Developer
+## Lians Personal — $10/month
 
-*For developers who want hosted continuity without operating the memory layer.*
+*For one person who wants hosted continuity without operating the memory layer.*
 
-**Deployment:** Lians-managed service, where available
+**Deployment:** Lians-managed service through a monthly self-serve subscription
 
-**Commercial value:**
+**Includes:**
 
-- Hosted continuity across supported clients and devices
-- Managed identity and storage
-- Defined hosted usage allowance
-- Upgrade path to higher managed limits
-- Standard service support
+- One managed Lians account and private memory workspace
+- Hosted continuity across supported API and MCP connections
+- 100,000 memory writes and 50,000 recalls per month
+- Memory inspection, correction, deletion, and export controls
+- Email setup support
+- Monthly billing with cancellation at any time
+
+Personal does not change the underlying model, increase a provider quota, or
+promise lower token use on every task. It can reduce repeated context when a
+small relevant recall replaces conversation history that would otherwise be
+resent, and results should be verified on the user's workflow.
 
 ## Team
 
@@ -93,10 +100,10 @@ strict residency, isolation, or procurement requirements.*
 
 ## Pricing principle
 
-Developer service may be usage-based. Institutional pricing should be tied to
-the deployment boundary, managed limits, support obligation, evidence scope,
-and contractual risk. Do not quote a hosted tier or limit until enforcement and
-entitlements are active for that environment.
+Lians Personal is the simple public on-ramp. Institutional pricing should be
+tied to the deployment boundary, managed limits, support obligation, evidence
+scope, and contractual risk. Do not quote an organization tier or limit until
+enforcement and entitlements are active for that environment.
 
 See the [Community and commercial boundary](community-cloud-boundary.md) and
 the [managed billing design](billing.md).
