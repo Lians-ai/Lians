@@ -43,7 +43,7 @@ local         = [
     # LocalLiansClient defaults to this provider when it is installed. Keep it
     # in the local extra so the documented install never falls back to the
     # deterministic test-grade embedding stub.
-    "sentence-transformers>=3.0",
+    "sentence-transformers>=5.7.0",
 ]
 bge-onnx      = [
     "sqlalchemy[asyncio]>=2.0",
@@ -70,7 +70,7 @@ mcp           = [
     "numpy>=1.26",
     "fastapi>=0.110",
     "asyncpg>=0.29",
-    "sentence-transformers>=3.0",
+    "sentence-transformers>=5.7.0",
 ]
 all           = [
     "lians-sdk[langchain,langgraph,crewai,openai-agents,autogen,local,bge-onnx,mcp]",
