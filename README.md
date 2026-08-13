@@ -8,6 +8,7 @@
   <a href="https://www.lians.ai/">Website</a> ·
   <a href="docs/install.md">Install</a> ·
   <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
+  <a href="https://www.lians.ai/pricing">Pricing</a> ·
   <a href="https://github.com/Lians-ai/Lians/issues">Issues</a> ·
   <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a> ·
   <a href="https://github.com/Lians-ai"><strong>Follow @Lians-ai</strong></a>
@@ -33,6 +34,21 @@ Your agent can remember a useful fact now and recall it when it matters later.
 
 Lians is a memory layer, not another assistant. Your agent and model stay the
 same; Lians gives them a place to remember.
+
+## Start free. Upgrade only when it saves you time.
+
+- **Community is free:** run Lians locally or self-host it with no account,
+  API key, or software license fee.
+- **Lians Personal is $10/month:** get a managed account, a private hosted
+  memory workspace, 100,000 writes and 50,000 recalls each month, export and
+  deletion controls, and email setup support. Cancel anytime.
+
+[Install the free local version](docs/easy-install.md) or
+[get Lians Personal](https://www.lians.ai/upgrade?plan=starter).
+
+Lians does not change the underlying model or promise fewer tokens on every
+task. It can avoid resending old conversation when a small relevant recall is
+enough; verify the result on your own workflow.
 
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
@@ -179,6 +195,7 @@ Java, C, framework adapters, and self-hosting.
 | Add memory without a terminal | [Lians Easy](docs/easy-install.md) |
 | Give an existing AI client memory from a terminal | [MCP setup](#developer-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
+| Use managed private memory without running a server | [Lians Personal — $10/month](https://www.lians.ai/upgrade?plan=starter) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
 | Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
