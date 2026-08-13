@@ -1,6 +1,6 @@
 # Lians Memory universal plugin production checklist
 
-> **Production OAuth/MCP E2E and reviewer fixture provisioning passed; OpenAI portal gates pending:** production workflow [31349405257](https://github.com/Lians-ai/Lians/actions/runs/31349405257) most recently deployed build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` at schema `0030_force_hosted_mcp_rls`. Three distinct production Machines passed the cold-boot qualification, and each cited workflow recorded a single immediate post-MCP result with health, liveness, and readiness `ok`. The cited workflows do not attest an extended post-MCP observation window or later degradation state. During the minute `2026-08-10T03:41Z`, a sanitized production OAuth E2E passed protected-resource metadata, OIDC discovery, DCR, browser login, authorization callback, token exchange, repository JWT verification, the authenticated endpoint checker, MCP remember/recall/confirmed-forget calls, and session cleanup. Auth0 recorded the reviewer login at `2026-08-10T03:40:58Z`, and the published three-record reviewer fixture is live and verified. Fixture reset rehearsal and secure portal credential entry, OpenAI publisher and business verification, domain verification, Scan Tools, the demo, portal selection of the operator-approved United States and United Kingdom scope, submission, review, and publication remain pending.
+> **Production OAuth/MCP E2E, publisher verification, and reviewer fixture provisioning passed; remaining OpenAI portal gates pending:** production workflow [31349405257](https://github.com/Lians-ai/Lians/actions/runs/31349405257) most recently deployed build `e72fad2c7f98ecf54b6553a90bf8d862046c1abc` at schema `0030_force_hosted_mcp_rls`. Three distinct production Machines passed the cold-boot qualification, and each cited workflow recorded a single immediate post-MCP result with health, liveness, and readiness `ok`. The cited workflows do not attest an extended post-MCP observation window or later degradation state. During the minute `2026-08-10T03:41Z`, a sanitized production OAuth E2E passed protected-resource metadata, OIDC discovery, DCR, browser login, authorization callback, token exchange, repository JWT verification, the authenticated endpoint checker, MCP remember/recall/confirmed-forget calls, and session cleanup. Auth0 recorded the reviewer login at `2026-08-10T03:40:58Z`; the `Lians, Ai` business identity is verified in the OpenAI portal; the submitter's Apps Management owner role is validated; and the published two-record reviewer fixture is live and verified. Secure portal credential entry, developer-mode rehearsal, the skill/domain/tool scans, the demo, portal selection of the operator-approved United States and United Kingdom scope, submission, review, and publication remain pending.
 
 The universal package is under `plugins/lians-memory-universal/`. It contains no local hooks, setup scripts, vendored Python runtime, or custom UI. The implemented hosted MCP contract is in `agentmem/src/lians/openai_mcp.py`; the deployed service must match it exactly.
 
@@ -17,12 +17,13 @@ The universal package is under `plugins/lians-memory-universal/`. It contains no
 - Verified production schema: `0030_force_hosted_mcp_rls`
 - Verified public boundary: HTTPS, protected-resource metadata, and unauthenticated OAuth challenge
 - Verified authenticated boundary: OIDC discovery, DCR, browser login and callback, token exchange, repository JWT verification, authenticated endpoint contract checking, MCP remember/recall/confirmed-forget calls, and session cleanup passed during minute `2026-08-10T03:41Z`
-- Reviewer evidence: Auth0 displayed the latest login at `2026-08-10T03:40:58Z`, and the public synthetic three-record fixture is live and verified; reset rehearsal and secure portal credential delivery remain pending
+- Reviewer evidence: Auth0 displayed the latest login at `2026-08-10T03:40:58Z`, and the public synthetic two-record fixture is live and verified; developer-mode rehearsal and secure portal credential delivery remain pending
+- Publisher evidence: the `Lians, Ai` business identity is verified in the OpenAI portal, and the submitter's Apps Management owner role is validated
 - Temporary DCR cleanup: no cleanup endpoint was advertised, so the exact temporary client was manually deleted and the remaining registered-client inventory was verified as zero
 - Cold-boot qualification: three successful production rehearsals on distinct Machine IDs; machine-start to first `1/1 passing` readiness was `197.528`, `197.947`, and `197.963` seconds, so the observed maximum `197.963` seconds was below the 360-second hosted startup timeout
 - Post-MCP health: each workflow recorded one single immediate result with health, liveness, and readiness `ok`; it does not attest an extended observation window or later degradation state
 - Fly grace disclosure: the deploy logs warned that the configured 420-second (`7m0s`) HTTP-check grace period was lowered to an effective one minute; the configured 420 seconds was **not honored** and is not part of the qualification claim
-- Pending portal boundary: OpenAI business and domain verification, Scan Tools, reviewer fixture reset rehearsal and secure credential entry, launch-country selection, demo, submission, review, and publication
+- Pending portal boundary: secure reviewer credential entry, developer-mode rehearsal, the skill/domain/tool scans, launch-country selection, demo, submission, review, and publication
 - Claim boundary: Lians can reduce repeated context setup when relevant memory exists. It does not increase OpenAI or Codex quotas, bypass rate limits, or guarantee faster total responses.
 
 `mcp.urlStatus: validated_live` records that the canonical public endpoint is live. `mcp.liveVerification.authenticatedMcpStatus: validated_production_oauth_e2e` separately records the sanitized operator-run production OAuth/MCP check; it is not an OpenAI portal Scan Tools result or approval. Do not submit while `submission/metadata.json` contains a pending submission gate. The availability value `operator_selected_pending_submission` records the approved launch-country scope; it does not mean the countries are selected in the portal or that the plugin is submitted, approved, published, or listed.
@@ -58,7 +59,7 @@ Tool discovery must match this table and `submission/metadata.json`:
 - [ ] Keep `recall` bounded and mark `readOnlyHint: false` and `idempotentHint: false` because every call writes an audit receipt, even though memory content is unchanged.
 - [ ] Ensure `recall.context` starts with the untrusted-data warning and an empty result says no relevant memory was found.
 - [ ] Keep `forget_memory` limited to one active, tenant-owned hosted-MCP memory reference. Require `confirm: true`; `confirm: false` must return an error and perform no deletion.
-- [ ] Verify confirmed deletion permanently crypto-shreds the selected memory, returns `status: forgotten`, and reports the actual `memories_erased` count.
+- [ ] Verify confirmed removal immediately crypto-shreds the selected memory from active service storage, returns `status: forgotten`, reports the actual `memories_erased` count, and discloses that encrypted provider backups may retain a recoverable copy for up to 5 days.
 - [ ] Verify an absent, already-forgotten, foreign-tenant, or non-hosted reference returns `status: not_found` with `memories_erased: 0` and reveals no cross-tenant detail.
 - [ ] Enforce per-user and per-tenant authorization in the server, not in skill instructions.
 - [ ] Add timeouts, workload rate limits, retry-safe reads, and bounded response sizes.
@@ -82,8 +83,9 @@ Tool discovery must match this table and `submission/metadata.json`:
 - [ ] Confirm `remember` and `forget_memory` require `memory:write`; confirm `recall` requires only `memory:read`.
 - [ ] Return `_meta["mcp/www_authenticate"]` with a useful challenge when linking, reauthorization, or additional scope is required.
 - [ ] Add the portal-provided `https://chatgpt.com/connector/oauth/{callback_id}` redirect URI to the authorization-server allowlist.
-- [x] Prepare the dedicated reviewer account and provision the published three-record fixture. Browser login succeeded, Auth0 displayed the reviewer account's latest login at `2026-08-10T03:40:58Z`, and the public synthetic fixture references were verified live.
-- [ ] Rehearse fixture reset before each case and enter the temporary reviewer credential only in the portal's secure field.
+- [x] Prepare the dedicated reviewer account and provision the two published fixed records. Browser login succeeded, Auth0 displayed the reviewer account's latest login at `2026-08-10T03:40:58Z`, and the `architecture-current` and `region-current` references were verified live.
+- [ ] Rehearse all five positive and three negative cases in OpenAI developer mode. Case 4 must create a disposable record without an idempotency key, forget its returned UUID, and retry the exact forget call for `not_found`/`0`; it must not delete or require resetting a fixed fixture record.
+- [ ] Enter the temporary reviewer credential only in the portal's secure field.
 
 ## 4. Enforce privacy and destructive-action boundaries
 
@@ -101,7 +103,7 @@ Tool discovery must match this table and `submission/metadata.json`:
 - [x] Treat `audit_retention_days` as a minimum only. The operator approved indefinite retention of pseudonymous, content-free append-only audit records on 2026-08-09, and the public privacy policy discloses it.
 - [x] Publish a privacy policy covering collected data, purposes, recipients, retention, deletion, access, export, correction, and user controls.
 - [x] Record provider-backed backup evidence: the encrypted Fly PostgreSQL volumes and current snapshots report five-day retention; Fly documents snapshot restoration; the public policy discloses that deleted content can remain recoverable until snapshot expiry. A restored pre-deletion snapshot is not claimed to contain a later tombstone.
-- [ ] Require fresh, explicit user confirmation before each irreversible `forget_memory` call. Never infer confirmation from an earlier unrelated message.
+- [ ] Require fresh, explicit user confirmation before each destructive `forget_memory` call, including disclosure of immediate active-service crypto-shredding and the encrypted provider backup window of up to 5 days. Never infer confirmation from an earlier unrelated message.
 - [ ] Test prompt injection, cross-tenant access, scope escalation, replay, secret ingestion, bulk transcript ingestion, and data exfiltration.
 
 ## 5. Verify the domain
@@ -125,7 +127,7 @@ python (Join-Path $codexRoot "skills/.system/skill-creator/scripts/quick_validat
 - [x] Confirm the manifest name matches the plugin folder.
 - [x] Confirm `displayName` is at most 30 characters and `shortDescription` is one line and at most 30 characters.
 - [x] Confirm there are no more than three starter prompts and each is at most 128 characters.
-- [x] Confirm `submission/test-cases.json` contains exactly five positive and three negative cases, including confirmed permanent deletion.
+- [x] Confirm `submission/test-cases.json` contains exactly five positive and three negative cases, including self-cleaning confirmed active-storage removal with an exact `not_found`/`0` retry.
 - [ ] Confirm `submission/data-handling.md` and `submission/reviewer-guide.md` exist, match the deployed behavior, and contain no credentials, tokens, or MFA secrets.
 - [x] Confirm the icon is square and present inside the package.
 - [x] Confirm no secret, private path, local hook, setup script, vendored runtime, obsolete endpoint, or unsupported MCP configuration is present.
@@ -151,16 +153,16 @@ npx @modelcontextprotocol/inspector@latest
 - [ ] Reauthorization, scope-denial, and invalid-token cases pass on every supported OpenAI client surface.
 - [x] One synthetic production canary completes MCP remember, recall, and confirmed forget, followed by session cleanup.
 - [ ] `recall` writes an audit receipt but does not alter memory content.
-- [ ] `forget_memory` with `confirm: false` performs no deletion; confirmed deletion succeeds once and an exact retry returns `not_found`.
+- [ ] `forget_memory` with `confirm: false` performs no removal; confirmed active-storage removal succeeds once and an exact retry returns `not_found` with `memories_erased: 0`.
 - [ ] Every valid and invalid call returns a bounded result or useful error without leaking tenant data.
-- [ ] All five positive and three negative cases pass from a restored reviewer fixture.
+- [ ] All five positive and three negative cases pass in OpenAI developer mode using only the two fixed fixture UUIDs; case 4 creates and removes its own disposable record.
 - [ ] Direct, indirect, follow-up, unsupported, and boundary prompts behave consistently on supported ChatGPT and Codex surfaces.
 
 ## 7. Prepare portal materials
 
 - [ ] Use an OpenAI Platform project with global data residency. MCP submissions from EU-residency projects are currently not supported.
-- [ ] Confirm the submitter has Apps Management Write / `api.apps.write` and Apps Management Read / `api.apps.read` as needed.
-- [ ] Complete business verification for the **Lians** publisher identity.
+- [x] Validate the submitter's Apps Management owner role for Apps Management Write / `api.apps.write` and Apps Management Read / `api.apps.read`.
+- [x] Confirm that the **Lians, Ai** business identity is verified in the OpenAI portal.
 - [x] Verify the public website, support, privacy, and terms URLs resolve and match that identity.
 - [ ] Record the canonical endpoint, OAuth configuration, reviewer credentials, successful domain verification, and current Scan Tools result.
 - [ ] Use [`reviewer-guide.md`](../plugins/lians-memory-universal/submission/reviewer-guide.md) to provision and verify the fixture account; transmit credentials only through the portal's secure reviewer fields.
@@ -168,7 +170,7 @@ npx @modelcontextprotocol/inspector@latest
 - [ ] Upload the final skill tree from `plugins/lians-memory-universal/skills/lians-memory/`.
 - [ ] Use the three starter prompts from the manifest.
 - [ ] Upload exactly the five positive and three negative cases from `submission/test-cases.json`.
-- [ ] Record a demo covering remember, audited recall, confirmation, and permanent forget; add its HTTPS URL to `submission/metadata.json`.
+- [ ] Record a demo covering remember, audited recall, confirmation, immediate active-storage crypto-shredding, the up-to-5-day encrypted provider backup disclosure, and the safe retry; add its HTTPS URL to `submission/metadata.json`.
 - [x] Approve **United States** and **United Kingdom** as the initial launch-country scope.
 - [ ] In the portal, select exactly **United States** and **United Kingdom**; add countries only after separate legal, privacy, product-availability, and support review.
 - [ ] Paste the notes from `submission/release-notes.md`.
@@ -201,9 +203,9 @@ No screenshots are required because this release has no custom UI.
 | Deletion | Explicit confirmation, tenant checks, crypto-shredding, and idempotent retry pass | Partial (confirmed-forget canary passed; tenant and retry cases remain) |
 | Backups | Provider-backed deletion window and restore/tombstone behavior are documented and disclosed | Pass (2026-08-09) |
 | Domain | OpenAI challenge verification passes | Pending |
-| Evaluation | All five positive and three negative cases pass on supported surfaces | Pending |
-| Publisher | Required permissions and verified Lians business identity are present | Pending |
-| Reviewer fixture | Public no-MFA account, fixture reset, and secure portal credentials pass | Partial (browser login and live three-record fixture passed; reset rehearsal and portal delivery remain) |
+| Evaluation | All five positive and three negative cases pass on supported surfaces | Pending (developer-mode rehearsal not yet run) |
+| Publisher | Required permissions and verified `Lians, Ai` business identity are present | Pass (OpenAI portal verification and Apps Management owner role observed) |
+| Reviewer fixture | Public no-MFA account, two fixed fixture records, and secure portal credentials pass | Partial (browser login and both fixed records passed; secure portal delivery remains) |
 | Scan Tools | OpenAI Scan Tools completes with no unresolved error or warning | Pending |
 | Portal availability | Exactly United States and United Kingdom are selected in the portal | Pending |
 | Review assets | Legal/support URLs, demo, regions, scan result, and release notes are complete | Pending |
