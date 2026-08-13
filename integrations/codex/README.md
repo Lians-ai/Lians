@@ -45,8 +45,8 @@ codex plugin add lians-memory@lians
 
 ## Advanced tools
 
-Remove the `LIANS_MCP_ENABLED_TOOLS` line from the MCP configuration to expose
-point-in-time recall, reconstruction, conflicts, lineage, fact history, and
-backtest checks.
+Replace `lians-memory-mcp` with `lians-mcp` in the MCP configuration to
+expose point-in-time recall, reconstruction, conflicts, lineage, fact history,
+feedback, and backtest checks.
 
 For the complete product overview, see the [root README](../../README.md).

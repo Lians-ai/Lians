@@ -17,10 +17,7 @@ this server to your client's MCP configuration:
   "mcpServers": {
     "lians": {
       "command": "uvx",
-      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
-      "env": {
-        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,list_memories,correct_memory,forget_memory"
-      }
+      "args": ["--from", "lians-sdk[mcp]", "lians-memory-mcp"]
     }
   }
 }
@@ -29,10 +26,10 @@ this server to your client's MCP configuration:
 Restart the client. Local mode needs no Lians account, API key, or Docker
 service and stores memory in `~/.lians/mcp.db`.
 
-The starter configuration exposes `remember`, `recall`, `list_memories`,
-`correct_memory`, and confirmed `forget_memory`. Remove the
-`LIANS_MCP_ENABLED_TOOLS` setting to also expose the advanced point-in-time,
-reconstruction, lineage, conflict, and backtest tools.
+The starter command exposes `remember` and `recall`. Replace
+`lians-memory-mcp` with `lians-mcp` to expose the advanced point-in-time,
+reconstruction, lineage, conflict, feedback, and backtest tools shipped in the
+current PyPI release.
 
 Client-specific examples:
 
