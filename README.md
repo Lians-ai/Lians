@@ -178,7 +178,7 @@ Java, C, framework adapters, and self-hosting.
 | Give an existing AI client memory from a terminal | [MCP setup](#developer-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
-| Use LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
+| Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
 
 ## Why Lians

@@ -79,10 +79,36 @@ async def test_submission_tool_contracts_match_runtime_exactly():
             assert _without_titles(submitted[name][field]) == _without_titles(actual[name][field])
         assert actual[name]["_meta"]["securitySchemes"] == actual[name]["securitySchemes"]
 
+    forget = actual["forget_memory"]
+    assert forget["description"] == (
+        "Immediately crypto-shred one stored memory from active service storage by its "
+        "reference. Encrypted provider backups may retain a recoverable copy for up to 5 "
+        "days. Call only after the user explicitly confirms."
+    )
+    assert forget["inputSchema"]["properties"]["confirm"]["description"] == (
+        "Must be true only after the user confirms immediate active-service "
+        "crypto-shredding and the disclosed encrypted provider backup window of up to 5 days."
+    )
+
 
 def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthful():
     metadata = json.loads((BUNDLE / "submission" / "metadata.json").read_text(encoding="utf-8"))
     cases = json.loads((BUNDLE / "submission" / "test-cases.json").read_text(encoding="utf-8"))
+    manifest = json.loads((BUNDLE / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+
+    expected_long_description = (
+        "Lians Memory stores project facts and decisions that users explicitly choose to keep, "
+        "recalls bounded context, and removes a selected memory from active storage after "
+        "confirmation. It does not increase OpenAI usage quotas or bypass rate limits."
+    )
+    assert metadata["listing"]["longDescription"] == expected_long_description
+    assert manifest["interface"]["longDescription"] == expected_long_description
+    assert metadata["listing"]["developerName"] == "Lians, Ai"
+    assert metadata["publisher"]["identity"] == "Lians, Ai"
+    assert manifest["author"]["name"] == "Lians, Ai"
+    assert manifest["interface"]["developerName"] == "Lians, Ai"
+    assert metadata["listing"]["supportURL"] == "https://www.lians.ai/contact"
+    assert "supportURL" not in manifest["interface"]
 
     assert len(cases["positive"]) == metadata["testing"]["positiveCaseCount"] == 5
     assert len(cases["negative"]) == metadata["testing"]["negativeCaseCount"] == 3
@@ -90,7 +116,6 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
     assert {record["fixtureId"]: record["memoryRef"] for record in cases["fixture"]["records"]} == {
         "architecture-current": "fde306da-3f06-4063-9535-acd1c03b226c",
         "region-current": "a5104b94-c427-4a33-b6eb-5362c568cf62",
-        "deletion-target": "49c6b391-3f01-4c1f-97a6-45be3c968246",
     }
     serialized_cases = json.dumps(cases)
     for stale_ref in (
@@ -99,6 +124,30 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
         "33333333-3333-4333-8333-333333333333",
     ):
         assert stale_ref not in serialized_cases
+
+    case_4 = next(
+        case for case in cases["positive"] if case["id"] == "positive-4-confirmed-forget"
+    )
+    assert case_4["requiredFixtureData"] == []
+    assert [step["name"] for step in case_4["expectedToolSequence"]] == [
+        "remember",
+        "forget_memory",
+        "forget_memory",
+    ]
+    remember_arguments = case_4["expectedToolSequence"][0]["arguments"]
+    assert remember_arguments == {
+        "content": "Atlas disposable review note for confirmed removal.",
+        "project": "atlas",
+    }
+    assert "idempotency_key" not in remember_arguments
+    first_forget = case_4["expectedToolSequence"][1]["arguments"]
+    retry_forget = case_4["expectedToolSequence"][2]["arguments"]
+    assert first_forget == retry_forget == {
+        "memory_ref": "${remember.memory_ref}",
+        "confirm": True,
+    }
+    assert "status not_found" in case_4["expectedResultShape"]
+    assert "memories_erased 0" in case_4["expectedResultShape"]
     assert metadata["mcp"]["url"] == "https://mcp.lians.ai/mcp"
     assert metadata["mcp"]["urlStatus"] == "validated_live"
     assert metadata["mcp"]["liveVerification"] == {
@@ -270,18 +319,22 @@ def test_submission_cases_live_boundary_and_operator_policy_statuses_are_truthfu
     }
     assert (
         metadata["reviewArtifacts"]["reviewerAccountStatus"]
-        == "login_and_live_fixture_validated_pending_reset_rehearsal_and_secure_portal_delivery"
+        == "login_and_live_fixture_validated_pending_secure_portal_delivery"
     )
-    for field in (
-        "verificationStatus",
-        "appsManagementWriteStatus",
-        "appsManagementReadStatus",
-    ):
-        assert metadata["publisher"][field] == "pending_operator_action"
+    assert metadata["publisher"]["verificationStatus"] == "verified_openai_portal"
+    assert (
+        metadata["publisher"]["appsManagementWriteStatus"]
+        == "validated_apps_management_owner"
+    )
+    assert (
+        metadata["publisher"]["appsManagementReadStatus"]
+        == "validated_apps_management_owner"
+    )
     assert metadata["skills"][0]["scanStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["domainVerificationStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["toolScanStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["demoRecordingURL"] is None
+    assert metadata["testing"]["developerModeRehearsalStatus"] == "pending_operator_action"
     assert (
         metadata["reviewArtifacts"]["auditRetentionLifecycleStatus"]
         == "approved_and_publicly_disclosed_indefinite_pseudonymous_content_free"
@@ -465,10 +518,17 @@ def test_authenticated_oauth_e2e_evidence_is_consistent_and_sanitized():
 
     assert metadata["draft"] is True
     assert metadata["testing"]["demoAccountFixtureStatus"] == "live_provisioned_and_verified"
-    assert metadata["publisher"]["verificationStatus"] == "pending_operator_action"
+    assert metadata["publisher"]["verificationStatus"] == "verified_openai_portal"
+    assert metadata["publisher"]["appsManagementWriteStatus"] == (
+        "validated_apps_management_owner"
+    )
+    assert metadata["publisher"]["appsManagementReadStatus"] == (
+        "validated_apps_management_owner"
+    )
     assert metadata["skills"][0]["scanStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["domainVerificationStatus"] == "pending_operator_action"
     assert metadata["reviewArtifacts"]["toolScanStatus"] == "pending_operator_action"
+    assert metadata["testing"]["developerModeRehearsalStatus"] == "pending_operator_action"
     assert metadata["availability"]["status"] == "operator_selected_pending_submission"
 
 

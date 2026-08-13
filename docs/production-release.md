@@ -41,7 +41,7 @@ Three consecutive production rehearsals qualified the cold-boot boundary. The re
 
 The maximum observed cold boot was `197.963s`, below the configured 360-second application startup timeout. This does **not** prove that Fly honored the configured 420-second health-check grace: every deploy log warned, `Service HTTP check has a grace period greater than 1 minute (7m0s); this will be lowered to 1 minute`. The effective Fly grace was one minute, so the configured 420 seconds was **not honored**.
 
-This production release and the later operator OAuth E2E do not mean the universal plugin passed OpenAI business or domain verification, Scan Tools, portal selection, submission, approval, publication, or directory listing.
+The later portal inspection verified the `Lians, Ai` business identity and validated the submitter's Apps Management owner role. This production release and the operator OAuth E2E do not mean the universal plugin passed domain verification, the skill or tool scans, developer-mode rehearsal, portal country selection, submission, approval, publication, or directory listing.
 
 ## Controls already enforced
 

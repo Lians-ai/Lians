@@ -739,8 +739,9 @@ def build_openai_mcp_runtime(settings: Any) -> HostedMCPRuntime:
         name="forget_memory",
         title="Forget one memory",
         description=(
-            "Permanently crypto-shred one stored memory by its reference. Call only after the "
-            "user explicitly confirms this irreversible deletion."
+            "Immediately crypto-shred one stored memory from active service storage by its "
+            "reference. Encrypted provider backups may retain a recoverable copy for up to 5 "
+            "days. Call only after the user explicitly confirms."
         ),
         annotations=ToolAnnotations(
             title="Forget one memory",
@@ -755,7 +756,13 @@ def build_openai_mcp_runtime(settings: Any) -> HostedMCPRuntime:
         memory_ref: Annotated[UUID, Field(description="Memory reference returned by Lians.")],
         confirm: Annotated[
             bool,
-            Field(description="Must be true only after the user confirms permanent deletion."),
+            Field(
+                description=(
+                    "Must be true only after the user confirms immediate active-service "
+                    "crypto-shredding and the disclosed encrypted provider backup window of "
+                    "up to 5 days."
+                )
+            ),
         ] = False,
     ) -> CallToolResult:
         authorization = _authorize(resource_url, WRITE_SCOPE, settings.api_secret_seed)
@@ -765,7 +772,9 @@ def build_openai_mcp_runtime(settings: Any) -> HostedMCPRuntime:
             return _tool_error("Tenant request limit reached. Retry after one minute.")
         if not confirm:
             return _tool_error(
-                "Deletion was not performed. Ask the user to confirm permanent deletion first."
+                "Removal was not performed. Ask the user to confirm immediate active-service "
+                "crypto-shredding and the disclosed encrypted provider backup window of up to "
+                "5 days first."
             )
         try:
             async with asyncio.timeout(settings.hosted_mcp_tool_timeout_seconds):
@@ -816,7 +825,14 @@ def build_openai_mcp_runtime(settings: Any) -> HostedMCPRuntime:
         ).model_dump(mode="json")
         return CallToolResult(
             content=[
-                TextContent(type="text", text="The selected memory was permanently forgotten.")
+                TextContent(
+                    type="text",
+                    text=(
+                        "The selected memory was immediately crypto-shredded from active service "
+                        "storage. Encrypted provider backups may retain a recoverable copy for up "
+                        "to 5 days."
+                    ),
+                )
             ],
             structuredContent=output,
         )
