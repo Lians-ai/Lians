@@ -1,100 +1,102 @@
 # Lians Packaging and Pricing
 
-Lians should be packaged around the trust boundary of the deployment. Regulated
-buyers care less about a small monthly tier ladder and more about whether memory
-can run in their environment, under their keys, with evidence their risk team can
-review.
+Lians is packaged around the service and deployment boundary. Code already
+published under Apache 2.0 stays under Apache 2.0; commercial packages sell
+managed capacity, organizational operation, evidence services, deployment
+assurance, and contractual commitments.
 
-> **Open-core boundary:** every software feature named below is Apache 2.0 and
-> ships in the public repository — the packages differ in *deployment scope,
-> support, review, and evidence*, never in withheld code. Do not describe any
-> package as unlocking product features; that is mem0's model, and its absence
-> is our differentiator.
+This is a packaging guide, not a public price list. Confirm availability,
+limits, pricing, and contractual terms before quoting a customer.
 
-## Developer
+## Community
 
-*For local prototypes, benchmarks, and framework integrations.*
+*For individual developers, local evaluation, and self-managed integration.*
 
-**Deployment:** local library or single-node server
+**Deployment:** local library, GitHub connector, or customer-operated server
 
 **Includes:**
 
-- Memory writes and recalls
+- Provider-neutral memory for Codex, Claude, Gemini, and MCP-compatible clients
+- Durable writes and bounded recall
 - Local SQLite mode
-- Semantic search
-- Basic bitemporal recall
-- Python and TypeScript SDKs
+- Existing public temporal, provenance, and technical-evidence primitives
+- Community documentation and public benchmark receipts
 - Community support
+
+Community does not include a Lians-hosted production tenant, cross-device
+account, team administration, higher hosted limits, an SLA, or managed evidence
+review.
+
+## Managed Developer
+
+*For developers who want hosted continuity without operating the memory layer.*
+
+**Deployment:** Lians-managed service, where available
+
+**Commercial value:**
+
+- Hosted continuity across supported clients and devices
+- Managed identity and storage
+- Defined hosted usage allowance
+- Upgrade path to higher managed limits
+- Standard service support
 
 ## Team
 
-*For internal pilots and non-production agent workflows.*
+*For shared production workflows and internal AI programs.*
 
-**Deployment:** self-hosted Docker or small Kubernetes deployment
+**Deployment:** Lians-managed, customer cloud, or private deployment
 
-**Includes:**
+**Commercial value:**
 
-- Everything in Developer
-- Postgres + pgvector backend
-- Domain adapters for finance, healthcare, and legal
-- Audit log and memory lineage
-- Conflict detection
-- Webhooks
-- Metrics and health checks
-- Standard support
+- Shared/team memory and organization administration
+- Higher contracted storage, write, and recall limits
+- Central policy and retention operation
+- Managed evidence exports, monitoring, and evaluation gates
+- Deployment review and named support options
 
 ## Regulated Production
 
-*For production agents that handle sensitive, time-dependent, or audited data.*
+*For sensitive, audited, or time-dependent AI workflows.*
 
-**Deployment:** customer cloud, private VPC, or on-prem
+**Deployment:** customer cloud, private VPC, on-premises, or approved managed
+environment
 
-**Includes:**
+**Commercial value:**
 
-- Everything in Team
-- PostgreSQL Row-Level Security information barriers
-- Crypto-shred erasure certificates
-- Compliance reports
-- Audit-chain verification and export
-- Backtest contamination detection
-- SIEM streaming
-- Custom KMS support: AWS, Azure, Vault
-- Go, Java, and C SDK support
-- Deployment review and hardening checklist
+- Production architecture and hardening review
+- Identity, retention, information-barrier, and key-management design
+- Managed evidence operations and review-ready exports
+- Private networking, regional residency, or dedicated environments where sold
+- Contracted support and service levels
+- BAA or other required data-processing terms where agreed
+
+Technical primitives do not by themselves establish legal or regulatory
+compliance. Claims depend on the deployed configuration and customer controls.
 
 ## Enterprise / Air-Gap
 
 *For banks, hospitals, law firms, insurers, and government environments with
 strict residency, isolation, or procurement requirements.*
 
-**Deployment:** private cloud, on-prem, or air-gapped
+**Deployment:** private cloud, on-premises, or air-gapped
 
-**Includes:**
+**Commercial value:**
 
-- Everything in Regulated Production
-- Air-gap mode
-- Local embedding deployment guidance
-- Dedicated onboarding
-- Security architecture review
+- Dedicated onboarding and security architecture review
+- Air-gap and local embedding deployment assistance
+- Customer-managed key and identity integration
 - Procurement evidence packet
-- SSO/OIDC gateway guidance
-- SLA and named support channel
+- Named support channel and negotiated SLA
 - Optional custom connector development
 - Annual contract pricing
 
-## Managed Cloud
+## Pricing principle
 
-*For customers that want regulated-memory primitives without operating the stack.*
+Developer service may be usage-based. Institutional pricing should be tied to
+the deployment boundary, managed limits, support obligation, evidence scope,
+and contractual risk. Do not quote a hosted tier or limit until enforcement and
+entitlements are active for that environment.
 
-Managed Cloud should be sold only where the customer's compliance posture allows
-hosted processing. Healthcare customers require an executed BAA before PHI is
-processed. Financial and legal customers may require customer-managed keys,
-private networking, regional residency, or dedicated environments.
-
-## Pricing Principle
-
-Developer pricing can be usage-based. Institutional pricing should be contract
-based and tied to deployment boundary, support, compliance obligations, and
-connector scope. Do not position the enterprise product as a $200/month SaaS
-tier; that undersells the risk reduction Lians provides and misaligns with how
-regulated buyers procure infrastructure.
+See the [Community and commercial boundary](community-cloud-boundary.md) and
+the [managed billing design](billing.md).

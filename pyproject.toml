@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lians"
 version = "0.5.0"
-description = "Cross-platform decision evidence and reconstruction for regulated AI agents"
+description = "Local-first, provider-neutral memory for any AI agent"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111.0",

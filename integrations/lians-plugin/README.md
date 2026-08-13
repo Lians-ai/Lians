@@ -2,6 +2,16 @@
 
 This plugin gives Claude Code commands and an agent for working with Lians memory.
 
+## Install from GitHub
+
+```text
+/plugin marketplace add Lians-ai/Lians
+/plugin install lians@lians-plugins
+```
+
+Restart Claude Code after installation. The repository is the distribution
+source; no copy-and-paste command files are required.
+
 ## Capabilities
 
 - Store and recall agent memory
@@ -34,3 +44,8 @@ The same command is published in the official MCP Registry under
 Repository: https://github.com/Lians-ai/Lians
 
 License: Apache-2.0
+
+The plugin is self-managed Community software. Hosted continuity across
+clients and devices, team memory, higher managed limits, administration,
+managed evidence operations, and support are commercial Lians services. See
+the [public/paid boundary](../../docs/community-cloud-boundary.md).

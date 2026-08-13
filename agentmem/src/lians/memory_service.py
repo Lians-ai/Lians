@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, update, text
+from sqlalchemy import select, and_, or_, update, text, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,7 +48,8 @@ from .schemas import (
     RetentionPolicyIn, RetentionPolicyOut, RetentionPruneResult,
     LineageNode, LineageEdge, MemoryLineageResult,
     ConflictFlagOut, ConflictListResult, ConflictResolveRequest, ConflictResolveResult,
-    ContextRequest, ContextResult,
+    ContextRequest, ContextResult, MemoryCorrectionCreate, MemoryForgetResult,
+    MemoryListResult, MemoryReceiptMemory, MemoryReceiptView,
 )
 from .embeddings import get_embedding_provider
 from .crypto import encrypt_content, unwrap_subject_key
@@ -239,6 +240,71 @@ def _context_receipt(
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode()).hexdigest(), round(coverage, 6), payload
+
+
+def _memory_receipt_view(
+    *,
+    receipt_kind: str,
+    receipt_sha256: str,
+    receipt: dict[str, Any],
+    memories: list[MemoryOut],
+    token_estimate: int,
+    provenance_coverage: float,
+    retrieval_degraded: bool,
+    excluded: Optional[list[dict[str, Any]]] = None,
+    open_conflicts: int = 0,
+) -> MemoryReceiptView:
+    """Project a canonical receipt into a safe, human-readable product view.
+
+    The canonical receipt remains privacy-minimal and content-addressed. This
+    projection is intentionally outside that hash so an authorized UI can show
+    plaintext, ranking reasons, and control affordances without changing the
+    verification contract consumed by Evidence Packs.
+    """
+    used: list[MemoryReceiptMemory] = []
+    for memory in memories:
+        breakdown = memory.score_breakdown or {}
+        reasons = [str(reason) for reason in (breakdown.get("reasons") or [])[:5]]
+        if not reasons:
+            reasons = ["Selected as relevant governed context"]
+        used.append(
+            MemoryReceiptMemory(
+                id=memory.id,
+                content=memory.content,
+                source=memory.source,
+                event_time=memory.event_time,
+                valid_from=memory.valid_from,
+                valid_to=memory.valid_to,
+                score=memory.score,
+                reasons=reasons,
+            )
+        )
+
+    excluded_items = [dict(item) for item in (excluded or [])]
+    used_label = "memory" if len(used) == 1 else "memories"
+    excluded_label = "memory" if len(excluded_items) == 1 else "memories"
+    headline = f"{len(used)} {used_label} used"
+    if receipt_kind == "context":
+        headline += f" · {len(excluded_items)} {excluded_label} excluded"
+    headline += f" · ~{token_estimate} context tokens"
+
+    return MemoryReceiptView(
+        receipt_sha256=receipt_sha256,
+        receipt_kind=receipt_kind,
+        integrity_status=("complete" if provenance_coverage >= 1.0 else "partial"),
+        retrieval_status=("degraded" if retrieval_degraded else "standard"),
+        headline=headline,
+        reference_time=receipt.get("reference_time"),
+        as_of=receipt.get("as_of"),
+        memories_used=used,
+        memories_excluded=excluded_items,
+        exclusion_scope=(
+            "context_budget_and_policy" if receipt_kind == "context" else "not_evaluated"
+        ),
+        open_conflicts=open_conflicts,
+        token_estimate=token_estimate,
+        provenance_coverage=provenance_coverage,
+    )
 
 
 async def _commit_recall_evidence(
@@ -796,6 +862,7 @@ async def add_memory(
     precomputed_embedding: Optional[list[float]] = None,
     _trusted_admission: Optional[AdmissionDecision] = None,
     idempotency_key: Optional[str] = None,
+    _forced_supersede_id: Optional[UUID] = None,
     _audit_privacy_minimal: bool = False,
     _audit_hmac_secret: str | None = None,
 ) -> MemoryOut:
@@ -930,6 +997,45 @@ async def add_memory(
                     else None
                 ),
             )
+
+            # An explicit user correction is stronger evidence than heuristic
+            # similarity. It still travels through the ordinary append-only
+            # write path, but deterministically closes the selected live
+            # version so a wording change can never leave two beliefs active.
+            if _forced_supersede_id is not None:
+                forced = (
+                    await db.execute(
+                        select(Memory)
+                        .where(Memory.id == _forced_supersede_id)
+                        .with_for_update()
+                        .execution_options(populate_existing=True)
+                    )
+                ).scalar_one_or_none()
+                if (
+                    forced is None
+                    or forced.namespace != namespace
+                    or forced.agent_id != req.agent_id
+                    or not _barrier_visible(forced, barrier_group)
+                ):
+                    raise LookupError("Memory not found")
+                if forced.erased_at is not None:
+                    raise ValueError("An erased memory cannot be corrected")
+                if forced.valid_to is not None or forced.superseded_by is not None:
+                    raise ValueError("Only the current memory version can be corrected")
+                if _utc(req.event_time) <= _utc(forced.event_time):
+                    raise ValueError(
+                        "Correction event_time must be later than the memory being corrected"
+                    )
+                if forced.id not in supersession.superseded_ids:
+                    supersession.superseded_ids.append(forced.id)
+                supersession.conflict_ids = [
+                    memory_id
+                    for memory_id in supersession.conflict_ids
+                    if memory_id != forced.id
+                ]
+                supersession.relation = "SUPERSEDES"
+                supersession.confidence = 1.0
+                supersession.rationale = "user_confirmed_correction"
 
             now = datetime.now(timezone.utc)
             mem = Memory(
@@ -1509,6 +1615,17 @@ async def _assemble_context_legacy(
         deadline_exceeded=result.deadline_exceeded,
         open_conflicts=open_conflicts,
         open_conflicts_total=open_conflicts_total,
+        receipt_view=_memory_receipt_view(
+            receipt_kind="context",
+            receipt_sha256=result.receipt_sha256,
+            receipt=result.receipt,
+            memories=included,
+            token_estimate=used,
+            provenance_coverage=result.provenance_coverage,
+            retrieval_degraded=result.retrieval_degraded,
+            excluded=[],
+            open_conflicts=open_conflicts_total,
+        ),
     )
 
 
@@ -1788,6 +1905,17 @@ async def assemble_context(
         },
         learning_applied=bool(adjustments),
         ranking_policy=ranking_policy,
+        receipt_view=_memory_receipt_view(
+            receipt_kind="context",
+            receipt_sha256=receipt_sha256,
+            receipt=receipt,
+            memories=included,
+            token_estimate=used,
+            provenance_coverage=provenance_coverage,
+            retrieval_degraded=result.retrieval_degraded,
+            excluded=excluded,
+            open_conflicts=open_conflicts_total,
+        ),
     )
 
 
@@ -1915,6 +2043,16 @@ async def recall_memories(
                     span.set_attribute("cache_hit", True)
                     record_recall(namespace, router="cache", cache_hit=True)
                     cached_result = RecallResult.model_validate_json(cache_lookup.payload)
+                    if cached_result.receipt_view is None:
+                        cached_result.receipt_view = _memory_receipt_view(
+                            receipt_kind="recall",
+                            receipt_sha256=cached_result.receipt_sha256,
+                            receipt=cached_result.receipt,
+                            memories=cached_result.memories,
+                            token_estimate=cached_result.token_estimate,
+                            provenance_coverage=cached_result.provenance_coverage,
+                            retrieval_degraded=cached_result.retrieval_degraded,
+                        )
                     await _commit_recall_evidence(
                         db,
                         namespace,
@@ -2026,9 +2164,19 @@ async def recall_memories(
                                 mode=execution["mode"],
                                 latency_budget_ms=execution["latency_budget_ms"],
                                 deadline_exceeded=latency_ms > execution["latency_budget_ms"],
+                                token_estimate=_estimate_tokens(mem_out.content or ""),
                                 receipt_sha256=receipt,
                                 receipt=receipt_payload,
                                 provenance_coverage=provenance_coverage,
+                                receipt_view=_memory_receipt_view(
+                                    receipt_kind="recall",
+                                    receipt_sha256=receipt,
+                                    receipt=receipt_payload,
+                                    memories=[mem_out],
+                                    token_estimate=_estimate_tokens(mem_out.content or ""),
+                                    provenance_coverage=provenance_coverage,
+                                    retrieval_degraded=False,
+                                ),
                             )
                             await _commit_recall_evidence(
                                 db,
@@ -2300,6 +2448,17 @@ async def recall_memories(
             receipt_sha256=receipt,
             receipt=receipt_payload,
             provenance_coverage=provenance_coverage,
+            receipt_view=_memory_receipt_view(
+                receipt_kind="recall",
+                receipt_sha256=receipt,
+                receipt=receipt_payload,
+                memories=memories_out,
+                token_estimate=sum(
+                    _estimate_tokens(m.content) for m in memories_out if m.content
+                ),
+                provenance_coverage=provenance_coverage,
+                retrieval_degraded=retrieval_degraded,
+            ),
         )
 
         # Never cache a degraded result — it would keep serving lexical-only
@@ -2720,6 +2879,204 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
         await flush_recall_invalidation(db, job)
 
     return RetentionPruneResult(namespace=namespace, memories_pruned=len(memories), cutoff_date=cutoff)
+
+
+async def list_memories(
+    db: AsyncSession,
+    namespace: str,
+    agent_id: str,
+    *,
+    state: str = "current",
+    limit: int = 50,
+    offset: int = 0,
+    barrier_override: Optional[str] = None,
+) -> MemoryListResult:
+    """List governed memory for an inspect/correct/forget control surface."""
+    if state not in {"current", "superseded", "erased", "all"}:
+        raise ValueError("Unsupported memory state")
+
+    effective_barrier = await _get_barrier_group(
+        db, namespace, agent_id, override=barrier_override
+    )
+    filters: list[Any] = [
+        Memory.namespace == namespace,
+        Memory.agent_id == agent_id,
+    ]
+    barrier_condition = _barrier_filter(Memory.barrier_group, effective_barrier)
+    if barrier_condition is not None:
+        filters.append(barrier_condition)
+    if state == "current":
+        filters.extend([
+            Memory.erased_at.is_(None),
+            Memory.valid_to.is_(None),
+            Memory.superseded_by.is_(None),
+        ])
+    elif state == "superseded":
+        filters.extend([
+            Memory.erased_at.is_(None),
+            or_(Memory.valid_to.is_not(None), Memory.superseded_by.is_not(None)),
+        ])
+    elif state == "erased":
+        filters.append(Memory.erased_at.is_not(None))
+
+    total = int(
+        (await db.execute(select(func.count()).select_from(Memory).where(*filters))).scalar_one()
+    )
+    rows = (
+        await db.execute(
+            select(Memory)
+            .where(*filters)
+            .order_by(Memory.ingestion_time.desc(), Memory.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+    subject_keys = await _load_namespace_subject_keys(db, namespace)
+    from .ranking import _decrypt
+
+    return MemoryListResult(
+        items=[_memory_to_out(row, _decrypt(row, subject_keys)) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+        state=state,
+    )
+
+
+async def correct_memory(
+    db: AsyncSession,
+    namespace: str,
+    memory_id: UUID,
+    req: MemoryCorrectionCreate,
+    *,
+    barrier_override: Optional[str] = None,
+) -> MemoryOut:
+    """Append a user-confirmed correction and close the selected live version."""
+    original = await db.get(Memory, memory_id)
+    if (
+        original is None
+        or original.namespace != namespace
+        or not _barrier_visible(original, barrier_override)
+    ):
+        raise LookupError("Memory not found")
+    if original.erased_at is not None:
+        raise ValueError("An erased memory cannot be corrected")
+    if original.valid_to is not None or original.superseded_by is not None:
+        raise ValueError("Only the current memory version can be corrected")
+
+    now = datetime.now(timezone.utc)
+    minimum_time = _utc(original.event_time) + timedelta(microseconds=1)
+    event_time = _utc(req.event_time) if req.event_time is not None else max(now, minimum_time)
+    metadata = {
+        key: value
+        for key, value in dict(original.metadata_ or {}).items()
+        if not str(key).startswith("_")
+    }
+    metadata.update(req.metadata)
+    metadata["_correction_of"] = str(original.id)
+
+    return await add_memory(
+        db,
+        namespace,
+        MemoryAdd(
+            agent_id=original.agent_id,
+            content=req.content,
+            event_time=event_time,
+            source=req.source or "user_correction",
+            subject_id=original.subject_id,
+            metadata=metadata,
+            importance=(req.importance if req.importance is not None else original.importance),
+        ),
+        barrier_override=barrier_override,
+        _forced_supersede_id=original.id,
+    )
+
+
+async def forget_memory(
+    db: AsyncSession,
+    namespace: str,
+    memory_id: UUID,
+    *,
+    request_ref: str,
+    barrier_override: Optional[str] = None,
+) -> MemoryForgetResult:
+    """Irreversibly remove one memory's content while preserving its audit tombstone.
+
+    This is record-level forgetting. ``erase_subject`` remains the stronger
+    subject-wide crypto-shred operation that destroys the subject DEK.
+    """
+    memory = await db.get(Memory, memory_id)
+    if (
+        memory is None
+        or memory.namespace != namespace
+        or not _barrier_visible(memory, barrier_override)
+    ):
+        raise LookupError("Memory not found")
+    agent_id = memory.agent_id
+    in_process_lock = await _get_in_process_lock(namespace, agent_id)
+    async with in_process_lock:
+        await _acquire_pg_advisory_lock(db, namespace, agent_id)
+        effective_barrier = await _get_barrier_group(
+            db, namespace, agent_id, override=barrier_override
+        )
+        memory = (
+            await db.execute(
+                select(Memory)
+                .where(Memory.id == memory_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if (
+            memory is None
+            or memory.namespace != namespace
+            or memory.agent_id != agent_id
+            or not _barrier_visible(memory, effective_barrier)
+        ):
+            raise LookupError("Memory not found")
+        if memory.erased_at is not None:
+            return MemoryForgetResult(
+                status="already_forgotten",
+                memory_id=memory.id,
+                erased_at=memory.erased_at,
+            )
+
+        now = datetime.now(timezone.utc)
+        memory.content_encrypted = None
+        memory.embedding = None
+        memory.metadata_ = {}
+        memory.erased_at = now
+        if memory.valid_to is None:
+            memory.valid_to = now
+        await remove_live_facts(db, [memory.id])
+        audit_event = await chain_log(
+            db,
+            namespace=namespace,
+            agent_id=memory.agent_id,
+            op="forget",
+            memory_id=memory.id,
+            content_hash=memory.content_hash,
+            payload={"request_ref": request_ref, "scope": "single_memory"},
+        )
+        invalidation_job = await queue_recall_invalidation(
+            db,
+            namespace,
+            memory.agent_id,
+            operation="memory.forget",
+            operation_ref=invalidation_reference("memory.forget", memory.id, request_ref),
+            memory_ids=[memory.id],
+        )
+        await db.commit()
+    invalidate_working_set(namespace, memory.agent_id)
+    await flush_recall_invalidation(db, invalidation_job)
+    record_erase(namespace, 1)
+    return MemoryForgetResult(
+        status="forgotten",
+        memory_id=memory.id,
+        erased_at=now,
+        audit_event_id=audit_event.id,
+        audit_event_hash=audit_event.row_hash,
+    )
 
 
 async def erase_subject(

@@ -25,6 +25,7 @@ Pushing a `vX.Y.Z` tag triggers:
 | `publish-lian-npm.yml` | `npm publish` **TypeScript** `@lians-ai/lians` through npm trusted publishing (GitHub OIDC) |
 | `release.yml` → `java-jar` | Attaches the **Java** jar to the GitHub Release |
 | `release.yml` → `c-tarball` | Attaches `lians-c-<version>.tar.gz` (the **C** source) to the Release |
+| `release.yml` → `lians-easy` | Attaches standalone Windows, macOS, and Linux **LiansMemory** apps plus SHA-256 checksums |
 | `release.yml` → `go-tag` | Mirrors the tag to `agentmem/sdk/go/vX.Y.Z` so `go get …@vX.Y.Z` resolves |
 | `release.yml` → `maven-central` | Publishes **Java** to Maven Central — only when opted in (below) |
 | `publish-mcp-container.yml` | Waits for the exact `lians-sdk` version on PyPI, then publishes normalized GHCR tags (`X.Y.Z`, never `vX.Y.Z`) |
@@ -39,12 +40,18 @@ Pushing a `vX.Y.Z` tag triggers:
 - MCPB: `integrations/mcpb/manifest.json` and
   `integrations/mcpb/pyproject.toml`; generate `integrations/mcpb/uv.lock` only
   after the exact Python release is live on PyPI
+- Lians Easy: `packages/lians-easy/pyproject.toml` → `version`
 - Go: `agentmem/sdk/go/version.go` → `Version` const (the resolvable version is still the git tag)
 
 `check_release_contract.py` verifies source-manifest synchronization only. It
 does not prove that any registry accepted the release.
 
 ## Required secrets / setup (one-time)
+
+Before advertising Lians Easy to nontechnical users, configure Windows code
+signing and Apple Developer ID signing/notarization for the release artifacts.
+Unsigned review builds are useful for internal testing but trigger operating
+system trust warnings and are not a finished consumer install experience.
 
 | Registry | Setup |
 |----------|-------|

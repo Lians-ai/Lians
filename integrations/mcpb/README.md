@@ -1,8 +1,11 @@
 # Lians Agent Memory MCPB
 
-This directory packages the published `lians-sdk` MCP server as a local MCP
-bundle. The host-managed UV runtime installs the pinned package and starts the
-same `lians-mcp` implementation documented in the repository root.
+This directory packages Lians—the memory tool for any AI agent—as a local MCP
+bundle. It gives a compatible host durable remember, recall, inspect, correct,
+and confirmed-forget tools.
+
+For a normal desktop user, the [guided Lians Easy installer](../../docs/easy-install.md)
+is the preferred path. This bundle is the host-managed package path.
 
 The default configuration stores data in `~/.lians/mcp.db`. It requires no API
 key, hosted service, or Docker process.

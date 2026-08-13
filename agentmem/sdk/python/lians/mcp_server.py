@@ -59,7 +59,6 @@ from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import Any
 from urllib.parse import parse_qs, unquote_to_bytes, urlsplit
 
-
 CODEX_DYNAMIC_SCOPE_CAPABILITY = "codex/sandbox-state-meta"
 CODEX_DYNAMIC_SCOPE_ENV = "LIANS_MCP_CODEX_DYNAMIC_SCOPE"
 MCP_DATA_HOME_ENV = "LIANS_MCP_DATA_HOME"
@@ -284,6 +283,9 @@ _TOOL_NAMES = frozenset(
     {
         "remember",
         "recall",
+        "list_memories",
+        "correct_memory",
+        "forget_memory",
         "recall_at",
         "reconstruct",
         "list_conflicts",
@@ -399,7 +401,8 @@ def _bind_codex_scope_for_request(server: Any) -> None:
 
 def _iso(value: str) -> datetime:
     """Parse the ISO-8601 form used by MCP clients, including a trailing Z."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    # Python 3.10 support requires normalizing Z; newer versions accept it.
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))  # noqa: FURB162
 
 
 def _get_local_client() -> Any:
@@ -458,6 +461,38 @@ def _local_api(method: str, path: str, body: dict | None = None) -> dict:
             mmr=body.get("mmr", False),
             surface_conflicts=body.get("surface_conflicts", True),
             max_conflicts=body.get("max_conflicts", 5),
+        )
+    if method == "GET" and parsed.path == "/v1/memories":
+        return client.list_memories(
+            agent_id=query.get("agent_id", [LIANS_AGENT_ID])[0],
+            state=query.get("state", ["current"])[0],
+            limit=int(query.get("limit", [50])[0]),
+            offset=int(query.get("offset", [0])[0]),
+        )
+    if (
+        method == "POST"
+        and parsed.path.startswith("/v1/memories/")
+        and parsed.path.endswith("/correct")
+    ):
+        memory_id = parsed.path.removeprefix("/v1/memories/").removesuffix("/correct")
+        return client.correct_memory(
+            memory_id,
+            body["content"],
+            event_time=_iso(body["event_time"]) if body.get("event_time") else None,
+            source=body.get("source", "user_correction"),
+            metadata=body.get("metadata", {}),
+            importance=body.get("importance"),
+        )
+    if (
+        method == "POST"
+        and parsed.path.startswith("/v1/memories/")
+        and parsed.path.endswith("/forget")
+    ):
+        memory_id = parsed.path.removeprefix("/v1/memories/").removesuffix("/forget")
+        return client.forget_memory(
+            memory_id,
+            confirm=body.get("confirm") is True,
+            request_ref=body.get("request_ref"),
         )
     if method == "POST" and parsed.path == "/v1/audit/reconstruct":
         return client.reconstruct(
@@ -654,6 +689,76 @@ def _build_server() -> Any:
                     title="Recall current Lians memory",
                     readOnlyHint=True,
                     destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=open_world,
+                ),
+            ),
+            Tool(
+                name="list_memories",
+                description="Inspect saved memories and whether each is current or superseded.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "state": {
+                            "type": "string",
+                            "enum": ["current", "superseded", "erased", "all"],
+                            "default": "current",
+                        },
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+                        "offset": {"type": "integer", "minimum": 0, "default": 0},
+                    },
+                    "additionalProperties": False,
+                },
+                annotations=ToolAnnotations(
+                    title="Inspect Lians memories",
+                    readOnlyHint=True,
+                    destructiveHint=False,
+                    idempotentHint=True,
+                    openWorldHint=open_world,
+                ),
+            ),
+            Tool(
+                name="correct_memory",
+                description=(
+                    "Correct one stale memory by appending a replacement. "
+                    "The previous version remains inspectable but is no longer recalled."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "required": ["memory_id", "content"],
+                    "properties": {
+                        "memory_id": {"type": "string"},
+                        "content": {"type": "string", "minLength": 1},
+                        "source": {"type": "string", "default": "user_correction"},
+                        "metadata": {"type": "object"},
+                    },
+                    "additionalProperties": False,
+                },
+                annotations=ToolAnnotations(
+                    title="Correct a Lians memory",
+                    readOnlyHint=False,
+                    destructiveHint=False,
+                    idempotentHint=False,
+                    openWorldHint=open_world,
+                ),
+            ),
+            Tool(
+                name="forget_memory",
+                description="Permanently erase one memory. Refuses unless confirm is true.",
+                inputSchema={
+                    "type": "object",
+                    "required": ["memory_id", "confirm"],
+                    "properties": {
+                        "memory_id": {"type": "string"},
+                        "confirm": {"type": "boolean", "const": True},
+                        "request_ref": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+                annotations=ToolAnnotations(
+                    title="Forget a Lians memory",
+                    readOnlyHint=False,
+                    destructiveHint=True,
                     idempotentHint=True,
                     openWorldHint=open_world,
                 ),
@@ -887,6 +992,61 @@ def _build_server() -> Any:
                 result = await _api("POST", "/v1/context", body)
                 return [TextContent(type="text", text=_fmt_context(result))]
 
+            elif name == "list_memories":
+                state = arguments.get("state", "current")
+                limit = arguments.get("limit", 50)
+                offset = arguments.get("offset", 0)
+                result = await _api(
+                    "GET",
+                    f"/v1/memories?agent_id={LIANS_AGENT_ID}&state={state}"
+                    f"&limit={limit}&offset={offset}",
+                )
+                items = result.get("items", [])
+                if not items:
+                    return [TextContent(type="text", text=f"No {state} memories found.")]
+                lines = [f"Showing {len(items)} of {result.get('total', len(items))} {state} memories:"]
+                for item in items:
+                    memory_id = str(item.get("id") or "")
+                    content = item.get("content") or "[erased]"
+                    lines.append(f"- [{memory_id}] {content}")
+                return [TextContent(type="text", text="\n".join(lines))]
+
+            elif name == "correct_memory":
+                memory_id = arguments["memory_id"]
+                replacement = await _api(
+                    "POST",
+                    f"/v1/memories/{memory_id}/correct",
+                    {
+                        "content": arguments["content"],
+                        "source": arguments.get("source", "user_correction"),
+                        "metadata": arguments.get("metadata", {}),
+                    },
+                )
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Corrected memory. Current id: {replacement.get('id')}",
+                    )
+                ]
+
+            elif name == "forget_memory":
+                memory_id = arguments["memory_id"]
+                result = await _api(
+                    "POST",
+                    f"/v1/memories/{memory_id}/forget",
+                    {
+                        "confirm": arguments.get("confirm") is True,
+                        "request_ref": arguments.get("request_ref")
+                        or f"mcp-confirmed-forget:{memory_id}",
+                    },
+                )
+                return [
+                    TextContent(
+                        type="text",
+                        text=f"Memory {result.get('status', 'forgotten')}: {memory_id}",
+                    )
+                ]
+
             elif name == "recall_at":
                 body = {
                     "agent_id": LIANS_AGENT_ID,
@@ -949,12 +1109,18 @@ def _build_server() -> Any:
                 roots = result.get("root_ids") or [result.get("root_id", "")]
                 tips = result.get("tip_ids") or [result.get("tip_id", "")]
                 lines = [
-                    f"Lineage graph for {memory_id[:8]}…: {len(nodes)} versions, "
-                    f"{len(edges)} edges, shape={result.get('shape', 'unknown')}",
-                    f"Roots: {', '.join(str(value)[:8] for value in roots)}; "
-                    f"tips/boundaries: {', '.join(str(value)[:8] for value in tips)}",
-                    f"Complete: {result.get('complete', False)}; "
-                    f"audit bindings complete: {result.get('audit_binding_complete', False)}",
+                    (
+                        f"Lineage graph for {memory_id[:8]}…: {len(nodes)} versions, "
+                        f"{len(edges)} edges, shape={result.get('shape', 'unknown')}"
+                    ),
+                    (
+                        f"Roots: {', '.join(str(value)[:8] for value in roots)}; "
+                        f"tips/boundaries: {', '.join(str(value)[:8] for value in tips)}"
+                    ),
+                    (
+                        f"Complete: {result.get('complete', False)}; "
+                        f"audit bindings complete: {result.get('audit_binding_complete', False)}"
+                    ),
                 ]
                 for node in nodes:
                     status = "CURRENT" if node.get("is_current") else "superseded"
@@ -1011,9 +1177,10 @@ def _build_server() -> Any:
                         )
                     ]
                 lines = [
-                    f"CONTAMINATED — showing {len(flags)} of {flags_total} flag(s) "
-                    f"out of {checked} memories "
-                    f"({rate:.1%} contamination rate):",
+                    (
+                        f"CONTAMINATED — showing {len(flags)} of {flags_total} flag(s) "
+                        f"out of {checked} memories ({rate:.1%} contamination rate):"
+                    ),
                 ]
                 for flag in flags:
                     ctype = flag.get("contamination_type", "")

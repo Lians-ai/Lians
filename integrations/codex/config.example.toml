@@ -1,31 +1,22 @@
-# Lians MCP server for Codex CLI
+# Lians local memory for Codex
 #
-# Add this block to your Codex config (~/.codex/config.toml) to expose Lians as a
-# native MCP tool server. Codex will gain the eight Lians memory tools without any
-# SDK code in your project.
-#
-# Requires `uvx` (ships with `uv`): https://docs.astral.sh/uv/
-# Install uv, then Codex launches the server on demand via the command below.
+# Add this block to ~/.codex/config.toml. Requires uv/uvx:
+# https://docs.astral.sh/uv/getting-started/installation/
 
 [mcp_servers.lians]
 command = "uvx"
 args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
 
 [mcp_servers.lians.env]
-# Point at the managed cloud (free tier) or your self-hosted server.
-LIANS_URL = "https://agentmem-lotus.fly.dev"
-# Create a key at https://www.lians.ai/login, or use your self-hosted key.
-LIANS_API_KEY = "lians_..."
-# Memory namespace for this agent/session.
-LIANS_AGENT_ID = "codex-session"
+# Keep the default product surface small. Remove this line to expose every
+# advanced temporal and audit tool.
+LIANS_MCP_ENABLED_TOOLS = "remember,recall,list_memories,correct_memory,forget_memory"
 
-# ── Local mode (no server, no API key) ─────────────────────────────────────────
-# For prototyping you can omit LIANS_URL / LIANS_API_KEY and run the local SQLite
-# backend instead:
-#
-#   [mcp_servers.lians]
-#   command = "uvx"
-#   args = ["--from", "lians-sdk[mcp,local]", "lians-mcp"]
-#   [mcp_servers.lians.env]
-#   LIANS_LOCAL = "1"
-#   LIANS_AGENT_ID = "codex-session"
+# Optional local overrides:
+# LIANS_LOCAL_DB = "~/.lians/mcp.db"
+# LIANS_AGENT_ID = "codex"
+# LIANS_NAMESPACE = "codex"
+
+# To use a hosted or self-hosted Lians service, add:
+# LIANS_URL = "https://memory.example.com"
+# LIANS_API_KEY = "lians_..."

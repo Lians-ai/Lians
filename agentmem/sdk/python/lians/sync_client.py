@@ -146,6 +146,56 @@ class LiansClient:
 
     # ── Read ──────────────────────────────────────────────────────────────────
 
+    def list_memories(
+        self,
+        agent_id: str,
+        state: str = "current",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """List authorized memory versions for an inspect/correct/forget UI."""
+        return self._loop.run_until_complete(
+            self._async.list_memories(agent_id, state, limit, offset)
+        )
+
+    def correct_memory(
+        self,
+        memory_id: str,
+        content: str,
+        *,
+        event_time: Optional[datetime] = None,
+        source: Optional[str] = "user_correction",
+        metadata: Optional[dict[str, Any]] = None,
+        importance: Optional[float] = None,
+    ) -> dict:
+        """Append a user-confirmed correction to a live memory."""
+        return self._loop.run_until_complete(
+            self._async.correct_memory(
+                memory_id,
+                content,
+                event_time=event_time,
+                source=source,
+                metadata=metadata,
+                importance=importance,
+            )
+        )
+
+    def forget_memory(
+        self,
+        memory_id: str,
+        *,
+        confirm: bool = False,
+        request_ref: Optional[str] = None,
+    ) -> dict:
+        """Irreversibly forget one memory while preserving its audit tombstone."""
+        return self._loop.run_until_complete(
+            self._async.forget_memory(
+                memory_id,
+                confirm=confirm,
+                request_ref=request_ref,
+            )
+        )
+
     def recall(
         self,
         agent_id: str,

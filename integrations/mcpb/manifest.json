@@ -3,7 +3,7 @@
   "name": "lians-agent-memory",
   "display_name": "Lians Agent Memory",
   "version": "0.5.0",
-  "description": "Bitemporal agent memory with deterministic supersession, point-in-time recall, and local persistent storage.",
+  "description": "Local memory for any AI agent: remember, recall, inspect, correct, and confirmed forget.",
   "author": {
     "name": "Lians",
     "url": "https://www.lians.ai"
@@ -24,10 +24,10 @@
   },
   "keywords": [
     "agent-memory",
-    "bitemporal",
-    "point-in-time",
+    "ai-agents",
+    "long-term-memory",
     "local-first",
-    "audit-trail"
+    "mcp"
   ],
   "license": "Apache-2.0",
   "homepage": "https://www.lians.ai",
