@@ -380,8 +380,9 @@ EXPECTED_TOOLS: dict[str, dict[str, Any]] = {
     "forget_memory": {
         "title": "Forget one memory",
         "description": (
-            "Permanently crypto-shred one stored memory by its reference. Call only after the "
-            "user explicitly confirms this irreversible deletion."
+            "Immediately crypto-shred one stored memory from active service storage by its "
+            "reference. Encrypted provider backups may retain a recoverable copy for up to 5 "
+            "days. Call only after the user explicitly confirms."
         ),
         "inputSchema": {
             "type": "object",
@@ -395,7 +396,9 @@ EXPECTED_TOOLS: dict[str, dict[str, Any]] = {
                     "type": "boolean",
                     "default": False,
                     "description": (
-                        "Must be true only after the user confirms permanent deletion."
+                        "Must be true only after the user confirms immediate active-service "
+                        "crypto-shredding and the disclosed encrypted provider backup window of "
+                        "up to 5 days."
                     ),
                 },
             },
