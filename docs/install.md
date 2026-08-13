@@ -112,6 +112,12 @@ See each SDK directory for the exact API surface:
 
 ## Framework integrations
 
+For Pydantic AI, start with the tested local temporal-memory example:
+
+- [Pydantic AI integration](../integrations/pydantic-ai/python)
+
+The Python package also includes adapters for these frameworks:
+
 ```bash
 pip install "lians-sdk[langchain]"
 pip install "lians-sdk[langgraph]"
