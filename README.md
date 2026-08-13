@@ -110,6 +110,12 @@ Remember that this project uses Python 3.12 and pytest.
 What Python version and test runner does this project use?
 ```
 
+On a clean machine, the first memory tool may download and initialize the local
+semantic model. Lians reports that warmup to MCP clients that support progress.
+If it is still running after 90 seconds, the tool returns a retryable error and
+does not queue the write; keep the MCP server running and retry shortly. Model
+files use the Hugging Face cache controlled by `HF_HOME`.
+
 Local MCP memory is stored in `~/.lians/mcp.db`. The starter configuration
 exposes the basic loop plus the controls needed to trust it:
 
