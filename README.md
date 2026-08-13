@@ -125,6 +125,7 @@ Use the exact setup guide for
 [Cursor](integrations/cursor),
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
+[OpenCode](integrations/opencode), or
 [Codex](plugins/lians-memory). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
 the advanced temporal and audit tools too.
 
