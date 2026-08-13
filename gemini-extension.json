@@ -1,0 +1,16 @@
+{
+  "name": "lians",
+  "version": "0.5.0",
+  "description": "Open-source, local-first memory for any AI agent.",
+  "mcpServers": {
+    "lians": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "lians-sdk[mcp]==0.5.0",
+        "lians-memory-mcp"
+      ],
+      "timeout": 120000
+    }
+  }
+}
