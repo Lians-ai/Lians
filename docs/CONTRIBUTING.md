@@ -1,47 +1,46 @@
 # Contributing to Lians
 
-Thank you for your interest in contributing. Lians is a financial-grade memory layer for AI agents — contributions that improve correctness, compliance coverage, or integration breadth are especially welcome.
+Thank you for your interest in contributing. Lians is the memory tool for any
+AI agent. Contributions that simplify installation, improve recall quality,
+make memory easier to control, or add a real integration are especially welcome.
+
+New to the project? Start with the [community guide](community.md) and the
+[public roadmap](../ROADMAP.md).
 
 ## Before you start
 
-Open an issue before opening a PR for anything beyond a small bug fix. This lets us align on approach before you invest time writing code.
-
-Search existing issues first to avoid duplicates.
+Open an issue before opening a pull request for anything beyond a small bug fix.
+Search existing issues first so work does not split across duplicate changes.
 
 ## Repository layout
 
-```
-server/          Core FastAPI server (agentmem/)
-sdk/python/      Thin HTTP client (lians package on PyPI)
-agentmem/sdk/    Full SDK — Python + TypeScript
-integrations/    Per-framework integration packages
+```text
+agentmem/src/    Core engine and FastAPI service
+agentmem/sdk/    Python, TypeScript, Go, Java, and C SDKs
+packages/        Lightweight user-facing packages, including Lians Easy
+integrations/    Agent, framework, and client integrations
+plugins/         Installable AI-client plugins
 docs/            Documentation
-benchmarks/      Reproducible benchmark suite
+demo/            Reproducible demos and examples
 ```
 
 ## Development setup
 
-### Server & full SDK (Python)
+### Server and full SDK (Python)
 
 ```bash
 git clone https://github.com/Lians-ai/Lians.git
-cd Lians/agentmem
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Run all tests (local embeddings, no API keys required)
-pytest -v
-
-# Run only fast unit tests
-pytest -v -m "not pgvector"
+cd Lians
+python -m venv .venv
+python -m pip install -e ".[dev]"
+python scripts/test_all.py
 ```
 
-### Thin client SDK (Python)
+### Lians Easy
 
 ```bash
-cd sdk/python
-pip install -e ".[dev]"
-pytest -v
+python -m pip install pytest
+PYTHONPATH=packages/lians-easy python -m pytest packages/lians-easy/tests -q
 ```
 
 ### TypeScript SDK
@@ -52,38 +51,38 @@ npm install
 npm test
 ```
 
-## Adding a framework integration
+## Adding an integration
 
-1. Create `integrations/<framework>/python/` (or `/typescript/`)
-2. Add a `README.md`, `pyproject.toml`, and tests
-3. Keep the integration dependency as an optional extra — never add it to core
-4. Add a row to the framework table in the root `README.md`
+1. Create `integrations/<framework>/python/` or a matching language directory.
+2. Add a README, package metadata where needed, and tests.
+3. Keep framework dependencies optional; do not add them to core.
+4. Add the path to the root README or install guide.
 
 ## Commit style
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Use clear conventional commit subjects:
 
-```
+```text
 feat: add Pydantic AI integration
-fix: correct valid_to boundary in point-in-time recall
-docs: add GDPR erasure example to README
-test: cover conflict detection edge case
+fix: exclude a superseded preference from recall
+docs: add the Windows desktop setup
+test: prove two MCP clients share one profile
 ```
 
 ## Pull request checklist
 
-- [ ] Tests pass locally (`pytest -v`)
-- [ ] New behaviour is covered by a test
-- [ ] Documentation updated for any user-facing change
-- [ ] No secrets, credentials, or real API keys in the diff
-- [ ] PR description links the relevant issue (`Closes #123`)
+- [ ] Relevant tests pass locally.
+- [ ] New behavior is covered by a test.
+- [ ] User-facing changes update the documentation.
+- [ ] No secrets, credentials, personal data, or real API keys are included.
+- [ ] The pull request links a relevant issue when one exists.
 
 ## Reporting a security issue
 
-Do **not** open a public issue for vulnerabilities. See [SECURITY.md](SECURITY.md).
+Do not open a public issue for vulnerabilities. Follow [SECURITY.md](SECURITY.md).
 
 ## Code style
 
-- Python: standard `ruff` defaults, 100-character line length
-- TypeScript: `tsc --strict`, no `any` without justification
-- No new dependencies on core paths without discussion
+- Python: Ruff defaults with a 100-character line length.
+- TypeScript: strict TypeScript; avoid `any` without justification.
+- New core dependencies require discussion and a clear product need.

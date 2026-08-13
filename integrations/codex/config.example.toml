@@ -10,7 +10,7 @@ args = ["--from", "lians-sdk[mcp]", "lians-mcp"]
 [mcp_servers.lians.env]
 # Keep the default product surface small. Remove this line to expose every
 # advanced temporal and audit tool.
-LIANS_MCP_ENABLED_TOOLS = "remember,recall"
+LIANS_MCP_ENABLED_TOOLS = "remember,recall,list_memories,correct_memory,forget_memory"
 
 # Optional local overrides:
 # LIANS_LOCAL_DB = "~/.lians/mcp.db"

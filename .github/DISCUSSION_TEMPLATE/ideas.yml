@@ -1,0 +1,27 @@
+title: "[Idea] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is hard today?
+      description: Describe the memory or installation problem before proposing a feature.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction
+      description: What would make the workflow simpler or more reliable?
+    validations:
+      required: true
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: How can you help?
+      options:
+        - I can implement this
+        - I can test it in a real workflow
+        - I can provide design feedback
+        - I am only proposing the idea
+    validations:
+      required: true

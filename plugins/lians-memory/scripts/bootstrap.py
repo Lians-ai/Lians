@@ -1478,7 +1478,9 @@ def configure_runtime_environment(
     child["LIANS_NAMESPACE"] = ""
     project_subject_id = f"codex-project:{project_scope(root)}"
     child["LIANS_MCP_SUBJECT_ID"] = project_subject_id
-    child["LIANS_MCP_ENABLED_TOOLS"] = "remember,recall"
+    child["LIANS_MCP_ENABLED_TOOLS"] = (
+        "remember,recall,list_memories,correct_memory,forget_memory"
+    )
     child["LIANS_MCP_SCHEMA_PROFILE"] = "compact"
     child["LIANS_MCP_RECALL_K"] = "20"
     child["LIANS_MCP_CONTEXT_MAX_TOKENS"] = "768"

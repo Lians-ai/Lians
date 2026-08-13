@@ -1,9 +1,10 @@
-# Governed memory engine
+# Verifiable memory engine
 
 Lians is a temporal memory engine with one governed record underneath recall,
 learning, and decision reconstruction. The engine keeps the original content as
 the source of truth, compiles it into typed artifacts, and returns a
-content-addressed receipt with every recall.
+content-addressed receipt plus an authorized human-readable Memory Receipt with
+every recall.
 
 ## Execution path
 
@@ -18,11 +19,12 @@ flowchart LR
     E --> H[Rank and filter]
     F --> H
     G --> H
-    H --> I[Recall receipt]
-    I --> J[Agent context]
-    J --> K[Outcome]
-    K --> L[Reviewed reflection]
-    L --> C
+    H --> I[Canonical receipt]
+    I --> J[Human Memory Receipt]
+    J --> K[Agent context]
+    K --> L[Outcome]
+    L --> M[Reviewed reflection]
+    M --> C
 ```
 
 ## Lossless typed compilation
@@ -104,6 +106,36 @@ commits to:
 `provenance_coverage` reports how much of the result set is content-addressed.
 The receipt lets a caller prove which governed records were presented to the
 agent without placing the query or memory content in the receipt.
+
+Every response also includes `receipt_view`, a
+`lians.memory-receipt-view.v1` projection for an authorized product interface.
+It shows the selected plaintext, source, event and validity times, ranking
+reasons, integrity and degradation state, approximate context tokens, and the
+same `receipt_sha256`. Context responses additionally show the bounded records
+excluded by the context budget or policy.
+
+The projection is intentionally not part of the canonical hash. Evidence Packs
+retain a stable privacy-minimal verification contract while an authorized user
+can understand the content the application is already permitted to show. A
+recall receipt does not claim to list every candidate rejected before final
+ranking; inspect `exclusion_scope` before interpreting exclusions.
+
+## Inspect, correct, and forget
+
+The memory-control contract uses the same namespace and information-barrier
+checks as recall:
+
+- `GET /v1/memories` lists current, superseded, erased, or all visible versions.
+- `POST /v1/memories/{id}/correct` appends a replacement linked by
+  `SUPERSEDES`; the historical version is closed, not rewritten.
+- `POST /v1/memories/{id}/forget` requires `confirm: true`, clears the selected
+  record's encrypted content, embedding, and metadata, and appends a verifiable
+  audit event. Repeating the call is idempotent.
+- `POST /v1/erase` remains the stronger subject-wide crypto-shred operation.
+
+Record-level forgetting retains a non-content tombstone and the append-only
+audit chain. It should not be described as deleting every reference to the
+subject. See the complete [verifiable-memory product contract](verifiable-memory.md).
 
 ## Retrieval and cache behavior
 

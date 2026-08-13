@@ -29,9 +29,14 @@
     ],
     "surfaces": [
       {
+        "label": "Lians Easy desktop installer",
+        "status": "Release candidate",
+        "detail": "Guided, dependency-free local setup for nontechnical users, with cross-client memory and managed deployment flags."
+      },
+      {
         "label": "MCP memory server",
         "status": "Available",
-        "detail": "Local memory for MCP-compatible agents with a starter surface of remember and recall."
+        "detail": "Local memory for MCP-compatible agents with remember, recall, inspect, correct, and confirmed forget."
       },
       {
         "label": "Python local library",

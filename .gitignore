@@ -64,3 +64,5 @@ agentmem/results/
 agentmem/benchmarks/data/*.sqlite
 # Local MCP smoke databases are synthetic runtime state, never release assets.
 .artifacts/*.db
+# Local standalone-installer build and smoke-test output.
+tmp/lians-easy-*

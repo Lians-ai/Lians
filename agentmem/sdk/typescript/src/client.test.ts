@@ -136,6 +136,44 @@ describe("batchAdd()", () => {
   });
 });
 
+describe("memory controls", () => {
+  it("lists, corrects, and forgets memory through the control endpoints", async () => {
+    const listFetch = mockFetch({
+      ok: true,
+      status: 200,
+      body: { items: [MEMORY_FIXTURE], total: 1, limit: 25, offset: 0, state: "current" },
+    });
+    await client.listMemories("agent-1", { state: "current", limit: 25 });
+    const [listUrl, listInit] = listFetch.mock.calls[0] as [string, RequestInit];
+    expect(listUrl).toContain("/v1/memories?");
+    expect(listUrl).toContain("agent_id=agent-1");
+    expect(listUrl).toContain("state=current");
+    expect(listInit.method).toBe("GET");
+
+    const correctFetch = mockFetch({ ok: true, status: 200, body: MEMORY_FIXTURE });
+    await client.correctMemory("mem-uuid-1", {
+      content: "The equity desk target for AAPL is $220",
+      source: "user_correction",
+    });
+    const [correctUrl, correctInit] = correctFetch.mock.calls[0] as [string, RequestInit];
+    expect(correctUrl).toBe("https://mem.example.com/v1/memories/mem-uuid-1/correct");
+    expect(JSON.parse(correctInit.body as string).content).toContain("$220");
+
+    const forgetFetch = mockFetch({
+      ok: true,
+      status: 200,
+      body: { status: "forgotten", memory_id: "mem-uuid-1" },
+    });
+    await client.forgetMemory("mem-uuid-1", {
+      confirm: true,
+      request_ref: "user-request-1",
+    });
+    const [forgetUrl, forgetInit] = forgetFetch.mock.calls[0] as [string, RequestInit];
+    expect(forgetUrl).toBe("https://mem.example.com/v1/memories/mem-uuid-1/forget");
+    expect(JSON.parse(forgetInit.body as string).confirm).toBe(true);
+  });
+});
+
 // ── recall ───────────────────────────────────────────────────────────────────
 
 describe("recall()", () => {
