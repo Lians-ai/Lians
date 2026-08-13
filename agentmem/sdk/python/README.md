@@ -62,6 +62,13 @@ environment:
 }
 ```
 
+The first memory tool on a clean machine may download the local semantic model.
+Progress-aware MCP clients receive a warmup message. After 90 seconds Lians
+returns a retryable error without queuing the write; keep the server running and
+retry shortly. Set `LIANS_MCP_LOCAL_READY_TIMEOUT` to 5-600 seconds when a host
+needs a different bound. Model files use the Hugging Face cache controlled by
+`HF_HOME`.
+
 ## Connect to a Lians server
 
 ```bash
