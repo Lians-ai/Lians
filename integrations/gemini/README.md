@@ -7,9 +7,16 @@ memory is not locked to Gemini or its model provider.
 ## Install
 
 1. Install [`uv`](https://docs.astral.sh/uv/).
-2. Merge [`settings.example.json`](settings.example.json) into
-   `~/.gemini/settings.json`.
+2. Install the extension:
+
+   ```bash
+   gemini extensions install https://github.com/Lians-ai/Lians
+   ```
+
 3. Restart Gemini CLI, then run `/mcp list` to confirm that `lians` is connected.
+
+For a manual setup, merge [`settings.example.json`](settings.example.json)
+into `~/.gemini/settings.json`.
 
 The Community starter profile exposes only two tools:
 
