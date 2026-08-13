@@ -1,0 +1,26 @@
+[project]
+name = "lians-pydantic-ai-example"
+version = "0.1.0"
+description = "A deterministic Pydantic AI agent with local temporal Lians memory"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "lians-sdk[local]",
+    "pydantic-ai-slim==2.29.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.9",
+]
+
+[tool.uv.sources]
+lians-sdk = { path = "../../../agentmem/sdk/python", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["test_demo.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
