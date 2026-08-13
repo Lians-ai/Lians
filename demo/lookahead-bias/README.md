@@ -1,14 +1,14 @@
 # Your Agent's Memory Is Contaminating Your Backtest
 
 **A reproducible demo of lookahead bias in agent memory — and the one-parameter fix.**
-No API keys. No network. `python run_demo.py`, ~30 seconds.
+No API keys. No network. `python run_demo.py`, usually 1-3 minutes on CPU.
 
 ![Equity curves: contaminated vs honest vs buy-and-hold](results/equity_curves.png)
 
 | run | retrieval | total return | Sharpe |
 |---|---|---:|---:|
-| **Contaminated** | `recall()` — present-time recall over the full history | **+44.0%** | **4.6** |
-| **Honest** | `recall_at(as_of=decision_time)` | −4.2% | −0.6 |
+| **Contaminated** | `recall()` — present-time recall over the full history | **+41.3%** | **3.9** |
+| **Honest** | `recall_at(as_of=decision_time)` | −0.9% | −0.1 |
 | Buy & hold | — | +1.4% | 0.4 |
 
 Same strategy. Same data. Same memory store. The entire diff between the two
@@ -50,13 +50,20 @@ warning — just a strategy that "works" in simulation and evaporates live.
      to what was knowable at decision time.
 4. **Prints the receipts.** Every contaminated retrieval is logged: decision
    timestamp, the note that was retrieved, the note's timestamp, and how many
-   days in the future it was created. In this run: **918 retrievals of
+   days in the future it was created. In this run: **858 retrievals of
    future information** across 124 decision days ([receipts.md](results/receipts.md)).
+
+The demo explicitly uses Lians' deterministic test embedding provider so the
+committed evidence does not drift with installed `sentence-transformers`
+versions. That is appropriate here because the experiment isolates temporal
+leakage, not semantic-model quality. Normal local product use still selects the
+semantic provider installed by `lians-sdk[local]`.
 
 The synthetic market is the point, not a limitation: because we control exactly
 which information existed when, the leak is *measurable* — every contaminated
-retrieval is provable from the data files, and the whole thing reproduces
-bit-for-bit with zero API keys. The causal structure it encodes (the note
+retrieval is provable from the data files, and the numerical receipts reproduce
+deterministically with zero API keys. (The rendered PNG may differ slightly
+across Matplotlib versions.) The causal structure it encodes (the note
 describing an outcome cannot exist before the outcome) is true of every real
 market. Fictional tickers are used so no real company's facts are misstated.
 
@@ -67,9 +74,9 @@ Excerpt — retrieval at decision time surfacing notes that did not exist yet
 
 | decision time | ticker | retrieved note (created later) | days in future | position | next-day return |
 |---|---|---|---:|---:|---:|
-| 2026-01-14 | AVLN | AVLN cuts FY outlook in an unscheduled January update; flags weak demand… | 0.6 | −1 | **−5.1%** |
 | 2026-02-04 | HLIO | Sell-side downgrades HLIO to Underweight after the February news… | 1.7 | −1 | **−9.6%** |
-| 2026-01-15 | CRDX | Sell-side upgrades CRDX to Overweight after the January news… | 1.7 | +1 | **+4.7%** |
+| 2026-03-26 | CRDX | CRDX cuts FY outlook in an unscheduled March update… | 0.6 | −1 | **−8.0%** |
+| 2026-05-22 | VYTR | Sell-side upgrades VYTR to Overweight after the May news… | 3.7 | +1 | **+6.5%** |
 
 The pattern in the full table is the tell: position sign matches the *future*
 note's direction, and the biggest next-day returns cluster on event days the
@@ -105,7 +112,7 @@ memory as infrastructure, not as a feature flag.
 ## Reproduce
 
 ```bash
-pip install lians-sdk[local]      # or run from the Lians monorepo checkout
+pip install "lians-sdk[local]" matplotlib  # or install the SDK from this checkout
 python generate_dataset.py        # optional — data/ is committed, seed=42
 python run_demo.py                # writes results/ (~30s, CPU only)
 ```
