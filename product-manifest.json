@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-12",
+  "updatedAt": "2026-08-13",
   "source": {
     "repository": "Lians-ai/Lians",
     "branch": "master"
@@ -42,6 +42,11 @@
         "label": "Python local library",
         "status": "Available",
         "detail": "SQLite-backed memory inside Python applications with no server, Docker container, or API key."
+      },
+      {
+        "label": "Pydantic AI integration",
+        "status": "Available",
+        "detail": "A tested local example that exposes current and point-in-time Lians recall as ordinary Pydantic AI function tools."
       },
       {
         "label": "Language SDKs",

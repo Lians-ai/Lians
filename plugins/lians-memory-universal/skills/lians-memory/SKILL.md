@@ -1,6 +1,6 @@
 ---
 name: lians-memory
-description: Use Lians Memory when the user asks to remember a durable project fact or decision, recall prior project context, permanently forget a specific stored memory, or continue work that depends on explicitly saved context. Do not use it for transient scratch text or whole-conversation capture.
+description: Use Lians Memory when the user asks to remember a durable project fact or decision, recall prior project context, remove a specific stored memory from active service storage after confirmation, or continue work that depends on explicitly saved context. Do not use it for transient scratch text or whole-conversation capture.
 ---
 
 # Lians Memory
@@ -27,9 +27,9 @@ Use only the `remember`, `recall`, and `forget_memory` tools supplied by the Lia
 ## Forget
 
 1. Use `forget_memory` only for one exact `memory_ref` returned by Lians.
-2. Explain that forgetting permanently crypto-shreds the selected memory, then require fresh, explicit confirmation in the current request or an immediate confirmation exchange.
+2. Explain that forgetting immediately crypto-shreds the selected memory from active service storage while encrypted provider backups may retain a recoverable copy for up to 5 days, then require fresh, explicit confirmation in the current request or an immediate confirmation exchange.
 3. Set `confirm` to `true` only after that confirmation. Do not call the tool merely to ask for confirmation.
-4. Treat `status: forgotten` as success and report `memories_erased`. Treat `status: not_found` as no deletion; do not imply that anything was erased.
+4. Treat `status: forgotten` as successful removal from active service storage and report `memories_erased` with the backup-window disclosure. Treat `status: not_found` as no deletion; do not imply that anything was erased.
 
 ## Boundaries
 
