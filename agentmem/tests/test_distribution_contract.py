@@ -19,6 +19,17 @@ def test_gemini_starter_profile_is_bounded_and_requires_confirmation():
     assert server["trust"] is False
 
 
+def test_gemini_extension_uses_the_published_bounded_server():
+    extension = _json("gemini-extension.json")
+    server = extension["mcpServers"]["lians"]
+
+    assert extension["version"] == "0.5.1"
+    assert server["command"] == "uvx"
+    assert server["args"] == ["--from", "lians-sdk[mcp]==0.5.0", "lians-mcp"]
+    assert server["includeTools"] == ["remember", "recall"]
+    assert server["timeout"] == 300000
+
+
 def test_cursor_starter_profile_is_local_bounded_stdio():
     server = _json("integrations/cursor/mcp.example.json")["mcpServers"]["lians"]
 
