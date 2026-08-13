@@ -13,6 +13,15 @@ install `0.5.0` until the release checklist verifies PyPI, npm, Go, Maven, the C
 asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
 
 ### Added
+- Lians Easy, a dependency-free desktop runtime and guided installer that can
+  configure supported AI clients, preserve configuration backups, share one
+  local profile across clients, and support silent enterprise deployment.
+- Core MCP memory controls for listing, correcting, and confirmed forgetting,
+  alongside remember and bounded recall.
+- Verifiable AI memory controls: human-readable Memory Receipts on recall and
+  context responses, list/correct/forget APIs, and Python and TypeScript SDK
+  support. Corrections preserve supersession history; record-level forgetting
+  requires explicit confirmation and preserves an audit tombstone.
 - Decision Envelopes, completeness grades, signed Evidence Packs, and offline
   verification for point-in-time decision reconstruction.
 - RIAD-1 reconstruction gates covering historical state, future-leak detection,

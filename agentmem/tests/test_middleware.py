@@ -447,6 +447,29 @@ class TestRateLimitMiddleware:
         assert resp.status_code == 429
         redis_key = r.eval.await_args.args[2]
         assert redis_key.startswith("agentmem:rl:admin:")
+
+    async def test_provisioning_secret_guesses_are_rate_limited_by_client_ip(self, client):
+        """Changing a provisioning-secret guess must not create a fresh bucket."""
+        from src.lians.config import get_settings
+
+        limit = get_settings().rate_limit_per_minute
+        with patch("src.lians.cache._get_redis") as mock_redis:
+            r = AsyncMock()
+            r.eval = AsyncMock(return_value=limit + 1)
+            r.expire = AsyncMock()
+            mock_redis.return_value = r
+
+            resp = await client.get(
+                "/v1/provisioning/api-keys?namespace=ns_test",
+                headers={
+                    "X-Provisioning-Secret": "a-different-wrong-guess",
+                    "X-Lians-Namespace": "ns_test",
+                },
+            )
+
+        assert resp.status_code == 429
+        redis_key = r.eval.await_args.args[2]
+        assert redis_key.startswith("agentmem:rl:provisioning:")
         assert "a-different-wrong-guess" not in redis_key
 
     @pytest.mark.parametrize("path", ["/mcp", "/mcp/"])

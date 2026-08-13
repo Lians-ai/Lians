@@ -28,6 +28,10 @@ import type {
   LiansClientOptions,
   MemoryAdd,
   MemoryOut,
+  MemoryListResult,
+  MemoryCorrectionCreate,
+  MemoryForgetRequest,
+  MemoryForgetResult,
   MemoryBatchResult,
   MessageIngestRequest,
   RecallRequest,
@@ -177,6 +181,47 @@ export class LiansClient {
     return this._req<MemoryBatchResult>("POST", "/v1/memories/batch", {
       json: { memories },
     });
+  }
+
+  /** List memory versions for an authorized inspect/correct/forget surface. */
+  listMemories(
+    agentId: string,
+    opts: {
+      state?: "current" | "superseded" | "erased" | "all";
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<MemoryListResult> {
+    return this._req<MemoryListResult>("GET", "/v1/memories", {
+      params: {
+        agent_id: agentId,
+        state: opts.state ?? "current",
+        limit: opts.limit ?? 50,
+        offset: opts.offset ?? 0,
+      },
+    });
+  }
+
+  /** Append a user-confirmed correction without rewriting memory history. */
+  correctMemory(
+    memoryId: string,
+    req: MemoryCorrectionCreate,
+  ): Promise<MemoryOut> {
+    return this._req<MemoryOut>("POST", `/v1/memories/${memoryId}/correct`, {
+      json: req,
+    });
+  }
+
+  /** Irreversibly forget one memory while preserving its audit tombstone. */
+  forgetMemory(
+    memoryId: string,
+    req: MemoryForgetRequest,
+  ): Promise<MemoryForgetResult> {
+    return this._req<MemoryForgetResult>(
+      "POST",
+      `/v1/memories/${memoryId}/forget`,
+      { json: req },
+    );
   }
 
   // ── Read ──────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ services:
   # ── Infrastructure ────────────────────────────────────────────────────────
 
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
     environment:
       POSTGRES_USER: agentmem
       POSTGRES_PASSWORD: agentmem
@@ -19,7 +19,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     ports:
       - "6379:6379"
     volumes:

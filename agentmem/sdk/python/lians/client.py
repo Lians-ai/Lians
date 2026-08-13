@@ -219,6 +219,58 @@ class AsyncLiansClient:
 
     # ── Read ──────────────────────────────────────────────────────────────────
 
+    async def list_memories(
+        self,
+        agent_id: str,
+        state: str = "current",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        """List authorized memory versions for an inspect/correct/forget UI."""
+        return await self._req("GET", "/v1/memories", params={
+            "agent_id": agent_id,
+            "state": state,
+            "limit": limit,
+            "offset": offset,
+        })
+
+    async def correct_memory(
+        self,
+        memory_id: str,
+        content: str,
+        *,
+        event_time: Optional[datetime] = None,
+        source: Optional[str] = "user_correction",
+        metadata: Optional[dict[str, Any]] = None,
+        importance: Optional[float] = None,
+    ) -> dict:
+        """Append a user-confirmed correction and close the selected live version."""
+        return await self._req(
+            "POST",
+            f"/v1/memories/{memory_id}/correct",
+            json={
+                "content": content,
+                "event_time": event_time.isoformat() if event_time else None,
+                "source": source,
+                "metadata": metadata or {},
+                "importance": importance,
+            },
+        )
+
+    async def forget_memory(
+        self,
+        memory_id: str,
+        *,
+        confirm: bool = False,
+        request_ref: Optional[str] = None,
+    ) -> dict:
+        """Irreversibly forget one memory while preserving its audit tombstone."""
+        return await self._req(
+            "POST",
+            f"/v1/memories/{memory_id}/forget",
+            json={"confirm": confirm, "request_ref": request_ref},
+        )
+
     async def recall(
         self,
         agent_id: str,

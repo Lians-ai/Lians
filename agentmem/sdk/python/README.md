@@ -1,82 +1,100 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="https://raw.githubusercontent.com/Lians-ai/Lians/HEAD/docs/images/logo.png" width="340" alt="Lians logo">
+    <img src="https://raw.githubusercontent.com/Lians-ai/Lians/HEAD/docs/assets/logo-blue.png" width="340" alt="Lians">
   </a>
 </p>
 
-# Lians
+# Lians for Python
 
-**Bitemporal long-term memory for AI agents.** Keep current facts clean, reconstruct what an agent knew at a past time, and retain tamper-evident audit records.
+**Local-first memory for AI agents.** Remember useful facts, recall relevant
+context in later sessions, and keep that memory independent of the model
+provider.
 
-## Install
+## Local quickstart
 
 ```bash
-pip install lians-sdk
-pip install lians-sdk[local]         # SQLite plus real local semantic embeddings
-pip install lians-sdk[mcp]           # Local MCP server
-pip install lians-sdk[langchain]     # LangChain
-pip install lians-sdk[langgraph]     # LangGraph
-pip install lians-sdk[crewai]        # CrewAI
-pip install lians-sdk[openai-agents] # OpenAI Agents SDK
-pip install lians-sdk[autogen]       # AutoGen v0.4
-pip install lians-sdk[all]           # Everything
+pip install "lians-sdk[local]"
 ```
-
-## Quickstart
 
 ```python
 from datetime import datetime, timezone
 from lians import LocalLiansClient
 
-mem = LocalLiansClient()  # No server, Docker, or API key
+memory = LocalLiansClient(db_path=".lians/memory.db")
 
-mem.add(
-    agent_id="analyst-1",
-    content="NVDA FY2026 revenue guidance raised to $40B",
-    event_time=datetime(2025, 11, 19, 16, tzinfo=timezone.utc),
-    metadata={"ticker": "NVDA", "metric": "revenue_guidance"},
-    importance=0.9,
+memory.add(
+    agent_id="my-agent",
+    content="The project uses Python 3.12 and pytest.",
+    event_time=datetime.now(timezone.utc),
+    metadata={"project": "demo", "topic": "tooling"},
 )
 
-# Superseded facts are excluded before they reach the model
-current = mem.recall(agent_id="analyst-1", query="NVDA revenue guidance")
-
-# Reconstruct what was known on a past date
-past = mem.recall_at(
-    agent_id="analyst-1",
-    query="NVDA revenue guidance",
-    as_of=datetime(2025, 3, 1, tzinfo=timezone.utc),
+result = memory.recall(
+    agent_id="my-agent",
+    query="Which Python version and test runner should I use?",
 )
+
+print([item["content"] for item in result["memories"]])
 ```
 
-## Why Lians
+Local mode stores memory in SQLite and needs no server, Docker container, or
+API key. The first run may download the local embedding model.
 
-- Bitemporal facts with event time and ingestion time
-- Deterministic supersession before memories reach the model
-- Point-in-time recall and lookahead-bias checks
-- Tamper-evident audit history and a crypto-erasure workflow
-- Local SQLite mode with no server or API key
-- Hosted and self-hosted deployment paths
+## Add memory to an MCP client
 
-See the [published benchmark results](https://github.com/Lians-ai/Lians/blob/master/docs/benchmark.md), [regulated-memory evaluation](https://github.com/Lians-ai/Lians/blob/master/docs/regulated-eval-results.md), and [public correction ledger](https://github.com/Lians-ai/Lians/blob/master/docs/gtm/public-right-of-reply-2026-07-17.md). The evaluation includes runnable adapters so results can be reproduced and challenged.
-
-## Framework integrations
-
-```python
-from lians.langchain_integration import LiansChatHistory, build_tools
-from lians.langgraph_integration import create_recall_node, create_remember_node
-from lians.crewai_integration import build_crewai_tools
-from lians.openai_agents_integration import build_openai_agent_tools
-from lians.autogen_integration import build_autogen_tools
+```bash
+pip install "lians-sdk[mcp]"
+lians-mcp
 ```
 
-## Hosted or self-hosted API
+For most MCP hosts, use `uvx` so you do not need to manage a virtual
+environment:
+
+```json
+{
+  "mcpServers": {
+    "lians": {
+      "command": "uvx",
+      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
+      "env": {"LIANS_MCP_ENABLED_TOOLS": "remember,recall"}
+    }
+  }
+}
+```
+
+## Connect to a Lians server
+
+```bash
+pip install lians-sdk
+```
 
 ```python
 from lians import LiansClient
 
-mem = LiansClient(base_url="https://mem.yourfirm.internal", api_key="...")
+memory = LiansClient(
+    base_url="https://memory.example.com",
+    api_key="...",
+)
 ```
+
+## Framework integrations
+
+```bash
+pip install "lians-sdk[langchain]"
+pip install "lians-sdk[langgraph]"
+pip install "lians-sdk[crewai]"
+pip install "lians-sdk[openai-agents]"
+pip install "lians-sdk[autogen]"
+```
+
+The package includes adapters for LangChain, LangGraph, CrewAI, OpenAI Agents,
+and AutoGen.
+
+## Advanced memory controls
+
+Lians also supports point-in-time recall, supersession, memory lineage,
+tamper-evident audit history, governed erasure, and shared deployments. These
+features are optional; `remember` and `recall` are enough to start.
 
 Full documentation: [github.com/Lians-ai/Lians](https://github.com/Lians-ai/Lians)
 

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-12",
+  "source": {
+    "repository": "Lians-ai/Lians",
+    "branch": "master"
+  },
+  "product": {
+    "name": "Lians",
+    "category": "Memory for any AI agent",
+    "summary": "Lians gives AI agents durable memory across chats, sessions, tools, and models. It runs locally by default, connects through MCP or SDKs, and lets an agent remember useful facts and recall relevant current context without locking that memory to one model provider.",
+    "workflow": [
+      {
+        "label": "Remember",
+        "detail": "Store one useful fact, preference, constraint, or decision that should survive the current chat."
+      },
+      {
+        "label": "Recall",
+        "detail": "Retrieve a small, relevant set of current memories when a later task needs them."
+      },
+      {
+        "label": "Continue",
+        "detail": "Point another compatible agent or model at the same memory store and continue with the same context."
+      },
+      {
+        "label": "Control",
+        "detail": "Supersede stale facts, inspect where a memory came from, and use confirmed erasure where the integration exposes it."
+      }
+    ],
+    "surfaces": [
+      {
+        "label": "Lians Easy desktop installer",
+        "status": "Release candidate",
+        "detail": "Guided, dependency-free local setup for nontechnical users, with cross-client memory and managed deployment flags."
+      },
+      {
+        "label": "MCP memory server",
+        "status": "Available",
+        "detail": "Local memory for MCP-compatible agents with remember, recall, inspect, correct, and confirmed forget."
+      },
+      {
+        "label": "Python local library",
+        "status": "Available",
+        "detail": "SQLite-backed memory inside Python applications with no server, Docker container, or API key."
+      },
+      {
+        "label": "Language SDKs",
+        "status": "Available",
+        "detail": "Python, TypeScript, Go, Java, and C clients for connecting applications to a Lians service."
+      },
+      {
+        "label": "Self-hosted service",
+        "status": "Available",
+        "detail": "A shared deployment path for teams that need server-backed memory, administration, and advanced controls."
+      }
+    ]
+  }
+}

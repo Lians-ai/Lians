@@ -103,6 +103,22 @@ def test_production_rejects_unencrypted_override(monkeypatch):
         _validate_production_secrets(settings)
 
 
+def test_production_rejects_weak_or_reused_provisioning_secret(monkeypatch):
+    monkeypatch.delenv("AGENTMEM_ALLOW_UNENCRYPTED", raising=False)
+    settings = SimpleNamespace(
+        deployment_environment="production",
+        admin_secret="a" * 48,
+        provisioning_secret="short",
+        cors_origins="https://www.lians.ai",
+    )
+    with pytest.raises(RuntimeError, match="PROVISIONING_SECRET"):
+        _validate_production_secrets(settings)
+
+    settings.provisioning_secret = settings.admin_secret
+    with pytest.raises(RuntimeError, match="different from ADMIN_SECRET"):
+        _validate_production_secrets(settings)
+
+
 def test_hosted_startup_timeout_default_is_published_to_deploy_configs():
     repository_root = Path(__file__).parents[2]
     env_example = (repository_root / "agentmem" / ".env.example").read_text(encoding="utf-8")

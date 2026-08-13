@@ -1,106 +1,125 @@
-# Lians — Guide for AI Coding Assistants
+# Lians - Guide for AI Coding Assistants
 
-This file gives AI coding assistants (Claude Code, Cursor, Codex, Windsurf) the context needed to work effectively in this repository.
+This file gives coding assistants the context needed to work in this
+repository.
 
 ## What Lians is
 
-Lians is a **financial-grade memory layer for AI agents**. It solves the stale-fact problem: when an agent writes "NVDA guidance is $35B" and later writes "NVDA guidance revised to $40B", naive memory systems return both — contaminating LLM context. Lians uses a bitemporal model to suppress superseded facts at the database layer.
+Lians is a local-first, provider-neutral memory tool for AI agents. Its core
+product loop is deliberately small:
 
-Key capabilities:
-- **Bitemporal facts** — `event_time` (when it happened) + `valid_from/valid_to` (when we knew it)
-- **Supersession pipeline** — three-stage detection (metadata overlap → deterministic rules → optional LLM)
-- **Tamper-evident audit chain** — SHA-256 hash chain on every write; SEC 17a-4 deployments additionally require configured WORM storage and policy controls
-- **GDPR crypto-shred** — per-subject AES-256-GCM keys; destroy key = content unrecoverable
-- **Information barriers** — PostgreSQL RLS enforced at the DB layer, not application layer
-- **Backtest contamination detection** — flags lookahead bias before a backtest runs
+1. `remember` one durable fact, preference, constraint, or decision; and
+2. `recall` a bounded set of relevant current memories in a later session.
+
+MCP is the default integration surface for existing AI clients. The Python
+local client is the default application surface. Both can run with SQLite and
+no Lians account or API key.
+
+Lians also has advanced temporal, audit, erasure, isolation, and reconstruction
+capabilities. Preserve those capabilities, but do not make them a prerequisite
+for the basic memory experience or the first explanation of the product.
+
+## Product principles
+
+- Keep the default setup local and model-provider neutral.
+- Make `remember` and `recall` work before exposing advanced tools.
+- Return small, task-relevant context instead of replaying full conversations.
+- Exclude superseded facts from current recall.
+- Require explicit confirmation whenever an integration exposes irreversible
+  deletion.
+- Keep sources, timestamps, and lineage available for users who need them.
 
 ## Repository layout
 
-```
-agentmem/                   Core server (FastAPI + Postgres + pgvector + Redis)
-  src/lians/                Python package — all server logic
-    api/                    Route handlers
-    adapters/               Domain adapters (finance, healthcare, legal)
-    embeddings.py           Provider abstraction (Voyage / OpenAI / local)
-    memory_service.py       Core write/recall/supersession logic
-    supersession.py         Three-stage supersession pipeline
-    audit_chain.py          SHA-256 Merkle audit chain
-    crypto.py               AES-256-GCM per-subject encryption
-    config.py               Pydantic settings (all env vars documented here)
-  tests/                    557+ pytest tests (all run with local embeddings)
-  alembic/versions/         DB migrations — read these to understand the schema
-  sdk/python/lians/         Full SDK with framework integrations
+```text
+agentmem/                   Core service and SDKs
+  src/lians/                FastAPI service and memory engine
+  tests/                    Pytest suite
+  alembic/versions/         Database migrations
+  sdk/python/lians/         Python SDK, local client, and MCP server
   sdk/typescript/src/       TypeScript SDK
-sdk/python/src/lians/       Thin HTTP client SDK (published as `lians` on PyPI)
-integrations/               Per-framework integration packages
-docs/                       Documentation
+integrations/               Agent and framework integrations
+plugins/                    Installable agent plugins
+docs/                       Setup, architecture, security, and operations
 ```
 
 ## How to run tests
 
 ```bash
-cd agentmem
-pip install -e ".[dev]"
-pytest -v                           # all tests, local embeddings
-pytest -v -k "not pgvector"         # skip tests requiring real Postgres
-pytest tests/test_memory_service.py # a single file
+python -m pip install -e ".[dev]"
+python scripts/test_all.py
 ```
 
-No external API keys are required. All tests run with `EMBEDDING_PROVIDER=local`.
+Focused server tests can also run directly:
+
+```bash
+python -m pytest agentmem/tests/test_mcp_local.py -q
+python -m pytest agentmem/tests/test_published_release_status.py -q
+```
+
+No external model API key is required for the default test suite.
 
 ## Key environment variables
 
-See `agentmem/.env.example` for the full list. The ones that matter most:
+See `agentmem/.env.example` for the complete reference.
 
-| Variable | Default | Notes |
+| Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | SQLite (tests) | Postgres for server mode |
-| `EMBEDDING_PROVIDER` | `local` | `voyage` or `openai` for production |
-| `ADMIN_SECRET` | `dev-admin-secret-change-in-production` | Must change in prod |
-| `MASTER_ENCRYPTION_KEY` | — | Required for encryption; blank disables it |
-| `SUPERSESSION_LLM_STAGE` | `false` | Enables Stage 3 Anthropic LLM adjudication |
+| `LIANS_LOCAL_DB` | `~/.lians/mcp.db` | Local MCP SQLite store |
+| `LIANS_MCP_ENABLED_TOOLS` | all tools | Optional MCP tool allowlist |
+| `LIANS_URL` | unset | Hosted or self-hosted Lians service |
+| `LIANS_API_KEY` | unset | Credential for a remote service |
+| `LIANS_AGENT_ID` | `mcp-agent` | Memory namespace for an agent |
+| `EMBEDDING_PROVIDER` | `local` in tests | Embedding implementation |
 
 ## Architecture decisions to know
 
-1. **Supersession is three-stage**: Stage 1 = metadata key overlap; Stage 2 = deterministic rule engine (SUPERSEDES / CONFIRMS / ADDS); Stage 3 = optional LLM (Claude Haiku) for paraphrase detection. Most work happens in `supersession.py`.
-
-2. **Embeddings are provider-agnostic**: `embeddings.py` has a `get_provider()` factory. Add a new provider by implementing `EmbeddingProvider` and registering it in the match block.
-
-3. **All tests use `EMBEDDING_PROVIDER=local`**: The local provider uses a deterministic hash projection — not accurate, but fast and zero-dependency. Never use it in production.
-
-4. **RLS barriers are enforced at Postgres level**: `migration 0011_rls_barriers` applies `FORCE ROW LEVEL SECURITY`. The session variable `app.current_namespace` controls visibility. Admin routes set it to `__admin__` to bypass.
-
-5. **The audit chain is append-only**: `audit_chain.py` — never add an UPDATE or DELETE on `event_log`. The hash chain breaks if you do.
-
-6. **Encryption**: Each subject gets a unique DEK stored in `subject_keys`. The DEK is encrypted under the master key. Destroying the `subject_keys` row is the GDPR crypto-shred — content rows remain but are unrecoverable.
+1. **Local mode is a real product path.** `LocalLiansClient` uses SQLite and the
+   same service-layer behavior without requiring the HTTP service.
+2. **MCP is the universal adapter.** `lians-mcp` exposes memory tools to any
+   compatible host. Keep its starter schema and errors easy to understand.
+3. **Supersession protects current recall.** Metadata overlap and deterministic
+   rules identify revisions; an optional model stage can adjudicate paraphrases.
+4. **Embeddings are provider-agnostic.** Add a provider through the factory in
+   `agentmem/src/lians/embeddings.py`.
+5. **The audit chain is append-only.** Never update or delete `event_log` rows.
+6. **Information barriers are enforced in PostgreSQL.** Production deployments
+   must use a non-superuser role for row-level security to be effective.
+7. **Erasure destroys per-subject keys.** Content becomes unrecoverable while
+   non-content audit structure can remain verifiable.
 
 ## Common tasks
 
-**Add a new API route:**
-- Add handler in `agentmem/src/lians/api/routes_<area>.py`
-- Register router in `agentmem/src/lians/main.py`
-- Add scope check via `auth.require("<scope>")` for paid-tier features
+**Change the basic memory behavior:**
 
-**Add a new domain adapter:**
-- Copy `agentmem/src/lians/adapters/passthrough.py`
-- Register in `agentmem/src/lians/adapters/__init__.py`
+- Start in `agentmem/src/lians/memory_service.py`.
+- Add a focused regression test in `agentmem/tests/`.
+- Verify both local-client and HTTP behavior when the contract is shared.
 
-**Add a new framework integration:**
-- Create `integrations/<framework>/python/`
-- Implement `remember()` and `recall()` wrappers around `LiansClient`
-- Add tests and a README
+**Change an MCP tool:**
+
+- Edit `agentmem/sdk/python/lians/mcp_server.py`.
+- Keep `remember` and `recall` backward compatible.
+- Run `agentmem/tests/test_mcp_local.py`.
+
+**Add a framework or agent integration:**
+
+- Create or extend `integrations/<framework>/`.
+- Keep the first-run surface to `remember` and `recall` where possible.
+- Document the smallest working configuration before advanced options.
 
 **Change the schema:**
-- Write an Alembic migration in `agentmem/alembic/versions/`
-- Follow the `0001_initial.py` pattern
-- Never modify existing migrations
+
+- Add an Alembic migration in `agentmem/alembic/versions/`.
+- Never modify an already-published migration.
 
 ## Testing invariants
 
-The six named invariants (from `docs/testing.md`):
-- **I1 Temporal soundness** — superseded facts never appear in present recall
-- **I2 Audit immutability** — hash chain is tamper-evident
-- **I3 Erasure completeness** — erased subjects return no data
-- **I4 Barrier isolation** — barrier groups cannot see each other's data
-- **I5 Point-in-time correctness** — `recall_at(as_of=T)` returns exactly the facts valid at T
-- **I6 Backtest purity** — `backtest_check` rejects any memory written after `simulation_as_of`
+The detailed invariants live in `docs/testing.md`. The most important product
+guarantees are:
+
+- superseded facts do not appear in present recall;
+- point-in-time recall returns the state known at that time;
+- erased subjects return no readable content;
+- barrier groups cannot read each other's memory; and
+- the append-only audit chain detects tampering.

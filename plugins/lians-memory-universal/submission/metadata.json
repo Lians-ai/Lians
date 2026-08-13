@@ -307,6 +307,18 @@
             },
             "truncated": {
               "type": "boolean"
+            },
+            "receipt_sha256": {
+              "default": "",
+              "type": "string"
+            },
+            "provenance_coverage": {
+              "default": 0.0,
+              "type": "number"
+            },
+            "receipt_view": {
+              "additionalProperties": true,
+              "type": "object"
             }
           },
           "required": [

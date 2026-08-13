@@ -515,7 +515,7 @@ dependencies = [
     { name = "httpx" },
 ]
 wheels = [
-    { filename = "lians_sdk-0.5.0-py3-none-any.whl", hash = "sha256:50fec88bd18d803eac7ba224c056e94e33fe9359a8d1331b8331678ec7beb038" },
+    { filename = "lians_sdk-0.5.0-py3-none-any.whl", hash = "sha256:b81fa359cbebe902756bcc52bfdce3775d9e3ef6d3d116e774fc4e1da2043895" },
 ]
 
 [package.optional-dependencies]
