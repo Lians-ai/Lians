@@ -206,7 +206,7 @@ def test_local_query_routes_parse_query_strings(monkeypatch):
     assert history == {"ticker": "NVDA", "items": []}
 
 
-def test_mcp_tools_advertise_safe_approval_hints():
+def test_mcp_tools_advertise_accurate_approval_hints():
     server = mcp_server._build_server()
     handler = next(
         callback
@@ -220,9 +220,16 @@ def test_mcp_tools_advertise_safe_approval_hints():
     recall_schema = tools["recall"].inputSchema["properties"]
     assert recall_schema["k"]["default"] == 50
     assert recall_schema["max_tokens"]["default"] == 2650
-    assert tools["remember"].annotations.readOnlyHint is False
-    assert tools["remember"].annotations.idempotentHint is False
-    for name in set(tools) - {"remember"}:
+    for name in ("remember", "correct_memory"):
+        assert tools[name].annotations.readOnlyHint is False
+        assert tools[name].annotations.destructiveHint is False
+        assert tools[name].annotations.idempotentHint is False
+
+    assert tools["forget_memory"].annotations.readOnlyHint is False
+    assert tools["forget_memory"].annotations.destructiveHint is True
+    assert tools["forget_memory"].annotations.idempotentHint is True
+
+    for name in set(tools) - {"remember", "correct_memory", "forget_memory"}:
         assert tools[name].annotations.readOnlyHint is True
         assert tools[name].annotations.destructiveHint is False
         assert tools[name].annotations.idempotentHint is True
