@@ -8,8 +8,8 @@
   <a href="https://www.lians.ai/">Website</a> ·
   <a href="docs/install.md">Install</a> ·
   <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
-  <a href="https://github.com/Lians-ai/Lians/issues">Issues</a> ·
-  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
+  <a href="https://www.lians.ai/pricing">Pricing</a> ·
+  <a href="https://github.com/Lians-ai/Lians/issues">Issues</a>
 </p>
 
 <p align="center">
@@ -20,48 +20,61 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
 </p>
 
-# Memory for any AI agent.
+# Portable memory for the AI tools you already use.
 
-Lians gives AI agents durable memory across chats, sessions, tools, and models.
-Your agent can remember a useful fact now and recall it when it matters later.
+Lians keeps useful project facts, decisions, research constraints, and
+preferences available when you start a new chat or switch tools. It is a
+memory layer, not another assistant: your model stays the same.
 
-- **Works with the AI you already use** through MCP, plugins, or an SDK.
-- **Runs locally by default** with SQLite and no Lians account or API key.
-- **Keeps memory focused** by returning a small, relevant set of current facts.
-- **Stays provider-neutral** so memory is not trapped inside one model vendor.
+The product loop is deliberately small:
 
-Lians is a memory layer, not another assistant. Your agent and model stay the
-same; Lians gives them a place to remember.
+1. **Remember** something worth keeping.
+2. **Recall** a few relevant current facts in a later session.
+3. **Inspect, correct, or forget** the memory when it changes.
+
+Lians works through MCP, plugins, and SDKs. Local mode stores memory in SQLite,
+needs no Lians account or API key, and does not lock memory to one model vendor.
+
+## One product, two ways to run it
+
+| | **Lians Local** | **Lians Personal** |
+|---|---|---|
+| Best for | Developers, students, and self-managed projects | One person who wants Lians operated for them |
+| Runs | On your device or infrastructure | In a private Lians-managed workspace |
+| Includes | The complete local memory loop through MCP or Python | 100,000 writes, 50,000 recalls, export and deletion controls, and email setup support |
+| Price | **Free** under Apache 2.0 | **$10/month**, cancel anytime |
+| Start | [Install local Lians](#free-local-setup-add-memory-through-mcp) | [Choose Lians Personal](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=product_modes) |
+
+Both modes provide the same basic experience: remember, recall, inspect,
+correct, and forget. Choose Local when you are comfortable running a package;
+choose Personal when setup and operation are the part you want handled.
+
+The first genuine Personal customer also gets a 30-minute founder-led setup
+session at no extra cost. Purchase only when managed memory solves a real
+problem for you.
+
+## Connect the AI tool you already use
+
+- **Cursor:** use the [one-click MCP installer](integrations/cursor).
+- **Claude Code:** paste the [two plugin commands](integrations/lians-plugin).
+- **Codex app, CLI, or IDE:** run the [one-command MCP setup](integrations/codex).
+
+All three routes use the same free local memory by default. After setup, try the
+[three-minute, two-chat memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
+
+Running a club, hackathon, class, or campus developer community? Use the
+[student and community kit](docs/student-community-kit.md) for a ready-made
+workshop, project track, judging rubric, and shareable announcement.
+
+Lians does not change the underlying model or promise fewer tokens on every
+task. It can avoid resending old conversation when a small relevant recall is
+enough; verify the result on your own workflow.
 
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
 </p>
 
-## Install Lians without a terminal
-
-Download **LiansMemory** for Windows, macOS, or Linux from
-[GitHub Releases](https://github.com/Lians-ai/Lians/releases), open it, choose
-the AI clients found on your computer, and select **Install Lians**.
-
-The desktop setup:
-
-- needs no Lians account, API key, Python installation, or model download;
-- safely backs up existing client settings before changing them;
-- gives supported clients one shared local memory profile; and
-- includes a diagnostic command and silent install mode for managed devices.
-
-Restart the selected AI client, then try:
-
-```text
-Remember that I am researching sustainable packaging for independent retailers.
-```
-
-The first standalone builds support Claude Desktop, Cursor, Windsurf, Gemini
-CLI, and Codex. ChatGPT does not load local stdio MCP servers, so the installer
-does not modify ChatGPT; it requires a hosted connector. See the
-[guided install and IT deployment guide](docs/easy-install.md).
-
-## Developer setup: add memory through MCP
+## Free local setup: add memory through MCP
 
 Use this path when you prefer a package-managed MCP server or want the full
 temporal and governance engine.
@@ -90,6 +103,12 @@ Remember that this project uses Python 3.12 and pytest.
 What Python version and test runner does this project use?
 ```
 
+On a clean machine, the first memory tool may download and initialize the local
+semantic model. Lians reports that warmup to MCP clients that support progress.
+If it is still running after 90 seconds, the tool returns a retryable error and
+does not queue the write; keep the MCP server running and retry shortly. Model
+files use the Hugging Face cache controlled by `HF_HOME`.
+
 Local MCP memory is stored in `~/.lians/mcp.db`. The starter configuration
 exposes the basic memory loop shipped in the current PyPI release:
 
@@ -102,7 +121,8 @@ Use the exact setup guide for
 [Cursor](integrations/cursor),
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
-[Codex](plugins/lians-memory). Use `lians-mcp` instead of
+[OpenCode](integrations/opencode), or
+[Codex](integrations/codex). Use `lians-mcp` instead of
 `lians-memory-mcp` when you want the full temporal and audit tool set.
 
 ## How it works
@@ -169,12 +189,18 @@ Java, C, framework adapters, and self-hosting.
 
 | You want to... | Start with |
 |---|---|
-| Add memory without a terminal | [Lians Easy](docs/easy-install.md) |
-| Give an existing AI client memory from a terminal | [MCP setup](#developer-setup-add-memory-through-mcp) |
+| Use managed private memory without running a server | [Lians Personal — $10/month](https://www.lians.ai/upgrade?plan=starter) |
+| Give an existing AI client free local memory | [MCP setup](#free-local-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
+| Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
-| Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
+| Use Pydantic AI or LangGraph | [Pydantic AI example](integrations/pydantic-ai/python) · [LangGraph example](integrations/langgraph/python) |
+| Use LangChain, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
+
+Cloned the repository and unsure which package or folder is current? Read
+[Supported paths and repository status](docs/supported-paths.md) before choosing
+an SDK, plugin, preview, or legacy tree.
 
 ## Why Lians
 
@@ -226,7 +252,7 @@ python scripts/test_all.py
 ```
 
 Focused test runs and development conventions are in
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). Published package and registry
+[CONTRIBUTING.md](CONTRIBUTING.md). Published package and registry
 versions are tracked in
 [docs/published-release-status.json](docs/published-release-status.json).
 

@@ -1,102 +1,78 @@
 # Lians Packaging and Pricing
 
-Lians is packaged around the service and deployment boundary. Code already
-published under Apache 2.0 stays under Apache 2.0; commercial packages sell
-managed capacity, organizational operation, evidence services, deployment
-assurance, and contractual commitments.
+Lians is one memory product with two default delivery modes. Users should not
+have to choose among separate “developer,” “research,” “team,” or “regulated”
+products before they understand the core memory loop.
 
-This is a packaging guide, not a public price list. Confirm availability,
-limits, pricing, and contractual terms before quoting a customer.
+## The product
 
-## Community
+Lians gives an AI tool five user-visible memory controls:
 
-*For individual developers, local evaluation, and self-managed integration.*
+1. remember a useful fact, preference, constraint, or decision;
+2. recall a bounded set of relevant current memories;
+3. inspect what is stored;
+4. correct a stale memory without losing its history; and
+5. forget a memory with explicit confirmation.
 
-**Deployment:** local library, GitHub connector, or customer-operated server
+The model and assistant remain the user's choice. Lians supplies the portable
+memory layer beside them.
 
-**Includes:**
+## The two default modes
 
-- Provider-neutral memory for Codex, Claude, Gemini, and MCP-compatible clients
-- Durable writes and bounded recall
-- Local SQLite mode
-- Existing public temporal, provenance, and technical-evidence primitives
-- Community documentation and public benchmark receipts
-- Community support
+| | **Lians Local** | **Lians Personal** |
+|---|---|---|
+| Customer | Developers, students, local evaluation, and self-managed projects | One person who wants hosted continuity without operating the memory layer |
+| Deployment | Local library, MCP server, or customer-operated service | Lians-managed private workspace |
+| Price | Free under Apache 2.0 | $10/month, cancel anytime |
+| Capacity | Limited by the user's environment | 100,000 writes and 50,000 recalls per month |
+| Support | Community documentation and public issues | Email setup support |
 
-Community does not include a Lians-hosted production tenant, cross-device
-account, team administration, higher hosted limits, an SLA, or managed evidence
-review.
+Local is a useful product, not a crippled trial. It includes provider-neutral
+memory, SQLite mode, the basic five-control lifecycle, existing temporal and
+provenance capabilities, public documentation, and reproducible benchmarks.
+It does not include a Lians-hosted tenant, an SLA, or managed operation.
 
-## Managed Developer
+Personal includes one managed account and private workspace, hosted continuity
+through supported connections, the published monthly allowance, memory export
+and deletion controls, and email setup support.
 
-*For developers who want hosted continuity without operating the memory layer.*
+Personal does not change the underlying model, increase a provider quota, or
+promise lower token use on every task. It can reduce repeated context when a
+small relevant recall replaces history that would otherwise be resent; verify
+that result on the user's workflow.
 
-**Deployment:** Lians-managed service, where available
+## Organizations use the same product
 
-**Commercial value:**
+An organization does not buy a different memory engine. It scopes how Lians is
+deployed and operated for a shared workflow. A proposal may include only the
+capabilities the target environment actually needs, such as:
 
-- Hosted continuity across supported clients and devices
-- Managed identity and storage
-- Defined hosted usage allowance
-- Upgrade path to higher managed limits
-- Standard service support
+- shared memory and organization administration;
+- contracted storage, write, and recall limits;
+- identity, policy, retention, and information-barrier operation;
+- managed evidence exports, monitoring, and evaluation gates;
+- private networking, regional residency, customer-managed keys, or a
+  dedicated environment;
+- customer-cloud, private-VPC, on-premises, or air-gapped deployment support;
+- architecture review, named support, an SLA, or data-processing terms where
+  separately agreed; and
+- custom connector work when it is part of the signed scope.
 
-## Team
-
-*For shared production workflows and internal AI programs.*
-
-**Deployment:** Lians-managed, customer cloud, or private deployment
-
-**Commercial value:**
-
-- Shared/team memory and organization administration
-- Higher contracted storage, write, and recall limits
-- Central policy and retention operation
-- Managed evidence exports, monitoring, and evaluation gates
-- Deployment review and named support options
-
-## Regulated Production
-
-*For sensitive, audited, or time-dependent AI workflows.*
-
-**Deployment:** customer cloud, private VPC, on-premises, or approved managed
-environment
-
-**Commercial value:**
-
-- Production architecture and hardening review
-- Identity, retention, information-barrier, and key-management design
-- Managed evidence operations and review-ready exports
-- Private networking, regional residency, or dedicated environments where sold
-- Contracted support and service levels
-- BAA or other required data-processing terms where agreed
-
+These are deployment and service options, not four more public product tiers.
 Technical primitives do not by themselves establish legal or regulatory
-compliance. Claims depend on the deployed configuration and customer controls.
+compliance; claims depend on the deployed configuration and customer controls.
 
-## Enterprise / Air-Gap
+## Packaging rule
 
-*For banks, hospitals, law firms, insurers, and government environments with
-strict residency, isolation, or procurement requirements.*
+The public choice is **Local or Personal**. Organization pricing is then tied
+to the workflow, deployment boundary, managed capacity, support obligation,
+evidence scope, and contractual risk. Do not quote an organization tier or
+limit until its enforcement and entitlements operate in that environment.
 
-**Deployment:** private cloud, on-premises, or air-gapped
-
-**Commercial value:**
-
-- Dedicated onboarding and security architecture review
-- Air-gap and local embedding deployment assistance
-- Customer-managed key and identity integration
-- Procurement evidence packet
-- Named support channel and negotiated SLA
-- Optional custom connector development
-- Annual contract pricing
-
-## Pricing principle
-
-Developer service may be usage-based. Institutional pricing should be tied to
-the deployment boundary, managed limits, support obligation, evidence scope,
-and contractual risk. Do not quote a hosted tier or limit until enforcement and
-entitlements are active for that environment.
+Code already published under Apache 2.0 remains under that license. Commercial
+value comes from hosted operation, managed capacity, organizational controls,
+deployment assurance, support, and contractual commitments—not from pretending
+the public code requires a new license.
 
 See the [Community and commercial boundary](community-cloud-boundary.md) and
 the [managed billing design](billing.md).

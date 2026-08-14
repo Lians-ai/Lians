@@ -26,6 +26,13 @@ this server to your client's MCP configuration:
 Restart the client. Local mode needs no Lians account, API key, or Docker
 service and stores memory in `~/.lians/mcp.db`.
 
+On a clean machine, the first memory tool may download and initialize the local
+semantic model. Progress-aware MCP clients show a warmup message. If warmup is
+still running after 90 seconds, Lians returns a retryable error and guarantees
+that the attempted write was not queued; keep the MCP server running and retry
+shortly. Model files use the Hugging Face cache controlled by `HF_HOME`. Set
+`LIANS_MCP_LOCAL_READY_TIMEOUT` to 5-600 seconds to change the bound.
+
 The starter command exposes `remember` and `recall`. Replace
 `lians-memory-mcp` with `lians-mcp` to expose the advanced point-in-time,
 reconstruction, lineage, conflict, feedback, and backtest tools shipped in the
@@ -109,9 +116,10 @@ See each SDK directory for the exact API surface:
 
 ## Framework integrations
 
-For Pydantic AI, start with the tested local temporal-memory example:
+Start with a tested, credential-free local example:
 
 - [Pydantic AI integration](../integrations/pydantic-ai/python)
+- [LangGraph integration](../integrations/langgraph/python)
 
 The Python package also includes adapters for these frameworks:
 
