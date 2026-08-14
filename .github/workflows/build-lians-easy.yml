@@ -63,8 +63,42 @@ jobs:
         run: >-
           python packages/lians-easy/tests/artifact_crash_smoke.py
           --binary dist/LiansMemory
+      - name: Prepare interrupted state for a fresh Windows runner
+        if: runner.os == 'Windows'
+        run: >-
+          python packages/lians-easy/tests/artifact_crash_smoke.py
+          --phase prepare
+          --binary dist/LiansMemory.exe
+          --fixture .lians-cold-restart
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: runner.os == 'Windows'
+        with:
+          name: LiansMemory-cold-restart-state
+          path: |
+            dist/LiansMemory.exe
+            .lians-cold-restart
+          if-no-files-found: error
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ matrix.artifact }}
           path: dist/LiansMemory*
           if-no-files-found: error
+
+  cold-restart:
+    name: Recover setup on a fresh Windows runner
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: LiansMemory-cold-restart-state
+          path: .
+      - run: >-
+          python packages/lians-easy/tests/artifact_crash_smoke.py
+          --phase resume
+          --binary dist/LiansMemory.exe
+          --fixture .lians-cold-restart
