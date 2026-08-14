@@ -29,6 +29,16 @@ clients, then ask Cursor to remember a useful project rule. Start a new Codex
 or Claude task in the same repository and inspect the receipt attached to the
 recalled context.
 
+For Gemini CLI, an install can succeed while `lians` remains disabled or
+disconnected in an untrusted folder. Review the folder and run `gemini trust`
+to trust the intended workspace interactively, then check `/mcp list` or
+`gemini mcp list` again. `--skip-trust` and
+`GEMINI_CLI_TRUST_WORKSPACE=true` are available for a single session or a
+disposable test environment, but they bypass the folder trust check and should
+not replace reviewing the workspace. See the
+[Gemini integration guide](../integrations/gemini/README.md#workspace-trust)
+for details.
+
 Existing client configuration files are backed up before every change. Memory
 is stored in a local SQLite file under the operating system's per-user Lians
 data directory. Selected clients use the same `personal` profile, so a fact
