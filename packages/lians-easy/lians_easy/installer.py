@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 from dataclasses import asdict, dataclass
@@ -14,6 +16,7 @@ from typing import Any
 
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
 MANAGED_END = "# <<< Lians Memory (managed by Lians Easy)"
+HOOK_STATUS = "Recalling Lians memory"
 
 
 @dataclass(frozen=True)
@@ -101,9 +104,30 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
 
 def runtime_command() -> tuple[str, list[str]]:
     if getattr(sys, "frozen", False):
-        installed = user_data_dir() / ("LiansMemory.exe" if sys.platform == "win32" else "lians-memory")
+        installed = user_data_dir() / (
+            "LiansMemory.exe" if sys.platform == "win32" else "lians-memory"
+        )
         return str(installed), ["mcp"]
     return sys.executable, ["-m", "lians_easy", "mcp"]
+
+
+def _runtime_argv(*args: str) -> list[str]:
+    command, prefix = runtime_command()
+    if getattr(sys, "frozen", False):
+        return [command, *args]
+    return [command, *prefix[:-1], *args]
+
+
+def _shell_command(argv: list[str], *, windows: bool) -> str:
+    return subprocess.list2cmdline(argv) if windows else shlex.join(argv)
+
+
+def _hook_path(client: str, home: Path) -> Path:
+    if client == "claude":
+        return home / ".claude" / "settings.json"
+    if client == "codex":
+        return home / ".codex" / "hooks.json"
+    raise ValueError(f"{client} does not support a Lians prompt hook")
 
 
 def _backup(path: Path) -> Path | None:
@@ -168,6 +192,57 @@ def _json_config(path: Path, command: str, args: list[str]) -> Path | None:
     return backup
 
 
+def _lians_hook_group(client: str) -> dict[str, Any]:
+    argv = _runtime_argv("hook", "--client", client)
+    hook: dict[str, Any] = {
+        "type": "command",
+        "command": _shell_command(argv, windows=sys.platform == "win32"),
+        "timeout": 8,
+        "statusMessage": HOOK_STATUS,
+    }
+    if client == "codex":
+        hook["commandWindows"] = _shell_command(argv, windows=True)
+        hook["additionalContextLimit"] = 2048
+    return {"hooks": [hook]}
+
+
+def _is_lians_hook_group(value: Any) -> bool:
+    if not isinstance(value, dict) or not isinstance(value.get("hooks"), list):
+        return False
+    return any(
+        isinstance(hook, dict) and hook.get("statusMessage") == HOOK_STATUS
+        for hook in value["hooks"]
+    )
+
+
+def _hook_config(path: Path, client: str, *, remove: bool = False) -> Path | None:
+    backup = _backup(path)
+    if path.exists():
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"Cannot safely update invalid JSON: {path}") from exc
+        if not isinstance(document, dict):
+            raise ValueError(f"Cannot safely update non-object JSON: {path}")
+    else:
+        document = {}
+    hooks = document.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise TypeError(f"hooks must be an object in {path}")
+    prompt_hooks = hooks.setdefault("UserPromptSubmit", [])
+    if not isinstance(prompt_hooks, list):
+        raise TypeError(f"hooks.UserPromptSubmit must be an array in {path}")
+    prompt_hooks[:] = [group for group in prompt_hooks if not _is_lians_hook_group(group)]
+    if not remove:
+        prompt_hooks.append(_lians_hook_group(client))
+    if remove and not prompt_hooks:
+        hooks.pop("UserPromptSubmit", None)
+    if remove and not hooks:
+        document.pop("hooks", None)
+    _write_text(path, json.dumps(document, indent=2) + "\n")
+    return backup
+
+
 def _managed_toml(command: str, args: list[str]) -> str:
     rendered_args = ", ".join(json.dumps(value) for value in args)
     return (
@@ -201,6 +276,7 @@ def _toml_config(path: Path, command: str, args: list[str]) -> Path | None:
 
 
 def install(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
+    home = home or Path.home()
     targets = client_targets(home)
     unknown = sorted(set(keys) - set(targets))
     if unknown:
@@ -215,20 +291,31 @@ def install(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
             if target.kind == "toml"
             else _json_config(target.config_path, command, args)
         )
-        results.append(
-            {
-                "client": key,
-                "label": target.label,
-                "config": str(target.config_path),
-                "backup": str(backup) if backup else None,
-                "status": "installed",
-            }
-        )
+        item = {
+            "client": key,
+            "label": target.label,
+            "config": str(target.config_path),
+            "backup": str(backup) if backup else None,
+            "status": "installed",
+            "automatic_recall": key in {"claude", "codex", "cursor"},
+        }
+        if key in {"claude", "codex"}:
+            hook_path = _hook_path(key, home)
+            hook_backup = _hook_config(hook_path, key)
+            item["hook_config"] = str(hook_path)
+            item["hook_backup"] = str(hook_backup) if hook_backup else None
+        if key == "cursor":
+            item["recall_mode"] = "always-applied project rule, refreshed after memory changes"
+        results.append(item)
     return {
         "status": "installed",
         "clients": results,
         "database": str(user_data_dir() / "memory.sqlite3"),
-        "next_step": "Restart each selected AI client, then ask it to remember something.",
+        "requires_trust": [key for key in keys if key == "codex"],
+        "next_step": (
+            "Restart each selected AI client. In Codex, review and trust the Lians hooks in "
+            "/hooks. Then ask Cursor to remember one project preference."
+        ),
     }
 
 
@@ -250,6 +337,7 @@ def plan(keys: list[str], *, action: str, home: Path | None = None) -> dict[str,
 
 
 def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
+    home = home or Path.home()
     targets = client_targets(home)
     unknown = sorted(set(keys) - set(targets))
     if unknown:
@@ -257,22 +345,27 @@ def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
     results = []
     for key in keys:
         target = targets[key]
-        if not target.config_path.exists():
-            results.append({"client": key, "status": "not_configured"})
-            continue
-        backup = _backup(target.config_path)
-        if target.kind == "toml":
+        backup = _backup(target.config_path) if target.config_path.exists() else None
+        if target.config_path.exists() and target.kind == "toml":
             content = _strip_managed_toml(target.config_path.read_text(encoding="utf-8"))
             _write_text(target.config_path, content + ("\n" if content else ""))
-        else:
+        elif target.config_path.exists():
             document = json.loads(target.config_path.read_text(encoding="utf-8"))
             servers = document.get("mcpServers")
             if isinstance(servers, dict):
                 servers.pop("lians", None)
             _write_text(target.config_path, json.dumps(document, indent=2) + "\n")
-        results.append(
-            {"client": key, "status": "removed", "backup": str(backup) if backup else None}
-        )
+        item = {
+            "client": key,
+            "status": "removed" if target.config_path.exists() else "not_configured",
+            "backup": str(backup) if backup else None,
+        }
+        if key in {"claude", "codex"}:
+            hook_path = _hook_path(key, home)
+            if hook_path.exists():
+                hook_backup = _hook_config(hook_path, key, remove=True)
+                item["hook_backup"] = str(hook_backup) if hook_backup else None
+        results.append(item)
     return {
         "status": "uninstalled",
         "clients": results,

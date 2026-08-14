@@ -9,8 +9,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .bridge import (
+    BridgeApplication,
+    context_for_event,
+    run_hook,
+    write_cursor_rule,
+)
 from .installer import client_targets, doctor, install, plan, uninstall
-from .mcp import run
+from .mcp import default_data_path, run
+from .store import MemoryStore
 
 
 def _keys(raw: str) -> list[str]:
@@ -28,8 +35,10 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
     print(result.get("status", "Lians Memory"))
     for item in result.get("clients", []):
         if isinstance(item, dict):
-            print(f"- {item.get('label') or item.get('key') or item.get('client')}: "
-                  f"{item.get('status') or item.get('config_path')}")
+            print(
+                f"- {item.get('label') or item.get('key') or item.get('client')}: "
+                f"{item.get('status') or item.get('config_path')}"
+            )
     if result.get("next_step"):
         print(result["next_step"])
 
@@ -41,6 +50,30 @@ def parser() -> argparse.ArgumentParser:
     mcp.add_argument("--data", type=Path)
     mcp.add_argument("--profile", default="personal")
 
+    bridge = commands.add_parser("bridge", help="Run the local Lians App service")
+    bridge.add_argument("--data", type=Path)
+    bridge.add_argument("--host", default="127.0.0.1")
+    bridge.add_argument("--port", type=int, default=7317)
+    bridge.add_argument("--app-dir", type=Path)
+
+    hook = commands.add_parser("hook", help="Inject bounded memory into an AI prompt")
+    hook.add_argument("--client", choices=("claude", "codex", "cursor"), required=True)
+    hook.add_argument("--data", type=Path)
+
+    context = commands.add_parser("context", help="Preview a signed context pack")
+    context.add_argument("--client", default="preview")
+    context.add_argument("--cwd", type=Path, default=Path.cwd())
+    context.add_argument("--prompt")
+    context.add_argument("--data", type=Path)
+    context.add_argument("--json", action="store_true")
+
+    cursor_rule = commands.add_parser(
+        "cursor-rule", help="Refresh Cursor's always-applied Lians project context"
+    )
+    cursor_rule.add_argument("--project", type=Path, default=Path.cwd())
+    cursor_rule.add_argument("--data", type=Path)
+    cursor_rule.add_argument("--json", action="store_true")
+
     for name in ("install", "uninstall"):
         command = commands.add_parser(name, help=f"{name.title()} supported AI client settings")
         command.add_argument(
@@ -49,7 +82,9 @@ def parser() -> argparse.ArgumentParser:
             help="Comma-separated claude,cursor,windsurf,gemini,codex; or detected/all",
         )
         command.add_argument("--yes", action="store_true", help="Confirm a non-interactive change")
-        command.add_argument("--plan", action="store_true", help="Show exact targets without changing them")
+        command.add_argument(
+            "--plan", action="store_true", help="Show exact targets without changing them"
+        )
         command.add_argument("--json", action="store_true")
 
     diagnostic = commands.add_parser("doctor", help="Show runtime and client detection")
@@ -61,6 +96,33 @@ def main(argv: list[str] | None = None) -> None:
     args = parser().parse_args(argv)
     if args.command == "mcp":
         run(args.data, profile=args.profile)
+        return
+    if args.command == "bridge":
+        BridgeApplication(
+            MemoryStore(args.data or default_data_path()),
+            host=args.host,
+            port=args.port,
+            app_dir=args.app_dir,
+        ).serve()
+        return
+    if args.command == "hook":
+        raise SystemExit(run_hook(client=args.client, data_path=args.data))
+    if args.command == "context":
+        prompt = args.prompt if args.prompt is not None else sys.stdin.read(1_000_001)
+        if len(prompt) > 1_000_000:
+            raise SystemExit("Prompt is too large")
+        pack = context_for_event(
+            {"prompt": prompt, "cwd": str(args.cwd)},
+            client=args.client,
+            store=MemoryStore(args.data or default_data_path()),
+        )
+        print(json.dumps(pack, ensure_ascii=False, indent=2) if args.json else pack["context"])
+        return
+    if args.command == "cursor-rule":
+        result = write_cursor_rule(
+            args.project, store=MemoryStore(args.data or default_data_path())
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else result["path"])
         return
     if args.command == "doctor":
         _show(doctor(), as_json=args.json)

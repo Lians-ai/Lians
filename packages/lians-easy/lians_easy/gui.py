@@ -25,7 +25,9 @@ def launch() -> None:
         ),
         wraplength=550,
     ).pack(anchor="w", pady=(10, 22))
-    ttk.Label(frame, text="Choose where to add Lians", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+    ttk.Label(frame, text="Choose where to add Lians", font=("Segoe UI", 12, "bold")).pack(
+        anchor="w"
+    )
 
     targets = client_targets()
     choices: dict[str, tk.BooleanVar] = {}

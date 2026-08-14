@@ -1,10 +1,10 @@
-# Lians Easy desktop preview
+# Lians Bridge desktop preview
 
-Lians Easy is a technical preview for adding private, local memory to a
-supported AI client. It is deliberately smaller than the full Lians engine.
+Lians Bridge is a technical preview for carrying private, local memory across
+supported AI clients. It is deliberately smaller than the full Lians engine.
 There is no account, API key, database server, or embedding-model download.
 
-There are currently no signed Windows, notarized macOS, or Linux
+There are currently no Authenticode-signed Windows, notarized macOS, or Linux
 `LiansMemory` assets in [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
 Do not send normal users to that page expecting a desktop download. For a live,
 managed setup, use [Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter).
@@ -20,12 +20,40 @@ python -m lians_easy
 ```
 
 Choose the clients to configure, select **Install Lians**, restart those
-clients, then ask one to remember a useful fact and recall it in another chat.
+clients, then ask Cursor to remember a useful project rule. Start a new Codex
+or Claude task in the same repository and inspect the receipt attached to the
+recalled context.
 
 Existing client configuration files are backed up before every change. Memory
 is stored in a local SQLite file under the operating system's per-user Lians
 data directory. Selected clients use the same `personal` profile, so a fact
-saved in one can be recalled in another.
+saved in one can be recalled in another. Memory values are encrypted at rest;
+Windows protects the root key with DPAPI. Corrections and scope changes create
+inspectable versions, while confirmed forgetting crypto-erases the full
+lineage so old wording cannot return from a different client.
+
+## Cross-tool experience
+
+The preview implements the first product loop directly:
+
+1. `remember` records an explicit preference, decision, fact, or handoff.
+2. Claude and Codex prompt hooks request a project-aware context pack before a
+   task is submitted.
+3. Cursor uses the same MCP tools plus a generated, always-applied project rule.
+4. A receipt reports the memories used, project, estimated tokens, selection
+   reasons, and exclusions.
+5. Pause, correction, scope, and confirmed forget changes apply to the shared
+   store immediately.
+
+The React control center can be served by the local Bridge during development:
+
+```bash
+python -m lians_easy bridge --app-dir /path/to/memory-checkup/local-dist
+```
+
+The hosted control center demonstrates the same information architecture, but
+uses sample data when it is not connected to a loopback Bridge. It never asks a
+user to paste raw AI-provider credentials.
 
 ## Release trust gate
 
@@ -85,14 +113,15 @@ and help-desk diagnostics.
 
 ## Easy runtime or full engine?
 
-| Need | Lians Easy | Full Lians engine |
+| Need | Lians Bridge | Full Lians engine |
 |---|---:|---:|
 | One person, several local AI clients | Yes | Yes |
-| No dependencies or model download | Yes | No |
+| No account, API key, or model download | Yes | No |
 | Keyword-based bounded recall | Yes | Yes |
+| Encrypted local values and signed context receipts | Yes | Yes |
 | Semantic retrieval and temporal reconstruction | No | Yes |
 | Shared team server and HTTP SDKs | No | Yes |
 | Governance, barriers, receipts, and audit workflows | No | Yes |
 
-Start with Lians Easy. Move to the full engine when the deployment—not the
+Start with Lians Bridge. Move to the full engine when the deployment—not the
 first-run setup—actually requires those capabilities.
