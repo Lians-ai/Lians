@@ -49,9 +49,10 @@ The core tools are intentionally understandable:
 ## Supported clients
 
 The first desktop release configures Claude Desktop, Cursor, Windsurf, Gemini
-CLI, Codex, and OpenCode. It does not modify ChatGPT because ChatGPT connectors
-use a hosted HTTP connection rather than a local stdio process. Use a hosted Lians
-connector when that distribution is available.
+CLI, Codex, and OpenCode. OpenCode uses its documented global configuration at
+`~/.config/opencode/opencode.json`. Lians Easy does not modify ChatGPT because
+ChatGPT connectors use a hosted HTTP connection rather than a local stdio
+process. Use a hosted Lians connector when that distribution is available.
 
 ## IT and enterprise deployment
 

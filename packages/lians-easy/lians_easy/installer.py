@@ -44,6 +44,8 @@ def user_data_dir() -> Path:
 
 def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
     home = home or Path.home()
+    config_root = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
+    opencode_config = config_root / "opencode" / "opencode.json"
     if sys.platform == "win32":
         roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
         paths = {
@@ -52,7 +54,7 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
-            "opencode": ("OpenCode", home / ".opencode" / "config.json"),
+            "opencode": ("OpenCode", opencode_config),
         }
     elif sys.platform == "darwin":
         paths = {
@@ -64,17 +66,17 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
-            "opencode": ("OpenCode", home / ".opencode" / "config.json"),
+            "opencode": ("OpenCode", opencode_config),
         }
     else:
-        config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
+        config = config_root
         paths = {
             "claude": ("Claude Desktop", config / "Claude" / "claude_desktop_config.json"),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
-            "opencode": ("OpenCode", home / ".opencode" / "config.json"),
+            "opencode": ("OpenCode", opencode_config),
         }
     targets: dict[str, ClientTarget] = {}
     for key, (label, path) in paths.items():
