@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "lians": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "lians-sdk[mcp]",
+        "lians-mcp"
+      ],
+      "enabled": true,
+      "environment": {
+        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,list_memories,correct_memory,forget_memory"
+      }
+    }
+  }
+}

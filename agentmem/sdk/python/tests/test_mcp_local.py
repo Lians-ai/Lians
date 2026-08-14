@@ -1,14 +1,14 @@
 """Unit coverage for zero-config MCP routing into LocalLiansClient."""
 
 import asyncio
+from concurrent.futures import Future
 from datetime import datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
+from lians import local_client, mcp_server
 from mcp.shared.memory import create_connected_server_and_client_session
 from mcp.types import CallToolRequest, CallToolRequestParams, RequestParams
-
-from lians import local_client, mcp_server
 
 
 def _codex_meta(project: Path) -> dict[str, object]:
@@ -488,6 +488,84 @@ def test_mcp_prewarm_mode_is_explicit_and_validated():
     assert mcp_server._parse_prewarm_mode("off") == "off"
     with pytest.raises(ValueError, match="LIANS_MCP_PREWARM"):
         mcp_server._parse_prewarm_mode("sometimes")
+
+
+def test_embedding_tool_times_out_before_queuing_a_hidden_write(monkeypatch):
+    prewarm = Future()
+    called = False
+    progress_messages = []
+
+    async def fake_api(method, path, body=None):
+        nonlocal called
+        called = True
+        return {"id": "must-not-be-written"}
+
+    monkeypatch.setattr(mcp_server, "LIANS_URL", "")
+    monkeypatch.setattr(mcp_server, "LIANS_MCP_LOCAL_READY_TIMEOUT", 0.01)
+    monkeypatch.setattr(mcp_server, "_LOCAL_PREWARM_FUTURE", prewarm)
+    monkeypatch.setattr(mcp_server, "_api", fake_api)
+    server = mcp_server._build_server()
+
+    async def call_through_mcp_session():
+        async def record_progress(progress, total, message):
+            progress_messages.append((progress, total, message))
+
+        async with create_connected_server_and_client_session(server) as session:
+            return await session.call_tool(
+                "remember",
+                {
+                    "content": "Do not store this after the caller times out",
+                    "event_time_iso": "2026-08-13T12:00:00Z",
+                },
+                progress_callback=record_progress,
+            )
+
+    result = asyncio.run(call_through_mcp_session())
+
+    assert result.isError is True
+    assert "still preparing the local semantic model" in result.content[0].text
+    assert "No memory was written" in result.content[0].text
+    assert [message for _, _, message in progress_messages] == [
+        "Lians is preparing its local semantic model for the first use.",
+        "The first-run model download is still in progress; retry shortly.",
+    ]
+    assert called is False
+
+
+def test_embedding_tool_runs_after_background_prewarm_completes(monkeypatch):
+    prewarm = Future()
+    prewarm.set_result({"memories": []})
+    calls = []
+
+    async def fake_api(method, path, body=None):
+        calls.append((method, path, body))
+        return {"id": "memory-1"}
+
+    monkeypatch.setattr(mcp_server, "LIANS_URL", "")
+    monkeypatch.setattr(mcp_server, "_LOCAL_PREWARM_FUTURE", prewarm)
+    monkeypatch.setattr(mcp_server, "_api", fake_api)
+    server = mcp_server._build_server()
+    handler = next(
+        callback
+        for request_type, callback in server.request_handlers.items()
+        if request_type.__name__ == "CallToolRequest"
+    )
+    request = CallToolRequest(
+        params=CallToolRequestParams(
+            name="remember",
+            arguments={
+                "content": "Store this once semantic memory is ready",
+                "event_time_iso": "2026-08-13T12:00:00Z",
+            },
+        )
+    )
+
+    result = asyncio.run(handler(request))
+
+    assert result.root.isError is False
+    assert [(method, path) for method, path, _ in calls] == [
+        ("POST", "/v1/memories")
+    ]
 
 
 def test_mcp_schema_profile_is_explicit_and_validated():

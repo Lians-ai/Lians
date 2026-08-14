@@ -1,0 +1,51 @@
+{
+  "schema_version": "lians.synthetic-support-expected.v1",
+  "fixture_id": "support-timeline-001",
+  "checks": [
+    {
+      "id": "current-ticket",
+      "query": "What is the current status of ticket T-104?",
+      "metadata": {"entity": "ticket-T-104", "field": "status"},
+      "include": ["Ticket T-104 status is resolved"],
+      "exclude": ["open", "awaiting replacement parts"]
+    },
+    {
+      "id": "historical-ticket",
+      "query": "What was the status of ticket T-104?",
+      "as_of": "2026-01-07T18:00:00Z",
+      "metadata": {"entity": "ticket-T-104", "field": "status"},
+      "include": ["Ticket T-104 status is awaiting replacement parts"],
+      "exclude": ["resolved"]
+    },
+    {
+      "id": "current-policy",
+      "query": "What is the return policy window?",
+      "metadata": {"entity": "return-policy", "field": "window_days"},
+      "include": ["Return policy window changed to 45 days"],
+      "exclude": ["30 days"]
+    },
+    {
+      "id": "historical-policy",
+      "query": "What was the return policy window?",
+      "as_of": "2026-01-15T00:00:00Z",
+      "metadata": {"entity": "return-policy", "field": "window_days"},
+      "include": ["Return policy window is 30 days"],
+      "exclude": ["45 days"]
+    },
+    {
+      "id": "current-customer-name",
+      "query": "What is customer C-77's name?",
+      "metadata": {"entity": "customer-C-77", "field": "name"},
+      "include": ["Customer C-77 name is Anna Reed"],
+      "exclude": ["Ana Reed"]
+    },
+    {
+      "id": "historical-customer-name",
+      "query": "What was customer C-77's name?",
+      "as_of": "2026-01-05T18:00:00Z",
+      "metadata": {"entity": "customer-C-77", "field": "name"},
+      "include": ["Customer C-77 name is Ana Reed"],
+      "exclude": ["Anna Reed"]
+    }
+  ]
+}
