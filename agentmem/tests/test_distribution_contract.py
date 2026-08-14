@@ -31,15 +31,22 @@ def test_gemini_extension_uses_the_published_bounded_server():
 
 
 def test_cursor_starter_profile_is_local_bounded_stdio():
-    server = _json("integrations/cursor/mcp.example.json")["mcpServers"]["lians"]
+    server = _json("integrations/cursor/mcp.example.json")["mcpServers"][
+        "lians-memory"
+    ]
 
     assert server["command"] == "uvx"
-    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-mcp"]
-    assert server["env"] == {
-        "LIANS_MCP_ENABLED_TOOLS": (
-            "remember,recall,list_memories,correct_memory,forget_memory"
-        )
-    }
+    assert server["args"] == [
+        "--from",
+        (
+            "lians-easy @ https://github.com/Lians-ai/Lians/archive/"
+            "dc94d6bfb894e5e25bf559697384b58ceedd434b.zip"
+            "#subdirectory=packages/lians-easy"
+        ),
+        "lians-easy",
+        "mcp",
+    ]
+    assert "env" not in server
 
 
 def test_cursor_guide_documents_project_and_global_install_without_credentials():
