@@ -31,13 +31,19 @@ def test_installer_preserves_json_and_creates_backup(tmp_path, monkeypatch):
     updated = json.loads(config.read_text())
     assert updated["theme"] == "dark"
     assert "other" in updated["mcpServers"]
-    assert updated["mcpServers"]["lians"]["args"][-1] == "mcp"
+    expected_database = tmp_path / "local" / "Lians" / "memory.sqlite3"
+    assert updated["mcpServers"]["lians"]["args"][-2:] == [
+        "--data",
+        str(expected_database),
+    ]
+    assert result["database"] == str(expected_database)
     assert result["clients"][0]["backup"]
     hooks = json.loads((home / ".claude" / "settings.json").read_text())["hooks"]
     [group] = hooks["UserPromptSubmit"]
     [hook] = group["hooks"]
     assert hook["statusMessage"] == HOOK_STATUS
     assert "hook --client claude" in hook["command"]
+    assert str(expected_database) in hook["command"]
 
     removed = uninstall(["claude"], home=home)
     assert "lians" not in json.loads(config.read_text())["mcpServers"]
@@ -58,11 +64,15 @@ def test_codex_managed_block_is_idempotent(tmp_path, monkeypatch):
     assert content.count(MANAGED_START) == 1
     assert content.count(MANAGED_END) == 1
     assert 'model = "gpt-5"' in content
+    expected_database = tmp_path / "lians" / "memory.sqlite3"
+    assert json.dumps("--data") in content
+    assert json.dumps(str(expected_database)) in content
     hooks = json.loads((home / ".codex" / "hooks.json").read_text())
     [group] = hooks["hooks"]["UserPromptSubmit"]
     [hook] = group["hooks"]
     assert hook["statusMessage"] == HOOK_STATUS
     assert hook["additionalContextLimit"] == 2048
+    assert str(expected_database) in hook["command"]
 
 
 def test_hook_install_preserves_unrelated_groups_and_uninstall_removes_only_lians(
@@ -108,7 +118,11 @@ def test_gemini_install_adds_before_agent_recall_and_preserves_settings(tmp_path
     updated = json.loads(config.read_text())
     assert updated["security"]["folderTrust"]["enabled"] is True
     assert "other" in updated["mcpServers"]
-    assert updated["mcpServers"]["lians"]["args"][-1] == "mcp"
+    expected_database = tmp_path / "lians" / "memory.sqlite3"
+    assert updated["mcpServers"]["lians"]["args"][-2:] == [
+        "--data",
+        str(expected_database),
+    ]
     assert result["clients"][0]["automatic_recall"] is True
     assert result["clients"][0]["hook_backup"]
     assert len(updated["hooks"]["BeforeAgent"]) == 2
@@ -121,6 +135,7 @@ def test_gemini_install_adds_before_agent_recall_and_preserves_settings(tmp_path
     assert lians_group["sequential"] is True
     assert hook["timeout"] == 8000
     assert "hook --client gemini" in hook["command"]
+    assert str(expected_database) in hook["command"]
 
     uninstall(["gemini"], home=home)
     restored = json.loads(config.read_text())
@@ -151,12 +166,17 @@ def test_antigravity_install_uses_current_mcp_and_hook_contracts(tmp_path, monke
     updated_mcp = json.loads(mcp_config.read_text())
     updated_hooks = json.loads(hooks_config.read_text())
     assert updated_mcp["mcpServers"]["other"]["command"] == "other"
-    assert updated_mcp["mcpServers"]["lians"]["args"][-1] == "mcp"
+    expected_database = tmp_path / "lians" / "memory.sqlite3"
+    assert updated_mcp["mcpServers"]["lians"]["args"][-2:] == [
+        "--data",
+        str(expected_database),
+    ]
     assert result["clients"][0]["automatic_recall"] is True
     assert updated_hooks["other-hook"]["PreInvocation"][0]["command"] == "other"
     [hook] = updated_hooks[LIANS_HOOK_NAME]["PreInvocation"]
     assert hook["timeout"] == 8
     assert "hook --client antigravity" in hook["command"]
+    assert str(expected_database) in hook["command"]
 
     uninstall(["antigravity"], home=home)
     restored_mcp = json.loads(mcp_config.read_text())
@@ -178,7 +198,11 @@ def test_antigravity_install_accepts_client_created_empty_config(tmp_path, monke
     result = install(["antigravity"], home=home)
 
     updated = json.loads(mcp_config.read_text())
-    assert updated["mcpServers"]["lians"]["args"][-1] == "mcp"
+    expected_database = tmp_path / "lians" / "memory.sqlite3"
+    assert updated["mcpServers"]["lians"]["args"][-2:] == [
+        "--data",
+        str(expected_database),
+    ]
     assert result["clients"][0]["backup"]
     assert (config_dir / "hooks.json").is_file()
 
@@ -191,7 +215,25 @@ def test_plan_reports_targets_without_writing(tmp_path, monkeypatch):
 
     assert result["changes_made"] is False
     assert result["clients"][0]["key"] == "codex"
+    assert result["runtime"]["args"][-2:] == [
+        "--data",
+        str(tmp_path / "lians" / "memory.sqlite3"),
+    ]
     assert not (home / ".codex" / "config.toml").exists()
+
+
+def test_runtime_and_hooks_pin_the_reported_database(tmp_path, monkeypatch):
+    data_home = tmp_path / "portable-lians-data"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(data_home))
+    expected_database = str(data_home / "memory.sqlite3")
+
+    _command, mcp_args = installer_module.runtime_command()
+    hook_argv = installer_module._runtime_argv("hook", "--client", "codex")
+    result = plan(["codex"], action="install", home=tmp_path / "home")
+
+    assert mcp_args[-3:] == ["mcp", "--data", expected_database]
+    assert hook_argv[-2:] == ["--data", expected_database]
+    assert result["runtime"]["args"] == mcp_args
 
 
 def test_frozen_runtime_is_replaced_with_atomic_writer(tmp_path, monkeypatch):
