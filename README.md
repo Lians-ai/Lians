@@ -60,6 +60,10 @@ memory solves a real problem for you.
 All three routes use the same free local memory by default. After setup, try the
 [three-minute, two-chat memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
 
+Running a club, hackathon, class, or campus developer community? Use the
+[student and community kit](docs/student-community-kit.md) for a ready-made
+workshop, project track, judging rubric, and shareable announcement.
+
 Lians does not change the underlying model or promise fewer tokens on every
 task. It can avoid resending old conversation when a small relevant recall is
 enough; verify the result on your own workflow.
