@@ -100,10 +100,11 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
 
 
 def runtime_command() -> tuple[str, list[str]]:
+    data_path = str(user_data_dir() / "memory.sqlite3")
     if getattr(sys, "frozen", False):
         installed = user_data_dir() / ("LiansMemory.exe" if sys.platform == "win32" else "lians-memory")
-        return str(installed), ["mcp"]
-    return sys.executable, ["-m", "lians_easy", "mcp"]
+        return str(installed), ["mcp", "--data", data_path]
+    return sys.executable, ["-m", "lians_easy", "mcp", "--data", data_path]
 
 
 def _backup(path: Path) -> Path | None:
