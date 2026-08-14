@@ -15,6 +15,13 @@ Do not send normal users to that page expecting a desktop download. For a live,
 managed setup, use [Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter).
 For free local memory today, use the [published MCP setup](install.md#mcp--use-lians-as-a-native-tool).
 
+Pull requests now build a real per-user `Lians-Setup-<version>.exe` and exercise
+install, first launch, the bundled app, Bridge readiness, silent removal, and
+memory preservation on a fresh Windows runner. That artifact is still unsigned
+and remains a technical fixture. The stable release path signs the runtime and
+installer with the configured Lians publisher certificate before repeating the
+same package smoke test and attaching the setup executable to a release.
+
 ## Personal setup
 
 Developers evaluating the preview can run it from a source checkout:

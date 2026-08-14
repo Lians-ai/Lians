@@ -35,6 +35,30 @@ git push origin v0.4.2
 | Java | Maven Central and GitHub Release JAR | `release.yml` signs and deploys with the `release` Maven profile | Sonatype credentials and GPG signing secrets |
 | C | GitHub Release source archive | `release.yml` creates `lians-c-<version>.tar.gz` | GitHub token supplied to the workflow |
 
+## Windows desktop package
+
+The Windows consumer job is disabled by default. Before setting the repository
+variable `PUBLISH_SIGNED_LIANS_DESKTOP=true`, configure:
+
+- repository secret `WINDOWS_SIGNING_CERT_PFX_BASE64`: the publisher PFX encoded
+  as one base64 string;
+- repository secret `WINDOWS_SIGNING_CERT_PASSWORD`: the PFX password; and
+- repository variable `WINDOWS_SIGNING_CERT_SHA1`: the exact SHA-1 thumbprint of
+  the expected publisher certificate, without relying on the PFX contents alone.
+
+The release runner imports the certificate into its ephemeral current-user
+store, confirms the thumbprint, signs `LiansMemory.exe`, builds the per-user
+NSIS setup, signs the setup executable, and validates both Authenticode chains.
+It then performs an actual silent install, opens the bundled Lians App through
+the installed Bridge, verifies local runtime discovery, silently uninstalls,
+and proves that encrypted memory was preserved. Only then does it upload
+`Lians-Setup-<version>.exe` and its SHA-256 checksum. The certificate is removed
+from the runner in an `always()` cleanup step; the PFX file is removed
+immediately after import.
+
+This flag currently publishes Windows only. Do not infer macOS notarization or
+Linux package signing from a successful Windows job.
+
 ## npm trusted publishing
 
 Configure the existing `@lians-ai/lians` package on npmjs.com with this trusted publisher:

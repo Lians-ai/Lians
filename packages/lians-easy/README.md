@@ -22,6 +22,14 @@ Open the executable without arguments for guided setup. Its final action opens
 the bundled control center through the loopback-only Bridge. Once at least one
 AI client is connected, later launches return to that control center directly.
 
+The Windows build workflow also wraps the frozen runtime in a per-user
+`Lians-Setup-<version>.exe`. It creates Start-menu entries, does not request
+administrator access, and is exercised through install, launch, and uninstall
+on a fresh runner. Silent removal preserves encrypted memory; interactive
+removal asks separately before erasure. Pull-request installers are unsigned
+technical fixtures until the publisher-gated release job signs both the runtime
+and setup executable.
+
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is
 protected with DPAPI. The full Lians engine remains available when a team needs

@@ -52,18 +52,26 @@ def test_windows_icon_contains_standard_shell_sizes() -> None:
     assert sizes == [16, 24, 32, 48, 64, 128, 256]
 
 
-def test_stable_release_cannot_upload_unsigned_desktop_assets() -> None:
+def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
     desktop_job = workflow.split("  lians-easy:\n", 1)[1].split("\n  go-tag:", 1)[0]
 
     assert "vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true'" in desktop_job
+    assert "WINDOWS_SIGNING_CERT_PFX_BASE64" in desktop_job
+    assert "WINDOWS_SIGNING_CERT_PASSWORD" in desktop_job
+    assert "WINDOWS_SIGNING_CERT_SHA1" in desktop_job
+    assert "signtool.exe" in desktop_job
+    assert "dist/LiansMemory.exe" in desktop_job
+    assert "build_windows_installer.ps1" in desktop_job
+    assert "artifact_windows_installer_smoke.py" in desktop_job
+    assert "--expected-signer-thumbprint" in desktop_job
+    assert "Lians-Setup-*.exe" in desktop_job
     assert "Get-AuthenticodeSignature" in desktop_job
     assert "signature.Status -ne 'Valid'" in desktop_job
-    assert "Block incomplete macOS publisher path" in desktop_job
-    assert "Block incomplete Linux publisher path" in desktop_job
-    assert desktop_job.index("Get-AuthenticodeSignature") < desktop_job.index(
+    assert "SignerCertificate.Thumbprint" in desktop_job
+    assert desktop_job.index("Sign and verify the Windows installer") < desktop_job.index(
         "gh release upload"
     )
 
@@ -77,6 +85,21 @@ def test_stable_release_cannot_upload_unsigned_desktop_assets() -> None:
         assert "--version-file packages/lians-easy/windows-version-info.txt" in build_contract
         assert "Verify Windows package identity" in build_contract
         assert "artifact_app_smoke.py" in build_contract
+
+
+def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() -> None:
+    script = (PACKAGE_ROOT / "windows-installer.nsi").read_text(encoding="utf-8")
+
+    assert 'RequestExecutionLevel user' in script
+    assert 'InstallDir "$LOCALAPPDATA\\Lians"' in script
+    assert "MUI_PAGE_DIRECTORY" not in script
+    assert 'MUI_FINISHPAGE_RUN_TEXT "Open Lians"' in script
+    assert 'CreateShortcut "$SMPROGRAMS\\Lians\\Lians.lnk"' in script
+    assert "uninstall --clients all --yes" in script
+    assert "IfSilent KeepEncryptedMemory" in script
+    assert "Permanently erase all encrypted Lians memories" in script
+    assert 'StrCmp "$INSTDIR" "$LOCALAPPDATA\\Lians" 0 RefuseUnsafeErase' in script
+    assert script.index("IfSilent KeepEncryptedMemory") < script.index('RMDir /r "$INSTDIR"')
 
 
 def test_packaged_control_center_is_source_pinned_and_bounded() -> None:

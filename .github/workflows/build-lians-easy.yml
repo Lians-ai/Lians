@@ -115,6 +115,37 @@ jobs:
         run: >-
           python packages/lians-easy/tests/artifact_crash_smoke.py
           --binary dist/LiansMemory
+      - name: Install pinned Windows packaging tool
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis.install --version=3.12.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            throw "NSIS installation failed with exit code $LASTEXITCODE"
+          }
+          $nsisVersion = (& makensis.exe /VERSION).Trim()
+          if ($nsisVersion -ne 'v3.12') {
+            throw "Expected NSIS v3.12; found '$nsisVersion'"
+          }
+      - name: Build per-user Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          & packages/lians-easy/scripts/build_windows_installer.ps1
+          -Binary dist/LiansMemory.exe
+          -OutputDirectory dist/installer
+      - name: Verify install, bundled app, and memory-preserving removal
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $versionLine = Select-String -LiteralPath packages/lians-easy/pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if (-not $versionLine -or $versionLine.Line -notmatch '^version\s*=\s*"([^"]+)"') {
+            throw 'Could not read the Lians Bridge package version'
+          }
+          $version = $Matches[1]
+          python packages/lians-easy/tests/artifact_windows_installer_smoke.py `
+            --installer "dist/installer/Lians-Setup-$version.exe" `
+            --expected-version $version
       - name: Prepare interrupted state for a fresh Windows runner
         if: runner.os == 'Windows'
         run: >-
@@ -134,7 +165,9 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ matrix.artifact }}
-          path: dist/LiansMemory*
+          path: |
+            dist/LiansMemory*
+            dist/installer/Lians-Setup-*.exe
           if-no-files-found: error
 
   cold-restart:

@@ -21,7 +21,7 @@ artifact until the publisher-signing gate passes.*
 
 | Audience | Primary package | Secondary path |
 |---|---|---|
-| Windows user | Authenticode-signed `LiansSetup.exe` | Microsoft Store or `winget` after the direct package is trusted |
+| Windows user | Authenticode-signed `Lians-Setup-<version>.exe` | Microsoft Store or `winget` after the direct package is trusted |
 | macOS user | Developer ID-signed and notarized `Lians.dmg` | Homebrew for technical users |
 | Linux user | Signed AppImage or Flatpak | Native packages when demand justifies them |
 | Enterprise IT | Signed MSIX/PKG with silent options | MDM deployment and the existing CLI contract |
@@ -38,11 +38,22 @@ original executable name, and the Lians lotus icon. Signing still remains a
 separate release gate; product metadata must never be presented as a substitute
 for a verified publisher.
 
-The stable-release workflow keeps desktop publication disabled unless the
-repository explicitly sets `PUBLISH_SIGNED_LIANS_DESKTOP=true`. Even with that
-opt-in, upload stops unless Windows Authenticode verifies; macOS and Linux stop
-until their notarized DMG and signed AppImage or Flatpak paths exist. Unsigned
-pull-request artifacts remain technical test fixtures, not consumer releases.
+The Windows package installs without elevation under the current account's
+local Lians directory, adds **Lians** and **Uninstall Lians** to the Start menu,
+and opens the same bundled control center as the frozen Bridge. Silent removal
+disconnects Lians-managed client entries and keeps encrypted memory. Interactive
+removal asks a separate, default-no question before permanently erasing memory
+and settings.
+
+The stable-release workflow keeps Windows desktop publication disabled unless
+the repository explicitly sets `PUBLISH_SIGNED_LIANS_DESKTOP=true`. Even with
+that opt-in, it imports only the configured publisher certificate, requires an
+exact thumbprint match, signs both the installed runtime and setup executable,
+re-verifies both Authenticode signatures, installs and exercises the resulting
+package, and uploads it only after those checks pass. macOS and Linux remain
+separate unfinished publisher paths; the Windows job no longer pretends to
+exercise them. Unsigned pull-request installers remain technical test fixtures,
+not consumer releases.
 
 ## First-run experience
 
@@ -134,7 +145,7 @@ receipt-aware recall surface.
 ## Package architecture
 
 ```text
-LiansSetup.exe / Lians.dmg
+Lians-Setup-<version>.exe / Lians.dmg
   -> verifies publisher and package integrity
   -> installs one per-user Lians Bridge and Lians App
   -> detects supported AI clients

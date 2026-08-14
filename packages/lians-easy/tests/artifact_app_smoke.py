@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import signal
 import socket
 import subprocess
 import tempfile
@@ -23,6 +25,31 @@ def _available_port() -> int:
 def _open(url: str, *, cookie: str | None = None):
     headers = {"Cookie": cookie} if cookie else {}
     return urlopen(Request(url, headers=headers), timeout=2)
+
+
+def _stop_process_tree(process: subprocess.Popen[bytes]) -> None:
+    """Stop the PyInstaller bootloader and its extracted child process."""
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        taskkill = Path(os.environ.get("SYSTEMROOT", r"C:\Windows")) / "System32" / "taskkill.exe"
+        subprocess.run(
+            [str(taskkill), "/PID", str(process.pid), "/T", "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+    else:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt":
+            process.kill()
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        process.wait(timeout=5)
 
 
 def main() -> None:
@@ -50,6 +77,7 @@ def main() -> None:
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            start_new_session=os.name != "nt",
         )
         try:
             deadline = time.monotonic() + 20
@@ -98,13 +126,7 @@ def main() -> None:
                 )
             )
         finally:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=5)
+            _stop_process_tree(process)
 
 
 if __name__ == "__main__":

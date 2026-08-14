@@ -110,17 +110,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lians-easy:
-    name: Signed Lians Bridge (${{ matrix.os }})
+    name: Signed Lians Bridge (Windows)
     needs: release-context
-    # Pull-request artifacts remain available for technical evaluation. Stable
-    # Release assets are opt-in only and must pass the platform publisher gate
-    # below before they can be uploaded for normal users.
+    # Pull-request artifacts remain available for technical evaluation. The
+    # normal-user Windows package is opt-in and requires an exact publisher
+    # certificate match before the release can receive any desktop asset.
     if: ${{ vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -129,38 +125,29 @@ jobs:
         with:
           python-version: "3.12"
       - name: Build standalone desktop runtime
+        shell: pwsh
         run: |
+          $versionLine = Select-String -LiteralPath packages/lians-easy/pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if (-not $versionLine -or $versionLine.Line -notmatch '^version\s*=\s*"([^"]+)"') {
+            throw 'Could not read the Lians Bridge package version'
+          }
+          $packageVersion = $Matches[1]
+          if ("v$packageVersion" -ne $env:RELEASE_TAG) {
+            throw "Lians Bridge version $packageVersion does not match $env:RELEASE_TAG"
+          }
           python -m pip install packages/lians-easy pyinstaller==6.22.0
-          data_separator=":"
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            data_separator=";"
-          fi
-          extra_args=(
-            --add-data "packages/lians-easy/lians_easy/app${data_separator}lians_easy/app"
-          )
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            extra_args+=(
-              --icon packages/lians-easy/windows-lians.ico
-              --version-file packages/lians-easy/windows-version-info.txt
-            )
-          fi
-          python -m PyInstaller --noconfirm --clean --onefile \
-            --name LiansMemory \
-            --paths packages/lians-easy \
-            "${extra_args[@]}" \
+          python -m PyInstaller --noconfirm --clean --onefile `
+            --name LiansMemory `
+            --paths packages/lians-easy `
+            --add-data "packages/lians-easy/lians_easy/app;lians_easy/app" `
+            --icon packages/lians-easy/windows-lians.ico `
+            --version-file packages/lians-easy/windows-version-info.txt `
             packages/lians-easy/entrypoint.py
-        shell: bash
       - name: Verify frozen Lians App and Bridge API
-        run: |
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            binary="dist/LiansMemory.exe"
-          else
-            binary="dist/LiansMemory"
-          fi
-          python packages/lians-easy/tests/artifact_app_smoke.py --binary "${binary}"
-        shell: bash
+        run: >-
+          python packages/lians-easy/tests/artifact_app_smoke.py
+          --binary dist/LiansMemory.exe
       - name: Verify Windows package identity
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $info = (Get-Item -LiteralPath dist/LiansMemory.exe).VersionInfo
@@ -184,56 +171,129 @@ jobs:
             }
           }
       - name: Verify frozen installer crash recovery
+        run: >-
+          python packages/lians-easy/tests/artifact_crash_smoke.py
+          --binary dist/LiansMemory.exe
+      - name: Sign the Windows runtime
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERT_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_PFX_BASE64 }}
+          WINDOWS_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
+          WINDOWS_SIGNING_CERT_SHA1: ${{ vars.WINDOWS_SIGNING_CERT_SHA1 }}
         run: |
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            binary="dist/LiansMemory.exe"
-          else
-            binary="dist/LiansMemory"
-          fi
-          python packages/lians-easy/tests/artifact_crash_smoke.py --binary "${binary}"
-        shell: bash
-      - name: Verify Windows Authenticode publisher gate
-        if: runner.os == 'Windows'
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_PFX_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_SHA1)) {
+            throw 'Windows signing requires the PFX secret, password secret, and expected SHA-1 certificate thumbprint variable'
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'lians-windows-signing.pfx'
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_PFX_BASE64))
+            $password = ConvertTo-SecureString $env:WINDOWS_SIGNING_CERT_PASSWORD -AsPlainText -Force
+            $expectedThumbprint = $env:WINDOWS_SIGNING_CERT_SHA1.Replace(' ', '').ToUpperInvariant()
+            $imported = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+            $matching = @($imported | Where-Object {
+              $_.HasPrivateKey -and $_.Thumbprint.ToUpperInvariant() -eq $expectedThumbprint
+            })
+            if ($matching.Count -ne 1) {
+              throw 'The PFX must contain exactly one private-key certificate matching WINDOWS_SIGNING_CERT_SHA1'
+            }
+            $certificate = $matching[0]
+            $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+              Sort-Object { [version]$_.Directory.Parent.Name } -Descending |
+              Select-Object -First 1
+            if (-not $signTool) {
+              throw 'Windows SDK signtool.exe was not found'
+            }
+            & $signTool.FullName sign /sha1 $certificate.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 dist/LiansMemory.exe
+            if ($LASTEXITCODE -ne 0) {
+              throw "Runtime signing failed with exit code $LASTEXITCODE"
+            }
+            "LIANS_WINDOWS_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "LIANS_SIGNTOOL=$($signTool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+          finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
+      - name: Verify signed runtime publisher
         shell: pwsh
         run: |
           $signature = Get-AuthenticodeSignature -LiteralPath dist/LiansMemory.exe
           if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
-            throw "Windows desktop publication requires a valid Authenticode signature; status was '$($signature.Status)'"
+            throw "Windows runtime requires a valid Authenticode signature; status was '$($signature.Status)'"
           }
-          $signature.SignerCertificate | Select-Object Subject,Issuer,NotBefore,NotAfter,Thumbprint
-      - name: Block incomplete macOS publisher path
-        if: runner.os == 'macOS'
-        shell: bash
+          if ($signature.SignerCertificate.Thumbprint -ne $env:LIANS_WINDOWS_CERT_THUMBPRINT) {
+            throw 'Windows runtime signer does not match the configured publisher certificate'
+          }
+      - name: Install pinned Windows packaging tool
+        shell: pwsh
         run: |
-          echo "macOS publication remains blocked until Developer ID signing, notarized DMG packaging, and staple validation are implemented." >&2
-          exit 1
-      - name: Block incomplete Linux publisher path
-        if: runner.os == 'Linux'
-        shell: bash
+          choco install nsis.install --version=3.12.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            throw "NSIS installation failed with exit code $LASTEXITCODE"
+          }
+          $nsisVersion = (& makensis.exe /VERSION).Trim()
+          if ($nsisVersion -ne 'v3.12') {
+            throw "Expected NSIS v3.12; found '$nsisVersion'"
+          }
+      - name: Build per-user Windows installer
+        shell: pwsh
+        run: >-
+          & packages/lians-easy/scripts/build_windows_installer.ps1
+          -Binary dist/LiansMemory.exe
+          -OutputDirectory dist/installer
+      - name: Sign and verify the Windows installer
+        shell: pwsh
         run: |
-          echo "Linux publication remains blocked until the signed AppImage or Flatpak path is implemented." >&2
-          exit 1
-      - name: Name platform artifact and write checksum
+          $installer = Get-ChildItem -LiteralPath dist/installer -Filter 'Lians-Setup-*.exe'
+          if (@($installer).Count -ne 1) {
+            throw 'Expected exactly one Lians Windows installer'
+          }
+          & $env:LIANS_SIGNTOOL sign /sha1 $env:LIANS_WINDOWS_CERT_THUMBPRINT /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $installer.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw "Installer signing failed with exit code $LASTEXITCODE"
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
+            throw "Windows installer requires a valid Authenticode signature; status was '$($signature.Status)'"
+          }
+          if ($signature.SignerCertificate.Thumbprint -ne $env:LIANS_WINDOWS_CERT_THUMBPRINT) {
+            throw 'Windows installer signer does not match the configured publisher certificate'
+          }
+      - name: Verify install, bundled app, and memory-preserving removal
+        shell: pwsh
         run: |
-          set -euo pipefail
-          platform="$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')"
-          architecture="$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]')"
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            asset="LiansMemory-${platform}-${architecture}.exe"
-            mv dist/LiansMemory.exe "${asset}"
-          else
-            executable="LiansMemory-${platform}-${architecture}"
-            mv dist/LiansMemory "${executable}"
-            chmod 0755 "${executable}"
-            asset="${executable}.tar.gz"
-            tar -czf "${asset}" "${executable}"
-            rm "${executable}"
-          fi
-          python -c "import hashlib, pathlib; p=pathlib.Path('${asset}'); pathlib.Path(str(p)+'.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\\n')"
-        shell: bash
-      - name: Attach Lians Easy to release
-        run: gh release upload "${RELEASE_TAG}" LiansMemory-* --clobber
-        shell: bash
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          python packages/lians-easy/tests/artifact_windows_installer_smoke.py `
+            --installer "dist/installer/Lians-Setup-$version.exe" `
+            --expected-version $version `
+            --expected-signer-thumbprint $env:LIANS_WINDOWS_CERT_THUMBPRINT
+      - name: Write Windows installer checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -LiteralPath dist/installer -Filter 'Lians-Setup-*.exe'
+          $checksum = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$checksum  $($installer.Name)" | Set-Content -LiteralPath "$($installer.FullName).sha256" -Encoding utf8
+      - name: Remove publisher certificate from the runner
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:LIANS_WINDOWS_CERT_THUMBPRINT) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$env:LIANS_WINDOWS_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          }
+      - name: Attach signed Lians Setup to release
+        shell: pwsh
+        run: |
+          $assets = @(Get-ChildItem -LiteralPath dist/installer -File | Where-Object {
+            $_.Name -like 'Lians-Setup-*.exe' -or $_.Name -like 'Lians-Setup-*.exe.sha256'
+          })
+          if ($assets.Count -ne 2) {
+            throw 'Expected one signed Windows installer and one SHA-256 checksum'
+          }
+          gh release upload $env:RELEASE_TAG @($assets.FullName) --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release upload failed with exit code $LASTEXITCODE"
+          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
