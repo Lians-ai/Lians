@@ -37,8 +37,8 @@ lineage so old wording cannot return from a different client.
 The preview implements the first product loop directly:
 
 1. `remember` records an explicit preference, decision, fact, or handoff.
-2. Claude and Codex prompt hooks request a project-aware context pack before a
-   task is submitted.
+2. Antigravity, Claude, Codex, and Gemini CLI prompt hooks request a
+   project-aware context pack before the agent starts the task.
 3. Cursor uses the same MCP tools plus a generated, always-applied project rule.
 4. A receipt reports the memories used, project, estimated tokens, selection
    reasons, and exclusions.
@@ -76,10 +76,10 @@ The core tools are intentionally understandable:
 
 ## Supported clients
 
-The first desktop release configures Claude Desktop, Cursor, Windsurf, Gemini
-CLI, and Codex. It does not modify ChatGPT because ChatGPT connectors use a
-hosted HTTP connection rather than a local stdio process. Use a hosted Lians
-connector when that distribution is available.
+The first desktop release configures Google Antigravity, Claude Desktop,
+Cursor, Windsurf, Gemini CLI, and Codex. It does not modify ChatGPT because
+ChatGPT connectors use a hosted HTTP connection rather than a local stdio
+process. Use a hosted Lians connector when that distribution is available.
 
 ## IT and enterprise deployment
 
@@ -92,19 +92,19 @@ LiansMemory doctor --json
 Preview an exact install without writing anything:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex --plan --json
+LiansMemory install --clients antigravity,claude,cursor,gemini,codex --plan --json
 ```
 
 Install for selected clients:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex --yes --json
+LiansMemory install --clients antigravity,claude,cursor,gemini,codex --yes --json
 ```
 
 Remove the managed client entries while preserving the user's memory database:
 
 ```bash
-LiansMemory uninstall --clients claude,cursor,codex --yes --json
+LiansMemory uninstall --clients antigravity,claude,cursor,gemini,codex --yes --json
 ```
 
 Every write is idempotent and creates a timestamped backup when a configuration

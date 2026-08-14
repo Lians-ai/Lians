@@ -17,6 +17,7 @@ from typing import Any
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
 MANAGED_END = "# <<< Lians Memory (managed by Lians Easy)"
 HOOK_STATUS = "Recalling Lians memory"
+LIANS_HOOK_NAME = "lians-memory-recall"
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,10 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
     if sys.platform == "win32":
         roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
         paths = {
+            "antigravity": (
+                "Google Antigravity",
+                home / ".gemini" / "config" / "mcp_config.json",
+            ),
             "claude": ("Claude Desktop", roaming / "Claude" / "claude_desktop_config.json"),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
@@ -58,6 +63,10 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
         }
     elif sys.platform == "darwin":
         paths = {
+            "antigravity": (
+                "Google Antigravity",
+                home / ".gemini" / "config" / "mcp_config.json",
+            ),
             "claude": (
                 "Claude Desktop",
                 home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
@@ -70,6 +79,10 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
     else:
         config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
         paths = {
+            "antigravity": (
+                "Google Antigravity",
+                home / ".gemini" / "config" / "mcp_config.json",
+            ),
             "claude": ("Claude Desktop", config / "Claude" / "claude_desktop_config.json"),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
@@ -123,10 +136,14 @@ def _shell_command(argv: list[str], *, windows: bool) -> str:
 
 
 def _hook_path(client: str, home: Path) -> Path:
+    if client == "antigravity":
+        return home / ".gemini" / "config" / "hooks.json"
     if client == "claude":
         return home / ".claude" / "settings.json"
     if client == "codex":
         return home / ".codex" / "hooks.json"
+    if client == "gemini":
+        return home / ".gemini" / "settings.json"
     raise ValueError(f"{client} does not support a Lians prompt hook")
 
 
@@ -194,6 +211,20 @@ def _json_config(path: Path, command: str, args: list[str]) -> Path | None:
 
 def _lians_hook_group(client: str) -> dict[str, Any]:
     argv = _runtime_argv("hook", "--client", client)
+    if client == "gemini":
+        return {
+            "matcher": "*",
+            "sequential": True,
+            "hooks": [
+                {
+                    "name": LIANS_HOOK_NAME,
+                    "type": "command",
+                    "command": _shell_command(argv, windows=sys.platform == "win32"),
+                    "timeout": 8000,
+                    "description": "Inject bounded project memory before Gemini starts the turn",
+                }
+            ],
+        }
     hook: dict[str, Any] = {
         "type": "command",
         "command": _shell_command(argv, windows=sys.platform == "win32"),
@@ -210,7 +241,11 @@ def _is_lians_hook_group(value: Any) -> bool:
     if not isinstance(value, dict) or not isinstance(value.get("hooks"), list):
         return False
     return any(
-        isinstance(hook, dict) and hook.get("statusMessage") == HOOK_STATUS
+        isinstance(hook, dict)
+        and (
+            hook.get("statusMessage") == HOOK_STATUS
+            or hook.get("name") == LIANS_HOOK_NAME
+        )
         for hook in value["hooks"]
     )
 
@@ -229,16 +264,45 @@ def _hook_config(path: Path, client: str, *, remove: bool = False) -> Path | Non
     hooks = document.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise TypeError(f"hooks must be an object in {path}")
-    prompt_hooks = hooks.setdefault("UserPromptSubmit", [])
+    event_name = "BeforeAgent" if client == "gemini" else "UserPromptSubmit"
+    prompt_hooks = hooks.setdefault(event_name, [])
     if not isinstance(prompt_hooks, list):
-        raise TypeError(f"hooks.UserPromptSubmit must be an array in {path}")
+        raise TypeError(f"hooks.{event_name} must be an array in {path}")
     prompt_hooks[:] = [group for group in prompt_hooks if not _is_lians_hook_group(group)]
     if not remove:
         prompt_hooks.append(_lians_hook_group(client))
     if remove and not prompt_hooks:
-        hooks.pop("UserPromptSubmit", None)
+        hooks.pop(event_name, None)
     if remove and not hooks:
         document.pop("hooks", None)
+    _write_text(path, json.dumps(document, indent=2) + "\n")
+    return backup
+
+
+def _antigravity_hook_config(path: Path, *, remove: bool = False) -> Path | None:
+    backup = _backup(path)
+    if path.exists():
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"Cannot safely update invalid JSON: {path}") from exc
+        if not isinstance(document, dict):
+            raise ValueError(f"Cannot safely update non-object JSON: {path}")
+    else:
+        document = {}
+    if remove:
+        document.pop(LIANS_HOOK_NAME, None)
+    else:
+        argv = _runtime_argv("hook", "--client", "antigravity")
+        document[LIANS_HOOK_NAME] = {
+            "PreInvocation": [
+                {
+                    "type": "command",
+                    "command": _shell_command(argv, windows=sys.platform == "win32"),
+                    "timeout": 8,
+                }
+            ]
+        }
     _write_text(path, json.dumps(document, indent=2) + "\n")
     return backup
 
@@ -297,11 +361,16 @@ def install(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
             "config": str(target.config_path),
             "backup": str(backup) if backup else None,
             "status": "installed",
-            "automatic_recall": key in {"claude", "codex", "cursor"},
+            "automatic_recall": key
+            in {"antigravity", "claude", "codex", "cursor", "gemini"},
         }
-        if key in {"claude", "codex"}:
+        if key in {"antigravity", "claude", "codex", "gemini"}:
             hook_path = _hook_path(key, home)
-            hook_backup = _hook_config(hook_path, key)
+            hook_backup = (
+                _antigravity_hook_config(hook_path)
+                if key == "antigravity"
+                else _hook_config(hook_path, key)
+            )
             item["hook_config"] = str(hook_path)
             item["hook_backup"] = str(hook_backup) if hook_backup else None
         if key == "cursor":
@@ -360,10 +429,14 @@ def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
             "status": "removed" if target.config_path.exists() else "not_configured",
             "backup": str(backup) if backup else None,
         }
-        if key in {"claude", "codex"}:
+        if key in {"antigravity", "claude", "codex", "gemini"}:
             hook_path = _hook_path(key, home)
             if hook_path.exists():
-                hook_backup = _hook_config(hook_path, key, remove=True)
+                hook_backup = (
+                    _antigravity_hook_config(hook_path, remove=True)
+                    if key == "antigravity"
+                    else _hook_config(hook_path, key, remove=True)
+                )
                 item["hook_backup"] = str(hook_backup) if hook_backup else None
         results.append(item)
     return {

@@ -11,7 +11,7 @@ replace operating-system code signing. Until a signed release is published,
 developers and IT teams should evaluate the Bridge from source:
 
 ```bash
-python -m lians_easy install --clients claude,cursor,codex --yes
+python -m lians_easy install --clients antigravity,claude,cursor,gemini,codex --yes
 python -m lians_easy doctor --json
 ```
 
@@ -20,11 +20,14 @@ editing is required. The local store uses AES-GCM; on Windows its root key is
 protected with DPAPI. The full Lians engine remains available when a team needs
 semantic retrieval, collaboration, governance, or a shared server deployment.
 
-Claude and Codex receive bounded context through prompt hooks. Cursor receives
-the same MCP tools and a generated project rule because current Cursor hooks do
-not provide a reliable dynamic prompt-injection contract. Every context pack
-records which memories appeared, why they appeared, what was excluded, and the
-estimated token cost.
+Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
+prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client
+uses a first-invocation `PreInvocation` hook and an ephemeral context step, so
+the memory is not appended again on every model call in the same agent loop.
+Cursor receives the same MCP tools and a generated project rule because current
+Cursor hooks do not provide a reliable dynamic prompt-injection contract. Every
+context pack records which memories appeared, why they appeared, what was
+excluded, and the estimated token cost.
 
 Run the deterministic token-budget benchmark from the repository root:
 

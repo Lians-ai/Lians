@@ -72,6 +72,29 @@ def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path):
     )
     assert "FastAPI" in codex_output["hookSpecificOutput"]["additionalContext"]
 
+    gemini_output = json.loads(
+        render_hook_output("gemini", context_for_event(event, client="gemini", store=store))
+    )
+    assert gemini_output["hookSpecificOutput"]["hookEventName"] == "BeforeAgent"
+    assert "FastAPI" in gemini_output["hookSpecificOutput"]["additionalContext"]
+
+    antigravity_event = {
+        "invocationNum": 0,
+        "workspacePaths": [str(project)],
+    }
+    antigravity_output = json.loads(
+        render_hook_output(
+            "antigravity",
+            context_for_event(
+                antigravity_event,
+                client="antigravity",
+                store=store,
+                default_query="Active project preferences constraints decisions and handoff",
+            ),
+        )
+    )
+    assert "FastAPI" in antigravity_output["injectSteps"][0]["ephemeralMessage"]
+
     rule = write_cursor_rule(project, store=store)
     rule_path = project / ".cursor" / "rules" / "lians-memory.mdc"
     assert rule["path"] == str(rule_path)
@@ -157,6 +180,80 @@ def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
 
     assert run_hook(client="codex", data_path=data) == 0
     assert "Use FastAPI for services." in output.getvalue()
+
+
+def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    data = tmp_path / "bridge.sqlite3"
+    store = MemoryStore(data)
+    call_tool(
+        store,
+        "remember",
+        {
+            "content": "Use FastAPI for Gemini services.",
+            "kind": "preference",
+            "scope": "project",
+            "project_root": str(project),
+            "source_client": "cursor",
+        },
+    )
+    event = json.dumps(
+        {
+            "hook_event_name": "BeforeAgent",
+            "prompt": "Build the service",
+            "cwd": str(project),
+        }
+    )
+    output = StringIO()
+    monkeypatch.setattr(sys, "stdin", StringIO(event))
+    monkeypatch.setattr(sys, "stdout", output)
+
+    assert run_hook(client="gemini", data_path=data) == 0
+    payload = json.loads(output.getvalue())
+    assert payload["hookSpecificOutput"]["hookEventName"] == "BeforeAgent"
+    assert "Use FastAPI for Gemini services." in payload["hookSpecificOutput"]["additionalContext"]
+
+
+def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    data = tmp_path / "bridge.sqlite3"
+    store = MemoryStore(data)
+    call_tool(
+        store,
+        "remember",
+        {
+            "content": "Use FastAPI for Antigravity services.",
+            "kind": "preference",
+            "scope": "project",
+            "project_root": str(project),
+            "source_client": "cursor",
+        },
+    )
+
+    first_output = StringIO()
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        StringIO(json.dumps({"invocationNum": 0, "workspacePaths": [str(project)]})),
+    )
+    monkeypatch.setattr(sys, "stdout", first_output)
+    assert run_hook(client="antigravity", data_path=data) == 0
+    first_payload = json.loads(first_output.getvalue())
+    assert "Use FastAPI for Antigravity services." in first_payload["injectSteps"][0][
+        "ephemeralMessage"
+    ]
+
+    later_output = StringIO()
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        StringIO(json.dumps({"invocationNum": 1, "workspacePaths": [str(project)]})),
+    )
+    monkeypatch.setattr(sys, "stdout", later_output)
+    assert run_hook(client="antigravity", data_path=data) == 0
+    assert json.loads(later_output.getvalue()) == {}
 
 
 def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_path):

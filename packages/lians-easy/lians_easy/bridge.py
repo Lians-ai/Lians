@@ -35,20 +35,30 @@ def context_for_event(
 ) -> dict[str, Any]:
     prompt = event.get("prompt")
     query = prompt.strip() if isinstance(prompt, str) and prompt.strip() else default_query
-    cwd = event.get("cwd") if isinstance(event.get("cwd"), str) else str(Path.cwd())
+    cwd = event.get("cwd") if isinstance(event.get("cwd"), str) else None
+    if cwd is None:
+        workspace_paths = event.get("workspacePaths")
+        if (
+            isinstance(workspace_paths, list)
+            and workspace_paths
+            and isinstance(workspace_paths[0], str)
+        ):
+            cwd = workspace_paths[0]
+    cwd = cwd or str(Path.cwd())
     return store.context_pack(
         query,
         project=detect_project(cwd),
         client=client,
         limit=3,
         max_tokens=512,
+        include_all_project=client == "antigravity",
     )
 
 
 def render_hook_output(client: str, pack: dict[str, Any]) -> str:
     context = pack.get("context") or ""
     if not context:
-        return ""
+        return "{}" if client == "antigravity" else ""
     if client in {"claude", "codex"}:
         return json.dumps(
             {
@@ -60,9 +70,26 @@ def render_hook_output(client: str, pack: dict[str, Any]) -> str:
             ensure_ascii=True,
             separators=(",", ":"),
         )
+    if client == "gemini":
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "BeforeAgent",
+                    "additionalContext": context,
+                }
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+    if client == "antigravity":
+        return json.dumps(
+            {"injectSteps": [{"ephemeralMessage": context}]},
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
     if client == "cursor":
         return json.dumps({"additional_context": context}, ensure_ascii=True, separators=(",", ":"))
-    raise ValueError("client must be claude, codex, or cursor")
+    raise ValueError("client must be antigravity, claude, codex, cursor, or gemini")
 
 
 def write_cursor_rule(
@@ -379,8 +406,24 @@ def run_hook(*, client: str, data_path: str | Path | None = None) -> int:
         event = json.loads(raw)
         if not isinstance(event, dict):
             return 0
+        if client == "antigravity" and event.get("invocationNum") not in {None, 0}:
+            sys.stdout.write("{}")
+            return 0
         store = MemoryStore(data_path or default_data_path())
-        output = render_hook_output(client, context_for_event(event, client=client, store=store))
+        default_query = (
+            "Active project preferences constraints decisions and handoff"
+            if client == "antigravity"
+            else "Start or continue work in this project"
+        )
+        output = render_hook_output(
+            client,
+            context_for_event(
+                event,
+                client=client,
+                store=store,
+                default_query=default_query,
+            ),
+        )
         if output:
             sys.stdout.write(output)
         return 0

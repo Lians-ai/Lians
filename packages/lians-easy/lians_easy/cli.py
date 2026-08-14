@@ -57,7 +57,11 @@ def parser() -> argparse.ArgumentParser:
     bridge.add_argument("--app-dir", type=Path)
 
     hook = commands.add_parser("hook", help="Inject bounded memory into an AI prompt")
-    hook.add_argument("--client", choices=("claude", "codex", "cursor"), required=True)
+    hook.add_argument(
+        "--client",
+        choices=("antigravity", "claude", "codex", "cursor", "gemini"),
+        required=True,
+    )
     hook.add_argument("--data", type=Path)
 
     context = commands.add_parser("context", help="Preview a signed context pack")
@@ -79,7 +83,10 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--clients",
             default="detected",
-            help="Comma-separated claude,cursor,windsurf,gemini,codex; or detected/all",
+            help=(
+                "Comma-separated antigravity,claude,cursor,windsurf,gemini,codex; "
+                "or detected/all"
+            ),
         )
         command.add_argument("--yes", action="store_true", help="Confirm a non-interactive change")
         command.add_argument(
