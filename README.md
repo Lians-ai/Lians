@@ -36,6 +36,10 @@ The product loop is deliberately small:
 Lians works through MCP, plugins, and SDKs. Local mode stores memory in SQLite,
 needs no Lians account or API key, and does not lock memory to one model vendor.
 
+<p align="center">
+  <img src="docs/assets/cross-tool-memory-flow.svg" width="100%" alt="A project preference saved in Cursor flows through the encrypted Lians Bridge into a new Codex or Claude task with an inspectable receipt and controls to correct, pause, or forget it.">
+</p>
+
 ## Tested across real AI clients
 
 On August 14, 2026, a live hosted-MCP test stored one synthetic project memory
