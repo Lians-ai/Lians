@@ -22,6 +22,7 @@ Environment variables:
     LIANS_MCP_CODEX_DYNAMIC_SCOPE Bind scope from Codex sandbox metadata when true
     LIANS_MCP_DATA_HOME Fixed private data root required by Codex dynamic scope
     LIANS_MCP_PREWARM Runtime warmup: background (default), true/sync, or false/off
+    LIANS_MCP_LOCAL_READY_TIMEOUT Seconds a tool waits for local model warmup (default: 90)
     LIANS_MCP_ENABLED_TOOLS Optional comma-separated tool allowlist
     LIANS_MCP_SCHEMA_PROFILE Tool schema shape: standard (default) or compact
     LIANS_MCP_RECALL_K Number of candidates considered for recall (default: 50)
@@ -278,6 +279,12 @@ def _bounded_int_env(name: str, default: int, minimum: int, maximum: int) -> int
 # own representative quality run and implies no universal usage or latency gain.
 LIANS_MCP_RECALL_K = _bounded_int_env("LIANS_MCP_RECALL_K", 50, 1, 100)
 LIANS_MCP_CONTEXT_MAX_TOKENS = _bounded_int_env("LIANS_MCP_CONTEXT_MAX_TOKENS", 2650, 64, 32000)
+LIANS_MCP_LOCAL_READY_TIMEOUT = _bounded_int_env(
+    "LIANS_MCP_LOCAL_READY_TIMEOUT",
+    90,
+    5,
+    600,
+)
 
 _TOOL_NAMES = frozenset(
     {
@@ -331,6 +338,68 @@ LIANS_MCP_SCHEMA_PROFILE = _parse_schema_profile(
 _LOCAL_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lians-mcp-local")
 _LOCAL_CLIENT: Any = None
 _LOCAL_PREWARM_FUTURE: Future[Any] | None = None
+
+
+class LocalRuntimeNotReady(RuntimeError):
+    """A safe, retryable local-model readiness failure for MCP clients."""
+
+
+async def _wait_for_local_runtime(server: Any) -> None:
+    """Wait boundedly for background warmup before queuing an embedding call.
+
+    Local requests and prewarm deliberately share a single executor because the
+    synchronous local client owns one asyncio loop.  Waiting here keeps a timed
+    out write out of that executor: the caller can safely retry without the
+    original write completing invisibly later.
+    """
+
+    future = _LOCAL_PREWARM_FUTURE
+    if LIANS_URL or future is None or future.done():
+        return
+
+    try:
+        request_context = server.request_context
+    except LookupError:
+        request_context = None
+    progress_token = (
+        getattr(request_context.meta, "progressToken", None)
+        if request_context is not None and request_context.meta is not None
+        else None
+    )
+    if progress_token is not None:
+        await request_context.session.send_progress_notification(
+            progress_token,
+            0,
+            total=1,
+            message="Lians is preparing its local semantic model for the first use.",
+        )
+
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(asyncio.wrap_future(future)),
+            timeout=LIANS_MCP_LOCAL_READY_TIMEOUT,
+        )
+    except TimeoutError as exc:
+        if progress_token is not None:
+            await request_context.session.send_progress_notification(
+                progress_token,
+                0.9,
+                total=1,
+                message="The first-run model download is still in progress; retry shortly.",
+            )
+        raise LocalRuntimeNotReady(
+            "Lians is still preparing the local semantic model. No memory was written; "
+            "keep the MCP server running and retry this tool shortly. The first run may "
+            "download the model into the Hugging Face cache controlled by HF_HOME."
+        ) from exc
+
+    if progress_token is not None:
+        await request_context.session.send_progress_notification(
+            progress_token,
+            1,
+            total=1,
+            message="Lians local semantic memory is ready.",
+        )
 
 
 def _bind_codex_dynamic_scope(meta: object) -> _CodexScopeBinding | None:
@@ -954,6 +1023,8 @@ def _build_server() -> Any:
         try:
             if LIANS_MCP_ENABLED_TOOLS is not None and name not in LIANS_MCP_ENABLED_TOOLS:
                 return [TextContent(type="text", text=f"Lians tool disabled: {name}")]
+            if name in {"remember", "recall", "correct_memory", "recall_at"}:
+                await _wait_for_local_runtime(server)
             if name == "remember":
                 body = {
                     "agent_id": LIANS_AGENT_ID,
@@ -1197,6 +1268,10 @@ def _build_server() -> Any:
 
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
+        except LocalRuntimeNotReady as exc:
+            # This message is fixed, contains no provider details, and tells the
+            # caller whether retrying can duplicate a write (it cannot).
+            raise RuntimeError(str(exc)) from exc
         except Exception as exc:
             # Let the MCP server mark operational failures as errors. Returning
             # an ordinary text block here makes hosts treat a failed remember as

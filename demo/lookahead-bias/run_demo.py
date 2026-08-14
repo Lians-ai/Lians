@@ -44,12 +44,16 @@ _sdk = HERE.parents[1] / "agentmem" / "sdk" / "python"
 if _sdk.exists():
     sys.path.insert(0, str(_sdk))
 
-from lians import LocalLiansClient  # noqa: E402
+from lians import LocalLiansClient
 
 AGENT = "strategy"
 K = 6
 POSITION_THRESHOLD = 0.15
 PROXIMITY_HALF_LIFE_DAYS = 7.0
+# Pin the benchmark to the deterministic provider. The product's automatic
+# semantic provider selection intentionally follows the installed environment,
+# which makes an evidence fixture drift across sentence-transformers releases.
+EMBEDDING_PROVIDER = "local"
 
 POSITIVE = {"beats", "raises", "upgrade", "upgrades", "ahead", "overweight", "improved", "strong"}
 NEGATIVE = {"misses", "cuts", "downgrade", "downgrades", "light", "underweight",
@@ -61,7 +65,7 @@ _word = re.compile(r"[a-z]+")
 def _aware(iso: str) -> datetime:
     """Parse an ISO timestamp as UTC-aware (SQLite strips tz info)."""
     dt = datetime.fromisoformat(iso)
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)  # noqa: UP017
 
 
 def polarity(text: str) -> int:
@@ -125,7 +129,9 @@ def run_backtest(mem: LocalLiansClient, days: list[date], tickers: list[str],
 
     for i in range(1, len(days)):
         d = days[i]
-        decision_time = datetime.combine(days[i - 1], time(21, 0), tzinfo=timezone.utc)
+        decision_time = datetime.combine(
+            days[i - 1], time(21, 0), tzinfo=timezone.utc  # noqa: UP017
+        )
         month = d.strftime("%B")
         day_pnl, n_pos = 0.0, 0
 
@@ -251,7 +257,10 @@ def main() -> None:
     days, tickers, returns = load_prices()
 
     print("ingesting notes into Lians (local, in-memory) ...")
-    with LocalLiansClient(namespace="lookahead-demo") as mem:
+    with LocalLiansClient(
+        namespace="lookahead-demo",
+        embedding_provider=EMBEDDING_PROVIDER,
+    ) as mem:
         n = ingest(mem)
         print(f"  {n} notes ingested")
 
@@ -264,7 +273,9 @@ def main() -> None:
         assert not honest_receipts
 
         # the kicker: Lians flags the contamination programmatically
-        checkpoint = datetime.combine(days[len(days) // 2], time(21, 0), tzinfo=timezone.utc)
+        checkpoint = datetime.combine(
+            days[len(days) // 2], time(21, 0), tzinfo=timezone.utc  # noqa: UP017
+        )
         report = mem.backtest_check(agent_id=AGENT, simulation_as_of=checkpoint)
 
     bench = [sum(returns[t][i] for t in tickers) / len(tickers) for i in range(1, len(days))]
@@ -280,9 +291,11 @@ def main() -> None:
 
     lines = [
         "# Receipts — future information retrieved during the contaminated run\n",
-        f"Every row is a memory retrieved at decision time that **did not exist yet**. "
-        f"Total: **{len(receipts)}** contaminated retrievals across "
-        f"{len(days) - 1} decision days.\n",
+        (
+            f"Every row is a memory retrieved at decision time that **did not exist yet**. "
+            f"Total: **{len(receipts)}** contaminated retrievals across "
+            f"{len(days) - 1} decision days.\n"
+        ),
         "| decision time | ticker | retrieved note (created later) | note timestamp | days in future | position | next-day return |",
         "|---|---|---|---|---:|---:|---:|",
     ]
@@ -314,6 +327,16 @@ def main() -> None:
 | Buy & hold | — | {total(curves['benchmark'])} | {sharpes['benchmark']:.1f} | {max_drawdown(curves['benchmark']) * 100:.1f}% |
 
 Contaminated retrievals: **{len(receipts)}** (see `receipts.md` / `receipts.csv`).
+
+## Reproduction contract
+
+- embedding provider: `{EMBEDDING_PROVIDER}` (deterministic test provider)
+- dataset: committed synthetic `data/` fixture, seed 42
+- external services and API keys: none
+
+The provider is pinned because this demo measures temporal leakage, not semantic
+model quality. Production local recall should use the SDK's normal semantic
+provider selection.
 
 ## The programmatic proof: `backtest_check()`
 

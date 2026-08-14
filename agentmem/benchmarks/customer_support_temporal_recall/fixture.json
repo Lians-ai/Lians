@@ -1,0 +1,55 @@
+{
+  "schema_version": "lians.synthetic-support-fixture.v1",
+  "fixture_id": "support-timeline-001",
+  "records": [
+    {
+      "id": "policy-original",
+      "content": "Return policy window is 30 days",
+      "event_time": "2026-01-01T00:00:00Z",
+      "ingestion_time": "2026-01-01T00:05:00Z",
+      "metadata": {"entity": "return-policy", "field": "window_days"}
+    },
+    {
+      "id": "ticket-open",
+      "content": "Ticket T-104 status is open",
+      "event_time": "2026-01-05T09:00:00Z",
+      "ingestion_time": "2026-01-05T09:01:00Z",
+      "metadata": {"entity": "ticket-T-104", "field": "status"}
+    },
+    {
+      "id": "customer-name-incorrect",
+      "content": "Customer C-77 name is Ana Reed",
+      "event_time": "2026-01-05T10:00:00Z",
+      "ingestion_time": "2026-01-05T10:01:00Z",
+      "metadata": {"entity": "customer-C-77", "field": "name"}
+    },
+    {
+      "id": "ticket-resolved",
+      "content": "Ticket T-104 status is resolved",
+      "event_time": "2026-01-08T16:00:00Z",
+      "ingestion_time": "2026-01-08T16:01:00Z",
+      "metadata": {"entity": "ticket-T-104", "field": "status"}
+    },
+    {
+      "id": "policy-revised",
+      "content": "Return policy window changed to 45 days",
+      "event_time": "2026-02-01T00:00:00Z",
+      "ingestion_time": "2026-02-01T00:01:00Z",
+      "metadata": {"entity": "return-policy", "field": "window_days"}
+    },
+    {
+      "id": "customer-name-corrected",
+      "content": "Customer C-77 name is Anna Reed",
+      "event_time": "2026-01-06T11:00:00Z",
+      "ingestion_time": "2026-02-03T09:00:00Z",
+      "metadata": {"entity": "customer-C-77", "field": "name"}
+    },
+    {
+      "id": "ticket-late-arrival",
+      "content": "Ticket T-104 status is awaiting replacement parts",
+      "event_time": "2026-01-07T12:00:00Z",
+      "ingestion_time": "2026-02-04T09:00:00Z",
+      "metadata": {"entity": "ticket-T-104", "field": "status"}
+    }
+  ]
+}
