@@ -9,9 +9,7 @@
   <a href="docs/install.md">Install</a> ·
   <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
   <a href="https://www.lians.ai/pricing">Pricing</a> ·
-  <a href="https://github.com/Lians-ai/Lians/issues">Issues</a> ·
-  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a> ·
-  <a href="https://github.com/Lians-ai"><strong>Follow @Lians-ai</strong></a>
+  <a href="https://github.com/Lians-ai/Lians/issues">Issues</a>
 </p>
 
 <p align="center">
@@ -22,29 +20,51 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
 </p>
 
-# Memory for any AI agent.
+# Portable memory for the AI tools you already use.
 
-Lians gives AI agents durable memory across chats, sessions, tools, and models.
-Your agent can remember a useful fact now and recall it when it matters later.
+Lians keeps useful project facts, decisions, research constraints, and
+preferences available when you start a new chat or switch tools. It is a
+memory layer, not another assistant: your model stays the same.
 
-- **Works with the AI you already use** through MCP, plugins, or an SDK.
-- **Runs locally by default** with SQLite and no Lians account or API key.
-- **Keeps memory focused** by returning a small, relevant set of current facts.
-- **Stays provider-neutral** so memory is not trapped inside one model vendor.
+The product loop is deliberately small:
 
-Lians is a memory layer, not another assistant. Your agent and model stay the
-same; Lians gives them a place to remember.
+1. **Remember** something worth keeping.
+2. **Recall** a few relevant current facts in a later session.
+3. **Inspect, correct, or forget** the memory when it changes.
 
-## Start free. Upgrade only when it saves you time.
+Lians works through MCP, plugins, and SDKs. Local mode stores memory in SQLite,
+needs no Lians account or API key, and does not lock memory to one model vendor.
 
-- **Community is free:** run Lians locally or self-host it with no account,
-  API key, or software license fee.
-- **Lians Personal is $10/month:** get a managed account, a private hosted
-  memory workspace, 100,000 writes and 50,000 recalls each month, export and
-  deletion controls, and email setup support. Cancel anytime.
+## One product, two ways to run it
 
-[Get Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter) or
-[install the free local version through MCP](#free-local-setup-add-memory-through-mcp).
+| | **Lians Local** | **Lians Personal** |
+|---|---|---|
+| Best for | Developers, students, and self-managed projects | One person who wants Lians operated for them |
+| Runs | On your device or infrastructure | In a private Lians-managed workspace |
+| Includes | The complete local memory loop through MCP or Python | 100,000 writes, 50,000 recalls, export and deletion controls, and email setup support |
+| Price | **Free** under Apache 2.0 | **$10/month**, cancel anytime |
+| Start | [Install local Lians](#free-local-setup-add-memory-through-mcp) | [Choose Lians Personal](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=product_modes) |
+
+Both modes provide the same basic experience: remember, recall, inspect,
+correct, and forget. Choose Local when you are comfortable running a package;
+choose Personal when setup and operation are the part you want handled.
+
+The first genuine Personal customer also gets a 30-minute founder-led setup
+session at no extra cost. Purchase only when managed memory solves a real
+problem for you.
+
+## Connect the AI tool you already use
+
+- **Cursor:** use the [one-click MCP installer](integrations/cursor).
+- **Claude Code:** paste the [two plugin commands](integrations/lians-plugin).
+- **Codex app, CLI, or IDE:** run the [one-command MCP setup](integrations/codex).
+
+All three routes use the same free local memory by default. After setup, try the
+[three-minute, two-chat memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
+
+Running a club, hackathon, class, or campus developer community? Use the
+[student and community kit](docs/student-community-kit.md) for a ready-made
+workshop, project track, judging rubric, and shareable announcement.
 
 Lians does not change the underlying model or promise fewer tokens on every
 task. It can avoid resending old conversation when a small relevant recall is
@@ -53,21 +73,6 @@ enough; verify the result on your own workflow.
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
 </p>
-
-## Simplest setup: Lians Personal
-
-Choose Personal when you want Lians managed for you instead of maintaining a
-local memory service. It includes a private hosted workspace, 100,000 writes
-and 50,000 recalls each month, export and deletion controls, and email setup
-support for **$10/month**. Cancel anytime.
-
-[Start Lians Personal](https://www.lians.ai/upgrade?plan=starter)
-
-The standalone desktop installer is still a technical preview. Signed Windows
-and notarized macOS downloads are not in the current GitHub releases, so the
-project does not present a nonexistent or unsigned download as the normal-user
-path. Developers evaluating the preview can use the
-[Lians Easy source guide](docs/easy-install.md).
 
 ## Free local setup: add memory through MCP
 
@@ -123,7 +128,7 @@ Use the exact setup guide for
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
 [OpenCode](integrations/opencode), or
-[Codex](plugins/lians-memory). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
+[Codex](integrations/codex). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
 the advanced temporal and audit tools too.
 
 ## How it works
@@ -195,8 +200,13 @@ Java, C, framework adapters, and self-hosting.
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
 | Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
-| Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
+| Use Pydantic AI or LangGraph | [Pydantic AI example](integrations/pydantic-ai/python) · [LangGraph example](integrations/langgraph/python) |
+| Use LangChain, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
+
+Cloned the repository and unsure which package or folder is current? Read
+[Supported paths and repository status](docs/supported-paths.md) before choosing
+an SDK, plugin, preview, or legacy tree.
 
 ## Why Lians
 

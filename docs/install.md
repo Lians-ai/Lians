@@ -119,9 +119,10 @@ See each SDK directory for the exact API surface:
 
 ## Framework integrations
 
-For Pydantic AI, start with the tested local temporal-memory example:
+Start with a tested, credential-free local example:
 
 - [Pydantic AI integration](../integrations/pydantic-ai/python)
+- [LangGraph integration](../integrations/langgraph/python)
 
 The Python package also includes adapters for these frameworks:
 
