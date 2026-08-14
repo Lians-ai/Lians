@@ -4,6 +4,13 @@ This starter profile gives Gemini CLI durable local memory through MCP. It is
 provider-neutral: the same local Lians store can support other MCP clients, so
 memory is not locked to Gemini or its model provider.
 
+> **Consumer account notice:** Google ended consumer Google-login access to
+> Gemini CLI on June 18, 2026. Consumer users should follow the
+> [Antigravity CLI integration](../antigravity/). This Gemini CLI path remains
+> applicable to supported Standard or Enterprise subscriptions, Gemini API
+> keys, and Vertex AI configurations. See Google's
+> [deprecation notice](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals).
+
 ## Install
 
 1. Install [`uv`](https://docs.astral.sh/uv/).

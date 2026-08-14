@@ -50,6 +50,10 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "claude": ("Claude Desktop", roaming / "Claude" / "claude_desktop_config.json"),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
+            "antigravity": (
+                "Antigravity CLI",
+                home / ".gemini" / "config" / "mcp_config.json",
+            ),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
         }
@@ -61,6 +65,10 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             ),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
+            "antigravity": (
+                "Antigravity CLI",
+                home / ".gemini" / "config" / "mcp_config.json",
+            ),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
         }
@@ -70,12 +78,21 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "claude": ("Claude Desktop", config / "Claude" / "claude_desktop_config.json"),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
+            "antigravity": (
+                "Antigravity CLI",
+                home / ".gemini" / "config" / "mcp_config.json",
+            ),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
         }
     targets: dict[str, ClientTarget] = {}
     for key, (label, path) in paths.items():
-        detected = path.exists() or path.parent.exists()
+        if key == "antigravity":
+            detected = path.exists() or shutil.which("agy") is not None
+        elif key == "gemini":
+            detected = path.exists() or shutil.which("gemini") is not None
+        else:
+            detected = path.exists() or path.parent.exists()
         configured = False
         if path.exists():
             try:

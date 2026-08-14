@@ -48,10 +48,13 @@ The core tools are intentionally understandable:
 
 ## Supported clients
 
-The first desktop release configures Claude Desktop, Cursor, Windsurf, Gemini
-CLI, and Codex. It does not modify ChatGPT because ChatGPT connectors use a
-hosted HTTP connection rather than a local stdio process. Use a hosted Lians
-connector when that distribution is available.
+The first desktop release configures Claude Desktop, Cursor, Windsurf,
+Antigravity CLI, Gemini CLI, and Codex. Choose Antigravity for a consumer Google
+account. The Gemini CLI target is for supported Standard or Enterprise
+subscriptions, API keys, and Vertex AI configurations after Google's June 18,
+2026 consumer-login retirement. It does not modify ChatGPT because ChatGPT
+connectors use a hosted HTTP connection rather than a local stdio process. Use
+a hosted Lians connector when that distribution is available.
 
 ## IT and enterprise deployment
 
@@ -64,19 +67,19 @@ LiansMemory doctor --json
 Preview an exact install without writing anything:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex --plan --json
+LiansMemory install --clients claude,cursor,antigravity,codex --plan --json
 ```
 
 Install for selected clients:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex --yes --json
+LiansMemory install --clients claude,cursor,antigravity,codex --yes --json
 ```
 
 Remove the managed client entries while preserving the user's memory database:
 
 ```bash
-LiansMemory uninstall --clients claude,cursor,codex --yes --json
+LiansMemory uninstall --clients claude,cursor,antigravity,codex --yes --json
 ```
 
 Every write is idempotent and creates a timestamped backup when a configuration

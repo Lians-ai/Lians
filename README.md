@@ -125,6 +125,7 @@ exposes the basic loop plus the controls needed to trust it:
 
 Use the exact setup guide for
 [Cursor](integrations/cursor),
+[Antigravity CLI](integrations/antigravity),
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
 [OpenCode](integrations/opencode), or

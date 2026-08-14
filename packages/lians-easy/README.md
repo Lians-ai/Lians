@@ -8,7 +8,7 @@ Normal users should download the standalone app from GitHub Releases and
 double-click it. Developers and IT teams can run the same installer from source:
 
 ```bash
-python -m lians_easy install --clients claude,cursor --yes
+python -m lians_easy install --clients claude,cursor,antigravity --yes
 python -m lians_easy doctor --json
 ```
 
