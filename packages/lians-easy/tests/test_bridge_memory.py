@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from lians_easy.crypto import LocalCipher
 from lians_easy.project import Project, detect_project
 from lians_easy.store import MemoryStore
 
@@ -29,6 +32,23 @@ def test_project_identity_follows_repository_origin_across_nested_paths(tmp_path
     assert project.origin == "github.com/example/fastapi-app"
     assert project.root == str(root)
     assert project.id.startswith("project-")
+
+
+def test_simultaneous_clients_publish_one_complete_root_key(tmp_path):
+    key_path = tmp_path / "bridge.key"
+    clients = 8
+    barrier = threading.Barrier(clients)
+
+    def initialize(_index):
+        barrier.wait()
+        return LocalCipher(key_path).fingerprint
+
+    with ThreadPoolExecutor(max_workers=clients) as pool:
+        fingerprints = list(pool.map(initialize, range(clients)))
+
+    assert len(set(fingerprints)) == 1
+    assert key_path.is_file()
+    assert not list(tmp_path.glob(".bridge.key.*.tmp"))
 
 
 def test_encrypted_cross_tool_context_receipt_and_immediate_correction(tmp_path):

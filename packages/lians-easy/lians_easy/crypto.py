@@ -13,6 +13,7 @@ import ctypes
 import json
 import os
 import sys
+import tempfile
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any
@@ -87,34 +88,57 @@ class LocalCipher:
     def _load_or_create_key(self) -> bytes:
         self.key_path.parent.mkdir(parents=True, exist_ok=True)
         if self.key_path.exists():
-            document = json.loads(self.key_path.read_text(encoding="utf-8"))
-            wrapped = base64.b64decode(document["key"])
-            if document.get("protection") == "windows-dpapi":
-                if sys.platform != "win32":
-                    raise OSError("This Lians key is protected for a Windows account")
-                return _windows_unprotect(wrapped)
-            return wrapped
+            return self._read_key()
 
         key = os.urandom(32)
         protection = "windows-dpapi" if sys.platform == "win32" else "owner-file"
         wrapped = _windows_protect(key) if sys.platform == "win32" else key
-        temporary = self.key_path.with_suffix(self.key_path.suffix + ".tmp")
-        temporary.write_text(
-            json.dumps(
-                {
-                    "version": 1,
-                    "protection": protection,
-                    "key": base64.b64encode(wrapped).decode("ascii"),
-                },
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.key_path.name}.",
+            suffix=".tmp",
+            dir=self.key_path.parent,
+            text=True,
         )
-        if sys.platform != "win32":
-            temporary.chmod(0o600)
-        os.replace(temporary, self.key_path)
-        return key
+        temporary = Path(temporary_name)
+        try:
+            document = (
+                json.dumps(
+                    {
+                        "version": 1,
+                        "protection": protection,
+                        "key": base64.b64encode(wrapped).decode("ascii"),
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(document)
+                handle.flush()
+                os.fsync(handle.fileno())
+            if sys.platform != "win32":
+                temporary.chmod(0o600)
+            try:
+                # A hard link publishes a fully written file without overwriting
+                # a key another client created at the same moment.
+                os.link(temporary, self.key_path)
+            except FileExistsError:
+                return self._read_key()
+            return key
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _read_key(self) -> bytes:
+        try:
+            document = json.loads(self.key_path.read_text(encoding="utf-8"))
+            wrapped = base64.b64decode(document["key"], validate=True)
+        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("Lians encryption key file is invalid") from exc
+        if document.get("protection") == "windows-dpapi":
+            if sys.platform != "win32":
+                raise OSError("This Lians key is protected for a Windows account")
+            return _windows_unprotect(wrapped)
+        return wrapped
 
     def seal(self, value: str, *, associated_data: bytes) -> tuple[bytes, bytes]:
         nonce = os.urandom(12)
