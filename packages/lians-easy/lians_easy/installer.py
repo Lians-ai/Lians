@@ -44,6 +44,7 @@ def user_data_dir() -> Path:
 
 def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
     home = home or Path.home()
+    cline_config = home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
     if sys.platform == "win32":
         roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
         paths = {
@@ -52,6 +53,7 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
+            "cline": ("Cline CLI", cline_config),
         }
     elif sys.platform == "darwin":
         paths = {
@@ -63,6 +65,7 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
+            "cline": ("Cline CLI", cline_config),
         }
     else:
         config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
@@ -72,6 +75,7 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
+            "cline": ("Cline CLI", cline_config),
         }
     targets: dict[str, ClientTarget] = {}
     for key, (label, path) in paths.items():

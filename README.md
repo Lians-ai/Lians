@@ -85,7 +85,8 @@ The standalone desktop installer is still a technical preview. Signed Windows
 and notarized macOS downloads are not in the current GitHub releases, so the
 project does not present a nonexistent or unsigned download as the normal-user
 path. Developers evaluating the preview can use the
-[Lians Easy source guide](docs/easy-install.md).
+[Lians Easy source guide](docs/easy-install.md) to configure Claude Desktop,
+Cursor, Windsurf, Gemini CLI, Codex, or Cline CLI.
 
 ## Free local setup: add memory through MCP
 
