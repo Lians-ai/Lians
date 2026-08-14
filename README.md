@@ -43,7 +43,12 @@ same; Lians gives them a place to remember.
   memory workspace, 100,000 writes and 50,000 recalls each month, export and
   deletion controls, and email setup support. Cancel anytime.
 
-[Get Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter) or
+**First-customer setup:** the first Personal customer gets a 30-minute
+founder-led setup session at no extra cost. We will connect one supported AI
+tool and run the two-chat memory test together. Purchase only when managed
+memory solves a real problem for you.
+
+[Get Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=first_customer_setup) or
 [install the free local version through MCP](#free-local-setup-add-memory-through-mcp).
 
 Lians does not change the underlying model or promise fewer tokens on every
@@ -61,7 +66,7 @@ local memory service. It includes a private hosted workspace, 100,000 writes
 and 50,000 recalls each month, export and deletion controls, and email setup
 support for **$10/month**. Cancel anytime.
 
-[Start Lians Personal](https://www.lians.ai/upgrade?plan=starter)
+[Start Lians Personal with founder-led setup](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=first_customer_setup)
 
 The standalone desktop installer is still a technical preview. Signed Windows
 and notarized macOS downloads are not in the current GitHub releases, so the
