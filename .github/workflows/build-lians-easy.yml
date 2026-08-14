@@ -55,11 +55,46 @@ jobs:
           python -m pytest packages/lians-easy/tests/test_gui_layout.py -q
         env:
           PYTHONPATH: packages/lians-easy
-      - run: >-
-          python -m PyInstaller --noconfirm --clean --onefile
-          --name LiansMemory
-          --paths packages/lians-easy
-          packages/lians-easy/entrypoint.py
+      - name: Build frozen Bridge artifact
+        shell: bash
+        run: |
+          extra_args=()
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            extra_args=(
+              --icon packages/lians-easy/windows-lians.ico
+              --version-file packages/lians-easy/windows-version-info.txt
+            )
+          fi
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name LiansMemory \
+            --paths packages/lians-easy \
+            "${extra_args[@]}" \
+            packages/lians-easy/entrypoint.py
+      - name: Verify Windows package identity
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $info = (Get-Item -LiteralPath dist/LiansMemory.exe).VersionInfo
+          $versionLine = Select-String -LiteralPath packages/lians-easy/pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if (-not $versionLine -or $versionLine.Line -notmatch '^version\s*=\s*"([^"]+)"') {
+            throw 'Could not read the Lians Bridge package version'
+          }
+          $packageVersion = $Matches[1]
+          $expected = @{
+            CompanyName = 'Lians'
+            FileDescription = 'Lians Bridge local AI memory'
+            LegalCopyright = 'Copyright 2026 Lians'
+            ProductName = 'Lians Bridge'
+            OriginalFilename = 'LiansMemory.exe'
+            FileVersion = $packageVersion
+            ProductVersion = $packageVersion
+          }
+          foreach ($field in $expected.Keys) {
+            if ($info.$field -ne $expected[$field]) {
+              throw "$field was '$($info.$field)'; expected '$($expected[$field])'"
+            }
+          }
+          $info | Select-Object CompanyName,FileDescription,ProductName,FileVersion,ProductVersion,OriginalFilename,LegalCopyright
       - name: Verify frozen installer crash recovery on Windows
         if: runner.os == 'Windows'
         run: >-

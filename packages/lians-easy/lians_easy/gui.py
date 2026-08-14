@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -580,5 +581,13 @@ class SetupApp:
 
 def launch() -> None:
     root = tk.Tk()
+    if sys.platform == "win32":
+        try:
+            # The frozen executable carries the Lians lotus as its first icon
+            # resource. Reuse it for the window and taskbar instead of Tk's
+            # generic feather icon.
+            root.iconbitmap(default=sys.executable)
+        except tk.TclError:
+            pass
     SetupApp(root)
     root.mainloop()

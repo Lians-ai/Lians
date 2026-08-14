@@ -27,6 +27,18 @@ per-user installation so setup does not request administrator access. If a
 future capability truly requires elevation, ask at that step and explain the
 specific reason before the operating-system prompt appears.
 
+Downloaded Windows artifacts must also identify themselves before signing is
+available: Explorer properties show **Lians Bridge**, the package version, the
+original executable name, and the Lians lotus icon. Signing still remains a
+separate release gate; product metadata must never be presented as a substitute
+for a verified publisher.
+
+The stable-release workflow keeps desktop publication disabled unless the
+repository explicitly sets `PUBLISH_SIGNED_LIANS_DESKTOP=true`. Even with that
+opt-in, upload stops unless Windows Authenticode verifies; macOS and Linux stop
+until their notarized DMG and signed AppImage or Flatpak paths exist. Unsigned
+pull-request artifacts remain technical test fixtures, not consumer releases.
+
 ## First-run experience
 
 The setup sequence has four moments:

@@ -110,8 +110,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lians-easy:
-    name: Lians Easy (${{ matrix.os }})
+    name: Signed Lians Bridge (${{ matrix.os }})
     needs: release-context
+    # Pull-request artifacts remain available for technical evaluation. Stable
+    # Release assets are opt-in only and must pass the platform publisher gate
+    # below before they can be uploaded for normal users.
+    if: ${{ vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -127,11 +131,43 @@ jobs:
       - name: Build standalone desktop runtime
         run: |
           python -m pip install packages/lians-easy pyinstaller==6.22.0
+          extra_args=()
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            extra_args=(
+              --icon packages/lians-easy/windows-lians.ico
+              --version-file packages/lians-easy/windows-version-info.txt
+            )
+          fi
           python -m PyInstaller --noconfirm --clean --onefile \
             --name LiansMemory \
             --paths packages/lians-easy \
+            "${extra_args[@]}" \
             packages/lians-easy/entrypoint.py
         shell: bash
+      - name: Verify Windows package identity
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $info = (Get-Item -LiteralPath dist/LiansMemory.exe).VersionInfo
+          $versionLine = Select-String -LiteralPath packages/lians-easy/pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          if (-not $versionLine -or $versionLine.Line -notmatch '^version\s*=\s*"([^"]+)"') {
+            throw 'Could not read the Lians Bridge package version'
+          }
+          $packageVersion = $Matches[1]
+          $expected = @{
+            CompanyName = 'Lians'
+            FileDescription = 'Lians Bridge local AI memory'
+            LegalCopyright = 'Copyright 2026 Lians'
+            ProductName = 'Lians Bridge'
+            OriginalFilename = 'LiansMemory.exe'
+            FileVersion = $packageVersion
+            ProductVersion = $packageVersion
+          }
+          foreach ($field in $expected.Keys) {
+            if ($info.$field -ne $expected[$field]) {
+              throw "$field was '$($info.$field)'; expected '$($expected[$field])'"
+            }
+          }
       - name: Verify frozen installer crash recovery
         run: |
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
@@ -141,6 +177,27 @@ jobs:
           fi
           python packages/lians-easy/tests/artifact_crash_smoke.py --binary "${binary}"
         shell: bash
+      - name: Verify Windows Authenticode publisher gate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath dist/LiansMemory.exe
+          if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
+            throw "Windows desktop publication requires a valid Authenticode signature; status was '$($signature.Status)'"
+          }
+          $signature.SignerCertificate | Select-Object Subject,Issuer,NotBefore,NotAfter,Thumbprint
+      - name: Block incomplete macOS publisher path
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "macOS publication remains blocked until Developer ID signing, notarized DMG packaging, and staple validation are implemented." >&2
+          exit 1
+      - name: Block incomplete Linux publisher path
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          echo "Linux publication remains blocked until the signed AppImage or Flatpak path is implemented." >&2
+          exit 1
       - name: Name platform artifact and write checksum
         run: |
           set -euo pipefail
