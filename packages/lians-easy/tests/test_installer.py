@@ -51,3 +51,41 @@ def test_plan_reports_targets_without_writing(tmp_path, monkeypatch):
     assert result["changes_made"] is False
     assert result["clients"][0]["key"] == "codex"
     assert not (home / ".codex" / "config.toml").exists()
+
+
+def test_opencode_config_uses_mcp_key(tmp_path, monkeypatch):
+    """OpenCode uses 'mcp' key with 'type', 'command', 'enabled', 'environment'."""
+    home = tmp_path / "home"
+    config = home / ".opencode" / "config.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(json.dumps({"theme": "dark"}))
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    result = install(["opencode"], home=home)
+    updated = json.loads(config.read_text())
+
+    assert updated["theme"] == "dark"
+    assert "lians" in updated["mcp"]
+    lians_cfg = updated["mcp"]["lians"]
+    assert lians_cfg["type"] == "local"
+    assert lians_cfg["command"][0] in ("python", "python3", "lians-memory") or "python" in lians_cfg["command"][0].lower()
+    assert lians_cfg["enabled"] is True
+    assert "LIANS_MCP_ENABLED_TOOLS" in lians_cfg["environment"]
+    assert result["clients"][0]["backup"]
+
+    removed = uninstall(["opencode"], home=home)
+    assert "lians" not in json.loads(config.read_text()).get("mcp", {})
+    assert removed["data_preserved"].endswith("memory.sqlite3")
+
+
+def test_opencode_config_creates_new_file(tmp_path, monkeypatch):
+    """OpenCode config should be created if it doesn't exist."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    result = install(["opencode"], home=home)
+    config = home / ".opencode" / "config.json"
+    assert config.exists()
+    updated = json.loads(config.read_text())
+    assert "lians" in updated["mcp"]
+    assert updated["mcp"]["lians"]["type"] == "local"
