@@ -216,6 +216,10 @@ Java, C, framework adapters, and self-hosting.
 | Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
 
+Cloned the repository and unsure which package or folder is current? Read
+[Supported paths and repository status](docs/supported-paths.md) before choosing
+an SDK, plugin, preview, or legacy tree.
+
 ## Why Lians
 
 Most memory demos store text and run vector search. Lians also handles the
