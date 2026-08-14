@@ -78,3 +78,13 @@ def test_commercial_boundary_preserves_public_license_and_reserves_services():
     assert "higher managed storage, write, recall, and operational limits" in boundary
     assert "does not include a production Lians-hosted tenant" in boundary
     assert "Codex, Cursor, Claude, Gemini" in boundary
+
+
+def test_student_community_kit_uses_working_repository_asset_paths():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    kit = (ROOT / "docs/student-community-kit.md").read_text(encoding="utf-8")
+
+    assert "[student and community kit](docs/student-community-kit.md)" in readme
+    assert 'src="assets/logo-blue.png"' in kit
+    assert "[blue lotus logo](assets/logo-blue.png)" in kit
+    assert (ROOT / "docs/assets/logo-blue.png").is_file()
