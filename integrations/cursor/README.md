@@ -8,7 +8,7 @@ slice in a later chat.
 
 Use Cursor's official one-click MCP installer:
 
-[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvNjZiYzNkOWU0ZmY3MWQzNzNlZmE1MmNmZmMwZGY1ZjFkMWU3MjNhYy56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvNDM3YTlmNTAzODQzNDU3MmYxZWQwMTY0MzRmODg3ODMyOGM4YzQ5OS56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
 
 The button passes the same local server configuration shown below to Cursor.
 Review it in Cursor before approving the install.
