@@ -1,0 +1,25 @@
+[project]
+name = "lians-langgraph-example"
+version = "0.1.0"
+description = "A credential-free LangGraph workflow with durable local Lians memory"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "lians-sdk[langgraph,local]",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.9",
+]
+
+[tool.uv.sources]
+lians-sdk = { path = "../../../agentmem/sdk/python", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["test_demo.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
