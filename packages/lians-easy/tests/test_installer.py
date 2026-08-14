@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import lians_easy.installer as installer_module
+import pytest
 from lians_easy.installer import (
     HOOK_STATUS,
     LIANS_HOOK_NAME,
@@ -208,3 +210,125 @@ def test_install_reports_plain_language_progress(tmp_path, monkeypatch):
     assert events[1][1] == "Connecting Cursor"
     assert events[2][1] == "Connecting Codex"
     assert events[-1][1] == "Lians is ready"
+
+
+def test_failed_client_restores_exact_files_and_removes_transaction_backups(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    roaming = tmp_path / "roaming"
+    config = roaming / "Claude" / "claude_desktop_config.json"
+    hook = home / ".claude" / "settings.json"
+    config.parent.mkdir(parents=True)
+    hook.parent.mkdir(parents=True)
+    original_config = b'{"theme":"dark","mcpServers":{"other":{"command":"x"}}}'
+    invalid_hook = b"[]"
+    config.write_bytes(original_config)
+    hook.write_bytes(invalid_hook)
+    monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+
+    result = install(["claude"], home=home)
+
+    assert result["status"] == "failed"
+    assert result["retry_clients"] == ["claude"]
+    assert result["clients"][0]["rolled_back"] is True
+    assert config.read_bytes() == original_config
+    assert hook.read_bytes() == invalid_hook
+    assert not list(config.parent.glob("*.lians-backup-*"))
+    assert not list(hook.parent.glob("*.lians-backup-*"))
+
+
+def test_retry_targets_only_failed_client_and_preserves_success(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    roaming = tmp_path / "roaming"
+    cursor = home / ".cursor" / "mcp.json"
+    claude = roaming / "Claude" / "claude_desktop_config.json"
+    hook = home / ".claude" / "settings.json"
+    cursor.parent.mkdir(parents=True)
+    claude.parent.mkdir(parents=True)
+    hook.parent.mkdir(parents=True)
+    cursor.write_text(json.dumps({"theme": "dark"}))
+    original_claude = b'{"theme":"light"}'
+    claude.write_bytes(original_claude)
+    hook.write_text("[]")
+    monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+
+    first = install(["cursor", "claude"], home=home)
+
+    assert first["status"] == "partial"
+    assert [item["status"] for item in first["clients"]] == ["installed", "failed"]
+    assert first["retry_clients"] == ["claude"]
+    cursor_after_success = cursor.read_bytes()
+    assert "lians" in json.loads(cursor_after_success)["mcpServers"]
+    assert claude.read_bytes() == original_claude
+
+    hook.write_text("{}")
+    retried = install(first["retry_clients"], home=home)
+
+    assert retried["status"] == "installed"
+    assert [item["client"] for item in retried["clients"]] == ["claude"]
+    assert cursor.read_bytes() == cursor_after_success
+    assert "lians" in json.loads(claude.read_text())["mcpServers"]
+
+
+def test_verification_failure_rolls_back_primary_and_hook_files(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config = home / ".codex" / "config.toml"
+    hook = home / ".codex" / "hooks.json"
+    config.parent.mkdir(parents=True)
+    original_config = b'model = "gpt-5"\n'
+    original_hook = b'{"hooks":{"Other":[]}}'
+    config.write_bytes(original_config)
+    hook.write_bytes(original_hook)
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    def fail_verification(key, *, home):
+        raise RuntimeError(f"forced verification failure for {key} in {home}")
+
+    monkeypatch.setattr(installer_module, "_verify_client", fail_verification)
+
+    result = install(["codex"], home=home)
+
+    assert result["status"] == "failed"
+    assert result["clients"][0]["rolled_back"] is True
+    assert config.read_bytes() == original_config
+    assert hook.read_bytes() == original_hook
+    assert not list(config.parent.glob("*.lians-backup-*"))
+
+
+def test_verification_failure_removes_files_created_by_failed_transaction(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    config = home / ".codex" / "config.toml"
+    hook = home / ".codex" / "hooks.json"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    def fail_verification(key, *, home):
+        raise RuntimeError(f"forced verification failure for {key} in {home}")
+
+    monkeypatch.setattr(installer_module, "_verify_client", fail_verification)
+
+    result = install(["codex"], home=home)
+
+    assert result["status"] == "failed"
+    assert result["clients"][0]["rolled_back"] is True
+    assert not config.exists()
+    assert not hook.exists()
+
+
+def test_install_rejects_empty_selection_and_deduplicates_clients(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    with pytest.raises(ValueError, match="at least one"):
+        install([], home=home)
+
+    result = install(["cursor", "cursor"], home=home)
+
+    assert result["status"] == "installed"
+    assert [item["client"] for item in result["clients"]] == ["cursor"]

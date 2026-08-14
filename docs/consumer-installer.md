@@ -82,6 +82,14 @@ Technical details are progressive disclosure, not a separate product. The same
 engine powers the consumer setup screen, the advanced CLI, and enterprise MDM
 deployment.
 
+The Bridge preview now treats every selected AI integration as its own file
+transaction. It snapshots the exact original configuration and permissions,
+verifies both the memory connection and automatic-recall hook, restores a
+failed integration without disturbing successful ones, removes transaction
+backup residue, and returns only failed client IDs to the retry action. A
+process-kill and reboot-resume harness remains a generally available release
+gate.
+
 ## Package architecture
 
 ```text

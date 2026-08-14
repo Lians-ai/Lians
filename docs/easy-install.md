@@ -37,6 +37,11 @@ Windows protects the root key with DPAPI. Corrections and scope changes create
 inspectable versions, while confirmed forgetting crypto-erases the full
 lineage so old wording cannot return from a different client.
 
+Setup is transactional per AI client. If one integration cannot be verified,
+its exact original files and permissions are restored while successful clients
+remain connected. The GUI retries only the failed client IDs instead of
+repeating work that already passed.
+
 ## Cross-tool experience
 
 The preview implements the first product loop directly:

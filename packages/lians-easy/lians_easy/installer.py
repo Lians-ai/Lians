@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from stat import S_IMODE
 from typing import Any
 
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
@@ -34,6 +35,34 @@ class ClientTarget:
         result = asdict(self)
         result["config_path"] = str(self.config_path)
         return result
+
+
+@dataclass(frozen=True)
+class FileSnapshot:
+    """Exact pre-install state for one file in a client transaction."""
+
+    path: Path
+    existed: bool
+    content: bytes | None
+    mode: int | None
+
+    @classmethod
+    def capture(cls, path: Path) -> FileSnapshot:
+        if not path.exists():
+            return cls(path=path, existed=False, content=None, mode=None)
+        return cls(
+            path=path,
+            existed=True,
+            content=path.read_bytes(),
+            mode=S_IMODE(path.stat().st_mode),
+        )
+
+    def restore(self) -> None:
+        if not self.existed:
+            self.path.unlink(missing_ok=True)
+            return
+        assert self.content is not None
+        _write_bytes(self.path, self.content, mode=self.mode)
 
 
 def user_data_dir() -> Path:
@@ -148,14 +177,39 @@ def _hook_path(client: str, home: Path) -> Path:
     raise ValueError(f"{client} does not support a Lians prompt hook")
 
 
-def _backup(path: Path) -> Path | None:
+def _backup(
+    path: Path, *, on_created: Callable[[Path], None] | None = None
+) -> Path | None:
     if not path.exists():
         return None
     # datetime.UTC is unavailable on the package's supported Python 3.10.
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")  # noqa: UP017
     backup = path.with_name(f"{path.name}.lians-backup-{stamp}")
     shutil.copy2(path, backup)
+    if on_created is not None:
+        on_created(backup)
     return backup
+
+
+def _write_bytes(path: Path, content: bytes, *, mode: int | None = None) -> None:
+    """Atomically replace a file while retaining its original permissions."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.lians-", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if path.exists():
+            shutil.copymode(path, temporary)
+        elif mode is not None:
+            temporary.chmod(mode)
+        os.replace(temporary, path)
+        if mode is not None:
+            path.chmod(mode)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _write_text(path: Path, content: str) -> None:
@@ -191,8 +245,13 @@ def _install_runtime() -> Path | None:
     return destination
 
 
-def _json_config(path: Path, command: str, args: list[str]) -> Path | None:
-    backup = _backup(path)
+def _json_config(
+    path: Path,
+    command: str,
+    args: list[str],
+    *,
+    on_backup: Callable[[Path], None] | None = None,
+) -> Path | None:
     if path.exists():
         try:
             raw = path.read_text(encoding="utf-8")
@@ -207,6 +266,7 @@ def _json_config(path: Path, command: str, args: list[str]) -> Path | None:
     if not isinstance(servers, dict):
         raise TypeError(f"mcpServers must be an object in {path}")
     servers["lians"] = {"command": command, "args": args}
+    backup = _backup(path, on_created=on_backup)
     _write_text(path, json.dumps(document, indent=2) + "\n")
     return backup
 
@@ -252,8 +312,13 @@ def _is_lians_hook_group(value: Any) -> bool:
     )
 
 
-def _hook_config(path: Path, client: str, *, remove: bool = False) -> Path | None:
-    backup = _backup(path)
+def _hook_config(
+    path: Path,
+    client: str,
+    *,
+    remove: bool = False,
+    on_backup: Callable[[Path], None] | None = None,
+) -> Path | None:
     if path.exists():
         try:
             document = json.loads(path.read_text(encoding="utf-8"))
@@ -277,12 +342,17 @@ def _hook_config(path: Path, client: str, *, remove: bool = False) -> Path | Non
         hooks.pop(event_name, None)
     if remove and not hooks:
         document.pop("hooks", None)
+    backup = _backup(path, on_created=on_backup)
     _write_text(path, json.dumps(document, indent=2) + "\n")
     return backup
 
 
-def _antigravity_hook_config(path: Path, *, remove: bool = False) -> Path | None:
-    backup = _backup(path)
+def _antigravity_hook_config(
+    path: Path,
+    *,
+    remove: bool = False,
+    on_backup: Callable[[Path], None] | None = None,
+) -> Path | None:
     if path.exists():
         try:
             raw = path.read_text(encoding="utf-8")
@@ -306,6 +376,7 @@ def _antigravity_hook_config(path: Path, *, remove: bool = False) -> Path | None
                 }
             ]
         }
+    backup = _backup(path, on_created=on_backup)
     _write_text(path, json.dumps(document, indent=2) + "\n")
     return backup
 
@@ -332,14 +403,106 @@ def _strip_managed_toml(content: str) -> str:
     return (content[:start].rstrip() + "\n" + content[end:].lstrip()).strip()
 
 
-def _toml_config(path: Path, command: str, args: list[str]) -> Path | None:
-    backup = _backup(path)
+def _toml_config(
+    path: Path,
+    command: str,
+    args: list[str],
+    *,
+    on_backup: Callable[[Path], None] | None = None,
+) -> Path | None:
     content = path.read_text(encoding="utf-8") if path.exists() else ""
     content = _strip_managed_toml(content)
     updated = f"{content}\n\n" if content else ""
     updated += _managed_toml(command, args) + "\n"
+    backup = _backup(path, on_created=on_backup)
     _write_text(path, updated)
     return backup
+
+
+def _client_paths(key: str, target: ClientTarget, home: Path) -> list[Path]:
+    paths = [target.config_path]
+    if key in {"antigravity", "claude", "codex", "gemini"}:
+        paths.append(_hook_path(key, home))
+    return list(dict.fromkeys(paths))
+
+
+def _verify_client(key: str, *, home: Path) -> None:
+    target = client_targets(home)[key]
+    if not target.configured:
+        raise RuntimeError(f"Lians could not verify {target.label}")
+    if key not in {"antigravity", "claude", "codex", "gemini"}:
+        return
+    hook_path = _hook_path(key, home)
+    try:
+        raw = hook_path.read_text(encoding="utf-8")
+        document = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"Lians could not verify automatic recall for {target.label}") from exc
+    if not isinstance(document, dict):
+        raise TypeError(f"Lians could not verify automatic recall for {target.label}")
+    if key == "antigravity":
+        verified = LIANS_HOOK_NAME in document
+    else:
+        event_name = "BeforeAgent" if key == "gemini" else "UserPromptSubmit"
+        hooks = document.get("hooks", {})
+        groups = hooks.get(event_name, []) if isinstance(hooks, dict) else []
+        verified = isinstance(groups, list) and any(_is_lians_hook_group(group) for group in groups)
+    if not verified:
+        raise RuntimeError(f"Lians could not verify automatic recall for {target.label}")
+
+
+def _install_client(
+    key: str,
+    *,
+    target: ClientTarget,
+    home: Path,
+    command: str,
+    args: list[str],
+    on_backup: Callable[[Path], None],
+) -> dict[str, Any]:
+    backup = (
+        _toml_config(target.config_path, command, args, on_backup=on_backup)
+        if target.kind == "toml"
+        else _json_config(target.config_path, command, args, on_backup=on_backup)
+    )
+    item = {
+        "client": key,
+        "label": target.label,
+        "config": str(target.config_path),
+        "backup": str(backup) if backup else None,
+        "status": "installed",
+        "automatic_recall": key in {"antigravity", "claude", "codex", "cursor", "gemini"},
+    }
+    if key in {"antigravity", "claude", "codex", "gemini"}:
+        hook_path = _hook_path(key, home)
+        hook_backup = (
+            _antigravity_hook_config(hook_path, on_backup=on_backup)
+            if key == "antigravity"
+            else _hook_config(hook_path, key, on_backup=on_backup)
+        )
+        item["hook_config"] = str(hook_path)
+        item["hook_backup"] = str(hook_backup) if hook_backup else None
+    if key == "cursor":
+        item["recall_mode"] = "always-applied project rule, refreshed after memory changes"
+    _verify_client(key, home=home)
+    return item
+
+
+def _rollback_client(
+    snapshots: list[FileSnapshot], backups: list[Path]
+) -> list[str]:
+    errors: list[str] = []
+    for snapshot in reversed(snapshots):
+        try:
+            snapshot.restore()
+        except OSError as exc:
+            errors.append(f"{snapshot.path}: {exc}")
+    for backup in backups:
+        try:
+            backup.unlink(missing_ok=True)
+        except OSError as exc:
+            errors.append(f"{backup}: {exc}")
+    return errors
 
 
 def install(
@@ -349,6 +512,9 @@ def install(
     on_progress: Callable[[str, str], None] | None = None,
 ) -> dict[str, Any]:
     home = home or Path.home()
+    keys = list(dict.fromkeys(keys))
+    if not keys:
+        raise ValueError("Choose at least one AI client")
     targets = client_targets(home)
     unknown = sorted(set(keys) - set(targets))
     if unknown:
@@ -361,51 +527,60 @@ def install(
     progress("protecting", "Protecting your existing settings")
     _install_runtime()
     command, args = runtime_command()
-    results = []
+    results: list[dict[str, Any]] = []
     for key in keys:
         target = targets[key]
         progress("connecting", f"Connecting {target.label}")
-        backup = (
-            _toml_config(target.config_path, command, args)
-            if target.kind == "toml"
-            else _json_config(target.config_path, command, args)
-        )
-        item = {
-            "client": key,
-            "label": target.label,
-            "config": str(target.config_path),
-            "backup": str(backup) if backup else None,
-            "status": "installed",
-            "automatic_recall": key
-            in {"antigravity", "claude", "codex", "cursor", "gemini"},
-        }
-        if key in {"antigravity", "claude", "codex", "gemini"}:
-            hook_path = _hook_path(key, home)
-            hook_backup = (
-                _antigravity_hook_config(hook_path)
-                if key == "antigravity"
-                else _hook_config(hook_path, key)
+        backups: list[Path] = []
+        snapshots: list[FileSnapshot] | None = None
+        try:
+            snapshots = [
+                FileSnapshot.capture(path) for path in _client_paths(key, target, home)
+            ]
+            item = _install_client(
+                key,
+                target=target,
+                home=home,
+                command=command,
+                args=args,
+                on_backup=backups.append,
             )
-            item["hook_config"] = str(hook_path)
-            item["hook_backup"] = str(hook_backup) if hook_backup else None
-        if key == "cursor":
-            item["recall_mode"] = "always-applied project rule, refreshed after memory changes"
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            rollback_errors = _rollback_client(snapshots, backups) if snapshots else []
+            item = {
+                "client": key,
+                "label": target.label,
+                "config": str(target.config_path),
+                "status": "failed",
+                "error": str(exc),
+                "rolled_back": not rollback_errors,
+                "retryable": not rollback_errors,
+            }
+            if rollback_errors:
+                item["rollback_errors"] = rollback_errors
         results.append(item)
 
     progress("verifying", "Checking that memory is ready")
-    configured = client_targets(home)
-    missing = [targets[key].label for key in keys if not configured[key].configured]
-    if missing:
-        raise RuntimeError("Lians could not verify: " + ", ".join(missing))
-    progress("complete", "Lians is ready")
+    installed = [item for item in results if item["status"] == "installed"]
+    failed = [item for item in results if item["status"] == "failed"]
+    status = "installed" if not failed else "partial" if installed else "failed"
+    progress(
+        "complete" if status == "installed" else "partial",
+        "Lians is ready"
+        if status == "installed"
+        else f"{len(installed)} connected, {len(failed)} need another try",
+    )
     return {
-        "status": "installed",
+        "status": status,
         "clients": results,
+        "retry_clients": [item["client"] for item in failed if item["retryable"]],
         "database": str(user_data_dir() / "memory.sqlite3"),
-        "requires_trust": [key for key in keys if key == "codex"],
+        "requires_trust": [item["client"] for item in installed if item["client"] == "codex"],
         "next_step": (
             "Restart each selected AI client. In Codex, review and trust the Lians hooks in "
             "/hooks. Then ask Cursor to remember one project preference."
+            if status == "installed"
+            else "Retry only the failed AI apps. Successful connections were not repeated."
         ),
     }
 

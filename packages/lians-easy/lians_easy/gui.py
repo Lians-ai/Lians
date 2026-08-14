@@ -30,6 +30,8 @@ class SetupApp:
         self.choices: dict[str, tk.BooleanVar] = {}
         self.step_labels: dict[str, tk.Label] = {}
         self.other_rows: list[tk.Widget] = []
+        self.connected_labels: list[str] = []
+        self.retry_clients: list[str] = []
         self.details_visible = False
         self.other_visible = False
 
@@ -313,8 +315,10 @@ class SetupApp:
             f"Detected settings:\n{detected}"
         )
 
-    def _start_install(self) -> None:
-        selected = [key for key, value in self.choices.items() if value.get()]
+    def _start_install(self, selected_override: list[str] | None = None) -> None:
+        selected = selected_override or [
+            key for key, value in self.choices.items() if value.get()
+        ]
         if not selected:
             self.status.set("Choose at least one AI app to continue.")
             return
@@ -329,7 +333,10 @@ class SetupApp:
             except (OSError, RuntimeError, TypeError, ValueError) as error:
                 self.root.after(0, self._show_error, str(error))
                 return
-            self.root.after(0, lambda: self._show_success(result))
+            if result["status"] == "installed":
+                self.root.after(0, self._show_success, result)
+            else:
+                self.root.after(0, self._show_partial, result)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -338,7 +345,24 @@ class SetupApp:
 
     def _update_progress(self, stage: str, detail: str) -> None:
         order = ("protecting", "connecting", "verifying")
-        values = {"protecting": 18, "connecting": 55, "verifying": 84, "complete": 100}
+        values = {
+            "protecting": 18,
+            "connecting": 55,
+            "verifying": 84,
+            "complete": 100,
+            "partial": 100,
+        }
+        if stage == "partial":
+            for key in ("protecting", "connecting"):
+                label = self.step_labels[key]
+                label.configure(text=f"●  {label.cget('text')[3:]}", foreground=GREEN)
+            verification = self.step_labels["verifying"]
+            verification.configure(
+                text=f"●  {verification.cget('text')[3:]}", foreground=RED
+            )
+            self.progress_bar.configure(value=values[stage])
+            self.status.set(detail)
+            return
         current = order.index(stage) if stage in order else len(order)
         for index, key in enumerate(order):
             label = self.step_labels[key]
@@ -353,19 +377,58 @@ class SetupApp:
         self.status.set(detail)
 
     def _show_error(self, detail: str) -> None:
-        self.status.set("Setup did not finish. Your existing settings have backups.")
-        self.install_button.configure(state="normal", text="Try again")
+        self.status.set("Setup could not start. No AI app settings were changed.")
+        self.install_button.configure(
+            state="normal", text="Try again", command=self._start_install
+        )
         self.details.configure(
             text=f"Setup report\n{detail}\n\n{self._technical_details()}", foreground=RED
         )
         if not self.details_visible:
             self._toggle_details()
 
+    def _record_installed(self, result: dict[str, Any]) -> None:
+        for item in result["clients"]:
+            if item["status"] == "installed" and item["label"] not in self.connected_labels:
+                self.connected_labels.append(item["label"])
+
+    def _show_partial(self, result: dict[str, Any]) -> None:
+        self._record_installed(result)
+        failed = [item for item in result["clients"] if item["status"] == "failed"]
+        self.retry_clients = result["retry_clients"]
+        failed_labels = ", ".join(item["label"] for item in failed)
+        connected_count = len(self.connected_labels)
+        was_or_were = "was" if len(failed) == 1 else "were"
+        needs_or_need = "needs" if len(failed) == 1 else "need"
+        self.status.set(
+            f"{connected_count} connected. {failed_labels} {was_or_were} restored and "
+            f"{needs_or_need} another try."
+        )
+        if self.retry_clients:
+            self.install_button.configure(
+                state="normal",
+                text=f"Retry {failed_labels}",
+                command=lambda: self._start_install(self.retry_clients),
+            )
+        else:
+            self.install_button.configure(state="disabled", text="See technical details")
+        reports = "\n".join(
+            f"{item['label']}: {item['error']}"
+            + ("\nOriginal settings restored." if item["rolled_back"] else "")
+            for item in failed
+        )
+        self.details.configure(
+            text=f"Setup report\n{reports}\n\n{self._technical_details()}", foreground=RED
+        )
+        if not self.details_visible:
+            self._toggle_details()
+
     def _show_success(self, result: dict[str, Any]) -> None:
+        self._record_installed(result)
         for child in self.card.winfo_children():
             child.destroy()
 
-        connected = ", ".join(item["label"] for item in result["clients"])
+        connected = ", ".join(self.connected_labels)
         self._label(
             self.card,
             "Memory is ready.",
