@@ -4,7 +4,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "lians-easy @ https://github.com/Lians-ai/Lians/archive/9d0f9a622f11aac56b9707b7d328d361da7c140f.zip#subdirectory=packages/lians-easy",
+        "lians-easy @ https://github.com/Lians-ai/Lians/archive/c2fd3794b049d26ae28d0eea020987bec56af10b.zip#subdirectory=packages/lians-easy",
         "lians-easy",
         "mcp"
       ]
