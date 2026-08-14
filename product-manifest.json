@@ -49,6 +49,11 @@
         "detail": "A tested local example that exposes current and point-in-time Lians recall as ordinary Pydantic AI function tools."
       },
       {
+        "label": "LangGraph integration",
+        "status": "Available",
+        "detail": "A tested credential-free graph that remembers a fact locally and recalls it in a later invocation."
+      },
+      {
         "label": "Language SDKs",
         "status": "Available",
         "detail": "Python, TypeScript, Go, Java, and C clients for connecting applications to a Lians service."
