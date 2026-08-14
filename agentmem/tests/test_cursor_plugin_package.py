@@ -62,7 +62,7 @@ def test_cursor_mcp_uses_immutable_encrypted_bridge_runtime() -> None:
         "lians-easy",
         "mcp",
     ]
-    assert "9cfb46b6d191b000e38b2a5d884caa0af2cfb706" in server["args"][1]
+    assert "dca34b40784ffb2a3ec5bbc20994cc22e40ce139" in server["args"][1]
     assert "env" not in server
 
 
