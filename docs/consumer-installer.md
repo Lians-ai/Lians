@@ -89,8 +89,16 @@ failed integration without disturbing successful ones, removes transaction
 backup residue, and returns only failed client IDs to the retry action. The GUI
 also writes a user-selected JSON help report containing runtime state and
 client outcomes, while deliberately excluding settings contents, memory
-contents, exception text, credentials, and user paths. A process-kill and
-reboot-resume harness remains a generally available release gate.
+contents, exception text, credentials, and user paths.
+
+Setup now holds an operating-system file lock so a second installer cannot
+mutate the same client concurrently. Before changing each client, it atomically
+writes a disk-backed rollback journal containing only validated target paths
+and backup references. If the process stops after a file replacement, the next
+setup launch restores the exact prior state before retrying. A frozen Windows
+binary passed a forced-exit harness at that point, including cleanup and
+unrelated-settings preservation. A clean virtual-machine reboot/power-loss run
+remains a generally available release gate.
 
 ## Package architecture
 
@@ -125,7 +133,8 @@ Do not call the installer generally available until all of these pass:
 - Windows Authenticode, macOS Developer ID, notarization, package checksums,
   provenance, and update signatures verify in CI;
 - setup succeeds without administrator access for the normal per-user path;
-- an interrupted setup resumes or rolls back without corrupting client files;
+- an interrupted setup resumes or rolls back without corrupting client files,
+  including a clean virtual-machine reboot/power-loss run;
 - each supported client passes `remember -> new task -> bounded recall ->
   inspect -> correct -> forget` against the release artifact;
 - uninstall removes only Lians-managed integration state and clearly separates

@@ -132,6 +132,15 @@ jobs:
             --paths packages/lians-easy \
             packages/lians-easy/entrypoint.py
         shell: bash
+      - name: Verify frozen installer crash recovery
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            binary="dist/LiansMemory.exe"
+          else
+            binary="dist/LiansMemory"
+          fi
+          python packages/lians-easy/tests/artifact_crash_smoke.py --binary "${binary}"
+        shell: bash
       - name: Name platform artifact and write checksum
         run: |
           set -euo pipefail

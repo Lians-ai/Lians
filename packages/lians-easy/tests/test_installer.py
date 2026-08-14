@@ -194,6 +194,34 @@ def test_plan_reports_targets_without_writing(tmp_path, monkeypatch):
     assert not (home / ".codex" / "config.toml").exists()
 
 
+def test_frozen_runtime_is_replaced_with_atomic_writer(tmp_path, monkeypatch):
+    source = tmp_path / "source-runtime"
+    source.write_bytes(b"complete-frozen-runtime")
+    data_dir = tmp_path / "lians"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(data_dir))
+    monkeypatch.setattr("sys.executable", str(source))
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    writes = []
+    original_write = installer_module._write_bytes
+
+    def observe_atomic_write(path, content, *, mode=None):
+        writes.append((path, content, mode))
+        original_write(path, content, mode=mode)
+
+    monkeypatch.setattr(installer_module, "_write_bytes", observe_atomic_write)
+    installed = installer_module._install_runtime()
+
+    assert installed is not None
+    assert installed.read_bytes() == source.read_bytes()
+    assert writes == [
+        (
+            installed,
+            b"complete-frozen-runtime",
+            None if installer_module.sys.platform == "win32" else 0o755,
+        )
+    ]
+
+
 def test_install_reports_plain_language_progress(tmp_path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
@@ -347,6 +375,9 @@ def test_support_report_excludes_paths_settings_memory_and_error_content(
     data_dir = tmp_path / "private-lians-data"
     data_dir.mkdir()
     (data_dir / "memory.sqlite3").write_text(sensitive)
+    transaction_dir = data_dir / "setup-transactions"
+    transaction_dir.mkdir()
+    (transaction_dir / "pending.json").write_text(sensitive)
     monkeypatch.setenv("LIANS_EASY_HOME", str(data_dir))
     setup_result = {
         "status": "failed",
@@ -371,6 +402,7 @@ def test_support_report_excludes_paths_settings_memory_and_error_content(
 
     assert report["schema"] == "lians-support-report/v1"
     assert report["memory_store"] == {"exists": True, "size_bytes": len(sensitive)}
+    assert report["setup_recovery"] == {"pending_transactions": 1}
     assert report["last_setup"]["clients"] == [
         {
             "client": "cursor",
@@ -383,3 +415,108 @@ def test_support_report_excludes_paths_settings_memory_and_error_content(
     assert sensitive not in rendered
     assert str(home) not in rendered
     assert str(data_dir) not in rendered
+
+
+def test_interrupted_existing_config_is_exactly_recovered_before_retry(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    config = home / ".cursor" / "mcp.json"
+    config.parent.mkdir(parents=True)
+    sensitive = "private-setting-value"
+    original = json.dumps({"theme": "dark", "secret": sensitive}).encode()
+    config.write_bytes(original)
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+    original_write = installer_module._write_text
+    crashed = False
+
+    def interrupt_after_config_write(path, content):
+        nonlocal crashed
+        original_write(path, content)
+        if path == config and not crashed:
+            crashed = True
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(installer_module, "_write_text", interrupt_after_config_write)
+    with pytest.raises(KeyboardInterrupt):
+        install(["cursor"], home=home)
+
+    journals = list((tmp_path / "lians" / "setup-transactions").glob("*.json"))
+    assert len(journals) == 1
+    assert sensitive not in journals[0].read_text()
+    assert config.read_bytes() != original
+
+    monkeypatch.setattr(installer_module, "_write_text", original_write)
+    original_install_client = installer_module._install_client
+    observed_before_retry = []
+
+    def observe_recovered_config(key, **kwargs):
+        observed_before_retry.append(config.read_bytes())
+        return original_install_client(key, **kwargs)
+
+    monkeypatch.setattr(installer_module, "_install_client", observe_recovered_config)
+    result = install(["cursor"], home=home)
+
+    assert result["recovered_clients"] == ["cursor"]
+    assert observed_before_retry == [original]
+    assert json.loads(config.read_text())["secret"] == sensitive
+    assert not list((tmp_path / "lians" / "setup-transactions").glob("*.json"))
+
+
+def test_interrupted_new_config_is_removed_during_recovery(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config = home / ".cursor" / "mcp.json"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+    original_write = installer_module._write_text
+    crashed = False
+
+    def interrupt_after_config_write(path, content):
+        nonlocal crashed
+        original_write(path, content)
+        if path == config and not crashed:
+            crashed = True
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(installer_module, "_write_text", interrupt_after_config_write)
+    with pytest.raises(KeyboardInterrupt):
+        install(["cursor"], home=home)
+    assert config.is_file()
+
+    monkeypatch.setattr(installer_module, "_write_text", original_write)
+    recovered = installer_module._recover_interrupted_transactions(home=home)
+
+    assert recovered == ["cursor"]
+    assert not config.exists()
+
+
+def test_recovery_rejects_tampered_target_without_touching_it(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config = home / ".cursor" / "mcp.json"
+    outside = tmp_path / "outside.json"
+    outside.write_text("untouched")
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+    journal = installer_module.SetupJournal.begin("cursor", [config])
+    document = json.loads(journal.path.read_text())
+    document["entries"][0]["path"] = str(outside)
+    journal.path.write_text(json.dumps(document))
+
+    with pytest.raises(ValueError, match="unexpected file"):
+        installer_module._recover_interrupted_transactions(home=home)
+
+    assert outside.read_text() == "untouched"
+    assert journal.path.is_file()
+
+
+def test_setup_lock_rejects_a_second_mutation_process(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    with installer_module._setup_lock(), pytest.raises(
+        RuntimeError, match="already running"
+    ):
+        install(["cursor"], home=home)
+
+    with installer_module._setup_lock(), pytest.raises(
+        RuntimeError, match="already running"
+    ):
+        uninstall(["cursor"], home=home)

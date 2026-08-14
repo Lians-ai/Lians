@@ -44,6 +44,13 @@ repeating work that already passed. **Save help report** writes a redacted JSON
 diagnostic without copying memory content, AI-app settings, exception text,
 credentials, or user paths.
 
+Only one setup mutation process can run at a time. Each client transaction also
+has a small disk-backed rollback journal. If setup is killed after replacing a
+configuration file, the next launch validates the recorded targets, restores
+the protected originals, removes interrupted-transaction residue, and then
+retries. The frozen Windows binary passes this forced-process-exit lifecycle;
+an actual virtual-machine reboot/power-loss run remains a release gate.
+
 ## Cross-tool experience
 
 The preview implements the first product loop directly:

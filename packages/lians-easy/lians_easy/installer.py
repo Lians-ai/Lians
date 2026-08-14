@@ -10,9 +10,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+import uuid
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from stat import S_IMODE
 from typing import Any
@@ -230,8 +233,138 @@ def _write_text(path: Path, content: str) -> None:
         if path.exists():
             shutil.copymode(path, temporary)
         os.replace(temporary, path)
+        if (
+            os.environ.get("LIANS_EASY_TEST_MODE") == "crash-recovery"
+            and os.environ.get("LIANS_EASY_TEST_CRASH_AFTER_WRITE") == path.name
+        ):
+            # Release-artifact fault injection. The variable is used only by the
+            # crash-recovery harness and has no effect unless explicitly set.
+            os._exit(86)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _path_key(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _transaction_dir() -> Path:
+    return user_data_dir() / "setup-transactions"
+
+
+@dataclass
+class SetupJournal:
+    """Durable rollback metadata for one client setup transaction."""
+
+    path: Path
+    client: str
+    entries: list[dict[str, Any]]
+
+    @classmethod
+    def begin(cls, client: str, paths: list[Path]) -> SetupJournal:
+        directory = _transaction_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        journal = cls(
+            path=directory / f"{client}-{uuid.uuid4().hex}.json",
+            client=client,
+            entries=[
+                {
+                    "path": str(path.absolute()),
+                    "existed": path.exists(),
+                    "original_backup": None,
+                    "transaction_backups": [],
+                }
+                for path in paths
+            ],
+        )
+        journal.persist()
+        return journal
+
+    @classmethod
+    def load(cls, path: Path) -> SetupJournal:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError("An interrupted Lians setup report is invalid") from exc
+        if not isinstance(document, dict) or document.get("version") != 1:
+            raise ValueError("An interrupted Lians setup report is unsupported")
+        client = document.get("client")
+        entries = document.get("entries")
+        if not isinstance(client, str) or not isinstance(entries, list):
+            raise TypeError("An interrupted Lians setup report is incomplete")
+        return cls(path=path, client=client, entries=entries)
+
+    def persist(self) -> None:
+        _write_text(
+            self.path,
+            json.dumps(
+                {"version": 1, "client": self.client, "entries": self.entries},
+                indent=2,
+            )
+            + "\n",
+        )
+
+    def record_backup(self, backup: Path) -> None:
+        matches = []
+        for entry in self.entries:
+            target = Path(entry["path"])
+            if (
+                _path_key(backup.parent) == _path_key(target.parent)
+                and backup.name.startswith(f"{target.name}.lians-backup-")
+            ):
+                matches.append(entry)
+        if len(matches) != 1:
+            raise ValueError("Lians could not safely journal a settings backup")
+        entry = matches[0]
+        backups = entry["transaction_backups"]
+        rendered = str(backup.absolute())
+        if rendered not in backups:
+            backups.append(rendered)
+        if entry["original_backup"] is None:
+            entry["original_backup"] = rendered
+        self.persist()
+
+    def finish(self) -> None:
+        self.path.unlink(missing_ok=True)
+
+
+@contextmanager
+def _setup_lock() -> Iterator[None]:
+    """Allow only one setup mutation process while releasing automatically on crash."""
+    directory = user_data_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    lock_path = directory / "setup.lock"
+    handle = lock_path.open("a+b")
+    try:
+        if lock_path.stat().st_size == 0:
+            handle.write(b"\0")
+            handle.flush()
+        handle.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise RuntimeError("Lians Setup is already running on this computer") from exc
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
 
 
 def _install_runtime() -> Path | None:
@@ -242,9 +375,11 @@ def _install_runtime() -> Path | None:
     destination = target_dir / ("LiansMemory.exe" if sys.platform == "win32" else "lians-memory")
     source = Path(sys.executable).resolve()
     if source != destination.resolve():
-        shutil.copy2(source, destination)
-        if sys.platform != "win32":
-            destination.chmod(0o755)
+        _write_bytes(
+            destination,
+            source.read_bytes(),
+            mode=None if sys.platform == "win32" else 0o755,
+        )
     return destination
 
 
@@ -429,6 +564,102 @@ def _client_paths(key: str, target: ClientTarget, home: Path) -> list[Path]:
     return list(dict.fromkeys(paths))
 
 
+def _validated_journal_entries(
+    journal: SetupJournal, *, home: Path
+) -> list[dict[str, Any]]:
+    targets = client_targets(home)
+    if journal.client not in targets:
+        raise ValueError("An interrupted Lians setup report names an unknown AI app")
+    allowed_paths = _client_paths(journal.client, targets[journal.client], home)
+    allowed = {_path_key(path): path for path in allowed_paths}
+    if len(journal.entries) != len(allowed):
+        raise ValueError("An interrupted Lians setup report has unexpected targets")
+
+    validated: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw_entry in journal.entries:
+        if not isinstance(raw_entry, dict):
+            raise TypeError("An interrupted Lians setup report has an invalid target")
+        raw_path = raw_entry.get("path")
+        existed = raw_entry.get("existed")
+        original_backup = raw_entry.get("original_backup")
+        transaction_backups = raw_entry.get("transaction_backups")
+        if (
+            not isinstance(raw_path, str)
+            or not isinstance(existed, bool)
+            or (original_backup is not None and not isinstance(original_backup, str))
+            or not isinstance(transaction_backups, list)
+            or not all(isinstance(value, str) for value in transaction_backups)
+        ):
+            raise ValueError("An interrupted Lians setup report has invalid rollback data")
+        key = _path_key(Path(raw_path))
+        if key not in allowed or key in seen:
+            raise ValueError("An interrupted Lians setup report targets an unexpected file")
+        seen.add(key)
+        target = allowed[key]
+
+        backups: list[Path] = []
+        for raw_backup in transaction_backups:
+            backup = Path(raw_backup)
+            if (
+                _path_key(backup.parent) != _path_key(target.parent)
+                or not backup.name.startswith(f"{target.name}.lians-backup-")
+            ):
+                raise ValueError("An interrupted Lians setup report has an unsafe backup")
+            backups.append(backup)
+        original = Path(original_backup) if original_backup is not None else None
+        if original is not None and all(
+            _path_key(original) != _path_key(backup) for backup in backups
+        ):
+            raise ValueError("An interrupted Lians setup report lost its original backup")
+        validated.append(
+            {
+                "path": target,
+                "existed": existed,
+                "original_backup": original,
+                "transaction_backups": backups,
+            }
+        )
+    if seen != set(allowed):
+        raise ValueError("An interrupted Lians setup report is missing a target")
+    return validated
+
+
+def _recover_interrupted_transactions(*, home: Path) -> list[str]:
+    directory = _transaction_dir()
+    if not directory.is_dir():
+        return []
+    recovered: list[str] = []
+    for journal_path in sorted(directory.glob("*.json")):
+        journal = SetupJournal.load(journal_path)
+        entries = _validated_journal_entries(journal, home=home)
+        for entry in reversed(entries):
+            target = entry["path"]
+            if entry["existed"]:
+                backup = entry["original_backup"]
+                if backup is None:
+                    # Every mutating writer records its backup before replacement,
+                    # so a missing reference proves this target was not changed.
+                    continue
+                if not backup.is_file():
+                    raise RuntimeError(
+                        "Lians found an interrupted setup but its protected backup is missing"
+                    )
+                _write_bytes(
+                    target,
+                    backup.read_bytes(),
+                    mode=S_IMODE(backup.stat().st_mode),
+                )
+            else:
+                target.unlink(missing_ok=True)
+        for entry in entries:
+            for backup in entry["transaction_backups"]:
+                backup.unlink(missing_ok=True)
+        journal.finish()
+        recovered.append(journal.client)
+    return list(dict.fromkeys(recovered))
+
+
 def _verify_client(key: str, *, home: Path) -> None:
     target = client_targets(home)[key]
     if not target.configured:
@@ -491,15 +722,18 @@ def _install_client(
     return item
 
 
-def _rollback_client(
-    snapshots: list[FileSnapshot], backups: list[Path]
-) -> list[str]:
-    errors: list[str] = []
+def _restore_client(snapshots: list[FileSnapshot]) -> list[str]:
+    restore_errors: list[str] = []
     for snapshot in reversed(snapshots):
         try:
             snapshot.restore()
         except OSError as exc:
-            errors.append(f"{snapshot.path}: {exc}")
+            restore_errors.append(f"{snapshot.path}: {exc}")
+    return restore_errors
+
+
+def _cleanup_backups(backups: list[Path]) -> list[str]:
+    errors: list[str] = []
     for backup in backups:
         try:
             backup.unlink(missing_ok=True)
@@ -508,7 +742,24 @@ def _rollback_client(
     return errors
 
 
+def _record_setup_backup(
+    path: Path, *, backups: list[Path], journal: SetupJournal
+) -> None:
+    backups.append(path)
+    journal.record_backup(path)
+
+
 def install(
+    keys: list[str],
+    *,
+    home: Path | None = None,
+    on_progress: Callable[[str, str], None] | None = None,
+) -> dict[str, Any]:
+    with _setup_lock():
+        return _install_unlocked(keys, home=home, on_progress=on_progress)
+
+
+def _install_unlocked(
     keys: list[str],
     *,
     home: Path | None = None,
@@ -527,7 +778,13 @@ def install(
         if on_progress is not None:
             on_progress(stage, detail)
 
-    progress("protecting", "Protecting your existing settings")
+    recovered_clients = _recover_interrupted_transactions(home=home)
+    progress(
+        "protecting",
+        "Restored an interrupted setup and protected your existing settings"
+        if recovered_clients
+        else "Protecting your existing settings",
+    )
     _install_runtime()
     command, args = runtime_command()
     results: list[dict[str, Any]] = []
@@ -536,31 +793,50 @@ def install(
         progress("connecting", f"Connecting {target.label}")
         backups: list[Path] = []
         snapshots: list[FileSnapshot] | None = None
+        journal: SetupJournal | None = None
         try:
-            snapshots = [
-                FileSnapshot.capture(path) for path in _client_paths(key, target, home)
-            ]
+            paths = _client_paths(key, target, home)
+            snapshots = [FileSnapshot.capture(path) for path in paths]
+            journal = SetupJournal.begin(key, paths)
             item = _install_client(
                 key,
                 target=target,
                 home=home,
                 command=command,
                 args=args,
-                on_backup=backups.append,
+                on_backup=partial(
+                    _record_setup_backup, backups=backups, journal=journal
+                ),
             )
+            journal.finish()
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
-            rollback_errors = _rollback_client(snapshots, backups) if snapshots else []
+            restore_errors = _restore_client(snapshots) if snapshots else []
+            journal_errors: list[str] = []
+            if journal is not None and not restore_errors:
+                try:
+                    journal.finish()
+                except OSError as journal_error:
+                    journal_errors.append(f"{journal.path}: {journal_error}")
+            cleanup_errors = (
+                _cleanup_backups(backups)
+                if not restore_errors and not journal_errors
+                else []
+            )
             item = {
                 "client": key,
                 "label": target.label,
                 "config": str(target.config_path),
                 "status": "failed",
                 "error": str(exc),
-                "rolled_back": not rollback_errors,
-                "retryable": not rollback_errors,
+                "rolled_back": not restore_errors,
+                "retryable": not restore_errors and not journal_errors,
             }
-            if rollback_errors:
-                item["rollback_errors"] = rollback_errors
+            if restore_errors:
+                item["rollback_errors"] = restore_errors
+            if journal_errors:
+                item["journal_errors"] = journal_errors
+            if cleanup_errors:
+                item["cleanup_errors"] = cleanup_errors
         results.append(item)
 
     progress("verifying", "Checking that memory is ready")
@@ -576,6 +852,7 @@ def install(
     return {
         "status": status,
         "clients": results,
+        "recovered_clients": recovered_clients,
         "retry_clients": [item["client"] for item in failed if item["retryable"]],
         "database": str(user_data_dir() / "memory.sqlite3"),
         "requires_trust": [item["client"] for item in installed if item["client"] == "codex"],
@@ -606,11 +883,19 @@ def plan(keys: list[str], *, action: str, home: Path | None = None) -> dict[str,
 
 
 def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
+    with _setup_lock():
+        return _uninstall_unlocked(keys, home=home)
+
+
+def _uninstall_unlocked(
+    keys: list[str], *, home: Path | None = None
+) -> dict[str, Any]:
     home = home or Path.home()
     targets = client_targets(home)
     unknown = sorted(set(keys) - set(targets))
     if unknown:
         raise ValueError("Unknown clients: " + ", ".join(unknown))
+    recovered_clients = _recover_interrupted_transactions(home=home)
     results = []
     for key in keys:
         target = targets[key]
@@ -642,6 +927,7 @@ def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
     return {
         "status": "uninstalled",
         "clients": results,
+        "recovered_clients": recovered_clients,
         "data_preserved": str(user_data_dir() / "memory.sqlite3"),
     }
 
@@ -686,6 +972,13 @@ def support_report(
         "memory_store": {
             "exists": database.is_file(),
             "size_bytes": database.stat().st_size if database.is_file() else 0,
+        },
+        "setup_recovery": {
+            "pending_transactions": (
+                len(list(_transaction_dir().glob("*.json")))
+                if _transaction_dir().is_dir()
+                else 0
+            )
         },
         "clients": [
             {
