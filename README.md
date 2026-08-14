@@ -51,6 +51,15 @@ memory solves a real problem for you.
 [Get Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=first_customer_setup) or
 [install the free local version through MCP](#free-local-setup-add-memory-through-mcp).
 
+## Pick the AI you already use
+
+- **Cursor:** use the [one-click MCP installer](integrations/cursor).
+- **Claude Code:** paste the [two plugin commands](integrations/lians-plugin).
+- **Codex app, CLI, or IDE:** run the [one-command MCP setup](integrations/codex).
+
+All three routes use the same free local memory by default. After setup, try the
+[three-minute, two-chat memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
+
 Lians does not change the underlying model or promise fewer tokens on every
 task. It can avoid resending old conversation when a small relevant recall is
 enough; verify the result on your own workflow.
@@ -128,7 +137,7 @@ Use the exact setup guide for
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
 [OpenCode](integrations/opencode), or
-[Codex](plugins/lians-memory). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
+[Codex](integrations/codex). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
 the advanced temporal and audit tools too.
 
 ## How it works
