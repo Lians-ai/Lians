@@ -34,7 +34,7 @@ folder merely because it is named `sdk/python`.
 | `integrations/` | **Current, integration-specific** | Tested client and framework setup. Begin with the integration's README. |
 | `plugins/lians-memory/` | **Current Codex plugin source** | The repository marketplace plugin and its local runtime. |
 | `plugins/lians-memory-universal/` | **Submission/evaluation bundle** | Hosted OpenAI review material; it is not the general local installation path. |
-| `packages/lians-easy/` | **Technical preview; unsigned** | Source evaluation of Lians Bridge: encrypted local memory, MCP, Claude/Codex prompt hooks, Cursor project rules, and context receipts. |
+| `packages/lians-easy/` | **Technical preview** | Source evaluation of Lians Bridge: encrypted local memory, MCP, Claude/Codex prompt hooks, Cursor project rules, and context receipts. It is not a signed desktop download. |
 | `sdk/python/` | **Legacy** | The older `lians` 0.2.0 thin-client tree. Do not use it for new installs, examples, or integrations. |
 | `demo/`, `benchmarks/`, `paper/` | **Evidence and examples** | Reproducible demonstrations, evaluation fixtures, and research—not product installation entry points. |
 
