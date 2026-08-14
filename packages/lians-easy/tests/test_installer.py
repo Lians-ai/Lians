@@ -163,6 +163,22 @@ def test_antigravity_install_uses_current_mcp_and_hook_contracts(tmp_path, monke
     assert "other-hook" in restored_hooks
 
 
+def test_antigravity_install_accepts_client_created_empty_config(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config_dir = home / ".gemini" / "config"
+    config_dir.mkdir(parents=True)
+    mcp_config = config_dir / "mcp_config.json"
+    mcp_config.write_text("")
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    result = install(["antigravity"], home=home)
+
+    updated = json.loads(mcp_config.read_text())
+    assert updated["mcpServers"]["lians"]["args"][-1] == "mcp"
+    assert result["clients"][0]["backup"]
+    assert (config_dir / "hooks.json").is_file()
+
+
 def test_plan_reports_targets_without_writing(tmp_path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))

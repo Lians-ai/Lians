@@ -194,7 +194,8 @@ def _json_config(path: Path, command: str, args: list[str]) -> Path | None:
     backup = _backup(path)
     if path.exists():
         try:
-            document = json.loads(path.read_text(encoding="utf-8"))
+            raw = path.read_text(encoding="utf-8")
+            document = json.loads(raw) if raw.strip() else {}
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError(f"Cannot safely update invalid JSON: {path}") from exc
         if not isinstance(document, dict):
@@ -283,7 +284,8 @@ def _antigravity_hook_config(path: Path, *, remove: bool = False) -> Path | None
     backup = _backup(path)
     if path.exists():
         try:
-            document = json.loads(path.read_text(encoding="utf-8"))
+            raw = path.read_text(encoding="utf-8")
+            document = json.loads(raw) if raw.strip() else {}
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError(f"Cannot safely update invalid JSON: {path}") from exc
         if not isinstance(document, dict):
