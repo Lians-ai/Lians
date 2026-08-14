@@ -80,3 +80,5 @@ def test_cursor_install_routes_cannot_drift_from_plugin_config() -> None:
     assert "AES-GCM encrypted at rest" in readme
     assert "DPAPI protects the local root key" in readme
     assert "SQLite plaintext" not in readme
+    assert "[PR #170](https://github.com/Lians-ai/Lians/pull/170)" in readme
+    assert "advance the immutable pin" in readme
