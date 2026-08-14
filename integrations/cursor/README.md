@@ -6,6 +6,15 @@ slice in a later chat.
 
 ## Install for one project
 
+Use Cursor's official one-click MCP installer:
+
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=Lians&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1zZGtbbWNwXSIsImxpYW5zLW1jcCJdLCJlbnYiOnsiTElBTlNfTUNQX0VOQUJMRURfVE9PTFMiOiJyZW1lbWJlcixyZWNhbGwsbGlzdF9tZW1vcmllcyxjb3JyZWN0X21lbW9yeSxmb3JnZXRfbWVtb3J5In19)
+
+The button passes the same local server configuration shown below to Cursor.
+Review it in Cursor before approving the install.
+
+For manual setup:
+
 1. Install [`uv`](https://docs.astral.sh/uv/).
 2. Copy [`mcp.example.json`](mcp.example.json) to `.cursor/mcp.json` in your
    project. If that file already exists, merge the `lians` server into its
