@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gc
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -83,9 +82,6 @@ def main() -> None:
         if recalled_tokens > 512 or result["memories_used"] != 3 or reduction < 80:
             raise SystemExit(f"Token-budget benchmark failed: {json.dumps(result)}")
         print(json.dumps(result, indent=2))
-        # Release transient sqlite handles before Windows removes the fixture.
-        del store
-        gc.collect()
 
 
 if __name__ == "__main__":
