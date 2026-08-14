@@ -43,6 +43,7 @@ class SetupApp:
         self.last_result: dict[str, Any] | None = None
         self.details_visible = False
         self.other_visible = False
+        self.open_requested = False
 
         self.root.title("Lians Setup")
         self.root.geometry("780x720")
@@ -528,8 +529,8 @@ class SetupApp:
         ).pack(fill="x", pady=(20, 20))
         tk.Button(
             self.card,
-            text="Finish",
-            command=self.root.destroy,
+            text="Open Lians",
+            command=self._open_lians,
             background=BLUE,
             foreground="white",
             activebackground="#2e67de",
@@ -578,8 +579,19 @@ class SetupApp:
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
 
+    def _open_lians(self) -> None:
+        self.open_requested = True
+        self.root.destroy()
+
 
 def launch() -> None:
+    if any(target.configured for target in client_targets().values()):
+        from .bridge import BridgeApplication
+        from .mcp import default_data_path
+        from .store import MemoryStore
+
+        BridgeApplication(MemoryStore(default_data_path())).serve(open_browser=True)
+        return
     root = tk.Tk()
     if sys.platform == "win32":
         try:
@@ -589,5 +601,11 @@ def launch() -> None:
             root.iconbitmap(default=sys.executable)
         except tk.TclError:
             pass
-    SetupApp(root)
+    app = SetupApp(root)
     root.mainloop()
+    if app.open_requested:
+        from .bridge import BridgeApplication
+        from .mcp import default_data_path
+        from .store import MemoryStore
+
+        BridgeApplication(MemoryStore(default_data_path())).serve(open_browser=True)

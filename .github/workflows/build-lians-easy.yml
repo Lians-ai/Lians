@@ -58,9 +58,15 @@ jobs:
       - name: Build frozen Bridge artifact
         shell: bash
         run: |
-          extra_args=()
+          data_separator=":"
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            extra_args=(
+            data_separator=";"
+          fi
+          extra_args=(
+            --add-data "packages/lians-easy/lians_easy/app${data_separator}lians_easy/app"
+          )
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            extra_args+=(
               --icon packages/lians-easy/windows-lians.ico
               --version-file packages/lians-easy/windows-version-info.txt
             )
@@ -70,6 +76,10 @@ jobs:
             --paths packages/lians-easy \
             "${extra_args[@]}" \
             packages/lians-easy/entrypoint.py
+      - name: Verify frozen Lians App and Bridge API
+        run: >-
+          python packages/lians-easy/tests/artifact_app_smoke.py
+          --binary dist/LiansMemory${{ runner.os == 'Windows' && '.exe' || '' }}
       - name: Verify Windows package identity
         if: runner.os == 'Windows'
         shell: pwsh

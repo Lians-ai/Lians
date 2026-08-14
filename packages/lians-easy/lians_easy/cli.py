@@ -56,6 +56,11 @@ def parser() -> argparse.ArgumentParser:
     bridge.add_argument("--port", type=int, default=7317)
     bridge.add_argument("--app-dir", type=Path)
 
+    app = commands.add_parser("app", help="Open the local Lians control center")
+    app.add_argument("--data", type=Path)
+    app.add_argument("--host", default="127.0.0.1")
+    app.add_argument("--port", type=int, default=7317)
+
     hook = commands.add_parser("hook", help="Inject bounded memory into an AI prompt")
     hook.add_argument(
         "--client",
@@ -111,6 +116,13 @@ def main(argv: list[str] | None = None) -> None:
             port=args.port,
             app_dir=args.app_dir,
         ).serve()
+        return
+    if args.command == "app":
+        BridgeApplication(
+            MemoryStore(args.data or default_data_path()),
+            host=args.host,
+            port=args.port,
+        ).serve(open_browser=True)
         return
     if args.command == "hook":
         raise SystemExit(run_hook(client=args.client, data_path=args.data))

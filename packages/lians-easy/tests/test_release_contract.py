@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import struct
 from pathlib import Path
@@ -69,6 +71,38 @@ def test_stable_release_cannot_upload_unsigned_desktop_assets() -> None:
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
     for build_contract in (workflow, pull_request_workflow):
+        assert "--add-data" in build_contract
+        assert "lians_easy/app" in build_contract
         assert "--icon packages/lians-easy/windows-lians.ico" in build_contract
         assert "--version-file packages/lians-easy/windows-version-info.txt" in build_contract
         assert "Verify Windows package identity" in build_contract
+        assert "artifact_app_smoke.py" in build_contract
+
+
+def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
+    app_root = PACKAGE_ROOT / "lians_easy" / "app"
+    manifest = json.loads((app_root / "manifest.json").read_text(encoding="utf-8"))
+
+    assert manifest["source"]["commit"] == "27c8a2cd23e3e241d9125818a87ff1295a32e369"
+    assert manifest["source"]["sites_version"] == 26
+    assert manifest["source"]["build"] == "npm run build:local"
+
+    expected = set(manifest["files"])
+    actual = {
+        path.relative_to(app_root).as_posix()
+        for path in app_root.rglob("*")
+        if path.is_file() and path.name != "manifest.json"
+    }
+    assert actual == expected
+
+    total_bytes = 0
+    for relative, record in manifest["files"].items():
+        payload = (app_root / relative).read_bytes()
+        assert len(payload) == record["bytes"]
+        assert hashlib.sha256(payload).hexdigest() == record["sha256"]
+        total_bytes += len(payload)
+    assert total_bytes < 400_000
+
+    script = (app_root / "assets" / "index-Cefa2sSe.js").read_text(encoding="utf-8")
+    assert "\u00b7" in script
+    assert "\u00c2\u00b7" not in script

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import threading
 from http.server import ThreadingHTTPServer
@@ -353,6 +354,38 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
             )
         assert error.value.code == 403
         assert all(item["content"] != "This must not be stored" for item in store.list())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_loopback_default_serves_the_packaged_control_center(tmp_path):
+    app = BridgeApplication(MemoryStore(tmp_path / "bridge.sqlite3"), port=0)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            html = response.read().decode("utf-8")
+            cookie = response.headers["Set-Cookie"]
+            policy = response.headers["Content-Security-Policy"]
+
+        assert "<title>Lians Memory</title>" in html
+        assert "Lians Bridge is running" not in html
+        assert "HttpOnly" in cookie
+        assert "connect-src 'self'" in policy
+        assert "object-src 'none'" in policy
+
+        script_match = re.search(r'src="([^"]+\.js)"', html)
+        assert script_match is not None
+        with urlopen(f"{app.origin}{script_match.group(1)}") as response:
+            script = response.read().decode("utf-8")
+            assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert "MEMORY CONTROL CENTER" in script
+        assert "/v1/memories?state=all" in script
+        assert "/v1/context" in script
     finally:
         server.shutdown()
         server.server_close()

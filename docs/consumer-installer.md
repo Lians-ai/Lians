@@ -124,6 +124,13 @@ backups use the same writer. This narrows the remaining power-loss gate to
 release-artifact and filesystem behavior rather than an unflushed application
 write path.
 
+The preview executable now embeds the source-pinned React Lians App rather than
+ending at setup or requiring a separately hosted dashboard. The final setup
+action opens the loopback control center, and subsequent launches return there
+directly. Artifact smoke tests verify the real frozen binary serves the app,
+establishes its private session, reaches encrypted Bridge state, and exposes the
+receipt-aware recall surface.
+
 ## Package architecture
 
 ```text

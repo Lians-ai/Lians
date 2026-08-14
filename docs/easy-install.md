@@ -90,15 +90,21 @@ select the matching project handoff. If the client reports no workspace, Lians
 injects global preferences only and excludes project-scoped memories rather
 than guessing from the hook process directory.
 
-The React control center can be served by the local Bridge during development:
+The frozen Bridge now contains the verified React control-center bundle. The
+setup screen ends with **Open Lians**, and later launches open the local control
+center directly. Memory, Activity, Review, Integrations, and Settings all read
+from the same encrypted store used by connected AI clients.
+
+Developers can still override the bundled app while working on the React source:
 
 ```bash
 python -m lians_easy bridge --app-dir /path/to/memory-checkup/local-dist
 ```
 
-The hosted control center demonstrates the same information architecture, but
-uses sample data when it is not connected to a loopback Bridge. It never asks a
-user to paste raw AI-provider credentials.
+The packaged bundle is source-pinned and verified again through each frozen
+release artifact. The hosted control center demonstrates the same information
+architecture, but uses sample data when it is not connected to a loopback
+Bridge. It never asks a user to paste raw AI-provider credentials.
 
 ## Release trust gate
 

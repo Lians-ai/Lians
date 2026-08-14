@@ -9,6 +9,8 @@ import os
 import secrets
 import sys
 import tempfile
+import threading
+import webbrowser
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,6 +26,7 @@ from .store import MemoryStore
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7317
 MAX_REQUEST_BYTES = 1_000_000
+PACKAGED_APP_DIR = Path(__file__).resolve().with_name("app")
 
 
 def context_for_event(
@@ -145,7 +148,8 @@ class BridgeApplication:
         self.store = store
         self.host = host
         self.port = port
-        self.app_dir = Path(app_dir).resolve() if app_dir else None
+        selected_app_dir = Path(app_dir).resolve() if app_dir else PACKAGED_APP_DIR
+        self.app_dir = selected_app_dir if (selected_app_dir / "index.html").is_file() else None
         self.session_token = secrets.token_urlsafe(32)
 
     @property
@@ -229,6 +233,13 @@ class BridgeApplication:
                         self.send_header("Content-Type", content_type)
                         self.send_header("Content-Length", str(len(body)))
                         self.send_header("Cache-Control", "no-store")
+                        self.send_header("X-Content-Type-Options", "nosniff")
+                        self.send_header(
+                            "Content-Security-Policy",
+                            "default-src 'self'; connect-src 'self'; img-src 'self' data:; "
+                            "font-src 'self'; style-src 'self'; script-src 'self'; "
+                            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+                        )
                         self.send_header(
                             "Set-Cookie",
                             "lians_bridge="
@@ -375,8 +386,17 @@ class BridgeApplication:
 
         return Handler
 
-    def serve(self) -> None:
-        ThreadingHTTPServer((self.host, self.port), self.handler()).serve_forever()
+    def serve(self, *, open_browser: bool = False) -> None:
+        server = ThreadingHTTPServer((self.host, self.port), self.handler())
+        self.port = server.server_port
+        if open_browser:
+            opener = threading.Timer(0.15, lambda: webbrowser.open(self.origin))
+            opener.daemon = True
+            opener.start()
+        try:
+            server.serve_forever()
+        finally:
+            server.server_close()
 
 
 def re_match_memory_action(path: str) -> tuple[str, str] | None:

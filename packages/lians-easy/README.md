@@ -3,7 +3,9 @@
 Lians Bridge is the local service behind the guided Lians installer. It keeps
 one encrypted memory store for supported AI clients and exposes a small MCP
 surface, automatic bounded recall, project handoffs, and signed context
-receipts.
+receipts. The same package now carries the React Lians App for Memory, Activity,
+Review, Integrations, and Settings; normal users do not install or locate a
+separate web bundle.
 
 The current Windows executable is a development build and is not yet
 Authenticode-signed. Context receipts are Ed25519-signed, but that does not
@@ -13,7 +15,12 @@ developers and IT teams should evaluate the Bridge from source:
 ```bash
 python -m lians_easy install --clients antigravity,claude,cursor,gemini,codex --yes
 python -m lians_easy doctor --json
+python -m lians_easy app
 ```
+
+Open the executable without arguments for guided setup. Its final action opens
+the bundled control center through the loopback-only Bridge. Once at least one
+AI client is connected, later launches return to that control center directly.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is
