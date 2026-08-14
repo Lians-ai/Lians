@@ -45,7 +45,7 @@ class SetupApp:
 
         self.root.title("Lians Setup")
         self.root.geometry("780x720")
-        self.root.minsize(680, 640)
+        self.root.minsize(680, 620)
         self.root.configure(background=BACKGROUND)
         self.root.option_add("*Font", ("Segoe UI", 10))
 
@@ -60,7 +60,7 @@ class SetupApp:
             darkcolor=BLUE,
         )
 
-        self.shell = tk.Frame(root, background=BACKGROUND, padx=44, pady=34)
+        self.shell = tk.Frame(root, background=BACKGROUND, padx=32, pady=20)
         self.shell.pack(fill="both", expand=True)
         self._build_setup()
 
@@ -88,31 +88,31 @@ class SetupApp:
 
         self._label(
             self.shell,
-            "Give every AI app the same memory.",
+            "Your AI apps, one memory.",
             foreground=TEXT,
-            font=("Segoe UI", 25, "bold"),
+            font=("Segoe UI", 22, "bold"),
             anchor="w",
-        ).pack(fill="x", pady=(24, 8))
+        ).pack(fill="x", pady=(16, 6))
         self._label(
             self.shell,
             (
                 "Lians carries your preferences and useful project context between the AI "
-                "apps you already use. No account, API key, or technical setup required."
+                "apps you already use. No account or API key required."
             ),
             foreground=MUTED,
             font=("Segoe UI", 11),
             justify="left",
-            wraplength=680,
+            wraplength=700,
             anchor="w",
-        ).pack(fill="x", pady=(0, 24))
+        ).pack(fill="x", pady=(0, 16))
 
         self.card = tk.Frame(
             self.shell,
             background=PANEL,
             highlightbackground=LINE,
             highlightthickness=1,
-            padx=24,
-            pady=22,
+            padx=20,
+            pady=16,
         )
         self.card.pack(fill="both", expand=True)
 
@@ -127,7 +127,7 @@ class SetupApp:
             detected_text,
             background=PANEL,
             foreground=TEXT,
-            font=("Segoe UI", 13, "bold"),
+            font=("Segoe UI", 12, "bold"),
             anchor="w",
         ).pack(fill="x")
         self._label(
@@ -136,7 +136,7 @@ class SetupApp:
             background=PANEL,
             foreground=MUTED,
             anchor="w",
-        ).pack(fill="x", pady=(4, 14))
+        ).pack(fill="x", pady=(2, 10))
 
         app_list = tk.Frame(self.card, background=PANEL)
         app_list.pack(fill="x")
@@ -162,24 +162,25 @@ class SetupApp:
                 cursor="hand2",
                 anchor="w",
                 padx=0,
-                pady=8,
+                pady=4,
             )
-            self.other_button.pack(fill="x", pady=(6, 0))
+            self.other_button.pack(fill="x", pady=(2, 0))
 
-        trust = tk.Frame(self.card, background=PANEL_SOFT, padx=14, pady=12)
-        trust.pack(fill="x", pady=(14, 14))
-        for copy in (
-            "Memory stays encrypted on this computer",
-            "Existing settings are backed up before Lians changes them",
-            "Pause, correct, or permanently forget a memory whenever you want",
-        ):
-            self._label(
-                trust,
-                f"  {copy}",
-                background=PANEL_SOFT,
-                foreground=MUTED,
-                anchor="w",
-            ).pack(fill="x", pady=2)
+        trust = tk.Frame(self.card, background=PANEL_SOFT, padx=12, pady=8)
+        trust.pack(fill="x", pady=(8, 8))
+        self._label(
+            trust,
+            (
+                "✓  Memory stays encrypted on this computer\n"
+                "✓  Existing settings are backed up before Lians changes them\n"
+                "✓  Pause, correct, or permanently forget a memory whenever you want"
+            ),
+            background=PANEL_SOFT,
+            foreground=MUTED,
+            font=("Segoe UI", 9),
+            justify="left",
+            anchor="w",
+        ).pack(fill="x")
 
         self.progress_frame = tk.Frame(self.card, background=PANEL)
         self.progress_bar = ttk.Progressbar(
@@ -213,7 +214,7 @@ class SetupApp:
             foreground=MUTED,
             anchor="w",
         )
-        self.status_label.pack(fill="x", pady=(2, 8))
+        self.status_label.pack(fill="x", pady=(0, 4))
 
         actions = tk.Frame(self.card, background=PANEL)
         actions.pack(fill="x")
@@ -228,9 +229,9 @@ class SetupApp:
             relief="flat",
             borderwidth=0,
             cursor="hand2",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 10, "bold"),
             padx=24,
-            pady=11,
+            pady=8,
         )
         self.install_button.pack(side="left")
         tk.Button(
@@ -245,7 +246,7 @@ class SetupApp:
             borderwidth=0,
             cursor="hand2",
             padx=18,
-            pady=11,
+            pady=8,
         ).pack(side="left")
         tk.Button(
             actions,
@@ -259,7 +260,7 @@ class SetupApp:
             borderwidth=0,
             cursor="hand2",
             padx=8,
-            pady=11,
+            pady=8,
         ).pack(side="right")
 
         self.details = self._label(
@@ -277,7 +278,7 @@ class SetupApp:
     def _client_row(
         self, parent: tk.Widget, target: ClientTarget, variable: tk.BooleanVar
     ) -> tk.Frame:
-        row = tk.Frame(parent, background=PANEL, pady=4)
+        row = tk.Frame(parent, background=PANEL)
         row.pack(fill="x")
         check = tk.Checkbutton(
             row,
@@ -288,7 +289,7 @@ class SetupApp:
             activebackground=PANEL,
             activeforeground=TEXT,
             selectcolor=BLUE_SOFT,
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 9, "bold"),
             anchor="w",
             cursor="hand2",
         )
