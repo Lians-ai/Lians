@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shlex
 import shutil
 import subprocess
@@ -15,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from stat import S_IMODE
 from typing import Any
+
+from . import __version__
 
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
 MANAGED_END = "# <<< Lians Memory (managed by Lians Easy)"
@@ -660,3 +663,76 @@ def doctor(home: Path | None = None) -> dict[str, Any]:
             "ChatGPT does not load local stdio MCP servers; use a hosted Lians connector when available."
         ),
     }
+
+
+def support_report(
+    *, home: Path | None = None, setup_result: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Build a shareable diagnostic report without settings or memory content."""
+    home = home or Path.home()
+    database = user_data_dir() / "memory.sqlite3"
+    targets = client_targets(home)
+    report: dict[str, Any] = {
+        "schema": "lians-support-report/v1",
+        # datetime.UTC is unavailable on the package's supported Python 3.10.
+        "generated_at": datetime.now(timezone.utc).isoformat(),  # noqa: UP017
+        "lians_version": __version__,
+        "runtime": {
+            "platform": sys.platform,
+            "os_release": platform.release(),
+            "machine": platform.machine(),
+            "standalone": bool(getattr(sys, "frozen", False)),
+        },
+        "memory_store": {
+            "exists": database.is_file(),
+            "size_bytes": database.stat().st_size if database.is_file() else 0,
+        },
+        "clients": [
+            {
+                "key": target.key,
+                "label": target.label,
+                "detected": target.detected,
+                "configured": target.configured,
+            }
+            for target in targets.values()
+        ],
+    }
+    if setup_result is not None:
+        clients = setup_result.get("clients", [])
+        report["last_setup"] = {
+            "status": setup_result.get("status", "unknown"),
+            "clients": [
+                {
+                    key: item[key]
+                    for key in (
+                        "client",
+                        "label",
+                        "status",
+                        "automatic_recall",
+                        "rolled_back",
+                        "retryable",
+                    )
+                    if key in item
+                }
+                for item in clients
+                if isinstance(item, dict)
+            ],
+            "retry_clients": [
+                value
+                for value in setup_result.get("retry_clients", [])
+                if isinstance(value, str)
+            ],
+        }
+    return report
+
+
+def write_support_report(
+    destination: Path,
+    *,
+    home: Path | None = None,
+    setup_result: dict[str, Any] | None = None,
+) -> Path:
+    """Write a redacted support report atomically to a user-selected path."""
+    report = support_report(home=home, setup_result=setup_result)
+    _write_text(destination, json.dumps(report, indent=2) + "\n")
+    return destination

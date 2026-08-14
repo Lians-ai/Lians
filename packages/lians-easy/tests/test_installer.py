@@ -11,7 +11,9 @@ from lians_easy.installer import (
     MANAGED_START,
     install,
     plan,
+    support_report,
     uninstall,
+    write_support_report,
 )
 
 
@@ -332,3 +334,52 @@ def test_install_rejects_empty_selection_and_deduplicates_clients(tmp_path, monk
 
     assert result["status"] == "installed"
     assert [item["client"] for item in result["clients"]] == ["cursor"]
+
+
+def test_support_report_excludes_paths_settings_memory_and_error_content(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "private-user-name"
+    config = home / ".cursor" / "mcp.json"
+    config.parent.mkdir(parents=True)
+    sensitive = "do-not-share-this-memory-or-key"
+    config.write_text(json.dumps({"secret": sensitive, "mcpServers": {"lians": {}}}))
+    data_dir = tmp_path / "private-lians-data"
+    data_dir.mkdir()
+    (data_dir / "memory.sqlite3").write_text(sensitive)
+    monkeypatch.setenv("LIANS_EASY_HOME", str(data_dir))
+    setup_result = {
+        "status": "failed",
+        "clients": [
+            {
+                "client": "cursor",
+                "label": "Cursor",
+                "status": "failed",
+                "error": sensitive,
+                "config": str(config),
+                "rolled_back": True,
+                "retryable": True,
+            }
+        ],
+        "retry_clients": ["cursor"],
+    }
+
+    report = support_report(home=home, setup_result=setup_result)
+    destination = tmp_path / "Lians-help-report.json"
+    write_support_report(destination, home=home, setup_result=setup_result)
+    rendered = destination.read_text()
+
+    assert report["schema"] == "lians-support-report/v1"
+    assert report["memory_store"] == {"exists": True, "size_bytes": len(sensitive)}
+    assert report["last_setup"]["clients"] == [
+        {
+            "client": "cursor",
+            "label": "Cursor",
+            "status": "failed",
+            "rolled_back": True,
+            "retryable": True,
+        }
+    ]
+    assert sensitive not in rendered
+    assert str(home) not in rendered
+    assert str(data_dir) not in rendered

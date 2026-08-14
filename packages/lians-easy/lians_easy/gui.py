@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from tkinter import ttk
+from pathlib import Path
+from tkinter import filedialog, ttk
 from typing import Any
 
-from .installer import ClientTarget, client_targets, install, user_data_dir
+from .installer import (
+    ClientTarget,
+    client_targets,
+    install,
+    user_data_dir,
+    write_support_report,
+)
 
 BACKGROUND = "#05070b"
 PANEL = "#0b1019"
@@ -32,6 +39,7 @@ class SetupApp:
         self.other_rows: list[tk.Widget] = []
         self.connected_labels: list[str] = []
         self.retry_clients: list[str] = []
+        self.last_result: dict[str, Any] | None = None
         self.details_visible = False
         self.other_visible = False
 
@@ -239,6 +247,20 @@ class SetupApp:
             padx=18,
             pady=11,
         ).pack(side="left")
+        tk.Button(
+            actions,
+            text="Save help report",
+            command=self._save_support_report,
+            background=PANEL,
+            foreground=MUTED,
+            activebackground=PANEL,
+            activeforeground=TEXT,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=8,
+            pady=11,
+        ).pack(side="right")
 
         self.details = self._label(
             self.card,
@@ -377,6 +399,7 @@ class SetupApp:
         self.status.set(detail)
 
     def _show_error(self, detail: str) -> None:
+        self.last_result = {"status": "error", "clients": [], "retry_clients": []}
         self.status.set("Setup could not start. No AI app settings were changed.")
         self.install_button.configure(
             state="normal", text="Try again", command=self._start_install
@@ -393,6 +416,7 @@ class SetupApp:
                 self.connected_labels.append(item["label"])
 
     def _show_partial(self, result: dict[str, Any]) -> None:
+        self.last_result = result
         self._record_installed(result)
         failed = [item for item in result["clients"] if item["status"] == "failed"]
         self.retry_clients = result["retry_clients"]
@@ -424,6 +448,7 @@ class SetupApp:
             self._toggle_details()
 
     def _show_success(self, result: dict[str, Any]) -> None:
+        self.last_result = result
         self._record_installed(result)
         for child in self.card.winfo_children():
             child.destroy()
@@ -514,6 +539,38 @@ class SetupApp:
             padx=24,
             pady=10,
         ).pack(anchor="w")
+
+        tk.Button(
+            self.card,
+            text="Save help report",
+            command=self._save_support_report,
+            background=PANEL,
+            foreground=MUTED,
+            activebackground=PANEL,
+            activeforeground=TEXT,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=0,
+            pady=10,
+        ).pack(anchor="w")
+
+    def _save_support_report(self) -> None:
+        destination = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Save Lians help report",
+            initialfile="Lians-help-report.json",
+            defaultextension=".json",
+            filetypes=(("JSON report", "*.json"), ("All files", "*.*")),
+        )
+        if not destination:
+            return
+        try:
+            path = write_support_report(Path(destination), setup_result=self.last_result)
+        except OSError:
+            self.status.set("The help report could not be saved. Choose another folder.")
+            return
+        self.status.set(f"Help report saved as {path.name}.")
 
     def _copy(self, value: str) -> None:
         self.root.clipboard_clear()

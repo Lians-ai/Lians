@@ -40,7 +40,9 @@ lineage so old wording cannot return from a different client.
 Setup is transactional per AI client. If one integration cannot be verified,
 its exact original files and permissions are restored while successful clients
 remain connected. The GUI retries only the failed client IDs instead of
-repeating work that already passed.
+repeating work that already passed. **Save help report** writes a redacted JSON
+diagnostic without copying memory content, AI-app settings, exception text,
+credentials, or user paths.
 
 ## Cross-tool experience
 
