@@ -43,8 +43,8 @@ same; Lians gives them a place to remember.
   memory workspace, 100,000 writes and 50,000 recalls each month, export and
   deletion controls, and email setup support. Cancel anytime.
 
-[Install the free local version](docs/easy-install.md) or
-[get Lians Personal](https://www.lians.ai/upgrade?plan=starter).
+[Get Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter) or
+[install the free local version through MCP](#free-local-setup-add-memory-through-mcp).
 
 Lians does not change the underlying model or promise fewer tokens on every
 task. It can avoid resending old conversation when a small relevant recall is
@@ -54,31 +54,22 @@ enough; verify the result on your own workflow.
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
 </p>
 
-## Install Lians without a terminal
+## Simplest setup: Lians Personal
 
-Download **LiansMemory** for Windows, macOS, or Linux from
-[GitHub Releases](https://github.com/Lians-ai/Lians/releases), open it, choose
-the AI clients found on your computer, and select **Install Lians**.
+Choose Personal when you want Lians managed for you instead of maintaining a
+local memory service. It includes a private hosted workspace, 100,000 writes
+and 50,000 recalls each month, export and deletion controls, and email setup
+support for **$10/month**. Cancel anytime.
 
-The desktop setup:
+[Start Lians Personal](https://www.lians.ai/upgrade?plan=starter)
 
-- needs no Lians account, API key, Python installation, or model download;
-- safely backs up existing client settings before changing them;
-- gives supported clients one shared local memory profile; and
-- includes a diagnostic command and silent install mode for managed devices.
+The standalone desktop installer is still a technical preview. Signed Windows
+and notarized macOS downloads are not in the current GitHub releases, so the
+project does not present a nonexistent or unsigned download as the normal-user
+path. Developers evaluating the preview can use the
+[Lians Easy source guide](docs/easy-install.md).
 
-Restart the selected AI client, then try:
-
-```text
-Remember that I am researching sustainable packaging for independent retailers.
-```
-
-The first standalone builds support Claude Desktop, Cursor, Windsurf, Gemini
-CLI, and Codex. ChatGPT does not load local stdio MCP servers, so the installer
-does not modify ChatGPT; it requires a hosted connector. See the
-[guided install and IT deployment guide](docs/easy-install.md).
-
-## Developer setup: add memory through MCP
+## Free local setup: add memory through MCP
 
 Use this path when you prefer a package-managed MCP server or want the full
 temporal and governance engine.
@@ -199,10 +190,10 @@ Java, C, framework adapters, and self-hosting.
 
 | You want to... | Start with |
 |---|---|
-| Add memory without a terminal | [Lians Easy](docs/easy-install.md) |
-| Give an existing AI client memory from a terminal | [MCP setup](#developer-setup-add-memory-through-mcp) |
-| Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
 | Use managed private memory without running a server | [Lians Personal — $10/month](https://www.lians.ai/upgrade?plan=starter) |
+| Give an existing AI client free local memory | [MCP setup](#free-local-setup-add-memory-through-mcp) |
+| Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
+| Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
 | Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
