@@ -20,6 +20,9 @@ def test_local_runtime_extras_include_sqlalchemy_asyncio_support() -> None:
     extras = package["project"]["optional-dependencies"]
 
     for extra in ("local", "bge-onnx", "mcp"):
-        assert "sqlalchemy[asyncio]>=2.0" in extras[extra], (
+        assert any(
+            dependency.startswith("sqlalchemy[asyncio]>=")
+            for dependency in extras[extra]
+        ), (
             f"lians-sdk[{extra}] must install SQLAlchemy's asyncio dependencies"
         )

@@ -29,7 +29,7 @@ crewai        = ["crewai>=0.28"]
 openai-agents = ["openai-agents>=0.0.1"]
 autogen       = ["autogen-core>=0.4"]
 local         = [
-    "sqlalchemy[asyncio]>=2.0",
+    "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
     "pydantic-settings>=2.14.2",
@@ -46,7 +46,7 @@ local         = [
     "sentence-transformers>=3.0",
 ]
 bge-onnx      = [
-    "sqlalchemy[asyncio]>=2.0",
+    "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
     "pydantic-settings>=2.14.2",
@@ -61,7 +61,7 @@ bge-onnx      = [
 mcp           = [
     "mcp>=1.0.0,<2",
     "httpx>=0.27.0",
-    "sqlalchemy[asyncio]>=2.0",
+    "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.19",
     "pydantic>=2.5",
     "pydantic-settings>=2.14.2",
