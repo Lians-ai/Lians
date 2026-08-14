@@ -256,6 +256,47 @@ def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
     assert json.loads(later_output.getvalue()) == {}
 
 
+def test_antigravity_empty_workspace_injects_global_memory_only(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    data = tmp_path / "bridge.sqlite3"
+    store = MemoryStore(data)
+    call_tool(
+        store,
+        "remember",
+        {
+            "content": "Use FastAPI only inside this project.",
+            "kind": "preference",
+            "scope": "project",
+            "project_root": str(project),
+            "source_client": "antigravity",
+        },
+    )
+    call_tool(
+        store,
+        "remember",
+        {
+            "content": "Never use em dashes.",
+            "kind": "preference",
+            "scope": "global",
+            "source_client": "antigravity",
+        },
+    )
+    monkeypatch.chdir(project)
+
+    pack = context_for_event(
+        {"invocationNum": 0, "workspacePaths": []},
+        client="antigravity",
+        store=store,
+        default_query="Active project preferences constraints decisions and handoff",
+    )
+
+    assert "Never use em dashes." in pack["context"]
+    assert "Use FastAPI only inside this project." not in pack["context"]
+    assert pack["receipt"]["project"]["name"] == "global"
+    assert pack["receipt"]["excluded"]["scope"] == 1
+
+
 def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_path):
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     app = BridgeApplication(store, port=0)

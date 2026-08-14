@@ -44,10 +44,10 @@ def context_for_event(
             and isinstance(workspace_paths[0], str)
         ):
             cwd = workspace_paths[0]
-    cwd = cwd or str(Path.cwd())
+    project = None if client == "antigravity" and cwd is None else detect_project(cwd or Path.cwd())
     return store.context_pack(
         query,
-        project=detect_project(cwd),
+        project=project,
         client=client,
         limit=3,
         max_tokens=512,

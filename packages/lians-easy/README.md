@@ -24,6 +24,9 @@ Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client
 uses a first-invocation `PreInvocation` hook and an ephemeral context step, so
 the memory is not appended again on every model call in the same agent loop.
+Antigravity CLI users should mount the active repository with
+`agy --add-dir /path/to/project ...`; when Antigravity reports no workspace,
+Lians safely injects global preferences only and excludes project memories.
 Cursor receives the same MCP tools and a generated project rule because current
 Cursor hooks do not provide a reliable dynamic prompt-injection contract. Every
 context pack records which memories appeared, why they appeared, what was

@@ -69,6 +69,17 @@ The preview implements the first product loop directly:
 5. Pause, correction, scope, and confirmed forget changes apply to the shared
    store immediately.
 
+For Antigravity CLI and other headless runs, mount the repository explicitly:
+
+```bash
+agy --add-dir /path/to/project --print "Start the next task"
+```
+
+Antigravity then includes that path in the `PreInvocation` event so Lians can
+select the matching project handoff. If the client reports no workspace, Lians
+injects global preferences only and excludes project-scoped memories rather
+than guessing from the hook process directory.
+
 The React control center can be served by the local Bridge during development:
 
 ```bash
