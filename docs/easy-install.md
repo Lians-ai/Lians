@@ -1,18 +1,26 @@
-# Install Lians without a terminal
+# Lians Easy desktop preview
 
-Lians Easy is the normal-user path for adding private, local memory to a
-supported AI client. It is deliberately smaller than the full Lians engine:
-there is no account, API key, Python setup, database server, or embedding model
-download.
+Lians Easy is a technical preview for adding private, local memory to a
+supported AI client. It is deliberately smaller than the full Lians engine.
+There is no account, API key, database server, or embedding-model download.
+
+There are currently no signed Windows, notarized macOS, or Linux
+`LiansMemory` assets in [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
+Do not send normal users to that page expecting a desktop download. For a live,
+managed setup, use [Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter).
+For free local memory today, use the [published MCP setup](install.md#mcp--use-lians-as-a-native-tool).
 
 ## Personal setup
 
-1. Download **LiansMemory** for your operating system from
-   [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
-2. Open the downloaded app.
-3. Leave the AI clients you use selected and choose **Install Lians**.
-4. Restart those clients.
-5. Ask the client to remember one useful fact, then recall it in another chat.
+Developers evaluating the preview can run it from a source checkout:
+
+```bash
+python -m pip install -e packages/lians-easy
+python -m lians_easy
+```
+
+Choose the clients to configure, select **Install Lians**, restart those
+clients, then ask one to remember a useful fact and recall it in another chat.
 
 Existing client configuration files are backed up before every change. Memory
 is stored in a local SQLite file under the operating system's per-user Lians
