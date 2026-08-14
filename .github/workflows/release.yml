@@ -232,7 +232,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "NSIS installation failed with exit code $LASTEXITCODE"
           }
-          $nsisVersion = (& makensis.exe /VERSION).Trim()
+          $nsisCompiler = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path -LiteralPath $nsisCompiler)) {
+            throw "NSIS compiler was not installed at the expected path: $nsisCompiler"
+          }
+          $nsisVersion = (& $nsisCompiler /VERSION).Trim()
           if ($nsisVersion -ne 'v3.12') {
             throw "Expected NSIS v3.12; found '$nsisVersion'"
           }
