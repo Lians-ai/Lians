@@ -200,7 +200,8 @@ Java, C, framework adapters, and self-hosting.
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
 | Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
-| Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
+| Use Pydantic AI or LangGraph | [Pydantic AI example](integrations/pydantic-ai/python) · [LangGraph example](integrations/langgraph/python) |
+| Use LangChain, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
 
 Cloned the repository and unsure which package or folder is current? Read
