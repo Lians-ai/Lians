@@ -56,6 +56,11 @@ subscriptions, API keys, and Vertex AI configurations after Google's June 18,
 connectors use a hosted HTTP connection rather than a local stdio process. Use
 a hosted Lians connector when that distribution is available.
 
+Antigravity is configured through its plugin loader, not the ordinary global
+MCP file. This is the route verified to expose invocable custom MCP tools on
+Antigravity CLI 1.1.13; see the
+[compatibility evidence](benchmarks/antigravity-cli-2026-08-14.md).
+
 ## IT and enterprise deployment
 
 The same artifact supports non-interactive deployment. Review detected paths:
