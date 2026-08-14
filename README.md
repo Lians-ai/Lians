@@ -18,6 +18,7 @@
   <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians"><img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry"></a>
   <a href="https://glama.ai/mcp/servers/Lians-ai/Lians"><img src="https://glama.ai/mcp/servers/Lians-ai/Lians/badges/score.svg" alt="Glama MCP quality score"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
+  <a href="https://github.com/Lians-ai/Lians/stargazers"><img src="https://img.shields.io/github/stars/Lians-ai/Lians?style=social" alt="Star Lians on GitHub"></a>
 </p>
 
 # Portable memory for the AI tools you already use.
@@ -34,6 +35,23 @@ The product loop is deliberately small:
 
 Lians works through MCP, plugins, and SDKs. Local mode stores memory in SQLite,
 needs no Lians account or API key, and does not lock memory to one model vendor.
+
+## Tested across real AI clients
+
+On August 14, 2026, a live hosted-MCP test stored one synthetic project memory
+through Cursor, recalled it in a separate Cursor chat, and then recalled the
+same exact codeword in a fresh Claude Code session. After confirmed deletion,
+Cursor returned no matching memory.
+
+In a separate balanced Cursor CLI stress test, bounded Lians-style context used
+**24.72% fewer provider-reported input tokens** than a 201-line always-applied
+Cursor rule while preserving all four exact answers. This is one synthetic
+large-rule workload, not a promise of universal token savings.
+
+[Read the methodology, raw aggregate evidence, and current platform blockers](docs/benchmarks/cross-agent-memory-2026-08-14.md).
+If this is the kind of portable memory you want agents to have,
+[star Lians](https://github.com/Lians-ai/Lians/stargazers) and try the
+[three-minute memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
 
 ## One product, two ways to run it
 
