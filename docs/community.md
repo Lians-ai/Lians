@@ -26,4 +26,4 @@ where the memory loop becomes confusing, slow, or unreliable.
 - Never post credentials, personal data, or confidential records.
 - No purchased stars, reciprocal-star campaigns, or manufactured engagement.
 
-See the [product roadmap](../ROADMAP.md) and [contribution guide](CONTRIBUTING.md).
+See the [product roadmap](../ROADMAP.md) and [contribution guide](../CONTRIBUTING.md).

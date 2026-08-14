@@ -257,7 +257,7 @@ python scripts/test_all.py
 ```
 
 Focused test runs and development conventions are in
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). Published package and registry
+[CONTRIBUTING.md](CONTRIBUTING.md). Published package and registry
 versions are tracked in
 [docs/published-release-status.json](docs/published-release-status.json).
 
