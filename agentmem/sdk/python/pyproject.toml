@@ -55,7 +55,7 @@ bge-onnx      = [
     "numpy>=1.26",
     "fastapi>=0.110",
     "asyncpg>=0.29",
-    "onnxruntime>=1.20,<2",
+    "onnxruntime>=1.24.3,<2",
     "tokenizers>=0.20,<1",
 ]
 mcp           = [
