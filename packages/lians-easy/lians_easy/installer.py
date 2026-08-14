@@ -191,10 +191,44 @@ def _backup(
     # datetime.UTC is unavailable on the package's supported Python 3.10.
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")  # noqa: UP017
     backup = path.with_name(f"{path.name}.lians-backup-{stamp}")
-    shutil.copy2(path, backup)
+    _write_bytes(
+        backup,
+        path.read_bytes(),
+        mode=S_IMODE(path.stat().st_mode),
+    )
     if on_created is not None:
         on_created(backup)
     return backup
+
+
+def _sync_directory(path: Path) -> None:
+    """Persist a POSIX directory entry after an atomic rename."""
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _durable_replace(source: Path, destination: Path) -> None:
+    """Atomically replace and request durable rename metadata from the OS."""
+    if os.name == "nt":
+        import ctypes
+
+        move_file = ctypes.WinDLL("kernel32", use_last_error=True).MoveFileExW
+        move_file.argtypes = (ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32)
+        move_file.restype = ctypes.c_int
+        movefile_replace_existing = 0x1
+        movefile_write_through = 0x8
+        if not move_file(
+            str(source),
+            str(destination),
+            movefile_replace_existing | movefile_write_through,
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return
+    os.replace(source, destination)
+    _sync_directory(destination.parent)
 
 
 def _write_bytes(path: Path, content: bytes, *, mode: int | None = None) -> None:
@@ -211,7 +245,7 @@ def _write_bytes(path: Path, content: bytes, *, mode: int | None = None) -> None
             shutil.copymode(path, temporary)
         elif mode is not None:
             temporary.chmod(mode)
-        os.replace(temporary, path)
+        _durable_replace(temporary, path)
         if mode is not None:
             path.chmod(mode)
     finally:
@@ -232,7 +266,7 @@ def _write_text(path: Path, content: str) -> None:
             os.fsync(handle.fileno())
         if path.exists():
             shutil.copymode(path, temporary)
-        os.replace(temporary, path)
+        _durable_replace(temporary, path)
         if (
             os.environ.get("LIANS_EASY_TEST_MODE") == "crash-recovery"
             and os.environ.get("LIANS_EASY_TEST_CRASH_AFTER_WRITE") == path.name

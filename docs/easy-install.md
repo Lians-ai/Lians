@@ -51,6 +51,11 @@ the protected originals, removes interrupted-transaction residue, and then
 retries. The frozen Windows binary passes this forced-process-exit lifecycle;
 an actual virtual-machine reboot/power-loss run remains a release gate.
 
+Journal, backup, configuration, and installed-runtime replacements flush file
+content before rename. Windows requests a write-through replacement; POSIX
+systems also flush the parent directory entry. This reduces the remaining
+power-loss risk to release-artifact and filesystem behavior.
+
 ## Cross-tool experience
 
 The preview implements the first product loop directly:

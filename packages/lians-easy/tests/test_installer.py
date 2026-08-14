@@ -222,6 +222,52 @@ def test_frozen_runtime_is_replaced_with_atomic_writer(tmp_path, monkeypatch):
     ]
 
 
+def test_durable_replace_atomically_replaces_existing_file(tmp_path):
+    source = tmp_path / "replacement.tmp"
+    destination = tmp_path / "settings.json"
+    source.write_bytes(b"complete-new-settings")
+    destination.write_bytes(b"old-settings")
+
+    installer_module._durable_replace(source, destination)
+
+    assert destination.read_bytes() == b"complete-new-settings"
+    assert not source.exists()
+
+
+def test_settings_backup_uses_the_durable_atomic_writer(tmp_path, monkeypatch):
+    source = tmp_path / "settings.json"
+    source.write_bytes(b"private-original-settings")
+    replacements = []
+    original_replace = installer_module._durable_replace
+
+    def observe_replace(temporary, destination):
+        replacements.append((temporary, destination))
+        original_replace(temporary, destination)
+
+    monkeypatch.setattr(installer_module, "_durable_replace", observe_replace)
+    backup = installer_module._backup(source)
+
+    assert backup is not None
+    assert backup.read_bytes() == source.read_bytes()
+    assert len(replacements) == 1
+    temporary, destination = replacements[0]
+    assert destination == backup
+    assert not temporary.exists()
+
+
+@pytest.mark.skipif(installer_module.os.name == "nt", reason="POSIX durability path")
+def test_posix_durable_replace_fsyncs_parent_directory(tmp_path, monkeypatch):
+    source = tmp_path / "replacement.tmp"
+    destination = tmp_path / "settings.json"
+    source.write_text("new")
+    synced = []
+    monkeypatch.setattr(installer_module, "_sync_directory", synced.append)
+
+    installer_module._durable_replace(source, destination)
+
+    assert synced == [tmp_path]
+
+
 def test_install_reports_plain_language_progress(tmp_path, monkeypatch):
     home = tmp_path / "home"
     monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))

@@ -100,6 +100,13 @@ binary passed a forced-exit harness at that point, including cleanup and
 unrelated-settings preservation. A clean virtual-machine reboot/power-loss run
 remains a generally available release gate.
 
+Critical file replacement now requests durable rename metadata as well as
+flushing file content: Windows uses `MoveFileEx` with replace and write-through,
+while POSIX systems `fsync` the parent directory after atomic rename. Settings
+backups use the same writer. This narrows the remaining power-loss gate to
+release-artifact and filesystem behavior rather than an unflushed application
+write path.
+
 ## Package architecture
 
 ```text
