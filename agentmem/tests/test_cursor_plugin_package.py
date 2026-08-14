@@ -47,7 +47,7 @@ def test_cursor_plugin_manifest_and_references_are_valid() -> None:
     assert re.search(r"^description:\s+\S", frontmatter, re.MULTILINE)
 
 
-def test_cursor_mcp_uses_immutable_dependency_free_local_server() -> None:
+def test_cursor_mcp_uses_immutable_encrypted_bridge_runtime() -> None:
     config = _json(MCP_PATH)
     assert set(config["mcpServers"]) == {"lians-memory"}
     server = config["mcpServers"]["lians-memory"]
@@ -62,6 +62,7 @@ def test_cursor_mcp_uses_immutable_dependency_free_local_server() -> None:
         "lians-easy",
         "mcp",
     ]
+    assert "9cfb46b6d191b000e38b2a5d884caa0af2cfb706" in server["args"][1]
     assert "env" not in server
 
 
@@ -75,3 +76,7 @@ def test_cursor_install_routes_cannot_drift_from_plugin_config() -> None:
     assert match is not None
     deeplink_server = json.loads(base64.b64decode(match.group(1)).decode("utf-8"))
     assert deeplink_server == plugin_server
+
+    assert "AES-GCM encrypted at rest" in readme
+    assert "DPAPI protects the local root key" in readme
+    assert "SQLite plaintext" not in readme

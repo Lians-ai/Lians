@@ -8,7 +8,7 @@ slice in a later chat.
 
 Use Cursor's official one-click MCP installer:
 
-[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvZGM5NGQ2YmZiODk0ZTVlMjViZjU1OTY5NzM4NGI1OGNlZWRkNDM0Yi56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvOWNmYjQ2YjZkMTkxYjAwMGUzOGIyYTVkODg0Y2FhMGFmMmNmYjcwNi56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
 
 The button passes the same local server configuration shown below to Cursor.
 Review it in Cursor before approving the install.
@@ -20,9 +20,12 @@ correct, and forget controls. The package is ready for repository validation;
 its presence here does not mean Cursor has approved or listed it in the public
 Marketplace yet.
 
-The native package runs the dependency-free Lians Easy MCP runtime from an
-immutable GitHub source archive. It requires `uv`, but it does not require Git,
-Python, a Lians account, or an API key.
+The native package runs the encrypted Lians Bridge MCP runtime from an immutable
+GitHub source archive. It requires `uv` and network access on first launch, but
+it does not require Git, a preinstalled Python runtime, a Lians account, or an
+API key. This package is stacked on the reviewed Bridge implementation in
+[PR #170](https://github.com/Lians-ai/Lians/pull/170); advance the immutable pin
+to the merged commit before marketplace submission.
 
 For manual setup:
 
@@ -43,10 +46,13 @@ database for its default `personal` profile:
 - macOS: `~/Library/Application Support/Lians/memory.sqlite3`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/Lians/memory.sqlite3`
 
-Point every supported AI client at Lians Easy to share that profile across
-clients on the same machine. Lians Easy stores memory content as local SQLite
-plaintext, so rely on OS account and disk protection and do not save secrets.
-Use the full encrypted Lians deployment path for regulated or sensitive data.
+Point every supported AI client at Lians Bridge to share that profile across
+clients on the same machine. Memory values are AES-GCM encrypted at rest. On
+Windows, DPAPI protects the local root key; macOS and Linux currently use an
+owner-only key file. Source, scope, timestamps, hashes, and signed context
+receipts remain inspectable by design. Credential-like values are rejected, and
+secrets should still stay in a secret manager. Use the full Lians engine when a
+deployment needs team governance, barriers, or managed key infrastructure.
 
 ## Test it in two chats
 
