@@ -29,6 +29,13 @@ this server to your client's MCP configuration:
 Restart the client. Local mode needs no Lians account, API key, or Docker
 service and stores memory in `~/.lians/mcp.db`.
 
+On a clean machine, the first memory tool may download and initialize the local
+semantic model. Progress-aware MCP clients show a warmup message. If warmup is
+still running after 90 seconds, Lians returns a retryable error and guarantees
+that the attempted write was not queued; keep the MCP server running and retry
+shortly. Model files use the Hugging Face cache controlled by `HF_HOME`. Set
+`LIANS_MCP_LOCAL_READY_TIMEOUT` to 5-600 seconds to change the bound.
+
 The starter configuration exposes `remember`, `recall`, `list_memories`,
 `correct_memory`, and confirmed `forget_memory`. Remove the
 `LIANS_MCP_ENABLED_TOOLS` setting to also expose the advanced point-in-time,

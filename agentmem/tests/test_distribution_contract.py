@@ -19,6 +19,17 @@ def test_gemini_starter_profile_is_bounded_and_requires_confirmation():
     assert server["trust"] is False
 
 
+def test_gemini_extension_uses_the_published_bounded_server():
+    extension = _json("gemini-extension.json")
+    server = extension["mcpServers"]["lians"]
+
+    assert extension["version"] == "0.5.1"
+    assert server["command"] == "uvx"
+    assert server["args"] == ["--from", "lians-sdk[mcp]==0.5.0", "lians-mcp"]
+    assert server["includeTools"] == ["remember", "recall"]
+    assert server["timeout"] == 300000
+
+
 def test_cursor_starter_profile_is_local_bounded_stdio():
     server = _json("integrations/cursor/mcp.example.json")["mcpServers"]["lians"]
 
@@ -67,3 +78,13 @@ def test_commercial_boundary_preserves_public_license_and_reserves_services():
     assert "higher managed storage, write, recall, and operational limits" in boundary
     assert "does not include a production Lians-hosted tenant" in boundary
     assert "Codex, Cursor, Claude, Gemini" in boundary
+
+
+def test_student_community_kit_uses_working_repository_asset_paths():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    kit = (ROOT / "docs/student-community-kit.md").read_text(encoding="utf-8")
+
+    assert "[student and community kit](docs/student-community-kit.md)" in readme
+    assert 'src="assets/logo-blue.png"' in kit
+    assert "[blue lotus logo](assets/logo-blue.png)" in kit
+    assert (ROOT / "docs/assets/logo-blue.png").is_file()

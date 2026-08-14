@@ -8,14 +8,17 @@
   <a href="https://www.lians.ai/">Website</a> ·
   <a href="docs/install.md">Install</a> ·
   <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
+  <a href="https://www.lians.ai/pricing">Pricing</a> ·
   <a href="https://github.com/Lians-ai/Lians/issues">Issues</a> ·
-  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a>
+  <a href="https://github.com/Lians-ai/Lians/stargazers"><strong>Star Lians</strong></a> ·
+  <a href="https://github.com/Lians-ai"><strong>Follow @Lians-ai</strong></a>
 </p>
 
 <p align="center">
   <a href="https://pypi.org/project/lians-sdk"><img src="https://img.shields.io/pypi/v/lians-sdk?label=PyPI" alt="PyPI version"></a>
   <a href="https://www.npmjs.com/package/@lians-ai/lians"><img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?label=npm" alt="npm version"></a>
   <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians"><img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry"></a>
+  <a href="https://glama.ai/mcp/servers/Lians-ai/Lians"><img src="https://glama.ai/mcp/servers/Lians-ai/Lians/badges/score.svg" alt="Glama MCP quality score"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
 </p>
 
@@ -32,35 +35,59 @@ Your agent can remember a useful fact now and recall it when it matters later.
 Lians is a memory layer, not another assistant. Your agent and model stay the
 same; Lians gives them a place to remember.
 
+## Start free. Upgrade only when it saves you time.
+
+- **Community is free:** run Lians locally or self-host it with no account,
+  API key, or software license fee.
+- **Lians Personal is $10/month:** get a managed account, a private hosted
+  memory workspace, 100,000 writes and 50,000 recalls each month, export and
+  deletion controls, and email setup support. Cancel anytime.
+
+**First-customer setup:** the first Personal customer gets a 30-minute
+founder-led setup session at no extra cost. We will connect one supported AI
+tool and run the two-chat memory test together. Purchase only when managed
+memory solves a real problem for you.
+
+[Get Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=first_customer_setup) or
+[install the free local version through MCP](#free-local-setup-add-memory-through-mcp).
+
+## Pick the AI you already use
+
+- **Cursor:** use the [one-click MCP installer](integrations/cursor).
+- **Claude Code:** paste the [two plugin commands](integrations/lians-plugin).
+- **Codex app, CLI, or IDE:** run the [one-command MCP setup](integrations/codex).
+
+All three routes use the same free local memory by default. After setup, try the
+[three-minute, two-chat memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
+
+Running a club, hackathon, class, or campus developer community? Use the
+[student and community kit](docs/student-community-kit.md) for a ready-made
+workshop, project track, judging rubric, and shareable announcement.
+
+Lians does not change the underlying model or promise fewer tokens on every
+task. It can avoid resending old conversation when a small relevant recall is
+enough; verify the result on your own workflow.
+
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second demo: remember, recall, and confirmed deletion</strong></a>
 </p>
 
-## Install Lians without a terminal
+## Simplest setup: Lians Personal
 
-Download **LiansMemory** for Windows, macOS, or Linux from
-[GitHub Releases](https://github.com/Lians-ai/Lians/releases), open it, choose
-the AI clients found on your computer, and select **Install Lians**.
+Choose Personal when you want Lians managed for you instead of maintaining a
+local memory service. It includes a private hosted workspace, 100,000 writes
+and 50,000 recalls each month, export and deletion controls, and email setup
+support for **$10/month**. Cancel anytime.
 
-The desktop setup:
+[Start Lians Personal with founder-led setup](https://www.lians.ai/upgrade?plan=starter&utm_source=github&utm_medium=readme&utm_campaign=first_customer_setup)
 
-- needs no Lians account, API key, Python installation, or model download;
-- safely backs up existing client settings before changing them;
-- gives supported clients one shared local memory profile; and
-- includes a diagnostic command and silent install mode for managed devices.
+The standalone desktop installer is still a technical preview. Signed Windows
+and notarized macOS downloads are not in the current GitHub releases, so the
+project does not present a nonexistent or unsigned download as the normal-user
+path. Developers evaluating the preview can use the
+[Lians Easy source guide](docs/easy-install.md).
 
-Restart the selected AI client, then try:
-
-```text
-Remember that I am researching sustainable packaging for independent retailers.
-```
-
-The first standalone builds support Claude Desktop, Cursor, Windsurf, Gemini
-CLI, and Codex. ChatGPT does not load local stdio MCP servers, so the installer
-does not modify ChatGPT; it requires a hosted connector. See the
-[guided install and IT deployment guide](docs/easy-install.md).
-
-## Developer setup: add memory through MCP
+## Free local setup: add memory through MCP
 
 Use this path when you prefer a package-managed MCP server or want the full
 temporal and governance engine.
@@ -92,6 +119,12 @@ Remember that this project uses Python 3.12 and pytest.
 What Python version and test runner does this project use?
 ```
 
+On a clean machine, the first memory tool may download and initialize the local
+semantic model. Lians reports that warmup to MCP clients that support progress.
+If it is still running after 90 seconds, the tool returns a retryable error and
+does not queue the write; keep the MCP server running and retry shortly. Model
+files use the Hugging Face cache controlled by `HF_HOME`.
+
 Local MCP memory is stored in `~/.lians/mcp.db`. The starter configuration
 exposes the basic loop plus the controls needed to trust it:
 
@@ -107,7 +140,8 @@ Use the exact setup guide for
 [Cursor](integrations/cursor),
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
-[Codex](plugins/lians-memory). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
+[OpenCode](integrations/opencode), or
+[Codex](integrations/codex). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
 the advanced temporal and audit tools too.
 
 ## How it works
@@ -174,9 +208,10 @@ Java, C, framework adapters, and self-hosting.
 
 | You want to... | Start with |
 |---|---|
-| Add memory without a terminal | [Lians Easy](docs/easy-install.md) |
-| Give an existing AI client memory from a terminal | [MCP setup](#developer-setup-add-memory-through-mcp) |
+| Use managed private memory without running a server | [Lians Personal — $10/month](https://www.lians.ai/upgrade?plan=starter) |
+| Give an existing AI client free local memory | [MCP setup](#free-local-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
+| Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
 | Use Pydantic AI, LangChain, LangGraph, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
 | Run the full service yourself | [Self-host Lians](docs/install.md#self-host-lians) |
@@ -231,7 +266,7 @@ python scripts/test_all.py
 ```
 
 Focused test runs and development conventions are in
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). Published package and registry
+[CONTRIBUTING.md](CONTRIBUTING.md). Published package and registry
 versions are tracked in
 [docs/published-release-status.json](docs/published-release-status.json).
 
