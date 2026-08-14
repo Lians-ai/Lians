@@ -88,3 +88,20 @@ def test_student_community_kit_uses_working_repository_asset_paths():
     assert 'src="assets/logo-blue.png"' in kit
     assert "[blue lotus logo](assets/logo-blue.png)" in kit
     assert (ROOT / "docs/assets/logo-blue.png").is_file()
+
+
+def test_supported_path_map_separates_current_preview_and_legacy_routes():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs/supported-paths.md").read_text(encoding="utf-8")
+    legacy = (ROOT / "sdk/python/README.md").read_text(encoding="utf-8")
+
+    assert "[Supported paths and repository status](docs/supported-paths.md)" in readme
+    assert '`uvx --from "lians-sdk[mcp]" lians-mcp`' in guide
+    assert '`pip install "lians-sdk[local]"`' in guide
+    assert "`agentmem/sdk/python/` | **Current and published**" in guide
+    assert "`packages/lians-easy/` | **Technical preview**" in guide
+    assert "`sdk/python/` | **Legacy**" in guide
+    assert "not a signed desktop download" in guide
+    assert "not the general local installation path" in guide
+    assert "not the supported starting point" in legacy
+    assert "[`agentmem/sdk/python`](../../agentmem/sdk/python)" in legacy
