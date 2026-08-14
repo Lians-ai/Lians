@@ -12,6 +12,11 @@ engine, verification, a retry path, and a support log. Lians should keep those
 mechanics while replacing the developer-facing presentation with a consumer
 setup flow.
 
+![Lians Bridge Windows setup showing detected AI apps, local privacy promises, and one setup action](assets/lians-bridge-setup-windows.png)
+
+*Actual frozen Windows preview at 125% display scaling. It is a technical test
+artifact until the publisher-signing gate passes.*
+
 ## What the user downloads
 
 | Audience | Primary package | Secondary path |
