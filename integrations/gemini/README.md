@@ -18,6 +18,20 @@ memory is not locked to Gemini or its model provider.
 For a manual setup, merge [`settings.example.json`](settings.example.json)
 into `~/.gemini/settings.json`.
 
+### Workspace trust
+
+Gemini CLI intentionally does not start user-level stdio MCP servers from an
+untrusted folder. If `/mcp list` or `gemini mcp list` shows `lians` as disabled
+or disconnected after installation, review the current folder and run
+`gemini trust` to trust that workspace interactively, then check the list again.
+
+For a single session or a disposable test environment, Gemini also supports
+`--skip-trust` and `GEMINI_CLI_TRUST_WORKSPACE=true`. These options bypass the
+folder trust check, so do not use them as a blanket replacement for reviewing
+and trusting the intended workspace. See Gemini CLI's
+[MCP server documentation](https://geminicli.com/docs/tools/mcp-server/#listing-servers-gemini-mcp-list)
+and [configuration reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md#environment-variables-and-env-files).
+
 The Community starter profile exposes only two tools:
 
 - `remember` stores durable information that should survive future sessions.
