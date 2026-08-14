@@ -188,3 +188,23 @@ def test_plan_reports_targets_without_writing(tmp_path, monkeypatch):
     assert result["changes_made"] is False
     assert result["clients"][0]["key"] == "codex"
     assert not (home / ".codex" / "config.toml").exists()
+
+
+def test_install_reports_plain_language_progress(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+    events = []
+
+    install(["cursor", "codex"], home=home, on_progress=lambda stage, detail: events.append((stage, detail)))
+
+    assert [stage for stage, _ in events] == [
+        "protecting",
+        "connecting",
+        "connecting",
+        "verifying",
+        "complete",
+    ]
+    assert events[0][1] == "Protecting your existing settings"
+    assert events[1][1] == "Connecting Cursor"
+    assert events[2][1] == "Connecting Codex"
+    assert events[-1][1] == "Lians is ready"

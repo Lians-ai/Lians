@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -341,17 +342,29 @@ def _toml_config(path: Path, command: str, args: list[str]) -> Path | None:
     return backup
 
 
-def install(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
+def install(
+    keys: list[str],
+    *,
+    home: Path | None = None,
+    on_progress: Callable[[str, str], None] | None = None,
+) -> dict[str, Any]:
     home = home or Path.home()
     targets = client_targets(home)
     unknown = sorted(set(keys) - set(targets))
     if unknown:
         raise ValueError("Unknown clients: " + ", ".join(unknown))
+
+    def progress(stage: str, detail: str) -> None:
+        if on_progress is not None:
+            on_progress(stage, detail)
+
+    progress("protecting", "Protecting your existing settings")
     _install_runtime()
     command, args = runtime_command()
     results = []
     for key in keys:
         target = targets[key]
+        progress("connecting", f"Connecting {target.label}")
         backup = (
             _toml_config(target.config_path, command, args)
             if target.kind == "toml"
@@ -378,6 +391,13 @@ def install(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
         if key == "cursor":
             item["recall_mode"] = "always-applied project rule, refreshed after memory changes"
         results.append(item)
+
+    progress("verifying", "Checking that memory is ready")
+    configured = client_targets(home)
+    missing = [targets[key].label for key in keys if not configured[key].configured]
+    if missing:
+        raise RuntimeError("Lians could not verify: " + ", ".join(missing))
+    progress("complete", "Lians is ready")
     return {
         "status": "installed",
         "clients": results,

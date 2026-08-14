@@ -1,5 +1,10 @@
 # Lians Bridge desktop preview
 
+The intended generally available package and nontechnical first-run contract
+are defined in [the consumer installer contract](consumer-installer.md). The
+current preview exercises the same Bridge and client configuration engine but
+does not yet satisfy its signing and release gates.
+
 Lians Bridge is a technical preview for carrying private, local memory across
 supported AI clients. It is deliberately smaller than the full Lians engine.
 There is no account, API key, database server, or embedding-model download.

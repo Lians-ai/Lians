@@ -1,86 +1,463 @@
-"""Guided desktop installer for nontechnical users."""
+"""Guided desktop setup for people who should never need a terminal."""
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
+from typing import Any
 
-from .installer import client_targets, install
+from .installer import ClientTarget, client_targets, install, user_data_dir
+
+BACKGROUND = "#05070b"
+PANEL = "#0b1019"
+PANEL_SOFT = "#111827"
+LINE = "#273247"
+TEXT = "#f4f7fb"
+MUTED = "#9ba8ba"
+BLUE = "#3777ff"
+BLUE_SOFT = "#13244a"
+GREEN = "#4fe0a0"
+RED = "#ff6d83"
+
+
+class SetupApp:
+    """A small consumer setup flow with progressive technical disclosure."""
+
+    def __init__(self, root: tk.Tk) -> None:
+        self.root = root
+        self.targets = client_targets()
+        self.choices: dict[str, tk.BooleanVar] = {}
+        self.step_labels: dict[str, tk.Label] = {}
+        self.other_rows: list[tk.Widget] = []
+        self.details_visible = False
+        self.other_visible = False
+
+        self.root.title("Lians Setup")
+        self.root.geometry("780x720")
+        self.root.minsize(680, 640)
+        self.root.configure(background=BACKGROUND)
+        self.root.option_add("*Font", ("Segoe UI", 10))
+
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure(
+            "Lians.Horizontal.TProgressbar",
+            troughcolor=PANEL_SOFT,
+            background=BLUE,
+            bordercolor=PANEL_SOFT,
+            lightcolor=BLUE,
+            darkcolor=BLUE,
+        )
+
+        self.shell = tk.Frame(root, background=BACKGROUND, padx=44, pady=34)
+        self.shell.pack(fill="both", expand=True)
+        self._build_setup()
+
+    def _label(self, parent: tk.Widget, text: str = "", **kwargs: Any) -> tk.Label:
+        return tk.Label(parent, text=text, background=kwargs.pop("background", BACKGROUND), **kwargs)
+
+    def _build_setup(self) -> None:
+        for child in self.shell.winfo_children():
+            child.destroy()
+
+        top = tk.Frame(self.shell, background=BACKGROUND)
+        top.pack(fill="x")
+        self._label(
+            top,
+            "LIANS",
+            foreground=BLUE,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(side="left")
+        self._label(
+            top,
+            "PRIVATE ON THIS DEVICE",
+            foreground=GREEN,
+            font=("Segoe UI", 9, "bold"),
+        ).pack(side="right")
+
+        self._label(
+            self.shell,
+            "Give every AI app the same memory.",
+            foreground=TEXT,
+            font=("Segoe UI", 25, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(24, 8))
+        self._label(
+            self.shell,
+            (
+                "Lians carries your preferences and useful project context between the AI "
+                "apps you already use. No account, API key, or technical setup required."
+            ),
+            foreground=MUTED,
+            font=("Segoe UI", 11),
+            justify="left",
+            wraplength=680,
+            anchor="w",
+        ).pack(fill="x", pady=(0, 24))
+
+        self.card = tk.Frame(
+            self.shell,
+            background=PANEL,
+            highlightbackground=LINE,
+            highlightthickness=1,
+            padx=24,
+            pady=22,
+        )
+        self.card.pack(fill="both", expand=True)
+
+        detected = [target for target in self.targets.values() if target.detected]
+        detected_text = (
+            f"We found {len(detected)} AI app{'s' if len(detected) != 1 else ''}"
+            if detected
+            else "Choose the AI apps you use"
+        )
+        self._label(
+            self.card,
+            detected_text,
+            background=PANEL,
+            foreground=TEXT,
+            font=("Segoe UI", 13, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        self._label(
+            self.card,
+            "Connect at least two to experience memory moving between them.",
+            background=PANEL,
+            foreground=MUTED,
+            anchor="w",
+        ).pack(fill="x", pady=(4, 14))
+
+        app_list = tk.Frame(self.card, background=PANEL)
+        app_list.pack(fill="x")
+        for target in self.targets.values():
+            variable = tk.BooleanVar(value=target.detected or target.configured)
+            self.choices[target.key] = variable
+            row = self._client_row(app_list, target, variable)
+            if detected and not target.detected and not target.configured:
+                row.pack_forget()
+                self.other_rows.append(row)
+
+        if self.other_rows:
+            self.other_button = tk.Button(
+                self.card,
+                text="+ Add another AI app",
+                command=self._toggle_other_apps,
+                background=PANEL,
+                foreground=BLUE,
+                activebackground=PANEL,
+                activeforeground=TEXT,
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                anchor="w",
+                padx=0,
+                pady=8,
+            )
+            self.other_button.pack(fill="x", pady=(6, 0))
+
+        trust = tk.Frame(self.card, background=PANEL_SOFT, padx=14, pady=12)
+        trust.pack(fill="x", pady=(14, 14))
+        for copy in (
+            "Memory stays encrypted on this computer",
+            "Existing settings are backed up before Lians changes them",
+            "Pause, correct, or permanently forget a memory whenever you want",
+        ):
+            self._label(
+                trust,
+                f"  {copy}",
+                background=PANEL_SOFT,
+                foreground=MUTED,
+                anchor="w",
+            ).pack(fill="x", pady=2)
+
+        self.progress_frame = tk.Frame(self.card, background=PANEL)
+        self.progress_bar = ttk.Progressbar(
+            self.progress_frame,
+            style="Lians.Horizontal.TProgressbar",
+            maximum=100,
+            value=0,
+        )
+        self.progress_bar.pack(fill="x", pady=(0, 12))
+        steps = (
+            ("protecting", "Protect your existing settings"),
+            ("connecting", "Connect your AI apps"),
+            ("verifying", "Check that memory is ready"),
+        )
+        for key, copy in steps:
+            label = self._label(
+                self.progress_frame,
+                f"○  {copy}",
+                background=PANEL,
+                foreground=MUTED,
+                anchor="w",
+            )
+            label.pack(fill="x", pady=2)
+            self.step_labels[key] = label
+
+        self.status = tk.StringVar(value="Ready to connect")
+        self.status_label = self._label(
+            self.card,
+            textvariable=self.status,
+            background=PANEL,
+            foreground=MUTED,
+            anchor="w",
+        )
+        self.status_label.pack(fill="x", pady=(2, 8))
+
+        actions = tk.Frame(self.card, background=PANEL)
+        actions.pack(fill="x")
+        self.install_button = tk.Button(
+            actions,
+            text="Set up Lians",
+            command=self._start_install,
+            background=BLUE,
+            foreground="white",
+            activebackground="#2e67de",
+            activeforeground="white",
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=("Segoe UI", 11, "bold"),
+            padx=24,
+            pady=11,
+        )
+        self.install_button.pack(side="left")
+        tk.Button(
+            actions,
+            text="Technical details",
+            command=self._toggle_details,
+            background=PANEL,
+            foreground=MUTED,
+            activebackground=PANEL,
+            activeforeground=TEXT,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=18,
+            pady=11,
+        ).pack(side="left")
+
+        self.details = self._label(
+            self.card,
+            self._technical_details(),
+            background=PANEL_SOFT,
+            foreground=MUTED,
+            justify="left",
+            wraplength=620,
+            anchor="w",
+            padx=14,
+            pady=12,
+        )
+
+    def _client_row(
+        self, parent: tk.Widget, target: ClientTarget, variable: tk.BooleanVar
+    ) -> tk.Frame:
+        row = tk.Frame(parent, background=PANEL, pady=4)
+        row.pack(fill="x")
+        check = tk.Checkbutton(
+            row,
+            text=target.label,
+            variable=variable,
+            background=PANEL,
+            foreground=TEXT,
+            activebackground=PANEL,
+            activeforeground=TEXT,
+            selectcolor=BLUE_SOFT,
+            font=("Segoe UI", 10, "bold"),
+            anchor="w",
+            cursor="hand2",
+        )
+        check.pack(side="left")
+        state = "Connected" if target.configured else "Found" if target.detected else "Not found yet"
+        color = GREEN if target.configured else BLUE if target.detected else MUTED
+        self._label(
+            row,
+            state,
+            background=PANEL,
+            foreground=color,
+            font=("Segoe UI", 9),
+        ).pack(side="right")
+        return row
+
+    def _toggle_other_apps(self) -> None:
+        self.other_visible = not self.other_visible
+        for row in self.other_rows:
+            if self.other_visible:
+                row.pack(fill="x")
+            else:
+                row.pack_forget()
+        self.other_button.configure(
+            text="Hide other apps" if self.other_visible else "+ Add another AI app"
+        )
+
+    def _toggle_details(self) -> None:
+        self.details_visible = not self.details_visible
+        if self.details_visible:
+            self.details.pack(fill="x", pady=(14, 0))
+        else:
+            self.details.pack_forget()
+
+    def _technical_details(self) -> str:
+        paths = [
+            f"{target.label}: {target.config_path}"
+            for target in self.targets.values()
+            if target.detected or target.configured
+        ]
+        detected = "\n".join(paths) if paths else "No supported app settings found yet."
+        return (
+            "What setup changes\n"
+            "Lians adds a local memory connection only to the apps you select. It does not "
+            "install Git, Python, build tools, or a model. Existing files are backed up first.\n\n"
+            f"Encrypted memory: {user_data_dir() / 'memory.sqlite3'}\n"
+            f"Detected settings:\n{detected}"
+        )
+
+    def _start_install(self) -> None:
+        selected = [key for key, value in self.choices.items() if value.get()]
+        if not selected:
+            self.status.set("Choose at least one AI app to continue.")
+            return
+
+        self.install_button.configure(state="disabled", text="Setting up...")
+        self.progress_frame.pack(fill="x", pady=(0, 10), before=self.status_label)
+        self._update_progress("protecting", "Protecting your existing settings")
+
+        def worker() -> None:
+            try:
+                result = install(selected, on_progress=self._queue_progress)
+            except (OSError, RuntimeError, TypeError, ValueError) as error:
+                self.root.after(0, self._show_error, str(error))
+                return
+            self.root.after(0, lambda: self._show_success(result))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _queue_progress(self, stage: str, detail: str) -> None:
+        self.root.after(0, lambda: self._update_progress(stage, detail))
+
+    def _update_progress(self, stage: str, detail: str) -> None:
+        order = ("protecting", "connecting", "verifying")
+        values = {"protecting": 18, "connecting": 55, "verifying": 84, "complete": 100}
+        current = order.index(stage) if stage in order else len(order)
+        for index, key in enumerate(order):
+            label = self.step_labels[key]
+            copy = label.cget("text")[3:]
+            if index < current or stage == "complete":
+                label.configure(text=f"●  {copy}", foreground=GREEN)
+            elif index == current:
+                label.configure(text=f"●  {copy}", foreground=BLUE)
+            else:
+                label.configure(text=f"○  {copy}", foreground=MUTED)
+        self.progress_bar.configure(value=values.get(stage, 0))
+        self.status.set(detail)
+
+    def _show_error(self, detail: str) -> None:
+        self.status.set("Setup did not finish. Your existing settings have backups.")
+        self.install_button.configure(state="normal", text="Try again")
+        self.details.configure(
+            text=f"Setup report\n{detail}\n\n{self._technical_details()}", foreground=RED
+        )
+        if not self.details_visible:
+            self._toggle_details()
+
+    def _show_success(self, result: dict[str, Any]) -> None:
+        for child in self.card.winfo_children():
+            child.destroy()
+
+        connected = ", ".join(item["label"] for item in result["clients"])
+        self._label(
+            self.card,
+            "Memory is ready.",
+            background=PANEL,
+            foreground=GREEN,
+            font=("Segoe UI", 22, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        self._label(
+            self.card,
+            f"Lians connected {connected}.",
+            background=PANEL,
+            foreground=TEXT,
+            font=("Segoe UI", 11),
+            anchor="w",
+            wraplength=620,
+        ).pack(fill="x", pady=(8, 22))
+
+        try_card = tk.Frame(self.card, background=BLUE_SOFT, padx=18, pady=16)
+        try_card.pack(fill="x")
+        self._label(
+            try_card,
+            "Try the cross-app memory moment",
+            background=BLUE_SOFT,
+            foreground=TEXT,
+            font=("Segoe UI", 12, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        self._label(
+            try_card,
+            (
+                "1. Restart the connected AI apps.\n"
+                "2. In one app, say: Remember that we use FastAPI and never write migrations manually.\n"
+                "3. Start a new task in another app and ask: What are our project rules?"
+            ),
+            background=BLUE_SOFT,
+            foreground=MUTED,
+            justify="left",
+            wraplength=590,
+            anchor="w",
+        ).pack(fill="x", pady=(10, 14))
+        tk.Button(
+            try_card,
+            text="Copy the first prompt",
+            command=lambda: self._copy(
+                "Remember that we use FastAPI and never write migrations manually."
+            ),
+            background=BLUE,
+            foreground="white",
+            activebackground="#2e67de",
+            activeforeground="white",
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=16,
+            pady=8,
+        ).pack(anchor="w")
+
+        self._label(
+            self.card,
+            (
+                "When a memory appears, Lians shows a small receipt with what was used, "
+                "why it was selected, the project, and its estimated token cost."
+            ),
+            background=PANEL,
+            foreground=MUTED,
+            justify="left",
+            wraplength=620,
+            anchor="w",
+        ).pack(fill="x", pady=(20, 20))
+        tk.Button(
+            self.card,
+            text="Finish",
+            command=self.root.destroy,
+            background=BLUE,
+            foreground="white",
+            activebackground="#2e67de",
+            activeforeground="white",
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=("Segoe UI", 11, "bold"),
+            padx=24,
+            pady=10,
+        ).pack(anchor="w")
+
+    def _copy(self, value: str) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(value)
 
 
 def launch() -> None:
     root = tk.Tk()
-    root.title("Lians Memory Setup")
-    root.geometry("620x560")
-    root.minsize(560, 500)
-
-    frame = ttk.Frame(root, padding=28)
-    frame.pack(fill="both", expand=True)
-    ttk.Label(frame, text="Give your AI a memory", font=("Segoe UI", 21, "bold")).pack(anchor="w")
-    ttk.Label(
-        frame,
-        text=(
-            "Lians saves useful facts locally and recalls only what matters. "
-            "No account, API key, model download, or configuration editing required."
-        ),
-        wraplength=550,
-    ).pack(anchor="w", pady=(10, 22))
-    ttk.Label(frame, text="Choose where to add Lians", font=("Segoe UI", 12, "bold")).pack(
-        anchor="w"
-    )
-
-    targets = client_targets()
-    choices: dict[str, tk.BooleanVar] = {}
-    for target in targets.values():
-        variable = tk.BooleanVar(value=target.detected)
-        choices[target.key] = variable
-        status_label = "configured" if target.configured else "found" if target.detected else ""
-        label = target.label + (f"  ({status_label})" if status_label else "")
-        ttk.Checkbutton(frame, text=label, variable=variable).pack(anchor="w", pady=5)
-
-    note = ttk.Label(
-        frame,
-        text=(
-            "Your memory stays on this computer. Existing configuration files are backed up. "
-            "ChatGPT requires a hosted connector and is not changed by this installer."
-        ),
-        wraplength=550,
-        foreground="#555555",
-    )
-    note.pack(anchor="w", pady=(18, 16))
-    status = tk.StringVar(value="Ready")
-    ttk.Label(frame, textvariable=status).pack(anchor="w", pady=(0, 8))
-
-    def begin_install() -> None:
-        selected = [key for key, value in choices.items() if value.get()]
-        if not selected:
-            messagebox.showinfo("Choose an AI client", "Select at least one AI client first.")
-            return
-        button.configure(state="disabled")
-        status.set("Installing Lians and backing up your settings…")
-        root.update_idletasks()
-        try:
-            result = install(selected)
-        except (OSError, TypeError, ValueError) as error:
-            failed(str(error))
-            return
-        finished(result["next_step"])
-
-    def failed(detail: str) -> None:
-        status.set("Setup could not finish.")
-        button.configure(state="normal")
-        messagebox.showerror("Lians setup", detail)
-
-    def finished(next_step: str) -> None:
-        status.set("Lians is installed.")
-        button.configure(text="Installed", state="disabled")
-        messagebox.showinfo("Lians is ready", next_step)
-
-    button = ttk.Button(frame, text="Install Lians", command=begin_install)
-    button.pack(anchor="w", ipadx=20, ipady=8)
-    ttk.Label(
-        frame,
-        text="After restarting your AI client, try: “Remember that I am researching sustainable packaging.”",
-        wraplength=550,
-    ).pack(anchor="w", pady=(22, 0))
+    SetupApp(root)
     root.mainloop()
