@@ -19,6 +19,7 @@ def test_installer_preserves_json_and_creates_backup(tmp_path, monkeypatch):
     config.parent.mkdir(parents=True)
     config.write_text(json.dumps({"theme": "dark", "mcpServers": {"other": {"command": "x"}}}))
     monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr("lians_easy.installer.shutil.which", lambda _name: None)
     monkeypatch.setenv("APPDATA", str(roaming))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
 
