@@ -7,7 +7,8 @@ self-hosted Lians server.
 ## Existing AI client: use MCP
 
 This is the recommended path for Claude Desktop, Cursor, Windsurf, VS Code,
-Gemini CLI, and other MCP-compatible agents.
+Antigravity CLI, supported Gemini CLI deployments, and other MCP-compatible
+agents.
 
 Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/), then add
 this server to your client's MCP configuration:
@@ -44,6 +45,7 @@ reconstruction, lineage, conflict, and backtest tools.
 Client-specific examples:
 
 - [Cursor](../integrations/cursor)
+- [Antigravity CLI](../integrations/antigravity)
 - [Gemini CLI](../integrations/gemini)
 - [Claude Code](../integrations/lians-plugin)
 - [Codex](../plugins/lians-memory)

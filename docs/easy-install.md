@@ -58,13 +58,22 @@ The core tools are intentionally understandable:
 
 ## Supported clients
 
-The first desktop release configures Claude Desktop, Cursor, Windsurf, Gemini
-CLI, Codex, Cline CLI, and OpenCode. Cline CLI uses its documented settings file
-at `~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its documented
-global configuration at `~/.config/opencode/opencode.json`. Lians Easy does not
-modify ChatGPT because ChatGPT connectors use a hosted HTTP connection rather
-than a local stdio process. Use a hosted Lians connector when that distribution
-is available.
+The first desktop release configures Claude Desktop, Cursor, Windsurf,
+Antigravity CLI, Gemini CLI, Codex, Cline CLI, and OpenCode. Choose Antigravity for a consumer Google
+account. The Gemini CLI target is for supported Standard or Enterprise
+subscriptions, API keys, and Vertex AI configurations after Google's June 18,
+2026 consumer-login retirement. It does not modify ChatGPT because ChatGPT
+connectors use a hosted HTTP connection rather than a local stdio process. Use
+a hosted Lians connector when that distribution is available.
+
+Cline CLI uses its documented settings file at
+`~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its documented
+global configuration at `~/.config/opencode/opencode.json`.
+
+Antigravity is configured through its plugin loader, not the ordinary global
+MCP file. This is the route verified to expose invocable custom MCP tools on
+Antigravity CLI 1.1.13; see the
+[compatibility evidence](benchmarks/antigravity-cli-2026-08-14.md).
 
 ## IT and enterprise deployment
 
@@ -77,19 +86,19 @@ LiansMemory doctor --json
 Preview an exact install without writing anything:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex,cline --plan --json
+LiansMemory install --clients claude,cursor,antigravity,codex,cline,opencode --plan --json
 ```
 
 Install for selected clients:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex,cline --yes --json
+LiansMemory install --clients claude,cursor,antigravity,codex,cline,opencode --yes --json
 ```
 
 Remove the managed client entries while preserving the user's memory database:
 
 ```bash
-LiansMemory uninstall --clients claude,cursor,codex,cline --yes --json
+LiansMemory uninstall --clients claude,cursor,antigravity,codex,cline,opencode --yes --json
 ```
 
 Every write is idempotent and creates a timestamped backup when a configuration
