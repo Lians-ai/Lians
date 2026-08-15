@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import errno
 import hmac
+import json
+import math
 import os
 import platform
+import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -35,6 +38,12 @@ from .sync_http import OpaqueSyncHTTPClient, SyncCloudError
 
 _PROCESS_LOCKS: dict[str, threading.Lock] = {}
 _PROCESS_LOCKS_GUARD = threading.Lock()
+_RETRY_STATE_VERSION = 1
+_RETRY_STATE_MAX_BYTES = 1024
+_RETRY_BASE_SECONDS = 5
+_RETRY_CAP_SECONDS = 300
+_RETRY_MAX_FAILURES = 32
+_RETRYABLE_SYNC_ERRORS = (CloudAuthError, OSError, SyncCloudError)
 
 
 def _process_lock(path: Path) -> threading.Lock:
@@ -99,14 +108,17 @@ class CloudSyncService:
         state_path: str | Path | None = None,
         device_name: str | None = None,
         client_factory: Any = OpaqueSyncHTTPClient,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self.store = store
         self.auth = auth
         self.state_path = Path(state_path or store.path.with_name("sync-state.json")).expanduser()
         self.lock_path = self.state_path.with_name(f".{self.state_path.name}.lock")
         self.pending_path = self.state_path.with_name("pending-device-enrollment.json")
+        self.retry_path = self.state_path.with_name("cloud-retry.json")
         self.device_name = (device_name or platform.node() or "This device")[:80]
         self._client_factory = client_factory
+        self._clock = clock
         self._lock = _process_lock(self.lock_path)
 
     @classmethod
@@ -161,14 +173,129 @@ class CloudSyncService:
             }
         return status
 
+    def _load_retry(self) -> dict[str, int | float] | None:
+        """Read a bounded, non-secret retry marker and fail open if it is invalid."""
+
+        try:
+            with self.retry_path.open("rb") as handle:
+                encoded = handle.read(_RETRY_STATE_MAX_BYTES + 1)
+            if not encoded or len(encoded) > _RETRY_STATE_MAX_BYTES:
+                return None
+            document = json.loads(encoded)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return None
+        if not isinstance(document, dict) or set(document) != {
+            "version",
+            "failures",
+            "retry_after",
+        }:
+            return None
+        version = document.get("version")
+        failures = document.get("failures")
+        retry_after = document.get("retry_after")
+        if (
+            type(version) is not int
+            or version != _RETRY_STATE_VERSION
+            or type(failures) is not int
+            or not 1 <= failures <= _RETRY_MAX_FAILURES
+            or type(retry_after) not in {int, float}
+            or not math.isfinite(retry_after)
+            or not 0 <= retry_after <= 10**12
+        ):
+            return None
+        return {"failures": failures, "retry_after": float(retry_after)}
+
+    def _retry_status(self) -> dict[str, int | bool]:
+        retry = self._load_retry()
+        if retry is None:
+            return {"active": False, "failures": 0, "retry_after_seconds": 0}
+        remaining = max(0, math.ceil(float(retry["retry_after"]) - self._clock()))
+        return {
+            "active": remaining > 0,
+            "failures": int(retry["failures"]),
+            "retry_after_seconds": remaining,
+        }
+
+    def _record_retry(self) -> None:
+        """Persist cross-process exponential backoff without storing cloud details."""
+
+        previous = self._load_retry()
+        failures = min(
+            int(previous["failures"]) + 1 if previous is not None else 1,
+            _RETRY_MAX_FAILURES,
+        )
+        exponent = min(failures - 1, 30)
+        delay = min(_RETRY_BASE_SECONDS * (2**exponent), _RETRY_CAP_SECONDS)
+        document = json.dumps(
+            {
+                "version": _RETRY_STATE_VERSION,
+                "failures": failures,
+                "retry_after": self._clock() + delay,
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        if len(document) > _RETRY_STATE_MAX_BYTES:
+            return
+        temporary: Path | None = None
+        descriptor: int | None = None
+        try:
+            self.retry_path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{self.retry_path.name}.",
+                suffix=".tmp",
+                dir=self.retry_path.parent,
+            )
+            temporary = Path(temporary_name)
+            with os.fdopen(descriptor, "wb") as handle:
+                descriptor = None
+                handle.write(document)
+                handle.flush()
+                os.fsync(handle.fileno())
+            if os.name != "nt":
+                temporary.chmod(0o600)
+            os.replace(temporary, self.retry_path)
+        except OSError:
+            # Retry metadata must never replace the original cloud failure or
+            # make a successful local memory operation fail.
+            pass
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def _clear_retry(self) -> None:
+        try:
+            self.retry_path.unlink(missing_ok=True)
+        except OSError:
+            # A stale marker can only delay automatic cloud work; manual Sync
+            # remains available and local memory is never affected.
+            pass
+
+    def _automatic_retry_pause(self) -> dict[str, Any] | None:
+        retry = self._retry_status()
+        if not retry["active"]:
+            return None
+        return {
+            "state": "pending",
+            "attempted": False,
+            "pending": True,
+            "retry_after_seconds": retry["retry_after_seconds"],
+            "message": "Working locally for now. Encrypted cloud sync will retry automatically.",
+        }
+
     def status(self) -> dict[str, Any]:
         auth_status = self._auth_status()
+        retry = self._retry_status()
         if not self.state_path.exists():
             return {
                 **auth_status,
                 "sync_state": "not_started",
                 "head_revision": 0,
                 "device_count": 1,
+                "sync_retry": retry,
             }
         try:
             state = self._load(self._identity())
@@ -178,6 +305,7 @@ class CloudSyncService:
                 "state": "needs_attention",
                 "sync_state": "invalid",
                 "message": "Local cloud-sync state needs repair before syncing.",
+                "sync_retry": retry,
             }
         assert state is not None
         return {
@@ -185,6 +313,7 @@ class CloudSyncService:
             "sync_state": "ready",
             "head_revision": state.head_revision,
             "device_count": len(state.active_devices),
+            "sync_retry": retry,
         }
 
     @staticmethod
@@ -444,9 +573,7 @@ class CloudSyncService:
                     raise SyncProtocolError("Cloud device registry does not match signed trust")
                 if device_state == "active":
                     if state.active_devices.get(device_id) != descriptor:
-                        raise SyncProtocolError(
-                            "Cloud device registry does not match signed trust"
-                        )
+                        raise SyncProtocolError("Cloud device registry does not match signed trust")
                 elif device_id not in state.revoked_device_ids:
                     # A device enrolled after an older rotation has no local
                     # trust path for that historical descriptor. Do not turn a
@@ -619,18 +746,24 @@ class CloudSyncService:
         """Apply remote revisions without publishing an unchanged local snapshot."""
 
         with self._exclusive():
-            if self.auth.status()["state"] not in {"connected", "refresh_required"}:
-                raise ValueError("Sign in to Lians Cloud before syncing")
-            identity = self._identity()
-            state = self._load(identity)
-            if state is None:
-                return {
-                    "state": "not_started",
-                    "revisions_pulled": 0,
-                    "head_revision": 0,
-                    "message": "Cloud sync will start after the first saved memory.",
-                }
-            pulled = self._pull(self._client(), state, identity)
+            try:
+                if self.auth.status()["state"] not in {"connected", "refresh_required"}:
+                    raise ValueError("Sign in to Lians Cloud before syncing")
+                identity = self._identity()
+                state = self._load(identity)
+                if state is None:
+                    self._clear_retry()
+                    return {
+                        "state": "not_started",
+                        "revisions_pulled": 0,
+                        "head_revision": 0,
+                        "message": "Cloud sync will start after the first saved memory.",
+                    }
+                pulled = self._pull(self._client(), state, identity)
+            except _RETRYABLE_SYNC_ERRORS:
+                self._record_retry()
+                raise
+            self._clear_retry()
             return {
                 "state": "current",
                 "revisions_pulled": pulled,
@@ -649,9 +782,13 @@ class CloudSyncService:
                 "attempted": False,
                 "revisions_pulled": 0,
             }
+        paused = self._automatic_retry_pause()
+        if paused is not None:
+            return {**paused, "revisions_pulled": 0}
         try:
             return {**self.pull_now(), "attempted": True}
         except DeviceRevokedError:
+            self._clear_retry()
             return {
                 "state": "device_removed",
                 "attempted": True,
@@ -670,34 +807,39 @@ class CloudSyncService:
         """Pull, validate, merge, and publish one encrypted full-state revision."""
 
         with self._exclusive():
-            if self.auth.status()["state"] not in {"connected", "refresh_required"}:
-                raise ValueError("Sign in to Lians Cloud before syncing")
-            identity = self._identity()
-            state = self._load(identity)
-            client = self._client()
-            created = state is None
-            if state is None:
-                state = SyncState.create(identity)
-                client.create_workspace(state)
-                self._save(state, identity)
+            try:
+                if self.auth.status()["state"] not in {"connected", "refresh_required"}:
+                    raise ValueError("Sign in to Lians Cloud before syncing")
+                identity = self._identity()
+                state = self._load(identity)
+                client = self._client()
+                created = state is None
+                if state is None:
+                    state = SyncState.create(identity)
+                    client.create_workspace(state)
+                    self._save(state, identity)
 
-            pulled = self._pull(client, state, identity)
-            pushed = False
-            # A bounded retry handles one writer that advanced the head between
-            # our pull and push. Divergent edits still fail atomically in merge.
-            for attempt in range(2):
-                revision = prepare_revision(self.store, state, identity)
-                try:
-                    client.push(state.workspace_id, revision)
-                except SyncPreconditionError:
-                    if attempt:
-                        raise
-                    pulled += self._pull(client, state, identity)
-                    continue
-                acknowledge_revision(state, revision)
-                self._save(state, identity)
-                pushed = True
-                break
+                pulled = self._pull(client, state, identity)
+                pushed = False
+                # A bounded retry handles one writer that advanced the head between
+                # our pull and push. Divergent edits still fail atomically in merge.
+                for attempt in range(2):
+                    revision = prepare_revision(self.store, state, identity)
+                    try:
+                        client.push(state.workspace_id, revision)
+                    except SyncPreconditionError:
+                        if attempt:
+                            raise
+                        pulled += self._pull(client, state, identity)
+                        continue
+                    acknowledge_revision(state, revision)
+                    self._save(state, identity)
+                    pushed = True
+                    break
+            except _RETRYABLE_SYNC_ERRORS:
+                self._record_retry()
+                raise
+            self._clear_retry()
             return {
                 "state": "synced",
                 "workspace_created": created,
@@ -720,6 +862,9 @@ class CloudSyncService:
                 "memory_scope": "local",
                 "pending": needs_retry,
             }
+        paused = self._automatic_retry_pause()
+        if paused is not None:
+            return {**paused, "memory_scope": "local"}
         try:
             return {
                 **self.sync_now(),
@@ -728,14 +873,13 @@ class CloudSyncService:
                 "pending": False,
             }
         except DeviceRevokedError:
+            self._clear_retry()
             return {
                 "state": "device_removed",
                 "attempted": True,
                 "memory_scope": "local",
                 "pending": False,
-                "message": (
-                    "Saved locally. This device no longer receives future cloud memory."
-                ),
+                "message": ("Saved locally. This device no longer receives future cloud memory."),
             }
         except (CloudAuthError, OSError, SyncCloudError, SyncProtocolError, ValueError):
             return {
@@ -843,26 +987,31 @@ class CloudSyncService:
         }
 
     def delete_cloud_memory(self, *, confirmed: bool = False) -> dict[str, Any]:
-        """Delete the exact remote workspace, then remove its local key state."""
+        """Delete all account-scoped sync objects, then remove local key state."""
 
         if not confirmed:
             raise ValueError("Cloud memory deletion requires confirmed=true")
         with self._exclusive():
-            identity = self._identity()
-            state = self._load(identity)
-            if state is None:
-                raise LookupError("No Lians Cloud workspace is connected")
-            result = self._client().delete_workspace(state.workspace_id, confirmed=True)
+            if self.auth.status()["state"] not in {"connected", "refresh_required"}:
+                raise ValueError("Sign in to Lians Cloud before deleting cloud data")
+            result = self._client().delete_account_data(confirmed=True)
             self.state_path.unlink(missing_ok=True)
+            self.pending_path.unlink(missing_ok=True)
+            self._clear_retry()
             self.auth.sign_out(confirmed=True)
             return {
                 "state": "deleted",
                 "local_memory_preserved": True,
                 "sync_turned_off": True,
+                "workspaces_deleted": result.get("workspaces_deleted", 0),
                 "encrypted_revisions_deleted": result.get("encrypted_revisions_deleted", 0),
-                "devices_deleted": result.get("devices_deleted", 0),
+                "devices_deleted": result.get(
+                    "device_records_deleted",
+                    result.get("devices_deleted", 0),
+                ),
+                "device_enrollments_deleted": result.get("enrollment_records_deleted", 0),
                 "message": (
-                    "Encrypted cloud memory was deleted and sync was turned off. "
+                    "All encrypted Lians cloud data was deleted and sync was turned off. "
                     "Local memory remains here."
                 ),
             }

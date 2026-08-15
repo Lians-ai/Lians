@@ -107,6 +107,8 @@ revision, and their approved internal registry.
 The Windows consumer job is disabled by default. Before setting the repository
 variable `PUBLISH_SIGNED_LIANS_DESKTOP=true`, configure:
 
+- protected GitHub environment `windows-lians-desktop` with a required
+  maintainer review;
 - repository secret `WINDOWS_SIGNING_CERT_PFX_BASE64`: the publisher PFX encoded
   as one base64 string;
 - repository secret `WINDOWS_SIGNING_CERT_PASSWORD`: the PFX password; and
@@ -119,10 +121,15 @@ NSIS 3.12 portable compiler with retries, verifies its pinned SHA-256, builds
 the per-user setup, signs the setup executable, and validates both Authenticode chains.
 It then performs an actual silent install, opens the bundled Lians App through
 the installed Bridge, verifies local runtime discovery, silently uninstalls,
-and proves that encrypted memory was preserved. Only then does it upload
-`Lians-Setup-<version>.exe` and its SHA-256 checksum. The certificate is removed
-from the runner in an `always()` cleanup step; the PFX file is removed
-immediately after import.
+and proves that encrypted memory was preserved. Before upload it records and
+verifies GitHub OIDC build provenance and refuses to replace an existing asset
+with the same name. When an older stable release contains an exact signed
+installer/checksum pair, the job installs that baseline first and proves the
+candidate preserves both encrypted memory and a managed Cursor connection. Set
+`REQUIRE_SIGNED_LIANS_DESKTOP_BASELINE=true` after the first signed desktop
+release so a missing or deleted baseline fails future releases. The certificate
+is removed from the runner in an `always()` cleanup step; the PFX file is
+removed immediately after import.
 
 This flag publishes Windows only. Do not infer macOS notarization or Linux
 package signing from a successful Windows job.
@@ -132,6 +139,8 @@ package signing from a successful Windows job.
 The Apple-silicon and Intel consumer jobs are independently disabled by
 default. Before setting `PUBLISH_SIGNED_LIANS_MACOS=true`, configure:
 
+- protected GitHub environment `macos-lians-desktop` with a required
+  maintainer review;
 - repository secret `MACOS_SIGNING_CERT_P12_BASE64`: the Developer ID
   Application certificate and private key encoded as one base64 string;
 - repository secret `MACOS_SIGNING_CERT_PASSWORD`: the P12 password;
@@ -155,8 +164,10 @@ builds and signs `Lians.app` and the architecture-labelled DMG.
 ticket, asks Gatekeeper to assess the disk image, mounts it, checks the bundle
 ID, version, architecture, signing authority, and Team ID, copies the app into
 a temporary Applications directory, and exercises the bundled encrypted
-Bridge. Only then does it upload the DMG and SHA-256 checksum. An `always()`
-step deletes the temporary keychain, P12, API key, and notary response.
+Bridge. It then records and verifies GitHub OIDC build provenance and refuses
+to overwrite an existing stable asset. Only then does it upload the DMG and
+SHA-256 checksum. An `always()` step deletes the temporary keychain, P12, API
+key, and notary response.
 
 Passing this publisher gate proves the package is trusted and executable. Do
 not promote the macOS build to normal users until the Lians App also exposes

@@ -100,9 +100,7 @@ class HTTPShapeCloud:
             def devices(self, workspace_id):
                 return outer.log.devices(workspace_id)
 
-            def remove_device(
-                self, workspace_id, device_id, rotation, *, confirmed=False
-            ):
+            def remove_device(self, workspace_id, device_id, rotation, *, confirmed=False):
                 assert confirmed is True
                 return outer.log.remove_device(workspace_id, device_id, rotation)
 
@@ -135,16 +133,63 @@ class HTTPShapeCloud:
                     "devices_deleted": device_count,
                 }
 
+            def delete_account_data(self, *, confirmed=False):
+                assert confirmed is True
+                workspaces = list(outer.log._workspaces.values())
+                result = {
+                    "workspaces_deleted": len(workspaces),
+                    "encrypted_revisions_deleted": sum(
+                        len(workspace["revisions"]) for workspace in workspaces
+                    ),
+                    "device_records_deleted": sum(
+                        len(workspace["devices"]) for workspace in workspaces
+                    ),
+                    "enrollment_records_deleted": len(outer.enrollments),
+                }
+                outer.log._workspaces.clear()
+                outer.enrollments.clear()
+                outer.deleted = True
+                return result
+
         return Client()
 
 
-def _service(store, auth, cloud, state_path, name):
+class ToggleCloud(HTTPShapeCloud):
+    def __init__(self):
+        super().__init__()
+        self.available = True
+        self.calls = 0
+
+    def client_factory(self, base_url, *, bearer_token_provider):
+        client = super().client_factory(
+            base_url,
+            bearer_token_provider=bearer_token_provider,
+        )
+        outer = self
+
+        class Client:
+            def __getattr__(self, name):
+                operation = getattr(client, name)
+
+                def call(*args, **kwargs):
+                    outer.calls += 1
+                    if not outer.available:
+                        raise SyncCloudError("Lians Cloud is unavailable")
+                    return operation(*args, **kwargs)
+
+                return call
+
+        return Client()
+
+
+def _service(store, auth, cloud, state_path, name, **kwargs):
     return CloudSyncService(
         store,
         auth,
         state_path=state_path,
         device_name=name,
         client_factory=cloud.client_factory,
+        **kwargs,
     )
 
 
@@ -198,8 +243,7 @@ def test_service_provisions_pulls_merges_pushes_and_deletes_opaque_memory(tmp_pa
     updated = first.sync_now()
     assert updated["revisions_pulled"] >= 1
     assert any(
-        item["content"] == "The project uses FastAPI."
-        for item in first_store.recall("FastAPI")
+        item["content"] == "The project uses FastAPI." for item in first_store.recall("FastAPI")
     )
 
     deleted = first.delete_cloud_memory(confirmed=True)
@@ -208,8 +252,47 @@ def test_service_provisions_pulls_merges_pushes_and_deletes_opaque_memory(tmp_pa
     assert deleted["sync_turned_off"] is True
     assert auth.signed_out is True
     assert cloud.deleted is True
+    assert deleted["workspaces_deleted"] == 1
+    assert deleted["device_enrollments_deleted"] == 0
     assert first_state_path.exists() is False
+    assert first.retry_path.exists() is False
+    assert first.pending_path.exists() is False
     assert first_store.stats()["current"] == 2
+
+
+def test_signed_in_clean_device_can_delete_inaccessible_old_cloud_data(tmp_path):
+    auth = FakeAuth()
+    cloud = HTTPShapeCloud()
+    old_store = MemoryStore(tmp_path / "lost" / "memory.sqlite3")
+    old_service = _service(
+        old_store,
+        auth,
+        cloud,
+        tmp_path / "lost" / "sync-state.json",
+        "Lost laptop",
+    )
+    old_store.remember("Old encrypted memory", scope="global")
+    old_service.sync_now()
+
+    clean_store = MemoryStore(tmp_path / "clean" / "memory.sqlite3")
+    clean_store.remember("Keep this local note", scope="global")
+    clean_service = _service(
+        clean_store,
+        auth,
+        cloud,
+        tmp_path / "clean" / "sync-state.json",
+        "Clean laptop",
+    )
+    assert clean_service.state_path.exists() is False
+
+    deleted = clean_service.delete_cloud_memory(confirmed=True)
+
+    assert deleted["state"] == "deleted"
+    assert deleted["workspaces_deleted"] == 1
+    assert deleted["local_memory_preserved"] is True
+    assert cloud.log._workspaces == {}
+    assert auth.signed_out is True
+    assert clean_store.recall("local note")[0]["content"] == "Keep this local note"
 
 
 def test_short_code_add_device_flow_needs_no_workspace_id_or_key_copy(tmp_path):
@@ -397,9 +480,7 @@ def test_device_management_rotates_future_key_without_claiming_remote_erasure(tm
 
     registry = first.connected_devices()
     assert registry["count"] == 2
-    old_laptop = next(
-        item for item in registry["devices"] if item["display_name"] == "Old laptop"
-    )
+    old_laptop = next(item for item in registry["devices"] if item["display_name"] == "Old laptop")
     assert old_laptop["can_remove"] is True
     assert all("signing_public_key" not in item for item in registry["devices"])
 
@@ -417,9 +498,7 @@ def test_device_management_rotates_future_key_without_claiming_remote_erasure(tm
     denied = second.pull_if_connected()
     assert denied["state"] == "device_removed"
     assert second_store.recall("future-only launch color") == []
-    assert second_store.recall("shared before removal")[0]["content"] == (
-        "Shared before removal"
-    )
+    assert second_store.recall("shared before removal")[0]["content"] == ("Shared before removal")
     second_store.remember("Private note after removal", scope="global")
     local_only = second.sync_if_connected()
     assert local_only == {
@@ -579,6 +658,160 @@ def test_cloud_failure_never_blocks_or_leaks_from_a_local_remember(tmp_path):
     assert store.recall("writing style")[0]["content"] == "Never use em dashes."
     assert "access-token" not in json.dumps(result)
     assert "private/person" not in json.dumps(result)
+
+
+def test_automatic_cloud_backoff_survives_processes_and_keeps_hooks_local(tmp_path):
+    now = [1_000.0]
+    clock = lambda: now[0]
+    cloud = ToggleCloud()
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    state_path = tmp_path / "sync-state.json"
+    service = _service(
+        store,
+        FakeAuth(),
+        cloud,
+        state_path,
+        "Laptop",
+        clock=clock,
+    )
+    store.remember("Use FastAPI.", scope="global", source_client="cursor")
+    service.sync_now()
+
+    cloud.available = False
+    calls_before_failure = cloud.calls
+    failed_pull = service.pull_if_connected()
+    assert failed_pull == {
+        "state": "pending",
+        "attempted": True,
+        "revisions_pulled": 0,
+        "message": "Cloud memory is temporarily unavailable; using local memory.",
+    }
+    assert cloud.calls == calls_before_failure + 1
+    marker = json.loads(service.retry_path.read_text(encoding="utf-8"))
+    assert set(marker) == {"version", "failures", "retry_after"}
+    assert marker == {"version": 1, "failures": 1, "retry_after": 1_005.0}
+    assert "unavailable" not in service.retry_path.read_text(encoding="utf-8")
+
+    # A separate service instance models the next short-lived Codex/Cursor hook.
+    next_process = _service(
+        store,
+        FakeAuth(),
+        cloud,
+        state_path,
+        "Laptop",
+        clock=clock,
+    )
+    calls_during_pause = cloud.calls
+    paused_pull = next_process.pull_if_connected()
+    assert paused_pull == {
+        "state": "pending",
+        "attempted": False,
+        "pending": True,
+        "retry_after_seconds": 5,
+        "message": "Working locally for now. Encrypted cloud sync will retry automatically.",
+        "revisions_pulled": 0,
+    }
+    paused_write = next_process.sync_if_connected()
+    assert paused_write == {
+        "state": "pending",
+        "attempted": False,
+        "pending": True,
+        "retry_after_seconds": 5,
+        "message": "Working locally for now. Encrypted cloud sync will retry automatically.",
+        "memory_scope": "local",
+    }
+    assert cloud.calls == calls_during_pause
+    assert next_process.status()["sync_retry"] == {
+        "active": True,
+        "failures": 1,
+        "retry_after_seconds": 5,
+    }
+
+    now[0] += 5
+    cloud.available = True
+    resumed = next_process.pull_if_connected()
+    assert resumed["state"] == "current"
+    assert resumed["attempted"] is True
+    assert next_process.retry_path.exists() is False
+    assert next_process.status()["sync_retry"] == {
+        "active": False,
+        "failures": 0,
+        "retry_after_seconds": 0,
+    }
+
+
+def test_manual_sync_bypasses_active_backoff_and_clears_it_on_success(tmp_path):
+    now = [2_000.0]
+    cloud = ToggleCloud()
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    state_path = tmp_path / "sync-state.json"
+    service = _service(
+        store,
+        FakeAuth(),
+        cloud,
+        state_path,
+        "Laptop",
+        clock=lambda: now[0],
+    )
+    store.remember("Use reviewed Alembic migrations.", scope="global")
+    service.sync_now()
+    cloud.available = False
+    assert service.pull_if_connected()["state"] == "pending"
+    assert service.retry_path.is_file()
+
+    cloud.available = True
+    calls_before_manual_sync = cloud.calls
+    result = service.sync_now()
+    assert result["state"] == "synced"
+    assert cloud.calls > calls_before_manual_sync
+    assert service.retry_path.exists() is False
+
+
+def test_invalid_retry_marker_fails_open_without_blocking_local_memory(tmp_path):
+    cloud = ToggleCloud()
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    state_path = tmp_path / "sync-state.json"
+    service = _service(store, FakeAuth(), cloud, state_path, "Laptop")
+    service.retry_path.write_text(
+        '{"version":1,"failures":true,"retry_after":"private path"}',
+        encoding="utf-8",
+    )
+    store.remember("Never use em dashes.", scope="global")
+
+    result = service.sync_if_connected()
+
+    assert result["state"] == "synced"
+    assert result["attempted"] is True
+    assert result["memory_scope"] == "everywhere"
+    assert cloud.calls > 0
+    assert service.retry_path.exists() is False
+    assert store.recall("em dashes")[0]["content"] == "Never use em dashes."
+
+
+def test_cloud_backoff_is_exponential_and_bounded_to_five_minutes(tmp_path):
+    now = [3_000.0]
+    cloud = ToggleCloud()
+    cloud.available = False
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    service = _service(
+        store,
+        FakeAuth(),
+        cloud,
+        tmp_path / "sync-state.json",
+        "Laptop",
+        clock=lambda: now[0],
+    )
+
+    observed_delays = []
+    for failures in range(1, 10):
+        with pytest.raises(SyncCloudError, match="unavailable"):
+            service.sync_now()
+        retry = service.status()["sync_retry"]
+        assert retry["failures"] == failures
+        observed_delays.append(retry["retry_after_seconds"])
+
+    assert observed_delays == [5, 10, 20, 40, 80, 160, 300, 300, 300]
+    assert service.retry_path.stat().st_size < 1024
 
 
 def test_broken_local_cloud_session_never_blocks_a_local_remember(tmp_path):

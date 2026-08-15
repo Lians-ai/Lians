@@ -84,9 +84,9 @@ jobs:
             "${extra_args[@]}" \
             packages/lians-easy/entrypoint.py
       - name: Verify frozen Lians App and Bridge API
-        run: >-
-          python packages/lians-easy/tests/artifact_app_smoke.py
-          --binary dist/LiansMemory${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: |
+          python packages/lians-easy/tests/artifact_app_smoke.py --binary dist/LiansMemory${{ runner.os == 'Windows' && '.exe' || '' }}
+          python packages/lians-easy/tests/artifact_cross_tool_smoke.py --binary dist/LiansMemory${{ runner.os == 'Windows' && '.exe' || '' }}
       - name: Verify encrypted memory portability through frozen runtime
         run: >-
           python packages/lians-easy/tests/artifact_portability_smoke.py

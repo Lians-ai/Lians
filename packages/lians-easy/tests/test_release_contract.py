@@ -30,18 +30,18 @@ def test_public_python_package_has_product_aligned_commands() -> None:
 
 
 def test_public_python_publish_is_gated_and_exercises_the_exact_wheel() -> None:
-    workflow = (
-        REPOSITORY_ROOT / ".github" / "workflows" / "publish-lians-bridge.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "publish-lians-bridge.yml").read_text(
+        encoding="utf-8"
+    )
 
-    assert 'release_tag must be an existing stable semver tag (vX.Y.Z)' in workflow
+    assert "release_tag must be an existing stable semver tag (vX.Y.Z)" in workflow
     assert '"lians-bridge"' in workflow
-    assert 'Runtime version $runtime_version does not match package version' in workflow
+    assert "Runtime version $runtime_version does not match package version" in workflow
     assert 'git rev-list -n 1 "$RELEASE_TAG"' in workflow
-    assert 'git rev-parse HEAD' in workflow
+    assert "git rev-parse HEAD" in workflow
     assert 'python -m twine check "$wheel" "$source_archive"' in workflow
-    assert 'lians_bridge-$PACKAGE_VERSION-py3-none-any.whl' in workflow
-    assert 'Expected exactly one wheel and one source archive' in workflow
+    assert "lians_bridge-$PACKAGE_VERSION-py3-none-any.whl" in workflow
+    assert "Expected exactly one wheel and one source archive" in workflow
     assert 'bin/lians" doctor --json' in workflow
     assert 'bin/lians-bridge" doctor --json' in workflow
     assert 'bin/lians-easy" doctor --json' in workflow
@@ -70,15 +70,13 @@ def test_windows_identity_resources_match_package_version() -> None:
 
 
 def test_windows_packaging_uses_verified_official_nsis_archive() -> None:
-    installer = (PACKAGE_ROOT / "scripts" / "install_nsis.ps1").read_text(
+    installer = (PACKAGE_ROOT / "scripts" / "install_nsis.ps1").read_text(encoding="utf-8")
+    build_workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml").read_text(
         encoding="utf-8"
     )
-    build_workflow = (
-        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
-    ).read_text(encoding="utf-8")
-    release_workflow = (
-        REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
-    ).read_text(encoding="utf-8")
+    release_workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "https://downloads.sourceforge.net/project/nsis/" in installer
     assert "NSIS%203/3.12/nsis-3.12.zip" in installer
@@ -118,11 +116,12 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
-    desktop_job = workflow.split("  lians-easy:\n", 1)[1].split(
-        "\n  lians-easy-macos:", 1
-    )[0]
+    desktop_job = workflow.split("  lians-easy:\n", 1)[1].split("\n  lians-easy-macos:", 1)[0]
 
     assert "vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true'" in desktop_job
+    assert "environment: windows-lians-desktop" in desktop_job
+    assert "id-token: write" in desktop_job
+    assert "attestations: write" in desktop_job
     assert "WINDOWS_SIGNING_CERT_PFX_BASE64" in desktop_job
     assert "WINDOWS_SIGNING_CERT_PASSWORD" in desktop_job
     assert "WINDOWS_SIGNING_CERT_SHA1" in desktop_job
@@ -132,12 +131,25 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     assert "artifact_windows_installer_smoke.py" in desktop_job
     assert "--rollback-fixture" in desktop_job
     assert "--expected-signer-thumbprint" in desktop_job
+    assert "select_desktop_baseline.py" in desktop_job
+    assert "--baseline-installer" in desktop_job
+    assert "--baseline-version" in desktop_job
+    assert "REQUIRE_SIGNED_LIANS_DESKTOP_BASELINE" in desktop_job
     assert "Lians-Setup-*.exe" in desktop_job
     assert "Get-AuthenticodeSignature" in desktop_job
     assert "signature.Status -ne 'Valid'" in desktop_job
     assert "SignerCertificate.Thumbprint" in desktop_job
+    assert "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8" in desktop_job
+    assert "gh attestation verify" in desktop_job
+    assert "Refusing to overwrite existing release asset" in desktop_job
+    assert "gh release upload $env:RELEASE_TAG @($assets.FullName) --clobber" not in desktop_job
     assert desktop_job.index("Sign and verify the Windows installer") < desktop_job.index(
         "gh release upload"
+    )
+    assert (
+        desktop_job.index("Attest Windows package build provenance")
+        < desktop_job.index("Verify Windows attestation")
+        < desktop_job.index("gh release upload")
     )
 
     pull_request_workflow = (
@@ -154,9 +166,9 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
 
 
 def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
-    workflow = (
-        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "os: macos-15\n" in workflow
     assert "os: macos-15-intel\n" in workflow
@@ -167,35 +179,54 @@ def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
     assert "dist/installer/Lians-*.dmg" in workflow
 
 
+def test_every_frozen_desktop_build_exercises_the_cross_tool_memory_moment() -> None:
+    pull_request_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
+    ).read_text(encoding="utf-8")
+    release_workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    smoke = (PACKAGE_ROOT / "tests" / "artifact_cross_tool_smoke.py").read_text(encoding="utf-8")
+
+    assert pull_request_workflow.count("artifact_cross_tool_smoke.py") == 1
+    assert release_workflow.count("artifact_cross_tool_smoke.py") == 3
+    for client in (
+        "antigravity",
+        "claude",
+        "cursor",
+        "windsurf",
+        "gemini",
+        "codex",
+        "cline",
+        "opencode",
+    ):
+        assert f'"{client}"' in smoke
+    assert '"/v1/remember"' in smoke
+    assert "f\"/v1/memories/{remembered['id']}/correct\"" in smoke
+    assert "f\"/v1/memories/{replacement['id']}/forget\"" in smoke
+    assert 'receipt["limits"] == {"max_memories": 3, "max_tokens": 118}' in smoke
+    assert 'assert receipt["signature"]' in smoke
+
+
 def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
-    release_workflow = (
-        REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
-    ).read_text(encoding="utf-8")
-    release_job = release_workflow.split("  lians-easy-linux:\n", 1)[1].split(
-        "\n  go-tag:", 1
-    )[0]
+    release_workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    release_job = release_workflow.split("  lians-easy-linux:\n", 1)[1].split("\n  go-tag:", 1)[0]
 
     for contract in (pull_request_workflow, release_job):
         assert "appimagetool/releases/download/1.9.1" in contract
-        assert (
-            "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
-            in contract
-        )
+        assert "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0" in contract
         assert "type2-runtime/releases/download/20251108/runtime-x86_64" in contract
-        assert (
-            "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
-            in contract
-        )
+        assert "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d" in contract
         assert "build_linux_appimage.sh" in contract
         assert "artifact_linux_appimage_smoke.py" in contract
         assert "Lians-$version-linux-x86_64.AppImage" in contract
 
-    script = (PACKAGE_ROOT / "scripts" / "build_linux_appimage.sh").read_text(
-        encoding="utf-8"
-    )
+    script = (PACKAGE_ROOT / "scripts" / "build_linux_appimage.sh").read_text(encoding="utf-8")
     smoke = (PACKAGE_ROOT / "tests" / "artifact_linux_appimage_smoke.py").read_text(
         encoding="utf-8"
     )
@@ -210,22 +241,15 @@ def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
     assert "environment: linux-lians-desktop" in release_job
     assert "id-token: write" in release_job
     assert "attestations: write" in release_job
-    assert (
-        "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
-        in release_job
-    )
+    assert "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8" in release_job
     assert "gh attestation verify" in release_job
     assert "sha256sum" in release_job
     assert "gh release upload" in release_job
 
 
 def test_macos_drag_and_drop_package_has_stable_identity_and_architecture() -> None:
-    script = (PACKAGE_ROOT / "scripts" / "build_macos_dmg.sh").read_text(
-        encoding="utf-8"
-    )
-    smoke = (PACKAGE_ROOT / "tests" / "artifact_macos_dmg_smoke.py").read_text(
-        encoding="utf-8"
-    )
+    script = (PACKAGE_ROOT / "scripts" / "build_macos_dmg.sh").read_text(encoding="utf-8")
+    smoke = (PACKAGE_ROOT / "tests" / "artifact_macos_dmg_smoke.py").read_text(encoding="utf-8")
 
     assert "ai.lians.memory" in script
     assert "CFBundleDisplayName string Lians" in script
@@ -243,11 +267,12 @@ def test_stable_macos_release_requires_developer_id_and_notarization() -> None:
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
-    macos_job = workflow.split("  lians-easy-macos:\n", 1)[1].split(
-        "\n  go-tag:", 1
-    )[0]
+    macos_job = workflow.split("  lians-easy-macos:\n", 1)[1].split("\n  go-tag:", 1)[0]
 
     assert "vars.PUBLISH_SIGNED_LIANS_MACOS == 'true'" in macos_job
+    assert "environment: macos-lians-desktop" in macos_job
+    assert "id-token: write" in macos_job
+    assert "attestations: write" in macos_job
     assert "runner: macos-15\n" in macos_job
     assert "runner: macos-15-intel\n" in macos_job
     assert "MACOS_SIGNING_CERT_P12_BASE64" in macos_job
@@ -267,18 +292,25 @@ def test_stable_macos_release_requires_developer_id_and_notarization() -> None:
     assert "xcrun stapler validate" in macos_job
     assert "--require-notarized" in macos_job
     assert "shasum -a 256" in macos_job
+    assert "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8" in macos_job
+    assert "gh attestation verify" in macos_job
+    assert "Refusing to overwrite existing release asset" in macos_job
+    assert 'gh release upload "$RELEASE_TAG" "$dmg" "$dmg.sha256" --clobber' not in macos_job
     assert macos_job.index('--codesign-identity "$MACOS_SIGNING_IDENTITY"') < (
         macos_job.index("xcrun notarytool submit")
     )
-    assert macos_job.index("xcrun stapler validate") < macos_job.index(
-        "gh release upload"
+    assert macos_job.index("xcrun stapler validate") < macos_job.index("gh release upload")
+    assert (
+        macos_job.index("Attest macOS package build provenance")
+        < macos_job.index("Verify macOS attestation")
+        < macos_job.index("gh release upload")
     )
 
 
 def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() -> None:
     script = (PACKAGE_ROOT / "windows-installer.nsi").read_text(encoding="utf-8")
 
-    assert 'RequestExecutionLevel user' in script
+    assert "RequestExecutionLevel user" in script
     assert 'InstallDir "$LOCALAPPDATA\\Lians"' in script
     assert "MUI_PAGE_DIRECTORY" not in script
     assert 'MUI_FINISHPAGE_RUN_TEXT "Open Lians"' in script
@@ -292,19 +324,52 @@ def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() 
 
 def test_windows_installer_health_checks_upgrades_and_restores_failed_candidates() -> None:
     script = (PACKAGE_ROOT / "windows-installer.nsi").read_text(encoding="utf-8")
-    workflow = (
-        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "PRODUCT_SHUTDOWN_EVENT" in script
     assert "PRODUCT_RUNTIME_BACKUP" in script
     assert "CopyFiles /SILENT" in script
     assert "doctor --json" in script
-    assert "Rename \"$INSTDIR\\${PRODUCT_RUNTIME_BACKUP}\"" in script
+    assert 'Rename "$INSTDIR\\${PRODUCT_RUNTIME_BACKUP}"' in script
     assert script.index("doctor --json") < script.index("WriteUninstaller")
     assert "SetErrorLevel 1603" in script
     assert "--rollback-fixture" in workflow
     assert "packages/lians-easy/README.md" in workflow
+
+
+def test_windows_release_smoke_preserves_memory_and_integrations_from_signed_baseline() -> None:
+    smoke = (PACKAGE_ROOT / "tests" / "artifact_windows_installer_smoke.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--baseline-installer" in smoke
+    assert "--baseline-version" in smoke
+    assert '"install",' in smoke
+    assert '"cursor",' in smoke
+    assert "cursor_config.read_bytes() == connected_config" in smoke
+    assert '"historical_upgrade_verified": baseline_installer is not None' in smoke
+    assert '"integration_preserved_across_upgrade": True' in smoke
+
+
+def test_operator_runbooks_match_the_enforced_production_schema() -> None:
+    expected = "0033_sync_device_key_rotation"
+    production = (REPOSITORY_ROOT / "docs" / "production-release.md").read_text(encoding="utf-8")
+    deployment = (REPOSITORY_ROOT / "docs" / "deploy.md").read_text(encoding="utf-8")
+    verifier = (REPOSITORY_ROOT / "scripts" / "verify_production_schema.py").read_text(
+        encoding="utf-8"
+    )
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "fly-deploy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert f'EXPECTED_REVISION = "{expected}"' in verifier
+    assert f"--expected-revision {expected}" in workflow
+    assert expected in production
+    assert expected in deployment
+    assert "0031_zero_knowledge_sync" not in production
+    assert "0031_zero_knowledge_sync" not in deployment
 
 
 def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
@@ -334,8 +399,7 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     scripts = [relative for relative in expected if relative.endswith(".js")]
     assert len(scripts) == 2
     script_documents = {
-        relative: (app_root / relative).read_text(encoding="utf-8")
-        for relative in scripts
+        relative: (app_root / relative).read_text(encoding="utf-8") for relative in scripts
     }
     script = next(value for value in script_documents.values() if "MEMORY CONTROL CENTER" in value)
     assert "\u00b7" in script
@@ -376,6 +440,11 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "Code matches · approve" in cloud_script
     assert "Lians cannot read it" in cloud_script
     assert "local memory was not changed" in cloud_script
+    assert "Working locally for now" in cloud_script
+    assert "Try sync now" in cloud_script
+    assert "Encrypted cloud sync will retry automatically" in cloud_script
+    assert "Delete all cloud data" in cloud_script
+    assert "every encrypted workspace and pending device request" in cloud_script
     assert "innerHTML" not in cloud_script
     assert "Authorization" not in cloud_script
     assert "client_secret" not in cloud_script
