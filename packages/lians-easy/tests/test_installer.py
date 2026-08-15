@@ -405,6 +405,7 @@ def test_failed_client_restores_exact_files_and_removes_transaction_backups(
     config.write_bytes(original_config)
     hook.write_bytes(invalid_hook)
     monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr("lians_easy.installer.shutil.which", lambda _name: None)
     monkeypatch.setenv("APPDATA", str(roaming))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
 
@@ -433,6 +434,7 @@ def test_retry_targets_only_failed_client_and_preserves_success(tmp_path, monkey
     claude.write_bytes(original_claude)
     hook.write_text("[]")
     monkeypatch.setattr("sys.platform", "win32")
+    monkeypatch.setattr("lians_easy.installer.shutil.which", lambda _name: None)
     monkeypatch.setenv("APPDATA", str(roaming))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
 
