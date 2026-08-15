@@ -73,9 +73,14 @@ without transferring the source device's DPAPI or owner-file key.
 
 ## Cloud boundary
 
-Cloud storage may hold a `.liansbackup` object as opaque ciphertext, but this
-format alone is not live multi-device sync. Production sync still needs user
-identity, device enrollment, recovery and rotation policy, concurrency and
-conflict UX, object versioning, deletion propagation, billing entitlements, and
-managed-connector controls. Those services must not receive the passphrase or a
-decrypted profile as part of this contract.
+Cloud storage may hold a `.liansbackup` object as opaque ciphertext, but that
+format alone is not live multi-device sync. Lians now has a separate tested
+protocol foundation for expiring device enrollment, per-recipient workspace-key
+wrapping, signed encrypted revision chains, compare-and-swap writes, deletion
+propagation, and atomic local conflicts. See
+[cloud-sync-protocol.md](cloud-sync-protocol.md).
+
+Hosted identity, durable persistence, recovery and rotation, billing
+entitlements, and the consumer sync UI remain release gates. Neither the backup
+flow nor the sync protocol sends a passphrase, workspace key, device private
+key, or decrypted profile to Lians Cloud.

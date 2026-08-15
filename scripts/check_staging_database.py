@@ -142,7 +142,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, help="Local Fly proxy port override")
     parser.add_argument(
         "--expected-revision",
-        default="0030_force_hosted_mcp_rls",
+        default="0031_zero_knowledge_sync",
     )
     return parser.parse_args()
 

@@ -13,10 +13,13 @@ production application `agentmem-lotus`.
 | Deployment branch | `master` only |
 | Deployment workflow | **Production deploy** |
 | Rollback workflow | **Production rollback** |
-| Expected schema after release | `0030_force_hosted_mcp_rls` |
+| Expected schema after release | `0031_zero_knowledge_sync` |
 
 The production workflow migrates the database to the reviewed Alembic head
-`0030_force_hosted_mcp_rls` before the application image is promoted.
+`0031_zero_knowledge_sync` before the application image is promoted. The latest
+verified production release below predates this candidate and remains at
+`0030_force_hosted_mcp_rls`; do not represent 0031 as deployed until a new
+guarded production workflow passes.
 
 ## Latest verified production release
 
@@ -58,7 +61,7 @@ The later portal inspection verified the `Lians, Ai` business identity and valid
 - Fly gates promotion on `/readyz`; current deploy logs lower the configured
   420-second grace period to an effective one minute, so operators must not
   represent the configured 420 seconds as honored.
-- The workflow verifies revision `0030_force_hosted_mcp_rls`, the public API
+- The next workflow verifies revision `0031_zero_knowledge_sync`, the public API
   surface, and the unauthenticated OpenAI MCP boundary after deployment.
 
 ## Go/no-go checklist
@@ -69,7 +72,7 @@ All items must be true before starting the workflow:
 - [ ] The production workflow files on `master` match the reviewed release
       candidate.
 - [ ] The staging database check passes at revision
-      `0030_force_hosted_mcp_rls`.
+      `0031_zero_knowledge_sync`.
 - [ ] A sanitized staging-data migration rehearsal has passed.
 - [ ] The release-candidate container build succeeds.
 - [ ] `https://mcp.lians.ai/readyz` is healthy before the release.
@@ -89,7 +92,7 @@ Do not proceed if any item is unknown.
 5. Let the protected production job complete its five-minute wait.
 6. Confirm the workflow records a prior image and selects a `created`
    database snapshot no older than two hours.
-7. Confirm the Fly release migration reaches `0030_force_hosted_mcp_rls`.
+7. Confirm the Fly release migration reaches `0031_zero_knowledge_sync`.
 8. Confirm the deployment and public smoke checks pass.
 9. Inspect `/health`, `/readyz`, error rate, and request latency for at least
    15 minutes.
@@ -101,7 +104,7 @@ Abort or stop promotion if:
 - the staging database check fails;
 - no production snapshot is both `created` and less than two hours old;
 - the release command fails or reports any revision other than
-  `0030_force_hosted_mcp_rls`;
+  `0031_zero_knowledge_sync`;
 - `/readyz` does not become healthy within the workflow timeout;
 - the public OpenAPI surface is incomplete;
 - authenticated traffic shows a material increase in errors or latency.
@@ -112,7 +115,7 @@ Use the **Production rollback** workflow with the prior image reference
 published by the deploy job. Run it from `master` and type `ROLLBACK`.
 
 Application rollback intentionally uses `--skip-release-command`. Do not run
-an Alembic downgrade during incident response. Migrations through 0030 are
+an Alembic downgrade during incident response. Migrations through 0031 are
 additive, so the prior application image can run against the advanced schema
 while the incident is investigated. A database restore is a separate,
 last-resort recovery procedure.

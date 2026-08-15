@@ -477,6 +477,69 @@ class ApiKey(Base):
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class SyncWorkspace(Base):
+    """Opaque, zero-knowledge workspace head for one authenticated namespace."""
+
+    __tablename__ = "sync_workspaces"
+
+    workspace_id = Column(String(36), primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    epoch = Column(Integer, nullable=False)
+    root_device = Column(JSON, nullable=False)
+    head_revision = Column(Integer, nullable=False, default=0, server_default="0")
+    head_hash = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        Index("ix_sync_workspaces_namespace_created", "namespace", "created_at"),
+    )
+
+
+class SyncDevice(Base):
+    """Public device identity and signed enrollment grant; no private key."""
+
+    __tablename__ = "sync_devices"
+
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), primary_key=True
+    )
+    device_id = Column(String(64), primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    descriptor = Column(JSON, nullable=False)
+    grant = Column(JSON, nullable=True)
+    grant_signature = Column(JSON, nullable=True)
+    enrolled_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_sync_devices_namespace_workspace", "namespace", "workspace_id"),
+    )
+
+
+class SyncRevision(Base):
+    """Encrypted profile revision; the service cannot decrypt its envelope."""
+
+    __tablename__ = "sync_revisions"
+
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), primary_key=True
+    )
+    revision = Column(Integer, primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    device_id = Column(String(64), nullable=False)
+    previous_hash = Column(String(64), nullable=True)
+    object_hash = Column(String(64), nullable=False)
+    envelope = Column(JSON, nullable=False)
+    authored_at = Column(DateTime(timezone=True), nullable=False)
+    stored_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "object_hash", name="uq_sync_revision_object_hash"),
+        Index("ix_sync_revisions_namespace_workspace", "namespace", "workspace_id", "revision"),
+    )
+
+
 class LiveFact(Base):
     """Compact read model: one row per live fact per agent.
 

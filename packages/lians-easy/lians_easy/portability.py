@@ -432,26 +432,229 @@ def _existing_record(
     return database.execute(f"SELECT * FROM {table} WHERE id = ?", (record_id,)).fetchone()
 
 
-def import_backup(store: MemoryStore, source: str | Path, passphrase: str) -> dict[str, Any]:
-    """Merge a verified backup atomically and re-encrypt memory for this device."""
+def _ordered_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.astimezone()
+    return parsed
 
-    path, payload = _decode_backup(source, passphrase)
+
+def _merge_sync_memory(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge the mutable state of one immutable memory identity.
+
+    Content and provenance never use last-writer-wins. Only pause/resume state,
+    the forward lineage pointer, and permanent forgetting may advance. A
+    forget tombstone always wins so an offline device cannot resurrect erased
+    content.
+    """
+
+    if existing == incoming:
+        return existing
+    immutable_fields = (
+        "id",
+        "kind",
+        "scope",
+        "project_id",
+        "source",
+        "source_client",
+        "source_ref",
+        "topic",
+        "created_at",
+        "supersedes_id",
+    )
+    if any(existing[field] != incoming[field] for field in immutable_fields):
+        raise ValueError(f"Sync conflict for memory ID {incoming['id']}")
+
+    existing_forgotten = existing["forgotten_at"] is not None
+    incoming_forgotten = incoming["forgotten_at"] is not None
+    if not existing_forgotten and not incoming_forgotten:
+        protected_fields = ("content", "content_sha256", "token_estimate", "metadata")
+        if any(existing[field] != incoming[field] for field in protected_fields):
+            raise ValueError(f"Sync conflict for memory ID {incoming['id']}")
+
+    forward_values = {
+        value
+        for value in (existing["superseded_by_id"], incoming["superseded_by_id"])
+        if value is not None
+    }
+    if len(forward_values) > 1:
+        raise ValueError(f"Sync conflict for memory ID {incoming['id']}")
+    superseded_by_id = next(iter(forward_values), None)
+
+    if existing_forgotten or incoming_forgotten:
+        tombstones = [
+            record for record in (existing, incoming) if record["forgotten_at"] is not None
+        ]
+        winner = max(tombstones, key=lambda record: _ordered_timestamp(record["forgotten_at"]))
+        merged = dict(winner)
+        merged.update(
+            {
+                "content": None,
+                "content_sha256": None,
+                "token_estimate": 0,
+                "metadata": {},
+                "updated_at": max(
+                    (existing["updated_at"], incoming["updated_at"]),
+                    key=_ordered_timestamp,
+                ),
+                "superseded_by_id": superseded_by_id,
+                "paused_at": None,
+            }
+        )
+        return merged
+
+    existing_updated = _ordered_timestamp(existing["updated_at"])
+    incoming_updated = _ordered_timestamp(incoming["updated_at"])
+    if existing_updated == incoming_updated and existing["paused_at"] != incoming["paused_at"]:
+        raise ValueError(f"Sync conflict for memory ID {incoming['id']}")
+    winner = incoming if incoming_updated > existing_updated else existing
+    merged = dict(winner)
+    merged["superseded_by_id"] = superseded_by_id
+    return merged
+
+
+def _validate_combined_lineage(memories: dict[str, dict[str, Any]]) -> None:
+    for record in memories.values():
+        for field in ("supersedes_id", "superseded_by_id"):
+            related = record[field]
+            if related is not None and related not in memories:
+                raise ValueError("Synchronized memory lineage references a missing record")
+        if record["supersedes_id"] is not None:
+            previous = memories[record["supersedes_id"]]
+            if previous["superseded_by_id"] != record["id"]:
+                raise ValueError("Synchronized memory lineage is not reciprocal")
+        if record["superseded_by_id"] is not None:
+            replacement = memories[record["superseded_by_id"]]
+            if replacement["supersedes_id"] != record["id"]:
+                raise ValueError("Synchronized memory lineage is not reciprocal")
+    completed: set[str] = set()
+    for memory_id in memories:
+        lineage: set[str] = set()
+        current_id: str | None = memory_id
+        while current_id is not None and current_id not in completed:
+            if current_id in lineage:
+                raise ValueError("Synchronized memory lineage contains a cycle")
+            lineage.add(current_id)
+            current_id = memories[current_id]["superseded_by_id"]
+        completed.update(lineage)
+
+
+def _propagate_forgotten_lineages(memories: dict[str, dict[str, Any]]) -> None:
+    """Make a tombstone cover every version, including an offline branch."""
+
+    neighbors: dict[str, set[str]] = {memory_id: set() for memory_id in memories}
+    for record in memories.values():
+        for related in (record["supersedes_id"], record["superseded_by_id"]):
+            if related is not None and related in neighbors:
+                neighbors[record["id"]].add(related)
+                neighbors[related].add(record["id"])
+
+    visited: set[str] = set()
+    for memory_id in memories:
+        if memory_id in visited:
+            continue
+        component: set[str] = set()
+        pending = [memory_id]
+        while pending:
+            candidate = pending.pop()
+            if candidate in component:
+                continue
+            component.add(candidate)
+            pending.extend(neighbors[candidate] - component)
+        visited.update(component)
+        tombstones = [
+            memories[candidate]["forgotten_at"]
+            for candidate in component
+            if memories[candidate]["forgotten_at"] is not None
+        ]
+        if not tombstones:
+            continue
+        forgotten_at = max(tombstones, key=_ordered_timestamp)
+        for candidate in component:
+            record = memories[candidate]
+            record.update(
+                {
+                    "content": None,
+                    "content_sha256": None,
+                    "token_estimate": 0,
+                    "metadata": {},
+                    "updated_at": max(
+                        (record["updated_at"], forgotten_at), key=_ordered_timestamp
+                    ),
+                    "paused_at": None,
+                    "forgotten_at": forgotten_at,
+                }
+            )
+
+
+def merge_profile_payload(
+    store: MemoryStore,
+    payload: dict[str, Any],
+    *,
+    sync: bool = False,
+) -> dict[str, Any]:
+    """Atomically merge a validated plaintext profile into the local store.
+
+    Portable backup imports remain strict. Sync mode additionally accepts
+    monotonic state changes, including deletion tombstones, while surfacing
+    divergent corrections as reviewable conflicts.
+    """
+
+    payload = _validate_payload(payload)
     incoming_memories = {record["id"]: record for record in payload["memories"]}
     incoming_activity = {record["id"]: record for record in payload["activity"]}
     incoming_receipts = {record["id"]: record for record in payload["receipts"]}
     imported = {"memories": 0, "activity": 0, "receipts": 0}
+    updated = {"memories": 0}
     skipped = {"memories": 0, "activity": 0, "receipts": 0}
 
     with store._connect() as database:
-        missing_memories: list[dict[str, Any]] = []
+        local_rows = database.execute(
+            "SELECT * FROM memories WHERE profile = ?",
+            (store.profile,),
+        ).fetchall()
+        combined_memories = {row["id"]: _memory_record(store, row) for row in local_rows}
+        local_memories = {
+            memory_id: {**record, "metadata": dict(record["metadata"])}
+            for memory_id, record in combined_memories.items()
+        }
         for record in incoming_memories.values():
             existing = _existing_record(database, "memories", record["id"])
             if existing is None:
-                missing_memories.append(record)
-            elif existing["profile"] != store.profile or _memory_record(store, existing) != record:
+                combined_memories[record["id"]] = record
+            elif existing["profile"] != store.profile:
                 raise ValueError(f"Import conflict for memory ID {record['id']}")
             else:
-                skipped["memories"] += 1
+                current = _memory_record(store, existing)
+                if current == record:
+                    skipped["memories"] += 1
+                elif not sync:
+                    raise ValueError(f"Import conflict for memory ID {record['id']}")
+                else:
+                    merged = _merge_sync_memory(current, record)
+                    combined_memories[record["id"]] = merged
+        if sync:
+            _propagate_forgotten_lineages(combined_memories)
+        _validate_combined_lineage(combined_memories)
+        missing_memories = [
+            record
+            for memory_id, record in combined_memories.items()
+            if memory_id not in local_memories
+        ]
+        changed_memories = [
+            record
+            for memory_id, record in combined_memories.items()
+            if memory_id in local_memories and record != local_memories[memory_id]
+        ]
+        skipped["memories"] = sum(
+            1
+            for memory_id in incoming_memories
+            if memory_id in local_memories
+            and combined_memories[memory_id] == local_memories[memory_id]
+        )
 
         missing_activity: list[dict[str, Any]] = []
         for record in incoming_activity.values():
@@ -473,7 +676,8 @@ def import_backup(store: MemoryStore, source: str | Path, passphrase: str) -> di
             else:
                 skipped["receipts"] += 1
 
-        for record in missing_memories:
+        missing_memory_ids = {record["id"] for record in missing_memories}
+        for record in (*missing_memories, *changed_memories):
             content = record["content"]
             if content is None:
                 ciphertext = nonce = None
@@ -482,39 +686,59 @@ def import_backup(store: MemoryStore, source: str | Path, passphrase: str) -> di
                     content,
                     associated_data=store._associated_data(record["id"], store.profile),
                 )
-            database.execute(
-                """INSERT INTO memories
+            if record["id"] in missing_memory_ids:
+                database.execute(
+                    """INSERT INTO memories
                    (id, profile, content_cipher, content_nonce, content_sha256, token_estimate,
                     kind, scope, project_id, source, source_client, source_ref, topic,
                     metadata_json, created_at, updated_at, paused_at, forgotten_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    record["id"],
-                    store.profile,
-                    ciphertext,
-                    nonce,
-                    record["content_sha256"],
-                    record["token_estimate"],
-                    record["kind"],
-                    record["scope"],
-                    record["project_id"],
-                    record["source"],
-                    record["source_client"],
-                    record["source_ref"],
-                    record["topic"],
-                    json.dumps(record["metadata"], sort_keys=True),
-                    record["created_at"],
-                    record["updated_at"],
-                    record["paused_at"],
-                    record["forgotten_at"],
-                ),
-            )
-        for record in missing_memories:
+                    (
+                        record["id"],
+                        store.profile,
+                        ciphertext,
+                        nonce,
+                        record["content_sha256"],
+                        record["token_estimate"],
+                        record["kind"],
+                        record["scope"],
+                        record["project_id"],
+                        record["source"],
+                        record["source_client"],
+                        record["source_ref"],
+                        record["topic"],
+                        json.dumps(record["metadata"], sort_keys=True),
+                        record["created_at"],
+                        record["updated_at"],
+                        record["paused_at"],
+                        record["forgotten_at"],
+                    ),
+                )
+            else:
+                database.execute(
+                    """UPDATE memories SET content = NULL, content_cipher = ?, content_nonce = ?,
+                       content_sha256 = ?, token_estimate = ?, metadata_json = ?, updated_at = ?,
+                       paused_at = ?, forgotten_at = ? WHERE profile = ? AND id = ?""",
+                    (
+                        ciphertext,
+                        nonce,
+                        record["content_sha256"],
+                        record["token_estimate"],
+                        json.dumps(record["metadata"], sort_keys=True),
+                        record["updated_at"],
+                        record["paused_at"],
+                        record["forgotten_at"],
+                        store.profile,
+                        record["id"],
+                    ),
+                )
+        for record in (*missing_memories, *changed_memories):
             database.execute(
                 "UPDATE memories SET supersedes_id = ?, superseded_by_id = ? WHERE id = ?",
                 (record["supersedes_id"], record["superseded_by_id"], record["id"]),
             )
         imported["memories"] = len(missing_memories)
+        updated["memories"] = len(changed_memories)
 
         for record in missing_activity:
             database.execute(
@@ -554,11 +778,21 @@ def import_backup(store: MemoryStore, source: str | Path, passphrase: str) -> di
         imported["receipts"] = len(missing_receipts)
 
     return {
-        "status": "imported",
-        "path": str(path),
+        "status": "synchronized" if sync else "imported",
         "source_profile": payload["source_profile"],
         "target_profile": store.profile,
         "imported": imported,
+        "updated": updated,
         "already_present": skipped,
         "re_encrypted_for_this_device": True,
+    }
+
+
+def import_backup(store: MemoryStore, source: str | Path, passphrase: str) -> dict[str, Any]:
+    """Merge a verified backup atomically and re-encrypt memory for this device."""
+
+    path, payload = _decode_backup(source, passphrase)
+    return {
+        **merge_profile_payload(store, payload),
+        "path": str(path),
     }

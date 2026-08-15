@@ -136,6 +136,23 @@ and receipt counts before import, and makes clear that existing history is
 never overwritten. The browser surface caps imports at 32 MiB; the CLI retains
 the full 128 MiB format limit for larger profiles.
 
+### Zero-knowledge sync foundation
+
+`lians_easy.sync` implements the device-side contract for future Lians Cloud
+continuity. An existing device approves a short-lived enrollment request, wraps
+the random workspace key specifically for the new device with X25519 and
+AES-GCM, and signs the device grant. Profile revisions are encrypted before
+upload, signed, hash-chained, and accepted by the opaque reference service only
+when they extend the current head. Permanent forgetting wins over stale content
+on another device; divergent corrections fail atomically for human review.
+
+This protocol foundation is not a claim that hosted sync or account recovery is
+generally available. The ordinary supported migration path remains **Move
+memory safely** until authenticated durable storage, device revocation and key
+rotation, recovery, provider-outage handling, and the consumer UI pass their
+release gates. The complete boundary is documented in
+[`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
+
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client
 uses a first-invocation `PreInvocation` hook and an ephemeral context step, so

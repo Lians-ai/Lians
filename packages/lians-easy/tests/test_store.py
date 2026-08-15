@@ -35,6 +35,24 @@ def test_profiles_are_isolated(tmp_path):
     assert work.recall("favorite color") == []
 
 
+def test_local_cipher_protects_binary_state_and_domain_separates_derived_keys(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    payload = b"workspace-key-material"
+    associated_data = b"lians-sync-state-v1"
+
+    ciphertext, nonce = store.cipher.seal_bytes(payload, associated_data=associated_data)
+
+    assert payload not in ciphertext
+    assert store.cipher.open_bytes(
+        ciphertext,
+        nonce,
+        associated_data=associated_data,
+    ) == payload
+    assert store.cipher.derive_key(info=b"lians-sync-exchange-v1") != store.cipher.derive_key(
+        info=b"lians-sync-signing-v1"
+    )
+
+
 def test_every_operation_closes_its_sqlite_connection(tmp_path, monkeypatch):
     real_connect = sqlite3.connect
     connections = []

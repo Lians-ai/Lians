@@ -147,13 +147,31 @@ class LocalCipher:
     def open(self, ciphertext: bytes, nonce: bytes, *, associated_data: bytes) -> str:
         return AESGCM(self._key).decrypt(nonce, ciphertext, associated_data).decode("utf-8")
 
-    def sign(self, value: bytes) -> dict[str, Any]:
-        seed = HKDF(
+    def seal_bytes(self, value: bytes, *, associated_data: bytes) -> tuple[bytes, bytes]:
+        """Protect local binary state without exposing the device root key."""
+
+        nonce = os.urandom(12)
+        return AESGCM(self._key).encrypt(nonce, value, associated_data), nonce
+
+    def open_bytes(self, ciphertext: bytes, nonce: bytes, *, associated_data: bytes) -> bytes:
+        """Open binary state previously protected for this OS account."""
+
+        return AESGCM(self._key).decrypt(nonce, ciphertext, associated_data)
+
+    def derive_key(self, *, info: bytes, length: int = 32) -> bytes:
+        """Derive a domain-separated device key from the protected local root."""
+
+        if not info or len(info) > 256 or not 16 <= length <= 64:
+            raise ValueError("Lians key derivation parameters are invalid")
+        return HKDF(
             algorithm=hashes.SHA256(),
-            length=32,
+            length=length,
             salt=None,
-            info=b"lians-context-receipt-v0.1",
+            info=info,
         ).derive(self._key)
+
+    def sign(self, value: bytes) -> dict[str, Any]:
+        seed = self.derive_key(info=b"lians-context-receipt-v0.1")
         private_key = Ed25519PrivateKey.from_private_bytes(seed)
         public_key = private_key.public_key().public_bytes(
             encoding=serialization.Encoding.Raw,

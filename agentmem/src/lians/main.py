@@ -43,6 +43,7 @@ from .api.routes_otlp import router as otlp_router
 from .api.routes_validmind import legacy_router as validmind_legacy_router
 from .api.routes_validmind import router as validmind_router
 from .api.routes_learning import router as learning_router
+from .api.routes_sync import router as sync_router
 from .telemetry import instrument_fastapi, instrument_sqlalchemy
 from .middleware import (
     setup_logging,
@@ -67,6 +68,9 @@ _HOSTED_RLS_TABLES = (
     "conflict_flags",
     "idempotency_keys",
     "durable_jobs",
+    "sync_workspaces",
+    "sync_devices",
+    "sync_revisions",
 )
 
 
@@ -545,6 +549,7 @@ app.include_router(otlp_router)
 app.include_router(validmind_router)
 app.include_router(validmind_legacy_router)
 app.include_router(learning_router)
+app.include_router(sync_router)
 
 
 def _build_sha() -> str:

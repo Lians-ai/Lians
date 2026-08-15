@@ -19,7 +19,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # explicit `scopes`. "compliance" gets read + admin (audit verify/export/erase)
 # but not write — it inspects and certifies, it does not author memories.
 ROLE_SCOPES: dict[str, list[str]] = {
-    "owner":      ["read", "write", "admin"],
+    "owner":      ["read", "write", "sync", "admin"],
     "analyst":    ["read", "write"],
     "compliance": ["read", "admin"],
     "readonly":   ["read"],

@@ -100,7 +100,7 @@ jobs:
           docker run --rm lians-engine:verify python -c \
             'import importlib.metadata as m; import boto3, hvac, stripe; import prometheus_client; from azure.identity import DefaultAzureCredential; from opentelemetry import trace; import lians.main; assert m.version("lians")'
           heads="$(docker run --rm lians-engine:verify alembic -c alembic.ini heads)"
-          grep -F "0030_force_hosted_mcp_rls (head)" <<<"$heads"
+          grep -F "0031_zero_knowledge_sync (head)" <<<"$heads"
           test "$(docker run --rm --entrypoint sh lians-engine:verify -c \
             'find /app/agentmem -type f | sort | grep -Ev "(/alembic/|/alembic.ini$)" | wc -l')" = "0"
 

@@ -57,7 +57,7 @@ def test_engine_publish_is_immutable_multiarch_and_evidence_bearing() -> None:
     assert "EXTRAS=enterprise" in workflow
     assert 'LIANS_BUILD_SHA=$(git rev-parse HEAD)' in workflow
     assert "LIANS_BUILD_SHA=${{ env.LIANS_BUILD_SHA }}" in workflow
-    assert "0030_force_hosted_mcp_rls (head)" in workflow
+    assert "0031_zero_knowledge_sync (head)" in workflow
     assert "10001:10001" in workflow
     assert ":latest" not in workflow
 
