@@ -16,6 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import __version__
 from .config import get_settings
+from .cloud_sync_oauth import (
+    SYNC_OAUTH_SCOPE,
+    get_cloud_sync_oauth_runtime,
+    validate_cloud_sync_oauth_settings,
+)
 from .openai_oauth import validate_openai_mcp_settings
 from .pii import SubjectKeyDestroyedError
 from .db import get_db as _get_db
@@ -143,6 +148,11 @@ def _validate_airgap(settings) -> None:
         errors.append(
             "SUPERSESSION_LLM_STAGE=true sends memory content to Anthropic's API. "
             "Set SUPERSESSION_LLM_STAGE=false to disable external LLM calls."
+        )
+    if getattr(settings, "cloud_sync_oauth_enabled", False) is True:
+        errors.append(
+            "CLOUD_SYNC_OAUTH_ENABLED=true requires authorization-server network access. "
+            "Set CLOUD_SYNC_OAUTH_ENABLED=false for an air-gapped deployment."
         )
     if errors:
         raise RuntimeError(
@@ -317,13 +327,22 @@ async def lifespan(app: FastAPI):
     await _validate_hosted_rls(
         engine,
         production=_is_production,
-        enabled=settings.hosted_mcp_enabled,
+        enabled=settings.hosted_mcp_enabled or settings.cloud_sync_oauth_enabled,
     )
 
     if settings.airgap_mode:
         _validate_airgap(settings)
 
     await load_master_key()
+
+    if _cloud_sync_oauth_runtime is not None:
+        try:
+            async with asyncio.timeout(settings.cloud_sync_oauth_startup_timeout_seconds):
+                await _cloud_sync_oauth_runtime.verifier.warm_jwks(force_refresh=True)
+        except (TimeoutError, RuntimeError) as exc:
+            raise RuntimeError(
+                "Consumer cloud sync OAuth issuer is unavailable at startup"
+            ) from exc
 
     # Encrypt legacy review-queue content and webhook signing secrets before the
     # service accepts traffic. The admin sentinel is transaction-local and is
@@ -441,6 +460,8 @@ _docs_enabled = (
 
 _hosted_mcp_runtime = None
 validate_openai_mcp_settings(_runtime_settings)
+validate_cloud_sync_oauth_settings(_runtime_settings)
+_cloud_sync_oauth_runtime = get_cloud_sync_oauth_runtime()
 if _runtime_settings.hosted_mcp_enabled:
     from .openai_mcp import build_openai_mcp_runtime
 
@@ -655,7 +676,32 @@ async def readyz(db: AsyncSession = Depends(_get_db)):
                 await _hosted_mcp_runtime.verifier.warm_jwks(force_refresh=False)
         except (TimeoutError, RuntimeError):
             return JSONResponse(content={"status": "unready"}, status_code=503)
+    if _cloud_sync_oauth_runtime is not None:
+        try:
+            async with asyncio.timeout(5):
+                await _cloud_sync_oauth_runtime.verifier.warm_jwks(force_refresh=False)
+        except (TimeoutError, RuntimeError):
+            return JSONResponse(content={"status": "unready"}, status_code=503)
     return await health(db)
+
+
+@app.get(
+    "/.well-known/oauth-protected-resource/lians-sync",
+    include_in_schema=False,
+)
+async def cloud_sync_protected_resource():
+    """Advertise the OAuth boundary used by native Lians Bridge clients."""
+
+    runtime = _cloud_sync_oauth_runtime
+    if runtime is None:
+        return JSONResponse(content={"detail": "Not found"}, status_code=404)
+    return {
+        "resource": runtime.resource_url,
+        "authorization_servers": [_runtime_settings.cloud_sync_oauth_issuer_url],
+        "scopes_supported": [SYNC_OAUTH_SCOPE],
+        "bearer_methods_supported": ["header"],
+        "resource_documentation": "https://www.lians.ai/privacy",
+    }
 
 
 @app.get("/.well-known/openai-apps-challenge", include_in_schema=False)

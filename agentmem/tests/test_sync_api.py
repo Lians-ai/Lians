@@ -14,6 +14,11 @@ import pytest_asyncio
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx import ASGITransport, AsyncClient
+from mcp.server.auth.provider import AccessToken
+from src.lians.cloud_sync_oauth import (
+    CloudSyncOAuthRuntime,
+    principal_from_sync_access_token,
+)
 from src.lians.db import get_db
 from src.lians.main import app
 from src.lians.models import ApiKey, SyncDevice, SyncRevision, SyncWorkspace
@@ -24,6 +29,7 @@ SYNC_KEY = "opaque-sync-key"
 OTHER_KEY = "opaque-sync-other-key"
 NO_SYNC_KEY = "opaque-no-sync-key"
 BARRIER_KEY = "opaque-barrier-sync-key"
+OAUTH_SECRET = "test-only-cloud-sync-namespace-secret-32-bytes"
 
 
 def _headers(key: str = SYNC_KEY) -> dict[str, str]:
@@ -302,3 +308,89 @@ async def test_cloud_workspace_deletion_requires_exact_confirmation(client):
     assert deleted.json()["encrypted_revisions_deleted"] == 1
     assert await db.get(SyncWorkspace, workspace_id) is None
     assert await db.get(SyncRevision, (workspace_id, 1)) is None
+
+
+@pytest.mark.asyncio
+async def test_consumer_oauth_sync_is_scoped_opaque_and_api_key_compatible(
+    client, monkeypatch
+):
+    http, db = client
+
+    class FakeVerifier:
+        async def verify_token(self, value):
+            if value == "invalid-token":
+                return None
+            return AccessToken(
+                token="verified",
+                client_id="lians-native",
+                scopes=[] if value == "no-scope-token" else ["memory:sync"],
+                expires_at=2_000_000_000,
+                resource="https://api.lians.ai",
+                subject="auth0|consumer-1",
+                claims={"iss": "https://login.example/", "tenant": ""},
+            )
+
+    runtime = CloudSyncOAuthRuntime(
+        verifier=FakeVerifier(),
+        resource_url="https://api.lians.ai",
+    )
+    monkeypatch.setattr(
+        "src.lians.cloud_sync_oauth.get_cloud_sync_oauth_runtime",
+        lambda: runtime,
+    )
+    monkeypatch.setenv("API_SECRET_SEED", OAUTH_SECRET)
+    from src.lians.config import get_settings
+
+    get_settings.cache_clear()
+    workspace_id = str(uuid.uuid4())
+    _, root = _device("Consumer laptop")
+    created = await http.post(
+        "/v1/sync/workspaces",
+        headers={"Authorization": "Bearer consumer-token"},
+        json={"workspace_id": workspace_id, "epoch": 1, "root_device": root},
+    )
+    assert created.status_code == 201, created.text
+    token = await FakeVerifier().verify_token("consumer-token")
+    principal = principal_from_sync_access_token(token, OAUTH_SECRET)
+    assert (await db.get(SyncWorkspace, workspace_id)).namespace == principal.namespace
+    assert "consumer-1" not in principal.namespace
+
+    no_scope = await http.get(
+        f"/v1/sync/workspaces/{workspace_id}/head",
+        headers={"Authorization": "Bearer no-scope-token"},
+    )
+    assert no_scope.status_code == 403
+    invalid = await http.get(
+        f"/v1/sync/workspaces/{workspace_id}/head",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+    assert invalid.status_code == 401
+    ambiguous = await http.get(
+        f"/v1/sync/workspaces/{workspace_id}/head",
+        headers={"Authorization": "Bearer consumer-token", "X-API-Key": SYNC_KEY},
+    )
+    assert ambiguous.status_code == 400
+
+    # Existing developer credentials continue to use their own tenant boundary.
+    developer_workspace = str(uuid.uuid4())
+    _, developer_root = _device("Developer PC")
+    developer_created = await http.post(
+        "/v1/sync/workspaces",
+        headers=_headers(),
+        json={
+            "workspace_id": developer_workspace,
+            "epoch": 1,
+            "root_device": developer_root,
+        },
+    )
+    assert developer_created.status_code == 201
+    assert (await db.get(SyncWorkspace, developer_workspace)).namespace == NAMESPACE
+
+
+@pytest.mark.asyncio
+async def test_sync_missing_credentials_returns_bearer_challenge(client):
+    http, _ = client
+    response = await http.get(f"/v1/sync/workspaces/{uuid.uuid4()}/head")
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == 'Bearer scope="memory:sync"'
+    assert "API-Key" in response.json()["detail"]

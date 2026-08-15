@@ -156,6 +156,38 @@ def test_cursor_remember_creates_the_first_project_rule(tmp_path):
     assert "Never use em dashes." in rule.read_text(encoding="utf-8")
 
 
+def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+
+    class PullingCloud:
+        def __init__(self):
+            self.calls = 0
+
+        def pull_if_connected(self):
+            self.calls += 1
+            if self.calls == 1:
+                store.remember(
+                    "Never use em dashes.",
+                    kind="preference",
+                    scope="global",
+                    source_client="cursor",
+                )
+            return {"state": "current", "attempted": True, "revisions_pulled": 1}
+
+    cloud = PullingCloud()
+    pack = context_for_event(
+        {"prompt": "Draft the response", "cwd": str(tmp_path)},
+        client="claude",
+        store=store,
+        cloud_sync=cloud,
+    )
+
+    assert cloud.calls == 1
+    assert "Never use em dashes." in pack["context"]
+    assert pack["receipt"]["client"] == "claude"
+    assert pack["cloud_sync"]["revisions_pulled"] == 1
+
+
 def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
@@ -321,6 +353,7 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         assert body["bridge"] == "ready"
         assert body["version"] == __version__
         assert body["memory"]["encrypted"] is True
+        assert body["cloud"]["state"] == "unavailable"
         assert {item["key"] for item in body["integrations"]} >= {"claude", "cursor", "codex"}
 
         status, remembered = _json_request(
@@ -359,6 +392,144 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
             )
         assert error.value.code == 403
         assert all(item["content"] != "This must not be stored" for item in store.list())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_loopback_cloud_auth_exposes_status_and_confirmed_actions_without_tokens(tmp_path):
+    calls = []
+
+    class FakeCloudAuth:
+        def status(self):
+            return {"state": "signed_out", "configured": True, "message": "Sign in."}
+
+        def sign_in(self):
+            calls.append("sign-in")
+            return {"state": "connected", "configured": True, "message": "Connected."}
+
+        def sign_out(self, *, confirmed=False):
+            if not confirmed:
+                raise ValueError("Signing out requires confirmed=true")
+            calls.append("sign-out")
+            return {
+                "state": "signed_out",
+                "configured": True,
+                "local_memory_preserved": True,
+            }
+
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        cloud_auth=FakeCloudAuth(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        status, cloud = _json_request(f"{app.origin}/v1/cloud/status", cookie=cookie)
+        assert status == 200
+        assert cloud["state"] == "signed_out"
+
+        with pytest.raises(HTTPError) as unconfirmed:
+            _json_request(
+                f"{app.origin}/v1/cloud/sign-in",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": False},
+            )
+        assert unconfirmed.value.code == 400
+        assert calls == []
+        status, connected = _json_request(
+            f"{app.origin}/v1/cloud/sign-in",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        assert status == 200
+        assert connected["state"] == "connected"
+        status, signed_out = _json_request(
+            f"{app.origin}/v1/cloud/sign-out",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        assert status == 200
+        assert signed_out["local_memory_preserved"] is True
+        assert calls == ["sign-in", "sign-out"]
+        assert "token" not in json.dumps([cloud, connected, signed_out]).lower()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
+    calls = []
+
+    class FakeCloudAuth:
+        def status(self):
+            return {"state": "connected", "configured": True, "message": "Connected."}
+
+    class FakeCloudSync:
+        def status(self):
+            return {"state": "connected", "sync_state": "ready", "head_revision": 1}
+
+        def pull_if_connected(self):
+            calls.append("pull")
+            return {"state": "current", "attempted": True, "revisions_pulled": 0}
+
+        def sync_if_connected(self):
+            calls.append("push")
+            return {
+                "state": "synced",
+                "attempted": True,
+                "memory_scope": "everywhere",
+                "pending": False,
+            }
+
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    app = BridgeApplication(
+        store,
+        port=0,
+        cloud_auth=FakeCloudAuth(),
+        cloud_sync=FakeCloudSync(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        status, remembered = _json_request(
+            f"{app.origin}/v1/remember",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "content": "Use FastAPI.",
+                "scope": "global",
+                "client": "cursor",
+            },
+        )
+        assert status == 201
+        assert remembered["cloud_sync"]["memory_scope"] == "everywhere"
+        assert calls == ["pull", "push"]
+
+        status, context = _json_request(
+            f"{app.origin}/v1/context",
+            cookie=cookie,
+            origin=app.origin,
+            data={"prompt": "Build the API", "client": "codex"},
+        )
+        assert status == 200
+        assert "Use FastAPI." in context["context"]
+        assert context["cloud_sync"]["state"] == "current"
+        assert calls == ["pull", "push", "pull"]
     finally:
         server.shutdown()
         server.server_close()

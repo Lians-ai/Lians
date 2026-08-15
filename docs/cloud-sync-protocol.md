@@ -4,10 +4,13 @@
 > deletion propagation, deterministic conflict handling, and opaque reference
 > server contract are implemented and tested in `lians_easy.sync`. The engine
 > also persists tenant-isolated encrypted workspaces, device grants, and
-> compare-and-swap revisions behind the explicit `sync` API-key scope. Consumer
-> OAuth, recovery, billing enforcement, and the sync UI are not generally
-> available yet. This document is an engineering contract, not a claim that
-> Lians Cloud is live.
+> compare-and-swap revisions behind either the explicit `sync` API-key scope or
+> a verified consumer `memory:sync` OAuth scope. The native Bridge now implements
+> system-browser Authorization Code + PKCE, encrypted rotating-token storage,
+> and automatic pull-before-recall / write-through-after-change orchestration.
+> A production identity provider, recovery, billing enforcement, device UI, and
+> the sync UI are not generally available yet. This document is an engineering
+> contract, not a claim that Lians Cloud is live.
 
 ## Product promise
 
@@ -100,9 +103,21 @@ supports workspace creation and head inspection, signed device-grant
 registration and listing, encrypted revision push/pull, and exact confirmed
 workspace deletion. PostgreSQL row-level security is enabled and forced on all
 three sync tables. `OpaqueSyncHTTPClient` gives the Bridge a bounded HTTPS
-transport with redacted credentials, sanitized failures, stale-head handling,
-and loopback-only plain HTTP for tests. These endpoints currently use scoped
-Lians API keys; they are not the finished nontechnical sign-in experience.
+transport with redacted API-key or rotating OAuth bearer credentials, sanitized
+failures, stale-head handling, and loopback-only plain HTTP for tests. Consumer
+tokens are verified for signature, issuer, audience, lifetime, and `memory:sync`
+scope. Their issuer, optional organization, and subject become a server-secret
+HMAC-derived opaque namespace; the sync tables receive none of those raw values.
+
+`CloudSyncService` serializes Bridge, MCP, and hook processes against one signed
+local state file. Connected clients pull encrypted revisions before recall,
+listing, context injection, and local mutations, then publish after remember,
+correction, pause, scope change, or confirmed forgetting. Cloud or identity
+provider failure never prevents the local mutation; the response reports that
+sync is pending and the next connected operation retries. The package test
+suite exercises the critical sequence from a Cursor-origin preference to a
+separate Codex device, then back through Claude correction and cross-device
+forgetting.
 
 The identity token, raw identity-provider subject, workspace key, device private
 keys, decrypted profile, memory count, project name, source, and receipt body
@@ -119,7 +134,7 @@ memory recovery.
 
 Before hosted sync is generally available, Lians still needs:
 
-- native-app authorization-code flow with PKCE and a tested Google sign-in;
+- production authorization-server configuration and a tested Google sign-in;
 - explicit device revocation plus workspace-key rotation for remaining devices;
 - a recovery-key or trusted-contact design, separately opted into by the user;
 - bounded retry/backoff, offline indicators, and conflict-review UI;

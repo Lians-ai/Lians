@@ -2,18 +2,20 @@
 FastAPI dependencies: API key auth, namespace resolution, DB session, RLS.
 """
 from __future__ import annotations
+
 import hashlib
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security
-from fastapi.security import APIKeyHeader
-from sqlalchemy import select, and_, text
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_db, set_current_namespace, set_current_barrier_group
+from ..db import get_db, set_current_barrier_group, set_current_namespace
 from ..models import ApiKey
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+_bearer_header = HTTPBearer(auto_error=False)
 
 # Named roles → scope sets (RBAC). A key's `role`, when set, is merged with any
 # explicit `scopes`. "compliance" gets read + admin (audit verify/export/erase)
@@ -39,7 +41,7 @@ def _effective_scopes(key_row: ApiKey) -> list[str]:
 
 
 class AuthContext:
-    def __init__(self, namespace: str, scopes: list[str], barrier_group: Optional[str] = None):
+    def __init__(self, namespace: str, scopes: list[str], barrier_group: str | None = None):
         self.namespace = namespace
         self.scopes = scopes
         # Information barrier the calling key is scoped to (None = unbarriered).
@@ -60,7 +62,7 @@ class AuthContext:
 async def _set_rls_context(
     db: AsyncSession,
     namespace: str,
-    barrier_group: Optional[str],
+    barrier_group: str | None,
 ) -> None:
     """
     Set the PostgreSQL session variable used by Row-Level Security policies.
@@ -93,13 +95,7 @@ async def _set_rls_context(
         pass  # SQLite or pre-transaction context — application-layer isolation applies
 
 
-async def get_auth(
-    raw_key: Annotated[Optional[str], Security(_api_key_header)],
-    db: AsyncSession = Depends(get_db),
-) -> AuthContext:
-    if not raw_key:
-        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
-
+async def _authenticate_api_key(raw_key: str, db: AsyncSession) -> AuthContext:
     hashed = _hash_key(raw_key)
     stmt = select(ApiKey).where(
         and_(
@@ -128,3 +124,69 @@ async def get_auth(
         scopes=_effective_scopes(key_row),
         barrier_group=barrier_group,
     )
+
+
+async def get_auth(
+    raw_key: Annotated[str | None, Security(_api_key_header)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AuthContext:
+    if not raw_key:
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
+    return await _authenticate_api_key(raw_key, db)
+
+
+async def get_sync_auth(
+    raw_key: Annotated[str | None, Security(_api_key_header)],
+    bearer: Annotated[
+        HTTPAuthorizationCredentials | None, Security(_bearer_header)
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AuthContext:
+    """Accept developer API keys or consumer OAuth, never both ambiguously."""
+
+    if raw_key and bearer is not None:
+        raise HTTPException(status_code=400, detail="Use one Lians credential type per request")
+    if raw_key:
+        return await _authenticate_api_key(raw_key, db)
+    if bearer is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in to Lians or provide an X-API-Key",
+            headers={"WWW-Authenticate": 'Bearer scope="memory:sync"'},
+        )
+
+    from ..cloud_sync_oauth import (
+        SYNC_OAUTH_SCOPE,
+        get_cloud_sync_oauth_runtime,
+        principal_from_sync_access_token,
+    )
+    from ..config import get_settings
+
+    runtime = get_cloud_sync_oauth_runtime()
+    if runtime is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Consumer Lians sign-in is not enabled",
+            headers={"WWW-Authenticate": f'Bearer scope="{SYNC_OAUTH_SCOPE}"'},
+        )
+    token = await runtime.verifier.verify_token(bearer.credentials)
+    if token is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Lians sign-in",
+            headers={"WWW-Authenticate": f'Bearer scope="{SYNC_OAUTH_SCOPE}"'},
+        )
+    try:
+        principal = principal_from_sync_access_token(token, get_settings().api_secret_seed)
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail="Relink your Lians account",
+            headers={"WWW-Authenticate": f'Bearer scope="{SYNC_OAUTH_SCOPE}"'},
+        ) from None
+
+    await _set_rls_context(db, principal.namespace, None)
+    set_current_namespace(principal.namespace)
+    set_current_barrier_group(None)
+    scopes = ["sync"] if SYNC_OAUTH_SCOPE in token.scopes else []
+    return AuthContext(namespace=principal.namespace, scopes=scopes, barrier_group=None)

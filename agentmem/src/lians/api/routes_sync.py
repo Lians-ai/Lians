@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import SyncDevice, SyncRevision, SyncWorkspace
-from .deps import AuthContext, get_auth
+from .deps import AuthContext, get_sync_auth
 
 router = APIRouter(prefix="/v1/sync", tags=["zero-knowledge-sync"])
 
@@ -266,7 +266,7 @@ async def _workspace(db: AsyncSession, namespace: str, workspace_id: str, *, loc
 @router.post("/workspaces", status_code=status.HTTP_201_CREATED)
 async def create_workspace(
     body: WorkspaceCreate,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     auth.require("sync")
@@ -321,7 +321,7 @@ async def create_workspace(
 @router.get("/workspaces/{workspace_id}/head")
 async def workspace_head(
     workspace_id: str,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     auth.require("sync")
@@ -347,7 +347,7 @@ async def workspace_head(
 async def register_device(
     workspace_id: str,
     body: DeviceGrantIn,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     auth.require("sync")
@@ -397,7 +397,7 @@ async def register_device(
 @router.get("/workspaces/{workspace_id}/devices/grants")
 async def device_grants(
     workspace_id: str,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     auth.require("sync")
@@ -426,7 +426,7 @@ async def device_grants(
 async def push_revision(
     workspace_id: str,
     body: RevisionIn,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     auth.require("sync")
@@ -494,7 +494,7 @@ async def push_revision(
 @router.get("/workspaces/{workspace_id}/revisions")
 async def pull_revisions(
     workspace_id: str,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
     after: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
@@ -527,7 +527,7 @@ async def pull_revisions(
 async def delete_workspace(
     workspace_id: str,
     body: WorkspaceDeleteIn,
-    auth: Annotated[AuthContext, Depends(get_auth)],
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     auth.require("sync")

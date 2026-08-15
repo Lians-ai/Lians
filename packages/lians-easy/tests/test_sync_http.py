@@ -53,6 +53,39 @@ def test_http_transport_sends_only_scoped_envelopes_and_redacts_credential(tmp_p
     assert "lians-secret-test-credential" not in repr(client)
 
 
+def test_http_transport_uses_rotating_oauth_bearer_without_retaining_it():
+    calls = []
+    tokens = iter(["first-access-token", "rotated-access-token"])
+
+    def opener(request, *, timeout):
+        calls.append(request)
+        return Response({"status": "ok"})
+
+    client = OpaqueSyncHTTPClient(
+        "https://cloud.lians.ai",
+        bearer_token_provider=lambda: next(tokens),
+        opener=opener,
+    )
+    workspace_id = "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d"
+    client.head(workspace_id)
+    client.head(workspace_id)
+    assert calls[0].headers["Authorization"] == "Bearer first-access-token"
+    assert calls[1].headers["Authorization"] == "Bearer rotated-access-token"
+    assert "X-api-key" not in calls[0].headers
+    assert "access-token" not in repr(client)
+
+
+def test_http_transport_requires_exactly_one_auth_mode():
+    with pytest.raises(ValueError, match="exactly one"):
+        OpaqueSyncHTTPClient("https://cloud.lians.ai")
+    with pytest.raises(ValueError, match="exactly one"):
+        OpaqueSyncHTTPClient(
+            "https://cloud.lians.ai",
+            "developer-key",
+            bearer_token_provider=lambda: "consumer-token",
+        )
+
+
 @pytest.mark.parametrize(
     "url",
     [

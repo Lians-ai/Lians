@@ -106,9 +106,11 @@ installed publisher and the operating system accepts the signature; otherwise
 Lians only selects the file in Downloads for the user to review.
 
 No Lians account, API key, database server, model download, or manual JSON
-editing is required. The local store uses AES-GCM; on Windows its root key is
-protected with DPAPI. The full Lians engine remains available when a team needs
-semantic retrieval, collaboration, governance, or a shared server deployment.
+editing is required for local mode. Optional Lians Cloud continuity uses an
+ordinary browser sign-in; credentials are never entered in the React app. The
+local store uses AES-GCM; on Windows its root key is protected with DPAPI. The
+full Lians engine remains available when a team needs semantic retrieval,
+collaboration, governance, or a shared server deployment.
 
 ### Move memory to another device
 
@@ -136,7 +138,7 @@ and receipt counts before import, and makes clear that existing history is
 never overwritten. The browser surface caps imports at 32 MiB; the CLI retains
 the full 128 MiB format limit for larger profiles.
 
-### Zero-knowledge sync foundation
+### Zero-knowledge cloud sync technical preview
 
 `lians_easy.sync` implements the device-side contract for future Lians Cloud
 continuity. An existing device approves a short-lived enrollment request, wraps
@@ -146,12 +148,29 @@ upload, signed, hash-chained, and accepted by the opaque reference service only
 when they extend the current head. Permanent forgetting wins over stale content
 on another device; divergent corrections fail atomically for human review.
 
-This protocol foundation is not a claim that hosted sync or account recovery is
+The Bridge now includes a public native OAuth client with system-browser PKCE,
+an OS-root-encrypted rotating-token vault, and automatic encrypted pull before
+context use plus write-through after memory changes. MCP and hook tests prove a
+Cursor-origin preference can appear on a separate Codex device, be corrected
+for Claude, and then be forgotten everywhere. Cloud failure leaves the local
+save successful and reports that encrypted sync is pending.
+
+Development builds opt into this path with deployment-provided public values;
+there is no client secret:
+
+```bash
+LIANS_CLOUD_URL=https://api.lians.ai
+LIANS_OAUTH_ISSUER=https://YOUR_ISSUER
+LIANS_OAUTH_CLIENT_ID=YOUR_PUBLIC_NATIVE_CLIENT_ID
+LIANS_OAUTH_AUDIENCE=https://api.lians.ai
+```
+
+This technical preview is not a claim that hosted sync or account recovery is
 generally available. The ordinary supported migration path remains **Move
-memory safely** until authenticated durable storage, device revocation and key
-rotation, recovery, provider-outage handling, and the consumer UI pass their
-release gates. The complete boundary is documented in
-[`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
+memory safely** until the production identity provider, device enrollment UI,
+device revocation and key rotation, recovery, provider-outage qualification,
+and consumer sync controls pass their release gates. The complete boundary is
+documented in [`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
 
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client

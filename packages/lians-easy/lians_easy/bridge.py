@@ -22,6 +22,8 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__
+from .cloud_auth import NativeCloudAuth
+from .cloud_service import CloudSyncService
 from .installer import client_targets, uninstall
 from .mcp import default_data_path
 from .portability import export_backup, import_backup, verify_backup
@@ -43,8 +45,10 @@ def context_for_event(
     *,
     client: str,
     store: MemoryStore,
+    cloud_sync: CloudSyncService | None = None,
     default_query: str = "Start or continue work in this project",
 ) -> dict[str, Any]:
+    cloud = (cloud_sync or CloudSyncService.for_store(store)).pull_if_connected()
     prompt = event.get("prompt")
     query = prompt.strip() if isinstance(prompt, str) and prompt.strip() else default_query
     cwd = event.get("cwd") if isinstance(event.get("cwd"), str) else None
@@ -57,7 +61,7 @@ def context_for_event(
         ):
             cwd = workspace_paths[0]
     project = None if client == "antigravity" and cwd is None else detect_project(cwd or Path.cwd())
-    return store.context_pack(
+    pack = store.context_pack(
         query,
         project=project,
         client=client,
@@ -65,6 +69,7 @@ def context_for_event(
         max_tokens=512,
         include_all_project=client == "antigravity",
     )
+    return {**pack, "cloud_sync": cloud}
 
 
 def render_hook_output(client: str, pack: dict[str, Any]) -> str:
@@ -154,6 +159,8 @@ class BridgeApplication:
         update_checker: Callable[[], dict[str, Any]] | None = None,
         update_downloader: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
         update_opener: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        cloud_auth: NativeCloudAuth | None = None,
+        cloud_sync: CloudSyncService | None = None,
     ) -> None:
         if host not in {"127.0.0.1", "::1", "localhost"}:
             raise ValueError("Lians Bridge only binds to the loopback interface")
@@ -168,6 +175,8 @@ class BridgeApplication:
         self.update_opener = update_opener or open_prepared_update
         self.prepared_update: dict[str, Any] | None = None
         self.update_lock = threading.Lock()
+        self.cloud_auth = cloud_auth or NativeCloudAuth.for_store(store)
+        self.cloud_sync = cloud_sync or CloudSyncService(store, self.cloud_auth)
 
     @property
     def origin(self) -> str:
@@ -311,6 +320,7 @@ class BridgeApplication:
                             "version": __version__,
                             "project": detect_project(cwd).public(),
                             "memory": application.store.stats(),
+                            "cloud": application.cloud_sync.status(),
                             "integrations": [
                                 {
                                     "key": target.key,
@@ -322,6 +332,9 @@ class BridgeApplication:
                             ],
                         },
                     )
+                    return
+                if parsed.path == "/v1/cloud/status":
+                    self._json(HTTPStatus.OK, application.cloud_sync.status())
                     return
                 if parsed.path == "/v1/update":
                     try:
@@ -356,9 +369,13 @@ class BridgeApplication:
                     return
                 if parsed.path == "/v1/memories":
                     state = query.get("state", ["current"])[0]
+                    cloud = application.cloud_sync.pull_if_connected()
                     self._json(
                         HTTPStatus.OK,
-                        {"memories": application.store.list(state=state)},
+                        {
+                            "memories": application.store.list(state=state),
+                            "cloud_sync": cloud,
+                        },
                     )
                     return
                 if parsed.path == "/v1/activity":
@@ -418,6 +435,33 @@ class BridgeApplication:
                         except OSError as exc:
                             raise RuntimeError("Lians could not prepare the encrypted backup") from exc
                         self._backup_download(content)
+                        return
+
+                    if parsed.path == "/v1/cloud/sign-in":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Cloud sign-in requires confirmed=true")
+                        self._json(HTTPStatus.OK, application.cloud_auth.sign_in())
+                        return
+                    if parsed.path == "/v1/cloud/sync":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Cloud sync requires confirmed=true")
+                        self._json(HTTPStatus.OK, application.cloud_sync.sync_now())
+                        return
+                    if parsed.path == "/v1/cloud/sign-out":
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_auth.sign_out(
+                                confirmed=data.get("confirmed") is True
+                            ),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/delete":
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.delete_cloud_memory(
+                                confirmed=data.get("confirmed") is True
+                            ),
+                        )
                         return
                     if parsed.path in {"/v1/backups/verify", "/v1/backups/import"}:
                         try:
@@ -569,6 +613,7 @@ class BridgeApplication:
 
                     cwd = str(data.get("cwd") or Path.cwd())
                     project = detect_project(cwd)
+                    cloud_before = application.cloud_sync.pull_if_connected()
 
                     def refresh_cursor_rule(*, force: bool = False) -> None:
                         rule = Path(project.root) / ".cursor" / "rules" / "lians-memory.mdc"
@@ -588,7 +633,13 @@ class BridgeApplication:
                             source_ref=str(data["source_ref"]) if data.get("source_ref") else None,
                         )
                         refresh_cursor_rule(force=item["source_client"] == "cursor")
-                        self._json(HTTPStatus.CREATED, {"memory": item})
+                        self._json(
+                            HTTPStatus.CREATED,
+                            {
+                                "memory": item,
+                                "cloud_sync": application.cloud_sync.sync_if_connected(),
+                            },
+                        )
                         return
                     if parsed.path == "/v1/context":
                         pack = application.store.context_pack(
@@ -598,7 +649,7 @@ class BridgeApplication:
                             limit=int(data.get("limit") or 3),
                             max_tokens=int(data.get("max_tokens") or 512),
                         )
-                        self._json(HTTPStatus.OK, pack)
+                        self._json(HTTPStatus.OK, {**pack, "cloud_sync": cloud_before})
                         return
                     match = re_match_memory_action(parsed.path)
                     if match:
@@ -608,14 +659,26 @@ class BridgeApplication:
                                 memory_id, str(data.get("content") or "")
                             )
                             refresh_cursor_rule()
-                            self._json(HTTPStatus.OK, {"memory": item})
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    "memory": item,
+                                    "cloud_sync": application.cloud_sync.sync_if_connected(),
+                                },
+                            )
                             return
                         if action == "pause":
                             item = application.store.pause(
                                 memory_id, paused=bool(data.get("paused", True))
                             )
                             refresh_cursor_rule()
-                            self._json(HTTPStatus.OK, {"memory": item})
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    "memory": item,
+                                    "cloud_sync": application.cloud_sync.sync_if_connected(),
+                                },
+                            )
                             return
                         if action == "scope":
                             scope = str(data.get("scope") or "project")
@@ -625,14 +688,26 @@ class BridgeApplication:
                                 project_id=project.id if scope == "project" else None,
                             )
                             refresh_cursor_rule()
-                            self._json(HTTPStatus.OK, {"memory": item})
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    "memory": item,
+                                    "cloud_sync": application.cloud_sync.sync_if_connected(),
+                                },
+                            )
                             return
                         if action == "forget":
                             result = application.store.forget(
                                 memory_id, confirmed=data.get("confirmed") is True
                             )
                             refresh_cursor_rule()
-                            self._json(HTTPStatus.OK, result)
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    **result,
+                                    "cloud_sync": application.cloud_sync.sync_if_connected(),
+                                },
+                            )
                             return
                     self._json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
                 except (
@@ -691,6 +766,7 @@ def run_hook(*, client: str, data_path: str | Path | None = None) -> int:
             sys.stdout.write("{}")
             return 0
         store = MemoryStore(data_path or default_data_path())
+        cloud_sync = CloudSyncService.for_store(store)
         default_query = (
             "Active project preferences constraints decisions and handoff"
             if client == "antigravity"
@@ -702,6 +778,7 @@ def run_hook(*, client: str, data_path: str | Path | None = None) -> int:
                 event,
                 client=client,
                 store=store,
+                cloud_sync=cloud_sync,
                 default_query=default_query,
             ),
         )

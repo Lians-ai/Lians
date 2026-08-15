@@ -7,6 +7,7 @@ import re
 import urllib.error
 import urllib.request
 import uuid
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -100,20 +101,25 @@ class OpaqueSyncHTTPClient:
     def __init__(
         self,
         base_url: str,
-        credential: str,
+        credential: str | None = None,
         *,
+        bearer_token_provider: Callable[[], str] | None = None,
         timeout_seconds: float = 15,
         opener: Any = urllib.request.urlopen,
     ) -> None:
         if not 1 <= timeout_seconds <= 60:
             raise ValueError("Lians Cloud timeout must be between 1 and 60 seconds")
         self.base_url = _origin(base_url)
-        self._credential = _credential(credential)
+        if (credential is None) == (bearer_token_provider is None):
+            raise ValueError("Configure exactly one Lians Cloud credential provider")
+        self._credential = _credential(credential) if credential is not None else None
+        self._bearer_token_provider = bearer_token_provider
         self.timeout_seconds = timeout_seconds
         self._opener = opener
 
     def __repr__(self) -> str:
-        return f"OpaqueSyncHTTPClient(base_url={self.base_url!r}, credential=<redacted>)"
+        mode = "api-key" if self._credential is not None else "oauth"
+        return f"OpaqueSyncHTTPClient(base_url={self.base_url!r}, auth={mode!r}, credential=<redacted>)"
 
     def _request(
         self,
@@ -131,16 +137,23 @@ class OpaqueSyncHTTPClient:
         ).encode()
         if encoded is not None and len(encoded) > MAX_CLOUD_REQUEST_BYTES:
             raise SyncProtocolError("Encrypted sync request exceeds the cloud safety limit")
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Lians-Bridge/0.5 opaque-sync",
+        }
+        if self._credential is not None:
+            headers["X-API-Key"] = self._credential
+        else:
+            assert self._bearer_token_provider is not None
+            headers["Authorization"] = (
+                "Bearer " + _credential(self._bearer_token_provider())
+            )
         request = urllib.request.Request(
             f"{self.base_url}{path}",
             data=encoded,
             method=method,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "X-API-Key": self._credential,
-                "User-Agent": "Lians-Bridge/0.5 opaque-sync",
-            },
+            headers=headers,
         )
         try:
             with self._opener(request, timeout=self.timeout_seconds) as response:

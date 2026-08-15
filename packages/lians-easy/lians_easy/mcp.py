@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from . import __version__
+from .cloud_service import CloudSyncService
 from .project import detect_project
 from .store import MemoryStore
 
@@ -143,8 +144,15 @@ def _text_result(data: Any, message: str | None = None) -> dict[str, Any]:
     }
 
 
-def call_tool(store: MemoryStore, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def call_tool(
+    store: MemoryStore,
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    cloud_sync: CloudSyncService | None = None,
+) -> dict[str, Any]:
     project = detect_project(arguments.get("project_root") or Path.cwd())
+    sync = cloud_sync or CloudSyncService.for_store(store)
 
     def refresh_cursor_rule(*, force: bool = False) -> None:
         rule = Path(project.root) / ".cursor" / "rules" / "lians-memory.mdc"
@@ -155,6 +163,7 @@ def call_tool(store: MemoryStore, name: str, arguments: dict[str, Any]) -> dict[
         write_cursor_rule(project.root, store=store)
 
     if name == "remember":
+        sync.pull_if_connected()
         scope = arguments.get("scope", "project")
         item = store.remember(
             arguments["content"],
@@ -168,8 +177,15 @@ def call_tool(store: MemoryStore, name: str, arguments: dict[str, Any]) -> dict[
             source_ref=arguments.get("source_ref"),
         )
         refresh_cursor_rule(force=item["source_client"] == "cursor")
-        return _text_result(item, f"Remembered: {item['content']} (id: {item['id']})")
+        cloud = sync.sync_if_connected()
+        message = (
+            f"Remembered everywhere: {item['content']} (id: {item['id']})"
+            if cloud["memory_scope"] == "everywhere"
+            else f"Remembered: {item['content']} (id: {item['id']})"
+        )
+        return _text_result({**item, "cloud_sync": cloud}, message)
     if name == "recall":
+        cloud = sync.pull_if_connected()
         pack = store.context_pack(
             arguments["query"],
             project=project,
@@ -180,33 +196,58 @@ def call_tool(store: MemoryStore, name: str, arguments: dict[str, Any]) -> dict[
         items = pack["memories"]
         if not items:
             return _text_result(
-                {"memories": [], "receipt": pack["receipt"]},
+                {"memories": [], "receipt": pack["receipt"], "cloud_sync": cloud},
                 "No relevant memories found.",
             )
         return _text_result(
-            {"memories": items, "receipt": pack["receipt"]},
+            {"memories": items, "receipt": pack["receipt"], "cloud_sync": cloud},
             pack["context"],
         )
     if name == "list_memories":
+        cloud = sync.pull_if_connected()
         items = store.list(
             state=arguments.get("state", "current"),
             limit=int(arguments.get("limit", 50)),
         )
-        return _text_result({"memories": items, "count": len(items)})
+        return _text_result({"memories": items, "count": len(items), "cloud_sync": cloud})
     if name == "correct_memory":
+        sync.pull_if_connected()
         item = store.correct(arguments["memory_id"], arguments["content"])
         refresh_cursor_rule()
-        return _text_result(item, f"Corrected memory. Current id: {item['id']}")
+        cloud = sync.sync_if_connected()
+        return _text_result(
+            {**item, "cloud_sync": cloud},
+            (
+                f"Corrected everywhere. Current id: {item['id']}"
+                if cloud["memory_scope"] == "everywhere"
+                else f"Corrected memory. Current id: {item['id']}"
+            ),
+        )
     if name == "forget_memory":
+        sync.pull_if_connected()
         result = store.forget(arguments["memory_id"], confirmed=arguments.get("confirmed") is True)
         refresh_cursor_rule()
-        return _text_result(result, f"Memory {result['status']}.")
+        cloud = sync.sync_if_connected()
+        return _text_result(
+            {**result, "cloud_sync": cloud},
+            (
+                "Memory forgotten everywhere."
+                if cloud["memory_scope"] == "everywhere"
+                else f"Memory {result['status']}."
+            ),
+        )
     raise ValueError(f"Unknown Lians tool: {name}")
 
 
 class MCPServer:
-    def __init__(self, store: MemoryStore) -> None:
+    def __init__(
+        self,
+        store: MemoryStore,
+        *,
+        cloud_sync: CloudSyncService | None = None,
+    ) -> None:
         self.store = store
+        self.cloud_sync = cloud_sync or CloudSyncService.for_store(store)
 
     def handle(self, request: dict[str, Any]) -> dict[str, Any] | None:
         method = request.get("method")
@@ -244,7 +285,10 @@ class MCPServer:
             params = request.get("params") or {}
             try:
                 result = call_tool(
-                    self.store, params.get("name", ""), params.get("arguments") or {}
+                    self.store,
+                    params.get("name", ""),
+                    params.get("arguments") or {},
+                    cloud_sync=self.cloud_sync,
                 )
             except Exception as exc:  # noqa: BLE001 - tool failures must be MCP results
                 result = {
