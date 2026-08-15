@@ -1,0 +1,144 @@
+name: Publish Lians Bridge to PyPI
+
+on:
+  pull_request:
+    paths:
+      - "packages/lians-easy/**"
+      - ".github/workflows/publish-lians-bridge.yml"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing immutable release tag to publish (for example, v0.6.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lians-bridge-pypi-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+jobs:
+  build:
+    name: Build and exercise public package
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_DIST: ${{ runner.temp }}/lians-bridge-dist
+    steps:
+      - name: Check out current change
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Check out requested release tag
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_tag }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Verify package identity and version
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["name"])')"
+          package_version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          runtime_version="$(PYTHONPATH=packages/lians-easy python -c 'from lians_easy import __version__; print(__version__)')"
+          if [[ "$package_name" != "lians-bridge" ]]; then
+            echo "Expected the public distribution to be lians-bridge; found $package_name" >&2
+            exit 1
+          fi
+          if [[ "$runtime_version" != "$package_version" ]]; then
+            echo "Runtime version $runtime_version does not match package version $package_version" >&2
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$package_version" >> "$GITHUB_ENV"
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "release_tag must be an existing stable semver tag (vX.Y.Z)" >&2
+              exit 1
+            fi
+            if [[ "v$package_version" != "$RELEASE_TAG" ]]; then
+              echo "Lians Bridge version $package_version does not match $RELEASE_TAG" >&2
+              exit 1
+            fi
+            tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+            head_sha="$(git rev-parse HEAD)"
+            if [[ "$tag_sha" != "$head_sha" ]]; then
+              echo "Checked-out SHA $head_sha does not match $RELEASE_TAG ($tag_sha)" >&2
+              exit 1
+            fi
+          fi
+      - name: Install build verification tools
+        run: python -m pip install build==1.3.0 twine==7.0.0
+      - name: Build wheel and source archive
+        working-directory: packages/lians-easy
+        run: python -m build --outdir "$PACKAGE_DIST"
+      - name: Validate published metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=("$PACKAGE_DIST"/*)
+          if [[ "${#files[@]}" != 2 ]]; then
+            echo "Expected exactly one wheel and one source archive; found ${#files[@]} files" >&2
+            exit 1
+          fi
+          wheel="$PACKAGE_DIST/lians_bridge-$PACKAGE_VERSION-py3-none-any.whl"
+          source_archive="$PACKAGE_DIST/lians_bridge-$PACKAGE_VERSION.tar.gz"
+          test -f "$wheel"
+          test -f "$source_archive"
+          python -m twine check "$wheel" "$source_archive"
+      - name: Exercise a clean wheel install
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/lians-bridge-smoke"
+          "$RUNNER_TEMP/lians-bridge-smoke/bin/python" -m pip install "$PACKAGE_DIST/lians_bridge-$PACKAGE_VERSION-py3-none-any.whl"
+          "$RUNNER_TEMP/lians-bridge-smoke/bin/lians" doctor --json
+          "$RUNNER_TEMP/lians-bridge-smoke/bin/lians-bridge" doctor --json
+          "$RUNNER_TEMP/lians-bridge-smoke/bin/lians-easy" doctor --json
+          "$RUNNER_TEMP/lians-bridge-smoke/bin/python" - <<'PY'
+          from importlib.resources import files
+          import lians_easy
+
+          assert lians_easy.__version__
+          app = files("lians_easy").joinpath("app", "index.html")
+          assert app.is_file(), "the wheel must carry the Lians App"
+          print(f"Verified lians-bridge {lians_easy.__version__} with bundled app")
+          PY
+      - name: Upload immutable package candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lians-bridge-dist-${{ github.run_id }}
+          path: ${{ env.PACKAGE_DIST }}/
+          if-no-files-found: error
+
+  publish:
+    name: Publish through PyPI trusted publishing
+    needs: build
+    if: github.event_name != 'pull_request' && vars.PUBLISH_LIANS_BRIDGE_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi-lians-bridge
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download the exact verified package candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: lians-bridge-dist-${{ github.run_id }}
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        with:
+          packages-dir: dist/

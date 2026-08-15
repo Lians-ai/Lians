@@ -9,6 +9,9 @@ Lians ships Python, TypeScript, Go, Java, and C SDKs. A unified `vX.Y.Z` tag run
    - `agentmem/sdk/typescript/package.json`
    - `agentmem/sdk/typescript/package-lock.json`
    - `agentmem/sdk/java/pom.xml`
+   - `packages/lians-easy/pyproject.toml`
+   - `packages/lians-easy/lians_easy/__init__.py`
+   - `packages/lians-easy/windows-version-info.txt`
 2. Update package README installation examples.
 3. Merge the release PR only after the full CI matrix passes.
 4. Confirm PyPI trusted publishing, npm trusted publishing, and Maven Central credentials are configured.
@@ -19,8 +22,9 @@ git tag -a v0.4.2 -m "release: v0.4.2"
 git push origin v0.4.2
 ```
 
-6. Monitor all three workflows until completion:
+6. Monitor all publication workflows until completion:
    - `publish-lian.yml`
+   - `publish-lians-bridge.yml`
    - `publish-lian-npm.yml`
    - `release.yml`
 7. Verify the published version from each public registry. A successful workflow is not proof that a registry search index has propagated.
@@ -30,10 +34,48 @@ git push origin v0.4.2
 | SDK | Registry | Publication path | Authentication |
 |---|---|---|---|
 | Python | [PyPI](https://pypi.org/project/lians-sdk/) | `publish-lian.yml` builds the sdist and wheel, then publishes them | PyPI trusted publisher through GitHub OIDC |
+| Lians Bridge | PyPI project `lians-bridge` after first publication | `publish-lians-bridge.yml` builds, verifies, installs, and exercises the wheel before publishing it | Opt-in PyPI trusted publisher through GitHub OIDC; no API token |
 | TypeScript | [npm](https://www.npmjs.com/package/@lians-ai/lians) | `publish-lian-npm.yml` builds, tests, and runs `npm publish` | npm trusted publisher through GitHub OIDC; no long-lived publish token |
 | Go | proxy.golang.org and pkg.go.dev | `release.yml` creates a module-path tag | GitHub token supplied to the workflow |
 | Java | Maven Central and GitHub Release JAR | `release.yml` signs and deploys with the `release` Maven profile | Sonatype credentials and GPG signing secrets |
 | C | GitHub Release source archive | `release.yml` creates `lians-c-<version>.tar.gz` | GitHub token supplied to the workflow |
+
+## Lians Bridge trusted publishing
+
+`lians-bridge` is the product-aligned developer distribution for the local
+Bridge. The source directory remains `packages/lians-easy` and the import
+namespace remains `lians_easy` for compatibility. The installed commands are
+`lians`, `lians-bridge`, and `lians-easy`; new documentation should lead with
+`lians`.
+
+Before setting the repository variable `PUBLISH_LIANS_BRIDGE_PYPI=true`, create
+or reserve the PyPI project through its pending trusted publisher flow with:
+
+| Field | Value |
+|---|---|
+| Owner | `Lians-ai` |
+| Repository | `Lians` |
+| Workflow filename | `publish-lians-bridge.yml` |
+| Environment | `pypi-lians-bridge` |
+
+Create the GitHub environment with the same name and protect it with a required
+maintainer review. The workflow accepts only an immutable stable `vX.Y.Z` tag,
+requires the package and runtime versions to match it, runs metadata checks,
+installs the exact wheel into a clean virtual environment, exercises all three
+command aliases, and proves the bundled Lians App is present. The publish job
+downloads that same artifact and authenticates with GitHub OIDC. It deliberately
+does not use `skip-existing`; a version collision must fail visibly rather than
+silently accepting registry state that was not produced by this run.
+
+After a successful first publication, verify the exact version from PyPI before
+changing `docs/easy-install.md` or `docs/supported-paths.md` from package
+candidate to published. Then test both supported no-clone paths on clean
+machines:
+
+```bash
+pipx install lians-bridge
+uv tool install lians-bridge
+```
 
 ## Windows desktop package
 

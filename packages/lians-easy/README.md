@@ -19,6 +19,44 @@ python -m lians_easy doctor --json
 python -m lians_easy app
 ```
 
+## Developer package
+
+The public Python distribution is named `lians-bridge`. It is built as a
+platform-independent wheel and carries the same encrypted runtime and bundled
+Lians App as the desktop package. After its first verified PyPI release,
+developers will be able to install it without cloning this repository:
+
+```bash
+pipx install lians-bridge
+# or: uv tool install lians-bridge
+
+lians doctor --json
+lians install --clients detected --plan --json
+lians install --clients detected --yes --json
+lians app
+```
+
+For a disposable diagnostic after publication:
+
+```bash
+uvx --from lians-bridge lians doctor --json
+```
+
+`lians-bridge` and the older `lians-easy` executable are compatibility aliases
+for `lians`. The distribution is not on PyPI yet, so these commands are a
+release contract rather than a claim that the package can already be
+downloaded. The gated publication workflow builds and exercises the exact
+wheel, verifies that its version matches an immutable stable tag, and uses PyPI
+trusted publishing without a stored API token.
+
+Before removing a `pipx` or `uv` installation, disconnect the managed client
+entries while the command still exists. This preserves encrypted memory:
+
+```bash
+lians uninstall --clients all --yes --json
+pipx uninstall lians-bridge
+```
+
 Open the executable without arguments for guided setup. Its final action opens
 the bundled control center through the loopback-only Bridge. Once at least one
 AI client is connected, later launches return to that control center directly.

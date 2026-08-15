@@ -242,7 +242,7 @@ them; they are not required to get started.
 agentmem/src/lians/          Core engine and HTTP service
 agentmem/sdk/python/        Python SDK, local client, and MCP server
 agentmem/sdk/typescript/    TypeScript SDK
-packages/lians-easy/        Encrypted cross-tool Bridge and installer preview
+packages/lians-easy/        Lians Bridge package source and installer preview
 integrations/               Agent and framework integrations
 plugins/                    Installable agent plugins
 docs/                       Setup, architecture, security, and operations

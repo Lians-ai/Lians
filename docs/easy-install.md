@@ -43,12 +43,33 @@ pretending the full signed upgrade-and-rollback lifecycle is complete.
 
 ## Personal setup
 
-Developers evaluating the preview can run it from a source checkout:
+Developers evaluating the current preview can run it from a source checkout:
 
 ```bash
 python -m pip install -e packages/lians-easy
 python -m lians_easy
 ```
+
+The product-aligned Python distribution is `lians-bridge`. Its wheel and
+trusted-publishing workflow are tested in pull requests, but it has not yet had
+its first PyPI release. Once the verified package is public, the no-clone path
+will be:
+
+```bash
+pipx install lians-bridge
+# or: uv tool install lians-bridge
+
+lians doctor --json
+lians install --clients detected --plan --json
+lians install --clients detected --yes --json
+lians app
+```
+
+Do not copy these commands into a normal-user onboarding flow until the
+`lians-bridge` project and expected version can be verified on PyPI. A public
+Python wheel removes the repository checkout for developers; it does not
+replace Authenticode, Developer ID, notarization, or clean-device testing for
+the consumer desktop packages.
 
 Choose the clients to configure, select **Install Lians**, restart those
 clients, then ask Cursor to remember a useful project rule. Start a new Codex
@@ -187,6 +208,17 @@ LiansMemory uninstall --clients antigravity,claude,cursor,gemini,codex --yes --j
 Every write is idempotent and creates a timestamped backup when a configuration
 already exists. This makes the same flow suitable for MDM, scripted onboarding,
 and help-desk diagnostics.
+
+For a future `pipx` or `uv` deployment, run the managed uninstall before
+removing the Python tool so client settings do not retain a command that no
+longer exists:
+
+```bash
+lians uninstall --clients all --yes --json
+pipx uninstall lians-bridge
+```
+
+This disconnects supported clients and preserves the encrypted memory store.
 
 ## Easy runtime or full engine?
 

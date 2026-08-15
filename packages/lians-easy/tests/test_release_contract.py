@@ -17,6 +17,42 @@ def _package_version() -> str:
     return match.group(1)
 
 
+def test_public_python_package_has_product_aligned_commands() -> None:
+    pyproject = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert 'requires = ["hatchling==1.32.0"]' in pyproject
+    assert 'name = "lians-bridge"' in pyproject
+    assert 'description = "Private cross-tool memory for AI clients"' in pyproject
+    assert 'lians = "lians_easy.cli:main"' in pyproject
+    assert 'lians-bridge = "lians_easy.cli:main"' in pyproject
+    assert 'lians-easy = "lians_easy.cli:main"' in pyproject
+    assert 'Repository = "https://github.com/Lians-ai/Lians"' in pyproject
+
+
+def test_public_python_publish_is_gated_and_exercises_the_exact_wheel() -> None:
+    workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "publish-lians-bridge.yml"
+    ).read_text(encoding="utf-8")
+
+    assert 'release_tag must be an existing stable semver tag (vX.Y.Z)' in workflow
+    assert '"lians-bridge"' in workflow
+    assert 'Runtime version $runtime_version does not match package version' in workflow
+    assert 'git rev-list -n 1 "$RELEASE_TAG"' in workflow
+    assert 'git rev-parse HEAD' in workflow
+    assert 'python -m twine check "$wheel" "$source_archive"' in workflow
+    assert 'lians_bridge-$PACKAGE_VERSION-py3-none-any.whl' in workflow
+    assert 'Expected exactly one wheel and one source archive' in workflow
+    assert 'bin/lians" doctor --json' in workflow
+    assert 'bin/lians-bridge" doctor --json' in workflow
+    assert 'bin/lians-easy" doctor --json' in workflow
+    assert 'joinpath("app", "index.html")' in workflow
+    assert "vars.PUBLISH_LIANS_BRIDGE_PYPI == 'true'" in workflow
+    assert "environment: pypi-lians-bridge" in workflow
+    assert "id-token: write" in workflow
+    assert "pypa/gh-action-pypi-publish@" in workflow
+    assert "skip-existing" not in workflow
+
+
 def test_windows_identity_resources_match_package_version() -> None:
     version = _package_version()
     numeric = tuple(int(part) for part in version.split(".")) + (0,)

@@ -17,7 +17,7 @@ machine-readable registry record is
 | Local memory inside a Python app or notebook | `pip install "lians-sdk[local]"` and [`LocalLiansClient`](../agentmem/sdk/python) | **Recommended** |
 | A shared self-hosted HTTP service | [`agentmem/src/lians/`](../agentmem/src/lians) through the [self-hosting guide](install.md#self-host-lians) | **Current, operator-managed** |
 | A language client for an existing HTTP service | [`agentmem/sdk/`](../agentmem/sdk) | **Current release line** |
-| Evaluate encrypted cross-tool memory and automatic recall | [`packages/lians-easy/`](../packages/lians-easy) | **Technical preview; unsigned** |
+| Evaluate encrypted cross-tool memory and automatic recall | [`packages/lians-easy/`](../packages/lians-easy) | **Technical preview; Python package candidate, desktop unsigned** |
 
 The current Python distribution is named **`lians-sdk`**, while its import
 namespace is **`lians`**. For new work, install `lians-sdk`; do not select a
@@ -34,7 +34,7 @@ folder merely because it is named `sdk/python`.
 | `integrations/` | **Current, integration-specific** | Tested client and framework setup. Begin with the integration's README. |
 | `plugins/lians-memory/` | **Current Codex plugin source** | The repository marketplace plugin and its local runtime. |
 | `plugins/lians-memory-universal/` | **Submission/evaluation bundle** | Hosted OpenAI review material; it is not the general local installation path. |
-| `packages/lians-easy/` | **Technical preview** | Source evaluation of Lians Bridge: encrypted local memory, MCP, Claude/Codex prompt hooks, Cursor project rules, and context receipts. It is not a signed desktop download. |
+| `packages/lians-easy/` | **Technical preview** | Source and future `lians-bridge` distribution: encrypted local memory, MCP, Claude/Codex prompt hooks, Cursor project rules, and context receipts. The Python wheel is not on PyPI yet, and it is not a signed desktop download. |
 | `sdk/python/` | **Legacy** | The older `lians` 0.2.0 thin-client tree. Do not use it for new installs, examples, or integrations. |
 | `demo/`, `benchmarks/`, `paper/` | **Evidence and examples** | Reproducible demonstrations, evaluation fixtures, and research—not product installation entry points. |
 
@@ -45,7 +45,10 @@ folder merely because it is named `sdk/python`.
   version string that remains in a historical or compatibility directory.
 - The normal free local path is the published `lians-sdk[mcp]` package. It needs
   no Lians account or API key and stores memory in `~/.lians/mcp.db`.
-- Lians Bridge remains source-only for normal users. The current GitHub release
+- Lians Bridge remains source-only for normal users. A product-aligned
+  `lians-bridge` wheel now has a tested, opt-in trusted-publishing path, but it
+  must not be described as installable until its first PyPI release is verified.
+  The current GitHub release
   does not contain signed Windows, notarized macOS, or Linux desktop installer
   assets. See the [preview trust gate](easy-install.md#release-trust-gate).
 - The full service and remote SDKs are for a hosted or self-hosted HTTP

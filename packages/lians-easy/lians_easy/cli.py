@@ -44,7 +44,7 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(prog="lians-easy", description="Local memory for your AI")
+    result = argparse.ArgumentParser(prog="lians", description="Local memory for your AI")
     commands = result.add_subparsers(dest="command")
     mcp = commands.add_parser("mcp", help="Run the local MCP memory server")
     mcp.add_argument("--data", type=Path)
