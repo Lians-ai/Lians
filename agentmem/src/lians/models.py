@@ -496,6 +496,31 @@ class SyncWorkspace(Base):
     )
 
 
+class SyncEnrollment(Base):
+    """Short-lived public-key exchange for adding a zero-knowledge device."""
+
+    __tablename__ = "sync_enrollments"
+
+    request_id = Column(String(36), primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    device_id = Column(String(64), nullable=False)
+    device_name = Column(String(80), nullable=False)
+    verification_code = Column(String(9), nullable=False)
+    request = Column(JSON, nullable=False)
+    approval = Column(JSON, nullable=True)
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), nullable=True
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_sync_enrollments_namespace_expires", "namespace", "expires_at"),
+        Index("ix_sync_enrollments_namespace_workspace", "namespace", "workspace_id"),
+    )
+
+
 class SyncDevice(Base):
     """Public device identity and signed enrollment grant; no private key."""
 

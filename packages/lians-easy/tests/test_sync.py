@@ -8,6 +8,7 @@ from lians_easy.store import MemoryStore
 from lians_easy.sync import (
     DeviceIdentity,
     OpaqueRevisionLog,
+    PendingEnrollment,
     SyncPreconditionError,
     SyncProtocolError,
     SyncState,
@@ -126,6 +127,23 @@ def test_state_is_local_key_protected_signed_and_bound_to_device(tmp_path):
     other_store, other_identity = _device(tmp_path, "Other PC")
     with pytest.raises(SyncProtocolError):
         SyncState.load(path, other_store.cipher, other_identity)
+
+
+def test_pending_enrollment_is_encrypted_resumable_and_device_bound(tmp_path):
+    store, identity = _device(tmp_path, "New laptop")
+    pending = PendingEnrollment.create(identity)
+    path = tmp_path / "New laptop" / "pending-enrollment.json"
+    pending.save(path, store.cipher, identity)
+
+    encoded = path.read_bytes()
+    assert pending.request["verification_code"].encode() not in encoded
+    assert pending.request["device"]["display_name"].encode() not in encoded
+    loaded = PendingEnrollment.load(path, store.cipher, identity)
+    assert loaded.request == pending.request
+
+    other_store, other_identity = _device(tmp_path, "Other laptop")
+    with pytest.raises(SyncProtocolError, match="different local device"):
+        PendingEnrollment.load(path, other_store.cipher, other_identity)
 
 
 def test_revision_tampering_replay_and_stale_push_fail_closed(tmp_path):

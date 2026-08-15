@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import hmac
 import os
 import platform
 import threading
@@ -16,12 +17,15 @@ from .cloud_auth import CloudAuthError, NativeCloudAuth
 from .store import MemoryStore
 from .sync import (
     DeviceIdentity,
+    PendingEnrollment,
     SyncPreconditionError,
     SyncProtocolError,
     SyncState,
+    accept_enrollment,
     acknowledge_revision,
     apply_device_grant,
     apply_revision,
+    approve_enrollment,
     prepare_revision,
 )
 from .sync_http import OpaqueSyncHTTPClient, SyncCloudError
@@ -99,6 +103,7 @@ class CloudSyncService:
             state_path or store.path.with_name("sync-state.json")
         ).expanduser()
         self.lock_path = self.state_path.with_name(f".{self.state_path.name}.lock")
+        self.pending_path = self.state_path.with_name("pending-device-enrollment.json")
         self.device_name = (device_name or platform.node() or "This device")[:80]
         self._client_factory = client_factory
         self._lock = _process_lock(self.lock_path)
@@ -122,6 +127,15 @@ class CloudSyncService:
 
     def _save(self, state: SyncState, identity: DeviceIdentity) -> None:
         state.save(self.state_path, self.store.cipher, identity)
+
+    def _load_pending(self, identity: DeviceIdentity) -> PendingEnrollment | None:
+        if not self.pending_path.exists():
+            return None
+        return PendingEnrollment.load(self.pending_path, self.store.cipher, identity)
+
+    def _require_connected(self) -> None:
+        if self.auth.status()["state"] not in {"connected", "refresh_required"}:
+            raise ValueError("Sign in to Lians Cloud before managing devices")
 
     def _client(self) -> OpaqueSyncHTTPClient:
         return self._client_factory(
@@ -171,6 +185,230 @@ class CloudSyncService:
             "head_revision": state.head_revision,
             "device_count": len(state.trusted_devices),
         }
+
+    @staticmethod
+    def _pending_summary(request: dict[str, Any], *, state: str) -> dict[str, Any]:
+        return {
+            "state": state,
+            "request_id": request["request_id"],
+            "verification_code": request["verification_code"],
+            "device": {
+                "device_id": request["device"]["device_id"],
+                "display_name": request["device"]["display_name"],
+            },
+            "expires_at": request["expires_at"],
+        }
+
+    def start_device_enrollment(self) -> dict[str, Any]:
+        """Publish a resumable short-code request from a new signed-in device."""
+
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            if self._load(identity) is not None:
+                raise ValueError("This device is already connected to Lians Cloud")
+            pending = self._load_pending(identity)
+            if pending is None:
+                pending = PendingEnrollment.create(identity)
+                client = self._client()
+                client.create_enrollment(pending.request)
+                try:
+                    pending.save(self.pending_path, self.store.cipher, identity)
+                except (OSError, SyncProtocolError):
+                    try:
+                        client.delete_enrollment(
+                            pending.request["request_id"], confirmed=True
+                        )
+                    except (OSError, SyncCloudError, ValueError):
+                        pass
+                    raise
+            return {
+                **self._pending_summary(pending.request, state="waiting_for_approval"),
+                "message": (
+                    "On a connected device, open Lians and approve this matching code."
+                ),
+            }
+
+    def device_enrollment_status(self) -> dict[str, Any]:
+        """Poll and atomically accept an approved request on this new device."""
+
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            state = self._load(identity)
+            if state is not None:
+                self.pending_path.unlink(missing_ok=True)
+                return {
+                    "state": "connected",
+                    "device": state.device,
+                    "device_count": len(state.trusted_devices),
+                    "head_revision": state.head_revision,
+                    "message": "This device can use encrypted memory everywhere.",
+                }
+            try:
+                pending = self._load_pending(identity)
+            except SyncProtocolError as exc:
+                if "expired" not in str(exc).lower():
+                    raise
+                self.pending_path.unlink(missing_ok=True)
+                return {
+                    "state": "expired",
+                    "message": "That code expired. Start Add Device again for a new code.",
+                }
+            if pending is None:
+                return {
+                    "state": "not_requested",
+                    "message": "Choose Add this device to begin.",
+                }
+            client = self._client()
+            try:
+                remote = client.enrollment(pending.request["request_id"])
+            except SyncCloudError as exc:
+                if exc.status not in {404, 410}:
+                    raise
+                self.pending_path.unlink(missing_ok=True)
+                return {
+                    "state": "expired" if exc.status == 410 else "cancelled",
+                    "message": "That device request is no longer available. Start again.",
+                }
+            approval = remote.get("approval")
+            if approval is None:
+                return {
+                    **self._pending_summary(
+                        pending.request, state="waiting_for_approval"
+                    ),
+                    "message": "Waiting for approval on a connected device.",
+                }
+            if not isinstance(approval, dict):
+                raise SyncCloudError("Lians Cloud returned an invalid device approval")
+            state = accept_enrollment(
+                self.store,
+                identity,
+                pending.request,
+                approval,
+                self.state_path,
+            )
+            pulled = self._pull(client, state, identity)
+            pushed = False
+            for attempt in range(2):
+                revision = prepare_revision(self.store, state, identity)
+                try:
+                    client.push(state.workspace_id, revision)
+                except SyncPreconditionError:
+                    if attempt:
+                        raise
+                    pulled += self._pull(client, state, identity)
+                    continue
+                acknowledge_revision(state, revision)
+                self._save(state, identity)
+                pushed = True
+                break
+            try:
+                client.delete_enrollment(pending.request["request_id"], confirmed=True)
+            except SyncCloudError:
+                # The short-lived opaque exchange can safely expire server-side.
+                pass
+            self.pending_path.unlink(missing_ok=True)
+            return {
+                "state": "connected",
+                "device": state.device,
+                "device_count": len(state.trusted_devices),
+                "revisions_pulled": pulled,
+                "revision_pushed": pushed,
+                "head_revision": state.head_revision,
+                "message": "This device can now use your encrypted memory everywhere.",
+            }
+
+    def pending_device_requests(self) -> dict[str, Any]:
+        """Return bounded public summaries for approval on an existing device."""
+
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            state = self._load(identity)
+            if state is None:
+                raise ValueError("Connect this device before approving another device")
+            requests: list[dict[str, Any]] = []
+            for item in self._client().enrollments():
+                request = item.get("request")
+                if not isinstance(request, dict) or not isinstance(request.get("device"), dict):
+                    raise SyncCloudError("Lians Cloud returned an invalid device request")
+                if request["device"].get("device_id") == identity.device_id:
+                    continue
+                try:
+                    requests.append(
+                        self._pending_summary(request, state="waiting_for_approval")
+                    )
+                except (KeyError, TypeError) as exc:
+                    raise SyncCloudError(
+                        "Lians Cloud returned an invalid device request"
+                    ) from exc
+            return {"state": "ready", "requests": requests, "count": len(requests)}
+
+    def approve_device_request(
+        self,
+        request_id: str,
+        verification_code: str,
+        *,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Approve only after an explicit, matching out-of-band short code."""
+
+        if not confirmed:
+            raise ValueError("Approving a device requires confirmed=true")
+        rendered_code = verification_code.strip().upper()
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            state = self._load(identity)
+            if state is None:
+                raise ValueError("Connect this device before approving another device")
+            client = self._client()
+            remote = client.enrollment(request_id)
+            request = remote.get("request")
+            if not isinstance(request, dict):
+                raise SyncCloudError("Lians Cloud returned an invalid device request")
+            expected_code = request.get("verification_code")
+            if not isinstance(expected_code, str) or not hmac.compare_digest(
+                rendered_code, expected_code
+            ):
+                raise ValueError("The verification code does not match this device request")
+            approval = approve_enrollment(state, identity, request)
+            client.approve_enrollment(request_id, approval)
+            self._save(state, identity)
+            recipient = approval["grant"]["recipient_device"]
+            return {
+                "state": "approved",
+                "request_id": request_id,
+                "device": {
+                    "device_id": recipient["device_id"],
+                    "display_name": recipient["display_name"],
+                },
+                "device_count": len(state.trusted_devices),
+                "message": f"{recipient['display_name']} can now finish connecting.",
+            }
+
+    def cancel_device_enrollment(self, *, confirmed: bool = False) -> dict[str, Any]:
+        if not confirmed:
+            raise ValueError("Cancelling Add Device requires confirmed=true")
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            pending = self._load_pending(identity)
+            if pending is None:
+                raise LookupError("No Add Device request is waiting")
+            try:
+                self._client().delete_enrollment(
+                    pending.request["request_id"], confirmed=True
+                )
+            except SyncCloudError as exc:
+                if exc.status not in {404, 410}:
+                    raise
+            self.pending_path.unlink(missing_ok=True)
+            return {
+                "state": "cancelled",
+                "message": "The device request was cancelled. Nothing was connected.",
+            }
 
     @staticmethod
     def _apply_grants(state: SyncState, grants: list[dict[str, Any]]) -> int:

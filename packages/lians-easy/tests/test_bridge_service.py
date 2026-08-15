@@ -468,6 +468,127 @@ def test_loopback_cloud_auth_exposes_status_and_confirmed_actions_without_tokens
         thread.join(timeout=5)
 
 
+def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded(tmp_path):
+    calls = []
+
+    class FakeCloudAuth:
+        def status(self):
+            return {"state": "connected", "configured": True, "message": "Connected."}
+
+    class FakeCloudSync:
+        def status(self):
+            return {"state": "connected", "sync_state": "not_started"}
+
+        def pending_device_requests(self):
+            calls.append("list")
+            return {
+                "state": "ready",
+                "count": 1,
+                "requests": [
+                    {
+                        "request_id": "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d",
+                        "verification_code": "ABCD-1234",
+                        "device": {"display_name": "Laptop", "device_id": "device-2"},
+                    }
+                ],
+            }
+
+        def start_device_enrollment(self):
+            calls.append("start")
+            return {
+                "state": "waiting_for_approval",
+                "request_id": "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d",
+                "verification_code": "ABCD-1234",
+            }
+
+        def device_enrollment_status(self):
+            calls.append("check")
+            return {"state": "connected", "device_count": 2}
+
+        def cancel_device_enrollment(self, *, confirmed=False):
+            assert confirmed is True
+            calls.append("cancel")
+            return {"state": "cancelled"}
+
+        def approve_device_request(
+            self, request_id, verification_code, *, confirmed=False
+        ):
+            assert request_id == "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d"
+            assert verification_code == "ABCD-1234"
+            assert confirmed is True
+            calls.append("approve")
+            return {
+                "state": "approved",
+                "device": {"display_name": "Laptop", "device_id": "device-2"},
+            }
+
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        cloud_auth=FakeCloudAuth(),
+        cloud_sync=FakeCloudSync(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        status, requests = _json_request(
+            f"{app.origin}/v1/cloud/device-requests", cookie=cookie
+        )
+        assert status == 200
+        assert requests["requests"][0]["verification_code"] == "ABCD-1234"
+
+        with pytest.raises(HTTPError) as unconfirmed:
+            _json_request(
+                f"{app.origin}/v1/cloud/device-enrollment/start",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": False},
+            )
+        assert unconfirmed.value.code == 400
+        _, started = _json_request(
+            f"{app.origin}/v1/cloud/device-enrollment/start",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        _, checked = _json_request(
+            f"{app.origin}/v1/cloud/device-enrollment/check",
+            cookie=cookie,
+            origin=app.origin,
+            data={},
+        )
+        _, approved = _json_request(
+            f"{app.origin}/v1/cloud/device-requests/approve",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "request_id": started["request_id"],
+                "verification_code": started["verification_code"],
+                "confirmed": True,
+            },
+        )
+        _, cancelled = _json_request(
+            f"{app.origin}/v1/cloud/device-enrollment/cancel",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        assert checked["state"] == "connected"
+        assert approved["state"] == "approved"
+        assert cancelled["state"] == "cancelled"
+        assert calls == ["list", "start", "check", "approve", "cancel"]
+        assert "workspace" not in json.dumps([requests, started, checked, approved, cancelled])
+        assert "key" not in json.dumps([requests, started, checked, approved, cancelled])
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
     calls = []
 

@@ -329,7 +329,7 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
         assert len(payload) == record["bytes"]
         assert hashlib.sha256(payload).hexdigest() == record["sha256"]
         total_bytes += len(payload)
-    assert total_bytes < 400_000
+    assert total_bytes < 410_000
 
     scripts = [relative for relative in expected if relative.endswith(".js")]
     assert len(scripts) == 2
@@ -355,6 +355,13 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "/v1/cloud/sync" in cloud_script
     assert "/v1/cloud/sign-out" in cloud_script
     assert "/v1/cloud/delete" in cloud_script
+    assert "/v1/cloud/device-enrollment/start" in cloud_script
+    assert "/v1/cloud/device-enrollment/check" in cloud_script
+    assert "/v1/cloud/device-enrollment/cancel" in cloud_script
+    assert "/v1/cloud/device-requests" in cloud_script
+    assert "/v1/cloud/device-requests/approve" in cloud_script
+    assert "Add this device" in cloud_script
+    assert "Code matches · approve" in cloud_script
     assert "Lians cannot read it" in cloud_script
     assert "local memory was not changed" in cloud_script
     assert "innerHTML" not in cloud_script

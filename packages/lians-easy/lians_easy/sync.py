@@ -44,6 +44,7 @@ from .portability import (
 from .store import MemoryStore
 
 STATE_FORMAT = "lians-sync-device-state"
+PENDING_ENROLLMENT_FORMAT = "lians-pending-device-enrollment"
 REQUEST_FORMAT = "lians-device-enrollment-request"
 APPROVAL_FORMAT = "lians-device-enrollment-approval"
 GRANT_FORMAT = "lians-device-grant"
@@ -364,6 +365,116 @@ class SyncState:
             head_revision=head["revision"],
             head_hash=head["object_hash"],
         )
+
+
+@dataclass(frozen=True)
+class PendingEnrollment:
+    """Locally encrypted state for a resumable Add Device request."""
+
+    request: dict[str, Any]
+
+    @classmethod
+    def create(
+        cls,
+        identity: DeviceIdentity,
+        *,
+        now: datetime | None = None,
+        ttl_seconds: int = 600,
+    ) -> PendingEnrollment:
+        return cls(
+            request=create_enrollment_request(
+                identity,
+                now=now,
+                ttl_seconds=ttl_seconds,
+            )
+        )
+
+    def save(
+        self,
+        path: str | Path,
+        cipher: LocalCipher,
+        identity: DeviceIdentity,
+        *,
+        overwrite: bool = True,
+    ) -> None:
+        request = _validate_request(self.request)
+        if request["device"] != identity.descriptor:
+            raise SyncProtocolError("Pending enrollment belongs to a different local device")
+        header = {
+            "format": PENDING_ENROLLMENT_FORMAT,
+            "version": SYNC_VERSION,
+            "request_id": request["request_id"],
+            "device_id": identity.device_id,
+        }
+        ciphertext, nonce = cipher.seal_bytes(
+            _canonical(request),
+            associated_data=_canonical(header),
+        )
+        document = {
+            **header,
+            "request": {
+                "cipher": "AES-256-GCM",
+                "nonce": _b64(nonce),
+                "ciphertext": _b64(ciphertext),
+            },
+        }
+        encoded = _canonical(document) + b"\n"
+        if len(encoded) > MAX_STATE_BYTES:
+            raise SyncProtocolError("Pending enrollment state is unexpectedly large")
+        _atomic_publish(Path(path).expanduser().resolve(), encoded, overwrite=overwrite)
+
+    @classmethod
+    def load(
+        cls,
+        path: str | Path,
+        cipher: LocalCipher,
+        identity: DeviceIdentity,
+        *,
+        now: datetime | None = None,
+    ) -> PendingEnrollment:
+        pending_path = Path(path).expanduser().resolve()
+        if pending_path.stat().st_size > MAX_STATE_BYTES:
+            raise SyncProtocolError("Pending enrollment state is unexpectedly large")
+        try:
+            document = json.loads(pending_path.read_bytes())
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise SyncProtocolError("Pending enrollment state is invalid") from exc
+        _exact(
+            document,
+            {"format", "version", "request_id", "device_id", "request"},
+            label="Pending enrollment state",
+        )
+        if (
+            document["format"] != PENDING_ENROLLMENT_FORMAT
+            or document["version"] != SYNC_VERSION
+            or document["device_id"] != identity.device_id
+        ):
+            raise SyncProtocolError("Pending enrollment belongs to a different local device")
+        _uuid(document["request_id"], label="Enrollment request ID")
+        wrapped = _exact(
+            document["request"],
+            {"cipher", "nonce", "ciphertext"},
+            label="Encrypted enrollment request",
+        )
+        if wrapped["cipher"] != "AES-256-GCM":
+            raise SyncProtocolError("Pending enrollment cipher is unsupported")
+        header = {key: document[key] for key in ("format", "version", "request_id", "device_id")}
+        try:
+            plaintext = cipher.open_bytes(
+                _unb64(wrapped["ciphertext"], label="Encrypted enrollment request"),
+                _unb64(wrapped["nonce"], label="Enrollment request nonce", length=12),
+                associated_data=_canonical(header),
+            )
+            request = json.loads(plaintext)
+        except (InvalidTag, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise SyncProtocolError("Pending enrollment state was changed") from exc
+        request = _validate_request(request, now=now)
+        if (
+            request["request_id"] != document["request_id"]
+            or request["device"] != identity.descriptor
+        ):
+            raise SyncProtocolError("Pending enrollment request does not match this device")
+        return cls(request=request)
 
 
 def _verification_code(request_body: dict[str, Any]) -> str:

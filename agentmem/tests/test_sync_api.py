@@ -7,7 +7,7 @@ import hashlib
 import json
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
@@ -21,7 +21,13 @@ from src.lians.cloud_sync_oauth import (
 )
 from src.lians.db import get_db
 from src.lians.main import app
-from src.lians.models import ApiKey, SyncDevice, SyncRevision, SyncWorkspace
+from src.lians.models import (
+    ApiKey,
+    SyncDevice,
+    SyncEnrollment,
+    SyncRevision,
+    SyncWorkspace,
+)
 
 NAMESPACE = "opaque-sync-test"
 OTHER_NAMESPACE = "opaque-sync-other"
@@ -69,18 +75,74 @@ def _signature(private: Ed25519PrivateKey, value: dict) -> dict[str, str]:
     }
 
 
-def _grant(workspace_id, epoch, approver_key, approver, recipient):
+def _grant(
+    workspace_id,
+    epoch,
+    approver_key,
+    approver,
+    recipient,
+    *,
+    request_id=None,
+    issued_at=None,
+):
     grant = {
         "format": "lians-device-grant",
         "version": 1,
         "workspace_id": workspace_id,
         "epoch": epoch,
-        "request_id": str(uuid.uuid4()),
+        "request_id": request_id or str(uuid.uuid4()),
         "recipient_device": recipient,
         "approver_device": approver,
-        "issued_at": datetime.now(UTC).isoformat(),
+        "issued_at": (issued_at or datetime.now(UTC)).isoformat(),
     }
     return {"grant": grant, "signature": _signature(approver_key, grant)}
+
+
+def _enrollment_request(device, *, now=None):
+    created = now or datetime.now(UTC)
+    request = {
+        "format": "lians-device-enrollment-request",
+        "version": 1,
+        "request_id": str(uuid.uuid4()),
+        "device": device,
+        "created_at": created.isoformat(),
+        "expires_at": (created + timedelta(minutes=10)).isoformat(),
+    }
+    digest = hashlib.sha256(
+        b"lians-enrollment-code-v1\0" + _canonical(request)
+    ).hexdigest()
+    request["verification_code"] = f"{digest[:4]}-{digest[4:8]}".upper()
+    return request
+
+
+def _enrollment_approval(workspace_id, epoch, approver_key, approver, request):
+    grant = _grant(
+        workspace_id,
+        epoch,
+        approver_key,
+        approver,
+        request["device"],
+        request_id=request["request_id"],
+    )
+    return {
+        "format": "lians-device-enrollment-approval",
+        "version": 1,
+        "request_id": request["request_id"],
+        "verification_code": request["verification_code"],
+        "grant": grant["grant"],
+        "grant_signature": grant["signature"],
+        "key_wrap": {
+            "cipher": "X25519-HKDF-SHA256+A256GCM",
+            "workspace_id": workspace_id,
+            "epoch": epoch,
+            "request_id": request["request_id"],
+            "recipient_device_id": request["device"]["device_id"],
+            "approver_device_id": approver["device_id"],
+            "ephemeral_public_key": base64.b64encode(os.urandom(32)).decode(),
+            "nonce": base64.b64encode(os.urandom(12)).decode(),
+            "ciphertext": base64.b64encode(os.urandom(48)).decode(),
+        },
+    }
 
 
 def _revision(workspace_id, epoch, revision, previous_hash, private, device):
@@ -268,6 +330,133 @@ async def test_sync_rejects_tampering_stale_writes_wrong_scope_and_other_tenant(
         headers=_headers(OTHER_KEY),
     )
     assert isolated.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_short_code_enrollment_exchange_registers_device_without_exposing_a_key(client):
+    http, db = client
+    workspace_id = str(uuid.uuid4())
+    root_key, root = _device("Main PC")
+    _, laptop = _device("Laptop")
+    await http.post(
+        "/v1/sync/workspaces",
+        headers=_headers(),
+        json={"workspace_id": workspace_id, "epoch": 1, "root_device": root},
+    )
+    request = _enrollment_request(laptop)
+
+    created = await http.post(
+        "/v1/sync/enrollments",
+        headers=_headers(),
+        json={"request": request},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["state"] == "waiting_for_approval"
+    assert created.json()["verification_code"] == request["verification_code"]
+    assert "workspace_key" not in json.dumps(created.json())
+
+    pending = await http.get("/v1/sync/enrollments", headers=_headers())
+    assert pending.status_code == 200
+    assert [item["request_id"] for item in pending.json()["enrollments"]] == [
+        request["request_id"]
+    ]
+
+    approval = _enrollment_approval(workspace_id, 1, root_key, root, request)
+    approved = await http.post(
+        f"/v1/sync/enrollments/{request['request_id']}/approval",
+        headers=_headers(),
+        json={"approval": approval},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "registered"
+    assert approved.json()["state"] == "approved"
+    assert approved.json()["approval"] == approval
+
+    status_response = await http.get(
+        f"/v1/sync/enrollments/{request['request_id']}", headers=_headers()
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["approval"] == approval
+    row = await db.get(SyncEnrollment, request["request_id"])
+    assert row.namespace == NAMESPACE
+    assert row.workspace_id == workspace_id
+    device = await db.get(SyncDevice, (workspace_id, laptop["device_id"]))
+    assert device.descriptor == laptop
+    assert "workspace_key" not in json.dumps(row.request)
+    assert "workspace_key" not in json.dumps(row.approval)
+
+    refused = await http.request(
+        "DELETE",
+        f"/v1/sync/enrollments/{request['request_id']}",
+        headers=_headers(),
+        json={"confirmed": False},
+    )
+    assert refused.status_code == 400
+    deleted = await http.request(
+        "DELETE",
+        f"/v1/sync/enrollments/{request['request_id']}",
+        headers=_headers(),
+        json={"confirmed": True},
+    )
+    assert deleted.status_code == 200
+    assert await db.get(SyncEnrollment, request["request_id"]) is None
+
+
+@pytest.mark.asyncio
+async def test_enrollment_exchange_is_tenant_scoped_expiring_and_tamper_rejecting(client):
+    http, db = client
+    workspace_id = str(uuid.uuid4())
+    root_key, root = _device("Main PC")
+    _, laptop = _device("Laptop")
+    await http.post(
+        "/v1/sync/workspaces",
+        headers=_headers(),
+        json={"workspace_id": workspace_id, "epoch": 1, "root_device": root},
+    )
+    request = _enrollment_request(laptop)
+    tampered_request = {**request, "verification_code": "0000-0000"}
+    rejected_request = await http.post(
+        "/v1/sync/enrollments",
+        headers=_headers(),
+        json={"request": tampered_request},
+    )
+    assert rejected_request.status_code == 422
+
+    created = await http.post(
+        "/v1/sync/enrollments",
+        headers=_headers(),
+        json={"request": request},
+    )
+    assert created.status_code == 201
+    other_list = await http.get("/v1/sync/enrollments", headers=_headers(OTHER_KEY))
+    assert other_list.json()["enrollments"] == []
+    other_status = await http.get(
+        f"/v1/sync/enrollments/{request['request_id']}",
+        headers=_headers(OTHER_KEY),
+    )
+    assert other_status.status_code == 404
+    wrong_scope = await http.get(
+        "/v1/sync/enrollments", headers=_headers(NO_SYNC_KEY)
+    )
+    assert wrong_scope.status_code == 403
+
+    approval = _enrollment_approval(workspace_id, 1, root_key, root, request)
+    approval["verification_code"] = "FFFF-FFFF"
+    rejected_approval = await http.post(
+        f"/v1/sync/enrollments/{request['request_id']}/approval",
+        headers=_headers(),
+        json={"approval": approval},
+    )
+    assert rejected_approval.status_code == 422
+    assert await db.get(SyncDevice, (workspace_id, laptop["device_id"])) is None
+
+    row = await db.get(SyncEnrollment, request["request_id"])
+    row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db.commit()
+    expired = await http.get(
+        f"/v1/sync/enrollments/{request['request_id']}", headers=_headers()
+    )
+    assert expired.status_code == 410
 
 
 @pytest.mark.asyncio

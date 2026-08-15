@@ -336,6 +336,20 @@ class BridgeApplication:
                 if parsed.path == "/v1/cloud/status":
                     self._json(HTTPStatus.OK, application.cloud_sync.status())
                     return
+                if parsed.path == "/v1/cloud/device-requests":
+                    try:
+                        result = application.cloud_sync.pending_device_requests()
+                    except (
+                        OSError,
+                        RuntimeError,
+                        ValueError,
+                        LookupError,
+                        TypeError,
+                    ) as exc:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                        return
+                    self._json(HTTPStatus.OK, result)
+                    return
                 if parsed.path == "/v1/update":
                     try:
                         result = application.update_checker()
@@ -460,6 +474,44 @@ class BridgeApplication:
                             HTTPStatus.OK,
                             application.cloud_sync.delete_cloud_memory(
                                 confirmed=data.get("confirmed") is True
+                            ),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-enrollment/start":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Adding this device requires confirmed=true")
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.start_device_enrollment(),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-enrollment/check":
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.device_enrollment_status(),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-enrollment/cancel":
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.cancel_device_enrollment(
+                                confirmed=data.get("confirmed") is True
+                            ),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-requests/approve":
+                        request_id = data.get("request_id")
+                        verification_code = data.get("verification_code")
+                        if not isinstance(request_id, str) or len(request_id) > 64:
+                            raise ValueError("Choose a valid device request")
+                        if not isinstance(verification_code, str) or len(verification_code) > 16:
+                            raise ValueError("Enter the matching verification code")
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.approve_device_request(
+                                request_id,
+                                verification_code,
+                                confirmed=data.get("confirmed") is True,
                             ),
                         )
                         return

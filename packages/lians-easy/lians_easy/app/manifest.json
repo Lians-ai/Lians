@@ -8,12 +8,12 @@
   },
   "files": {
     "assets/cloud-controls.css": {
-      "bytes": 6532,
-      "sha256": "81571d46e8c6a1ee7616ef81946b7c3def09fa6d77a44a6b95f0e3a4c696e59a"
+      "bytes": 9818,
+      "sha256": "5441383eee1905caf819aad82607d9428f89bb85c2cbd91eab54f912630bc256"
     },
     "assets/cloud-controls.js": {
-      "bytes": 11812,
-      "sha256": "ce04c8f0faaacf5e1a0323b4967e02392a5b32f0f7d7acd09cfedeb87c2b6b64"
+      "bytes": 20815,
+      "sha256": "97f673d1dc8f1afb22c50b3dddea05f4f2eca4ee82f358324ed6f827e517d15f"
     },
     "assets/index-CdO50wTw.css": {
       "bytes": 90523,

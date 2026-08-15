@@ -78,6 +78,13 @@ def _workspace_id(value: str) -> str:
     return value
 
 
+def _request_id(value: str) -> str:
+    try:
+        return _workspace_id(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Lians device request ID is invalid") from exc
+
+
 def _detail(body: bytes, *, status: int) -> str:
     if not body:
         return f"Lians Cloud request failed with status {status}"
@@ -185,6 +192,48 @@ class OpaqueSyncHTTPClient:
                 "epoch": state.epoch,
                 "root_device": state.device,
             },
+        )
+
+    def create_enrollment(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            raise TypeError("Lians device request is invalid")
+        return self._request("POST", "/v1/sync/enrollments", {"request": request})
+
+    def enrollments(self) -> list[dict[str, Any]]:
+        document = self._request("GET", "/v1/sync/enrollments")
+        enrollments = document.get("enrollments")
+        if not isinstance(enrollments, list) or not all(
+            isinstance(item, dict) for item in enrollments
+        ):
+            raise SyncCloudError("Lians Cloud returned an invalid device request list")
+        return enrollments
+
+    def enrollment(self, request_id: str) -> dict[str, Any]:
+        request_id = _request_id(request_id)
+        return self._request("GET", f"/v1/sync/enrollments/{request_id}")
+
+    def approve_enrollment(
+        self,
+        request_id: str,
+        approval: dict[str, Any],
+    ) -> dict[str, Any]:
+        request_id = _request_id(request_id)
+        if not isinstance(approval, dict):
+            raise TypeError("Lians device approval is invalid")
+        return self._request(
+            "POST",
+            f"/v1/sync/enrollments/{request_id}/approval",
+            {"approval": approval},
+        )
+
+    def delete_enrollment(self, request_id: str, *, confirmed: bool = False) -> dict[str, Any]:
+        request_id = _request_id(request_id)
+        if not confirmed:
+            raise ValueError("Device request removal requires confirmed=true")
+        return self._request(
+            "DELETE",
+            f"/v1/sync/enrollments/{request_id}",
+            {"confirmed": True},
         )
 
     def head(self, workspace_id: str) -> dict[str, Any]:

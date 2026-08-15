@@ -8,9 +8,11 @@
 > a verified consumer `memory:sync` OAuth scope. The native Bridge now implements
 > system-browser Authorization Code + PKCE, encrypted rotating-token storage,
 > and automatic pull-before-recall / write-through-after-change orchestration.
-> A production identity provider, recovery, billing enforcement, device UI, and
-> the sync UI are not generally available yet. This document is an engineering
-> contract, not a claim that Lians Cloud is live.
+> The packaged App now includes consumer sync controls and a short-code Add
+> Device / approval flow with encrypted resumable local state. A production
+> identity provider, recovery, billing enforcement, revocation with key
+> rotation, and signed release qualification are not generally available yet.
+> This document is an engineering contract, not a claim that Lians Cloud is live.
 
 ## Product promise
 
@@ -82,8 +84,8 @@ an automatic merge from silently choosing between contradictory corrections.
 
 ## Cloud storage contract
 
-The authenticated server namespace must own exactly the workspaces, device
-grants, and encrypted revisions associated with that account. A production
+The authenticated server namespace must own exactly the workspaces, short-lived
+enrollment exchanges, device grants, and encrypted revisions associated with that account. A production
 implementation persists only:
 
 - public device descriptors and signed grants;
@@ -99,10 +101,11 @@ failure, pulls the missing encrypted revisions, merges locally, and retries.
 The durable `/v1/sync` API implements that same boundary with a 1.5 MB encrypted
 revision limit under the deployment-wide 2 MB request cap, at most 20 active
 devices, 100 revisions per pull page, and a 10,000-revision retention gate. It
-supports workspace creation and head inspection, signed device-grant
-registration and listing, encrypted revision push/pull, and exact confirmed
-workspace deletion. PostgreSQL row-level security is enabled and forced on all
-three sync tables. `OpaqueSyncHTTPClient` gives the Bridge a bounded HTTPS
+supports workspace creation and head inspection, tenant-scoped expiring
+enrollment request/approval exchange, signed device-grant registration and
+listing, encrypted revision push/pull, and exact confirmed workspace deletion.
+PostgreSQL row-level security is enabled and forced on all four sync tables.
+`OpaqueSyncHTTPClient` gives the Bridge a bounded HTTPS
 transport with redacted API-key or rotating OAuth bearer credentials, sanitized
 failures, stale-head handling, and loopback-only plain HTTP for tests. Consumer
 tokens are verified for signature, issuer, audience, lifetime, and `memory:sync`

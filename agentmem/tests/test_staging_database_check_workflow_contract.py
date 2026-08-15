@@ -43,7 +43,7 @@ def test_dispatch_is_read_only_by_default_and_requires_exact_confirmation() -> N
 
     verification = _named_step(workflow, "Open Fly tunnel and verify staging")
     assert "\n        if:" not in verification
-    assert "--expected-revision 0031_zero_knowledge_sync" in verification
+    assert "--expected-revision 0032_device_enrollment_exchange" in verification
 
 
 def test_optional_migration_snapshots_the_exact_encrypted_staging_volume_first() -> None:

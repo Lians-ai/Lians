@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
 from lians_easy.cloud_service import CloudSyncService
 from lians_easy.mcp import call_tool
 from lians_easy.store import MemoryStore
@@ -46,6 +47,7 @@ class HTTPShapeCloud:
     def __init__(self):
         self.log = OpaqueRevisionLog()
         self.deleted = False
+        self.enrollments = {}
 
     def client_factory(self, base_url, *, bearer_token_provider):
         assert base_url == "https://api.lians.ai"
@@ -56,6 +58,37 @@ class HTTPShapeCloud:
             def create_workspace(self, state):
                 outer.log.create_workspace(state)
                 return {"status": "created"}
+
+            def create_enrollment(self, request):
+                outer.enrollments[request["request_id"]] = {
+                    "request": request,
+                    "approval": None,
+                }
+                return {"status": "created"}
+
+            def enrollments(self):
+                return [
+                    {
+                        "request_id": request_id,
+                        "request": document["request"],
+                        "approval": document["approval"],
+                    }
+                    for request_id, document in outer.enrollments.items()
+                    if document["approval"] is None
+                ]
+
+            def enrollment(self, request_id):
+                return outer.enrollments[request_id]
+
+            def approve_enrollment(self, request_id, approval):
+                outer.log.register_approval(approval)
+                outer.enrollments[request_id]["approval"] = approval
+                return {"status": "registered"}
+
+            def delete_enrollment(self, request_id, *, confirmed=False):
+                assert confirmed is True
+                del outer.enrollments[request_id]
+                return {"status": "deleted"}
 
             def grants(self, workspace_id):
                 return outer.log.grants(workspace_id)
@@ -164,6 +197,65 @@ def test_service_provisions_pulls_merges_pushes_and_deletes_opaque_memory(tmp_pa
     assert cloud.deleted is True
     assert first_state_path.exists() is False
     assert first_store.stats()["current"] == 2
+
+
+def test_short_code_add_device_flow_needs_no_workspace_id_or_key_copy(tmp_path):
+    auth = FakeAuth()
+    cloud = HTTPShapeCloud()
+    first_store = MemoryStore(tmp_path / "first" / "memory.sqlite3")
+    first = _service(
+        first_store,
+        auth,
+        cloud,
+        tmp_path / "first" / "sync-state.json",
+        "Main PC",
+    )
+    first_store.remember(
+        "We use FastAPI and never write migrations manually.",
+        kind="preference",
+        scope="global",
+        source_client="cursor",
+    )
+    first.sync_now()
+
+    second_store = MemoryStore(tmp_path / "second" / "memory.sqlite3")
+    second = _service(
+        second_store,
+        auth,
+        cloud,
+        tmp_path / "second" / "sync-state.json",
+        "Marketing laptop",
+    )
+    request = second.start_device_enrollment()
+    assert request["state"] == "waiting_for_approval"
+    assert request["verification_code"].encode() not in second.pending_path.read_bytes()
+
+    pending = first.pending_device_requests()
+    assert pending["count"] == 1
+    assert pending["requests"][0]["device"]["display_name"] == "Marketing laptop"
+    with pytest.raises(ValueError, match="does not match"):
+        first.approve_device_request(
+            request["request_id"],
+            "0000-0000",
+            confirmed=True,
+        )
+    approved = first.approve_device_request(
+        request["request_id"],
+        request["verification_code"],
+        confirmed=True,
+    )
+    assert approved["state"] == "approved"
+    assert approved["device_count"] == 2
+
+    connected = second.device_enrollment_status()
+    assert connected["state"] == "connected"
+    assert connected["revisions_pulled"] == 1
+    assert second.pending_path.exists() is False
+    assert second_store.recall("API migration policy")[0]["content"] == (
+        "We use FastAPI and never write migrations manually."
+    )
+    assert cloud.enrollments == {}
+    assert "FastAPI" not in json.dumps(cloud.log._workspaces)
 
 
 def test_cursor_memory_reaches_codex_and_claude_with_correction_and_forgetting(tmp_path):

@@ -155,6 +155,14 @@ Cursor-origin preference can appear on a separate Codex device, be corrected
 for Claude, and then be forgotten everywhere. Cloud failure leaves the local
 save successful and reports that encrypted sync is pending.
 
+The packaged Lians App now provides the ordinary Add Device path. A new device
+signs into the same account, chooses **Add this device**, and displays a
+short-lived matching code. An existing connected device reviews the public
+device name and code, explicitly approves it, and wraps the workspace key only
+for that recipient. The request survives an app restart in locally encrypted
+state, is removed after acceptance, and never asks the user for a workspace ID,
+JSON file, terminal command, API key, or recovery phrase.
+
 Development builds opt into this path with deployment-provided public values;
 there is no client secret:
 
@@ -167,10 +175,10 @@ LIANS_OAUTH_AUDIENCE=https://api.lians.ai
 
 This technical preview is not a claim that hosted sync or account recovery is
 generally available. The ordinary supported migration path remains **Move
-memory safely** until the production identity provider, device enrollment UI,
-device revocation and key rotation, recovery, provider-outage qualification,
-and consumer sync controls pass their release gates. The complete boundary is
-documented in [`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
+memory safely** until the production identity provider, device revocation and
+key rotation, recovery, provider-outage qualification, and signed release gates
+are complete. The complete boundary is documented in
+[`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
 
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client

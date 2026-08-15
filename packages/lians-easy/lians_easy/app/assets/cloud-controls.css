@@ -222,6 +222,178 @@
   color: #ffffff;
 }
 
+.lians-cloud__devices {
+  background: #080f1a;
+  border: 1px solid var(--lians-cloud-line);
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.lians-cloud__devices[hidden],
+.lians-cloud__enrollment[hidden],
+.lians-cloud__request-list[hidden],
+.lians-cloud__button[hidden] {
+  display: none !important;
+}
+
+.lians-cloud__devices-top {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.lians-cloud__devices-top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lians-cloud__devices-title {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lians-cloud__devices-copy {
+  color: var(--lians-cloud-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.lians-cloud__device-count {
+  border: 1px solid #2c466c;
+  color: #8eafff;
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 7px 9px;
+}
+
+.lians-cloud__device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.lians-cloud__button--device {
+  background: #0d1a2d;
+  border-color: #3a5e91;
+  color: #dbe6ff;
+  min-height: 38px;
+}
+
+.lians-cloud__button--device:hover:not(:disabled) {
+  background: #142746;
+  border-color: #6390ff;
+}
+
+.lians-cloud__enrollment {
+  background: linear-gradient(135deg, rgb(63 120 255 / 13%), rgb(51 230 154 / 5%));
+  border: 1px solid #426cb4;
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.lians-cloud__enrollment-label,
+.lians-cloud__enrollment-copy {
+  margin: 0;
+}
+
+.lians-cloud__enrollment-label,
+.lians-cloud__request-label {
+  color: #8cafff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.lians-cloud__code,
+.lians-cloud__request-code {
+  color: #ffffff;
+  display: block;
+  font-family: "Michroma", "Sora", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(24px, 5vw, 38px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  margin-top: 10px;
+}
+
+.lians-cloud__enrollment-copy,
+.lians-cloud__request-help {
+  color: #b7c7e2;
+  font-size: 11px;
+  line-height: 1.55;
+  margin-top: 10px;
+}
+
+.lians-cloud__enrollment-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 13px;
+}
+
+.lians-cloud__text-action {
+  background: transparent;
+  border: 0;
+  color: #8eafff;
+  cursor: pointer;
+  font: 700 10px/1 "Sora", ui-sans-serif, system-ui, sans-serif;
+  padding: 5px 0;
+}
+
+.lians-cloud__text-action:hover,
+.lians-cloud__text-action:focus-visible {
+  color: #ffffff;
+  outline: none;
+  text-decoration: underline;
+}
+
+.lians-cloud__request-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lians-cloud__request {
+  border-left: 2px solid #6f98ff;
+  background: #0b1626;
+  display: grid;
+  gap: 7px;
+  padding: 15px;
+}
+
+.lians-cloud__request-name {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lians-cloud__request-code {
+  font-size: 22px;
+  margin-top: 2px;
+}
+
+.lians-cloud__button--approve {
+  background: #1d8e65;
+  color: #ffffff;
+  justify-self: start;
+  margin-top: 6px;
+  min-height: 38px;
+}
+
+.lians-cloud__button--approve:hover:not(:disabled) {
+  background: #25a878;
+}
+
+.lians-cloud__request-empty {
+  color: #aabbd6;
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 12px 0 2px;
+}
+
 .lians-cloud__metrics {
   color: #8193b2;
   font-size: 10px;
@@ -338,6 +510,15 @@
 
   .lians-cloud__button--danger {
     margin-left: 0;
+  }
+
+  .lians-cloud__devices-top {
+    flex-direction: column;
+  }
+
+  .lians-cloud__device-actions,
+  .lians-cloud__enrollment-actions {
+    flex-direction: column;
   }
 }
 

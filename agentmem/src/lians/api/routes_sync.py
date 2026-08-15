@@ -5,10 +5,11 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import hmac
 import json
 import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from cryptography.exceptions import InvalidSignature
@@ -20,17 +21,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..models import SyncDevice, SyncRevision, SyncWorkspace
+from ..models import SyncDevice, SyncEnrollment, SyncRevision, SyncWorkspace
 from .deps import AuthContext, get_sync_auth
 
 router = APIRouter(prefix="/v1/sync", tags=["zero-knowledge-sync"])
 
 SYNC_VERSION = 1
 GRANT_FORMAT = "lians-device-grant"
+REQUEST_FORMAT = "lians-device-enrollment-request"
+APPROVAL_FORMAT = "lians-device-enrollment-approval"
 REVISION_FORMAT = "lians-encrypted-profile-revision"
 MAX_ENVELOPE_BYTES = 1_500_000
 MAX_DEVICES = 20
 MAX_REVISIONS = 10_000
+MAX_PENDING_ENROLLMENTS = 5
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
@@ -48,6 +52,24 @@ class DeviceGrantIn(BaseModel):
 
     grant: dict[str, Any]
     signature: dict[str, Any]
+
+
+class EnrollmentRequestIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request: dict[str, Any]
+
+
+class EnrollmentApprovalIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    approval: dict[str, Any]
+
+
+class EnrollmentDeleteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: bool
 
 
 class RevisionIn(BaseModel):
@@ -123,6 +145,51 @@ def _device(document: Any) -> dict[str, str]:
     }
 
 
+def _verification_code(request_body: dict[str, Any]) -> str:
+    digest = hashlib.sha256(
+        b"lians-enrollment-code-v1\0" + _canonical(request_body)
+    ).hexdigest()
+    return f"{digest[:4]}-{digest[4:8]}".upper()
+
+
+def _enrollment_request(
+    document: Any,
+    *,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], datetime, datetime]:
+    request = _exact(
+        document,
+        {
+            "format",
+            "version",
+            "request_id",
+            "device",
+            "created_at",
+            "expires_at",
+            "verification_code",
+        },
+        label="Enrollment request",
+    )
+    if request.get("format") != REQUEST_FORMAT or request.get("version") != SYNC_VERSION:
+        raise HTTPException(status_code=422, detail="Enrollment request is unsupported")
+    _uuid(request.get("request_id"), label="Enrollment request ID")
+    device = _device(request.get("device"))
+    created = _timestamp(request.get("created_at"), label="Enrollment creation time")
+    expires = _timestamp(request.get("expires_at"), label="Enrollment expiration time")
+    current = now or datetime.now(UTC)
+    if (
+        expires <= created
+        or expires - created > timedelta(minutes=30)
+        or current > expires
+        or created - current > timedelta(minutes=5)
+    ):
+        raise HTTPException(status_code=422, detail="Enrollment request expired")
+    body = {key: request[key] for key in request if key != "verification_code"}
+    if not hmac.compare_digest(str(request.get("verification_code", "")), _verification_code(body)):
+        raise HTTPException(status_code=422, detail="Enrollment verification code is invalid")
+    return {**request, "device": device}, created, expires
+
+
 def _timestamp(value: Any, *, label: str) -> datetime:
     if not isinstance(value, str) or len(value) > 128:
         raise HTTPException(status_code=422, detail=f"{label} is invalid")
@@ -183,6 +250,79 @@ def _grant(document: Any, signature: Any, *, workspace: SyncWorkspace) -> tuple[
         label="Device grant",
     )
     return document, recipient, approver
+
+
+def _enrollment_approval(
+    document: Any,
+    *,
+    request: dict[str, Any],
+    workspace: SyncWorkspace,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, str], dict[str, str]]:
+    approval = _exact(
+        document,
+        {
+            "format",
+            "version",
+            "request_id",
+            "verification_code",
+            "grant",
+            "grant_signature",
+            "key_wrap",
+        },
+        label="Enrollment approval",
+    )
+    if (
+        approval.get("format") != APPROVAL_FORMAT
+        or approval.get("version") != SYNC_VERSION
+        or approval.get("request_id") != request["request_id"]
+        or not hmac.compare_digest(
+            str(approval.get("verification_code", "")),
+            request["verification_code"],
+        )
+    ):
+        raise HTTPException(status_code=422, detail="Enrollment approval does not match")
+    grant, recipient, approver = _grant(
+        approval.get("grant"),
+        approval.get("grant_signature"),
+        workspace=workspace,
+    )
+    if grant["request_id"] != request["request_id"] or recipient != request["device"]:
+        raise HTTPException(status_code=422, detail="Enrollment grant does not match")
+    issued = _timestamp(grant["issued_at"], label="Enrollment grant issue time")
+    created = _timestamp(request["created_at"], label="Enrollment creation time")
+    expires = _timestamp(request["expires_at"], label="Enrollment expiration time")
+    if not created <= issued <= expires:
+        raise HTTPException(status_code=422, detail="Enrollment approval was issued too late")
+
+    wrap = _exact(
+        approval.get("key_wrap"),
+        {
+            "cipher",
+            "workspace_id",
+            "epoch",
+            "request_id",
+            "recipient_device_id",
+            "approver_device_id",
+            "ephemeral_public_key",
+            "nonce",
+            "ciphertext",
+        },
+        label="Enrollment key wrap",
+    )
+    expected = {
+        "cipher": "X25519-HKDF-SHA256+A256GCM",
+        "workspace_id": workspace.workspace_id,
+        "epoch": workspace.epoch,
+        "request_id": request["request_id"],
+        "recipient_device_id": recipient["device_id"],
+        "approver_device_id": approver["device_id"],
+    }
+    if any(wrap.get(key) != value for key, value in expected.items()):
+        raise HTTPException(status_code=422, detail="Enrollment key wrap does not match")
+    _unb64(wrap.get("ephemeral_public_key"), label="Enrollment exchange key", length=32)
+    _unb64(wrap.get("nonce"), label="Enrollment key nonce", length=12)
+    _unb64(wrap.get("ciphertext"), label="Encrypted workspace key", length=48)
+    return approval, grant, recipient, approver
 
 
 def _revision(
@@ -261,6 +401,270 @@ async def _workspace(db: AsyncSession, namespace: str, workspace_id: str, *, loc
     if row is None:
         raise HTTPException(status_code=404, detail="Sync workspace not found")
     return row
+
+
+async def _add_device(
+    db: AsyncSession,
+    *,
+    namespace: str,
+    workspace: SyncWorkspace,
+    grant: dict[str, Any],
+    signature: dict[str, Any],
+    recipient: dict[str, str],
+    approver: dict[str, str],
+) -> str:
+    approver_row = await db.get(
+        SyncDevice,
+        (workspace.workspace_id, approver["device_id"]),
+    )
+    if (
+        approver_row is None
+        or approver_row.namespace != namespace
+        or approver_row.revoked_at is not None
+        or approver_row.descriptor != approver
+    ):
+        raise HTTPException(status_code=403, detail="Device grant approver is not active")
+    existing = await db.get(
+        SyncDevice,
+        (workspace.workspace_id, recipient["device_id"]),
+    )
+    if existing is not None:
+        if existing.descriptor == recipient and existing.grant == grant:
+            return "exists"
+        raise HTTPException(status_code=409, detail="Sync device already exists")
+    count = await db.scalar(
+        select(func.count()).select_from(SyncDevice).where(
+            SyncDevice.workspace_id == workspace.workspace_id,
+            SyncDevice.namespace == namespace,
+            SyncDevice.revoked_at.is_(None),
+        )
+    )
+    if int(count or 0) >= MAX_DEVICES:
+        raise HTTPException(status_code=409, detail="Sync device limit reached")
+    db.add(
+        SyncDevice(
+            workspace_id=workspace.workspace_id,
+            device_id=recipient["device_id"],
+            namespace=namespace,
+            descriptor=recipient,
+            grant=grant,
+            grant_signature=signature,
+        )
+    )
+    return "registered"
+
+
+def _enrollment_document(row: SyncEnrollment) -> dict[str, Any]:
+    return {
+        "request_id": row.request_id,
+        "state": "approved" if row.approval is not None else "waiting_for_approval",
+        "device": {
+            "device_id": row.device_id,
+            "display_name": row.device_name,
+        },
+        "verification_code": row.verification_code,
+        "expires_at": row.expires_at.isoformat(),
+        "request": row.request,
+        "approval": row.approval,
+    }
+
+
+@router.post("/enrollments", status_code=status.HTTP_201_CREATED)
+async def create_enrollment_request(
+    body: EnrollmentRequestIn,
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Publish one short-lived public device request inside an account boundary."""
+
+    auth.require("sync")
+    auth.require_unbarriered()
+    now = datetime.now(UTC)
+    request, _, expires = _enrollment_request(body.request, now=now)
+    await db.execute(
+        delete(SyncEnrollment).where(
+            SyncEnrollment.namespace == auth.namespace,
+            SyncEnrollment.expires_at <= now,
+        )
+    )
+    existing = await db.get(SyncEnrollment, request["request_id"])
+    if existing is not None:
+        if existing.namespace == auth.namespace and existing.request == request:
+            return {"status": "exists", **_enrollment_document(existing)}
+        raise HTTPException(status_code=409, detail="Enrollment request already exists")
+    same_device = (
+        await db.execute(
+            select(SyncEnrollment).where(
+                SyncEnrollment.namespace == auth.namespace,
+                SyncEnrollment.device_id == request["device"]["device_id"],
+                SyncEnrollment.expires_at > now,
+            )
+        )
+    ).scalar_one_or_none()
+    if same_device is not None:
+        raise HTTPException(status_code=409, detail="This device already has a pending request")
+    pending_count = await db.scalar(
+        select(func.count()).select_from(SyncEnrollment).where(
+            SyncEnrollment.namespace == auth.namespace,
+            SyncEnrollment.expires_at > now,
+        )
+    )
+    if int(pending_count or 0) >= MAX_PENDING_ENROLLMENTS:
+        raise HTTPException(status_code=409, detail="Too many pending device requests")
+    row = SyncEnrollment(
+        request_id=request["request_id"],
+        namespace=auth.namespace,
+        device_id=request["device"]["device_id"],
+        device_name=request["device"]["display_name"],
+        verification_code=request["verification_code"],
+        request=request,
+        expires_at=expires,
+        created_at=now,
+    )
+    db.add(row)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Enrollment request changed concurrently") from exc
+    return {"status": "created", **_enrollment_document(row)}
+
+
+@router.get("/enrollments")
+async def list_enrollment_requests(
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """List unexpired requests that an existing trusted device may approve."""
+
+    auth.require("sync")
+    auth.require_unbarriered()
+    now = datetime.now(UTC)
+    rows = (
+        await db.execute(
+            select(SyncEnrollment)
+            .where(
+                SyncEnrollment.namespace == auth.namespace,
+                SyncEnrollment.expires_at > now,
+                SyncEnrollment.approval.is_(None),
+            )
+            .order_by(SyncEnrollment.created_at, SyncEnrollment.request_id)
+            .limit(MAX_PENDING_ENROLLMENTS)
+        )
+    ).scalars()
+    return {"enrollments": [_enrollment_document(row) for row in rows]}
+
+
+@router.get("/enrollments/{request_id}")
+async def enrollment_request_status(
+    request_id: str,
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    auth.require("sync")
+    auth.require_unbarriered()
+    _uuid(request_id, label="Enrollment request ID")
+    row = (
+        await db.execute(
+            select(SyncEnrollment).where(
+                SyncEnrollment.request_id == request_id,
+                SyncEnrollment.namespace == auth.namespace,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Enrollment request not found")
+    if row.expires_at.replace(tzinfo=row.expires_at.tzinfo or UTC) <= datetime.now(UTC):
+        raise HTTPException(status_code=410, detail="Enrollment request expired")
+    return _enrollment_document(row)
+
+
+@router.post("/enrollments/{request_id}/approval")
+async def approve_enrollment_request(
+    request_id: str,
+    body: EnrollmentApprovalIn,
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Register a signed device and store only its recipient-encrypted key wrap."""
+
+    auth.require("sync")
+    auth.require_unbarriered()
+    _uuid(request_id, label="Enrollment request ID")
+    row = (
+        await db.execute(
+            select(SyncEnrollment)
+            .where(
+                SyncEnrollment.request_id == request_id,
+                SyncEnrollment.namespace == auth.namespace,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Enrollment request not found")
+    if row.expires_at.replace(tzinfo=row.expires_at.tzinfo or UTC) <= datetime.now(UTC):
+        raise HTTPException(status_code=410, detail="Enrollment request expired")
+    if row.approval is not None:
+        if row.approval == body.approval:
+            return {"status": "exists", **_enrollment_document(row)}
+        raise HTTPException(status_code=409, detail="Enrollment request was already approved")
+    request, _, _ = _enrollment_request(row.request)
+    grant_document = body.approval.get("grant")
+    if not isinstance(grant_document, dict):
+        raise HTTPException(status_code=422, detail="Enrollment approval is invalid")
+    workspace_id = _uuid(
+        grant_document.get("workspace_id"),
+        label="Enrollment workspace ID",
+    )
+    workspace = await _workspace(db, auth.namespace, workspace_id, lock=True)
+    approval, grant, recipient, approver = _enrollment_approval(
+        body.approval,
+        request=request,
+        workspace=workspace,
+    )
+    device_status = await _add_device(
+        db,
+        namespace=auth.namespace,
+        workspace=workspace,
+        grant=grant,
+        signature=approval["grant_signature"],
+        recipient=recipient,
+        approver=approver,
+    )
+    row.approval = approval
+    row.workspace_id = workspace.workspace_id
+    row.approved_at = datetime.now(UTC)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Enrollment approval changed concurrently") from exc
+    return {"status": device_status, **_enrollment_document(row)}
+
+
+@router.delete("/enrollments/{request_id}")
+async def delete_enrollment_request(
+    request_id: str,
+    body: EnrollmentDeleteIn,
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    auth.require("sync")
+    auth.require_unbarriered()
+    if body.confirmed is not True:
+        raise HTTPException(status_code=400, detail="Enrollment removal requires confirmation")
+    _uuid(request_id, label="Enrollment request ID")
+    result = await db.execute(
+        delete(SyncEnrollment).where(
+            SyncEnrollment.request_id == request_id,
+            SyncEnrollment.namespace == auth.namespace,
+        )
+    )
+    if result.rowcount != 1:
+        raise HTTPException(status_code=404, detail="Enrollment request not found")
+    await db.commit()
+    return {"status": "deleted", "request_id": request_id}
 
 
 @router.post("/workspaces", status_code=status.HTTP_201_CREATED)
@@ -354,44 +758,21 @@ async def register_device(
     auth.require_unbarriered()
     workspace = await _workspace(db, auth.namespace, workspace_id, lock=True)
     grant, recipient, approver = _grant(body.grant, body.signature, workspace=workspace)
-    approver_row = await db.get(SyncDevice, (workspace_id, approver["device_id"]))
-    if (
-        approver_row is None
-        or approver_row.namespace != auth.namespace
-        or approver_row.revoked_at is not None
-        or approver_row.descriptor != approver
-    ):
-        raise HTTPException(status_code=403, detail="Device grant approver is not active")
-    existing = await db.get(SyncDevice, (workspace_id, recipient["device_id"]))
-    if existing is not None:
-        if existing.descriptor == recipient and existing.grant == grant:
-            return {"status": "exists", "device": recipient}
-        raise HTTPException(status_code=409, detail="Sync device already exists")
-    count = await db.scalar(
-        select(func.count()).select_from(SyncDevice).where(
-            SyncDevice.workspace_id == workspace_id,
-            SyncDevice.namespace == auth.namespace,
-            SyncDevice.revoked_at.is_(None),
-        )
-    )
-    if int(count or 0) >= MAX_DEVICES:
-        raise HTTPException(status_code=409, detail="Sync device limit reached")
-    db.add(
-        SyncDevice(
-            workspace_id=workspace_id,
-            device_id=recipient["device_id"],
-            namespace=auth.namespace,
-            descriptor=recipient,
-            grant=grant,
-            grant_signature=body.signature,
-        )
+    result = await _add_device(
+        db,
+        namespace=auth.namespace,
+        workspace=workspace,
+        grant=grant,
+        signature=body.signature,
+        recipient=recipient,
+        approver=approver,
     )
     try:
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
         raise HTTPException(status_code=409, detail="Sync device changed concurrently") from exc
-    return {"status": "registered", "device": recipient}
+    return {"status": result, "device": recipient}
 
 
 @router.get("/workspaces/{workspace_id}/devices/grants")
