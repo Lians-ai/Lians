@@ -22,7 +22,7 @@ artifact until the publisher-signing gate passes.*
 | Audience | Primary package | Secondary path |
 |---|---|---|
 | Windows user | Authenticode-signed `Lians-Setup-<version>.exe` | Microsoft Store or `winget` after the direct package is trusted |
-| macOS user | Developer ID-signed and notarized `Lians.dmg` | Homebrew for technical users |
+| macOS user | Developer ID-signed and notarized `Lians-<version>-macos-<architecture>.dmg` | Homebrew for technical users |
 | Linux user | Signed AppImage or Flatpak | Native packages when demand justifies them |
 | Enterprise IT | Signed MSIX/PKG with silent options | MDM deployment and the existing CLI contract |
 
@@ -50,10 +50,23 @@ the repository explicitly sets `PUBLISH_SIGNED_LIANS_DESKTOP=true`. Even with
 that opt-in, it imports only the configured publisher certificate, requires an
 exact thumbprint match, signs both the installed runtime and setup executable,
 re-verifies both Authenticode signatures, installs and exercises the resulting
-package, and uploads it only after those checks pass. macOS and Linux remain
-separate unfinished publisher paths; the Windows job no longer pretends to
-exercise them. Unsigned pull-request installers remain technical test fixtures,
-not consumer releases.
+package, and uploads it only after those checks pass.
+
+Pull requests also build separate native Apple-silicon and Intel DMGs on real
+macOS 15 runners. Each image contains **Lians.app** and an **Applications**
+shortcut, declares its exact CPU architecture and minimum supported macOS
+version, mounts read-only, copies like a normal drag-and-drop install, and runs
+the bundled Bridge and encrypted Lians App from that installed copy. These
+pull-request DMGs use only ad-hoc signatures and remain technical test fixtures.
+
+Stable macOS publication is independently disabled unless
+`PUBLISH_SIGNED_LIANS_MACOS=true`. That path requires an exact Apple Developer
+ID identity and Team ID, signs PyInstaller's embedded code during the one-file
+build, signs the app and DMG, requires an **Accepted** response from Apple's
+notary service, staples and validates the ticket, runs Gatekeeper assessment,
+repeats the mounted-package test, writes a SHA-256 checksum, and only then
+uploads the architecture-labelled asset. Linux remains a separate unfinished
+publisher path.
 
 ## First-run experience
 
@@ -187,3 +200,10 @@ Do not call the installer generally available until all of these pass:
 The core packaging decision is therefore: **one product, one Bridge, one setup
 experience, multiple integrations**. The CLI and raw log remain valuable for
 developers and IT, but normal users should never need to know they exist.
+
+The macOS DMG now proves delivery, identity, architecture, signing, notarization,
+and the real packaged runtime. It is not yet generally available because moving
+an app to Trash cannot safely express Lians' two different actions: disconnect
+managed AI integrations, and optionally erase encrypted memory. The control
+center must expose those as separate, plain-language choices before the macOS
+package clears the consumer uninstall gate.

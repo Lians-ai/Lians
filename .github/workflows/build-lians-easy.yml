@@ -37,8 +37,12 @@ jobs:
         include:
           - os: windows-latest
             artifact: LiansMemory-windows
-          - os: macos-latest
-            artifact: LiansMemory-macos
+          - os: macos-15
+            artifact: LiansMemory-macos-arm64
+            macos_architecture: arm64
+          - os: macos-15-intel
+            artifact: LiansMemory-macos-x86_64
+            macos_architecture: x86_64
           - os: ubuntu-latest
             artifact: LiansMemory-linux
     runs-on: ${{ matrix.os }}
@@ -48,6 +52,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install packages/lians-easy pyinstaller==6.22.0
+      - name: Install pinned macOS packaging dependency
+        if: runner.os == 'macOS'
+        run: python -m pip install Pillow==11.3.0
       - name: Verify consumer layout at common Windows scaling
         if: runner.os == 'Windows'
         run: |
@@ -115,6 +122,27 @@ jobs:
         run: >-
           python packages/lians-easy/tests/artifact_crash_smoke.py
           --binary dist/LiansMemory
+      - name: Build native macOS drag-and-drop package
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          bash packages/lians-easy/scripts/build_macos_dmg.sh \
+            --binary dist/LiansMemory \
+            --output-directory dist/installer \
+            --version "$version" \
+            --architecture "${{ matrix.macos_architecture }}"
+      - name: Verify mounted macOS package and installed Bridge
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          python packages/lians-easy/tests/artifact_macos_dmg_smoke.py \
+            --dmg "dist/installer/Lians-$version-macos-${{ matrix.macos_architecture }}.dmg" \
+            --expected-version "$version" \
+            --expected-architecture "${{ matrix.macos_architecture }}"
       - name: Install pinned Windows packaging tool
         if: runner.os == 'Windows'
         shell: pwsh
@@ -172,6 +200,7 @@ jobs:
           path: |
             dist/LiansMemory*
             dist/installer/Lians-Setup-*.exe
+            dist/installer/Lians-*.dmg
           if-no-files-found: error
 
   cold-restart:

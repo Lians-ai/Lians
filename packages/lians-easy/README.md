@@ -7,10 +7,11 @@ receipts. The same package now carries the React Lians App for Memory, Activity,
 Review, Integrations, and Settings; normal users do not install or locate a
 separate web bundle.
 
-The current Windows executable is a development build and is not yet
-Authenticode-signed. Context receipts are Ed25519-signed, but that does not
-replace operating-system code signing. Until a signed release is published,
-developers and IT teams should evaluate the Bridge from source:
+The current desktop artifacts are development builds and are not yet published
+with trusted operating-system signatures. Context receipts are Ed25519-signed,
+but that does not replace Windows Authenticode or Apple Developer ID signing and
+notarization. Until a signed release is published, developers and IT teams
+should evaluate the Bridge from source:
 
 ```bash
 python -m lians_easy install --clients antigravity,claude,cursor,gemini,codex --yes
@@ -29,6 +30,15 @@ on a fresh runner. Silent removal preserves encrypted memory; interactive
 removal asks separately before erasure. Pull-request installers are unsigned
 technical fixtures until the publisher-gated release job signs both the runtime
 and setup executable.
+
+The macOS workflow builds separate native Apple-silicon and Intel
+`Lians-<version>-macos-<architecture>.dmg` images. Each has a conventional
+**Lians.app -> Applications** drag-and-drop layout and is mounted, copied, and
+exercised on its matching macOS runner. Pull-request DMGs are ad-hoc-signed test
+fixtures. A stable asset requires the exact Lians Developer ID identity, Apple
+notarization, a stapled ticket, Gatekeeper acceptance, and a checksum. macOS is
+not a consumer release until the app also provides separate disconnect and
+memory-erasure controls; moving an app to Trash must not silently erase memory.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is

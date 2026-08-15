@@ -56,8 +56,44 @@ and proves that encrypted memory was preserved. Only then does it upload
 from the runner in an `always()` cleanup step; the PFX file is removed
 immediately after import.
 
-This flag currently publishes Windows only. Do not infer macOS notarization or
-Linux package signing from a successful Windows job.
+This flag publishes Windows only. Do not infer macOS notarization or Linux
+package signing from a successful Windows job.
+
+## macOS desktop packages
+
+The Apple-silicon and Intel consumer jobs are independently disabled by
+default. Before setting `PUBLISH_SIGNED_LIANS_MACOS=true`, configure:
+
+- repository secret `MACOS_SIGNING_CERT_P12_BASE64`: the Developer ID
+  Application certificate and private key encoded as one base64 string;
+- repository secret `MACOS_SIGNING_CERT_PASSWORD`: the P12 password;
+- repository variable `MACOS_SIGNING_IDENTITY`: the exact full identity, such
+  as `Developer ID Application: Example, Inc. (TEAMID)`;
+- repository variable `MACOS_SIGNING_TEAM_ID`: the expected Apple Team ID;
+- repository secret `APPLE_NOTARY_KEY_P8_BASE64`: an App Store Connect API key
+  encoded as one base64 string;
+- repository variable `APPLE_NOTARY_KEY_ID`: that API key's Key ID; and
+- repository variable `APPLE_NOTARY_ISSUER_ID`: its Issuer ID.
+
+The release matrix builds on native `macos-15` (`arm64`) and
+`macos-15-intel` (`x86_64`) runners. It imports the publisher credential into
+an ephemeral keychain and requires exactly one valid identity matching the
+configured full name. The Developer ID identity is passed to PyInstaller during
+the one-file build so its embedded native libraries receive trusted signatures;
+signing only the finished outer executable is not sufficient. The job then
+builds and signs `Lians.app` and the architecture-labelled DMG.
+
+`notarytool` must return `Accepted`. The workflow staples and validates the
+ticket, asks Gatekeeper to assess the disk image, mounts it, checks the bundle
+ID, version, architecture, signing authority, and Team ID, copies the app into
+a temporary Applications directory, and exercises the bundled encrypted
+Bridge. Only then does it upload the DMG and SHA-256 checksum. An `always()`
+step deletes the temporary keychain, P12, API key, and notary response.
+
+Passing this publisher gate proves the package is trusted and executable. Do
+not promote the macOS build to normal users until the Lians App also exposes
+plain-language removal controls that disconnect managed AI integrations and
+separately offer a default-safe choice to keep or permanently erase memory.
 
 ## npm trusted publishing
 

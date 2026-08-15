@@ -56,7 +56,9 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
         encoding="utf-8"
     )
-    desktop_job = workflow.split("  lians-easy:\n", 1)[1].split("\n  go-tag:", 1)[0]
+    desktop_job = workflow.split("  lians-easy:\n", 1)[1].split(
+        "\n  lians-easy-macos:", 1
+    )[0]
 
     assert "vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true'" in desktop_job
     assert "WINDOWS_SIGNING_CERT_PFX_BASE64" in desktop_job
@@ -85,6 +87,76 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
         assert "--version-file packages/lians-easy/windows-version-info.txt" in build_contract
         assert "Verify Windows package identity" in build_contract
         assert "artifact_app_smoke.py" in build_contract
+
+
+def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
+    workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "os: macos-15\n" in workflow
+    assert "os: macos-15-intel\n" in workflow
+    assert "artifact: LiansMemory-macos-arm64" in workflow
+    assert "artifact: LiansMemory-macos-x86_64" in workflow
+    assert "build_macos_dmg.sh" in workflow
+    assert "artifact_macos_dmg_smoke.py" in workflow
+    assert "dist/installer/Lians-*.dmg" in workflow
+
+
+def test_macos_drag_and_drop_package_has_stable_identity_and_architecture() -> None:
+    script = (PACKAGE_ROOT / "scripts" / "build_macos_dmg.sh").read_text(
+        encoding="utf-8"
+    )
+    smoke = (PACKAGE_ROOT / "tests" / "artifact_macos_dmg_smoke.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "ai.lians.memory" in script
+    assert "CFBundleDisplayName string Lians" in script
+    assert "LSMinimumSystemVersion string 13.0" in script
+    assert 'ln -s /Applications "$volume_root/Applications"' in script
+    assert 'actual_architectures="$(lipo -archs "$binary")"' in script
+    assert "codesign --verify --deep --strict" in script
+    assert "hdiutil create" in script
+    assert "Lians-$version-macos-$architecture.dmg" in script
+    assert "artifact_app_smoke.py" in smoke
+    assert 'os.readlink(applications) == "/Applications"' in smoke
+
+
+def test_stable_macos_release_requires_developer_id_and_notarization() -> None:
+    workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )
+    macos_job = workflow.split("  lians-easy-macos:\n", 1)[1].split(
+        "\n  go-tag:", 1
+    )[0]
+
+    assert "vars.PUBLISH_SIGNED_LIANS_MACOS == 'true'" in macos_job
+    assert "runner: macos-15\n" in macos_job
+    assert "runner: macos-15-intel\n" in macos_job
+    assert "MACOS_SIGNING_CERT_P12_BASE64" in macos_job
+    assert "MACOS_SIGNING_CERT_PASSWORD" in macos_job
+    assert "MACOS_SIGNING_IDENTITY" in macos_job
+    assert "MACOS_SIGNING_TEAM_ID" in macos_job
+    assert "APPLE_NOTARY_KEY_P8_BASE64" in macos_job
+    assert "APPLE_NOTARY_KEY_ID" in macos_job
+    assert "APPLE_NOTARY_ISSUER_ID" in macos_job
+    assert '--codesign-identity "$MACOS_SIGNING_IDENTITY"' in macos_job
+    assert "artifact_macos_dmg_smoke.py" in macos_job
+    assert "--expected-signing-identity" in macos_job
+    assert "--expected-team-id" in macos_job
+    assert "xcrun notarytool submit" in macos_job
+    assert 'result.get("status") != "Accepted"' in macos_job
+    assert "xcrun stapler staple" in macos_job
+    assert "xcrun stapler validate" in macos_job
+    assert "--require-notarized" in macos_job
+    assert "shasum -a 256" in macos_job
+    assert macos_job.index('--codesign-identity "$MACOS_SIGNING_IDENTITY"') < (
+        macos_job.index("xcrun notarytool submit")
+    )
+    assert macos_job.index("xcrun stapler validate") < macos_job.index(
+        "gh release upload"
+    )
 
 
 def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() -> None:

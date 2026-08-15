@@ -301,6 +301,200 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  lians-easy-macos:
+    name: Signed and notarized Lians (${{ matrix.architecture }})
+    needs: release-context
+    # A normal-user macOS asset exists only when the exact Developer ID
+    # publisher and Apple's notary service both validate it. Pull requests use
+    # separate ad-hoc-signed packages for technical lifecycle testing.
+    if: ${{ vars.PUBLISH_SIGNED_LIANS_MACOS == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOS_SIGNING_CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+      MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
+      MACOS_SIGNING_TEAM_ID: ${{ vars.MACOS_SIGNING_TEAM_ID }}
+      APPLE_NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+      APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+      APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Import the exact macOS publisher identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            MACOS_SIGNING_CERT_P12_BASE64
+            MACOS_SIGNING_CERT_PASSWORD
+            MACOS_SIGNING_IDENTITY
+            MACOS_SIGNING_TEAM_ID
+            APPLE_NOTARY_KEY_P8_BASE64
+            APPLE_NOTARY_KEY_ID
+            APPLE_NOTARY_ISSUER_ID
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "macOS publishing is missing $name" >&2
+              exit 1
+            fi
+          done
+
+          p12="$RUNNER_TEMP/lians-macos-signing-${{ matrix.architecture }}.p12"
+          keychain="$RUNNER_TEMP/lians-macos-signing-${{ matrix.architecture }}.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          printf '%s' "$MACOS_SIGNING_CERT_P12_BASE64" | base64 -D > "$p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$p12" \
+            -k "$keychain" \
+            -P "$MACOS_SIGNING_CERT_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain"
+          security list-keychains -d user -s "$keychain"
+
+          identities="$(security find-identity -v -p codesigning "$keychain")"
+          matches="$(printf '%s\n' "$identities" | grep -F -c "\"$MACOS_SIGNING_IDENTITY\"" || true)"
+          if [[ "$matches" != "1" ]]; then
+            echo "The P12 must contain exactly one valid identity matching MACOS_SIGNING_IDENTITY" >&2
+            exit 1
+          fi
+          rm -f "$p12"
+          echo "LIANS_MAC_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          echo "LIANS_MAC_KEYCHAIN_PASSWORD=$keychain_password" >> "$GITHUB_ENV"
+      - name: Build Developer ID-signed standalone runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          if [[ "v$version" != "$RELEASE_TAG" ]]; then
+            echo "Lians Bridge version $version does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if [[ "$(uname -m)" != "${{ matrix.architecture }}" ]]; then
+            echo "Runner architecture $(uname -m) does not match ${{ matrix.architecture }}" >&2
+            exit 1
+          fi
+          export MACOSX_DEPLOYMENT_TARGET=13.0
+          python -m pip install packages/lians-easy pyinstaller==6.22.0 Pillow==11.3.0
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name LiansMemory \
+            --paths packages/lians-easy \
+            --add-data "packages/lians-easy/lians_easy/app:lians_easy/app" \
+            --codesign-identity "$MACOS_SIGNING_IDENTITY" \
+            packages/lians-easy/entrypoint.py
+      - name: Verify signed frozen Lians App and crash recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          python packages/lians-easy/tests/artifact_app_smoke.py \
+            --binary dist/LiansMemory
+          python packages/lians-easy/tests/artifact_crash_smoke.py \
+            --binary dist/LiansMemory
+      - name: Build and verify Developer ID-signed DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          bash packages/lians-easy/scripts/build_macos_dmg.sh \
+            --binary dist/LiansMemory \
+            --output-directory dist/installer \
+            --version "$version" \
+            --architecture "${{ matrix.architecture }}" \
+            --signing-identity "$MACOS_SIGNING_IDENTITY"
+          python packages/lians-easy/tests/artifact_macos_dmg_smoke.py \
+            --dmg "dist/installer/Lians-$version-macos-${{ matrix.architecture }}.dmg" \
+            --expected-version "$version" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --expected-signing-identity "$MACOS_SIGNING_IDENTITY" \
+            --expected-team-id "$MACOS_SIGNING_TEAM_ID"
+      - name: Notarize and staple the DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          dmg="dist/installer/Lians-$version-macos-${{ matrix.architecture }}.dmg"
+          notary_key="$RUNNER_TEMP/AuthKey_$APPLE_NOTARY_KEY_ID.p8"
+          notary_result="$RUNNER_TEMP/lians-notary-${{ matrix.architecture }}.json"
+          printf '%s' "$APPLE_NOTARY_KEY_P8_BASE64" | base64 -D > "$notary_key"
+          chmod 600 "$notary_key"
+          xcrun notarytool submit "$dmg" \
+            --key "$notary_key" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --wait \
+            --output-format json > "$notary_result"
+          python - "$notary_result" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          result = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if result.get("status") != "Accepted":
+              raise SystemExit(f"Apple notarization was not accepted: {result}")
+          print(f"Apple notarization accepted: {result.get('id', 'submission recorded')}")
+          PY
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+      - name: Verify notarized package from the mounted release image
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          dmg="dist/installer/Lians-$version-macos-${{ matrix.architecture }}.dmg"
+          python packages/lians-easy/tests/artifact_macos_dmg_smoke.py \
+            --dmg "$dmg" \
+            --expected-version "$version" \
+            --expected-architecture "${{ matrix.architecture }}" \
+            --expected-signing-identity "$MACOS_SIGNING_IDENTITY" \
+            --expected-team-id "$MACOS_SIGNING_TEAM_ID" \
+            --require-notarized
+      - name: Write macOS package checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          name="Lians-$version-macos-${{ matrix.architecture }}.dmg"
+          (cd dist/installer && shasum -a 256 "$name" > "$name.sha256")
+      - name: Attach signed and notarized macOS package to release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          dmg="dist/installer/Lians-$version-macos-${{ matrix.architecture }}.dmg"
+          gh release upload "$RELEASE_TAG" "$dmg" "$dmg.sha256" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Remove macOS publisher credentials from the runner
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${LIANS_MAC_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$LIANS_MAC_KEYCHAIN" >/dev/null 2>&1 || true
+          fi
+          rm -f \
+            "$RUNNER_TEMP/lians-macos-signing-${{ matrix.architecture }}.p12" \
+            "$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID:-missing}.p8" \
+            "$RUNNER_TEMP/lians-notary-${{ matrix.architecture }}.json"
+
   go-tag:
     name: Tag Go module for go get
     needs: release-context

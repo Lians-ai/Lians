@@ -22,6 +22,15 @@ and remains a technical fixture. The stable release path signs the runtime and
 installer with the configured Lians publisher certificate before repeating the
 same package smoke test and attaching the setup executable to a release.
 
+Pull requests also build native `arm64` and `x86_64` macOS DMGs. CI mounts each
+image, verifies its Lians bundle identity and architecture, copies the app from
+the same **Lians -> Applications** layout a person sees, and exercises the real
+encrypted Bridge. Those images are ad-hoc-signed technical fixtures. The stable
+macOS publisher path requires the exact Lians Developer ID, Apple notarization,
+a stapled ticket, Gatekeeper acceptance, and a checksum before upload. A
+consumer macOS launch still waits on an in-app disconnect flow with a separate,
+default-safe memory-erasure choice.
+
 ## Personal setup
 
 Developers evaluating the preview can run it from a source checkout:
