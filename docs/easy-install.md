@@ -22,6 +22,16 @@ python -m lians_easy
 Choose the clients to configure, select **Install Lians**, restart those
 clients, then ask one to remember a useful fact and recall it in another chat.
 
+For Gemini CLI, an install can succeed while `lians` remains disabled or
+disconnected in an untrusted folder. Review the folder and run `gemini trust`
+to trust the intended workspace interactively, then check `/mcp list` or
+`gemini mcp list` again. `--skip-trust` and
+`GEMINI_CLI_TRUST_WORKSPACE=true` are available for a single session or a
+disposable test environment, but they bypass the folder trust check and should
+not replace reviewing the workspace. See the
+[Gemini integration guide](../integrations/gemini/README.md#workspace-trust)
+for details.
+
 Existing client configuration files are backed up before every change. Memory
 is stored in a local SQLite file under the operating system's per-user Lians
 data directory. Selected clients use the same `personal` profile, so a fact
@@ -49,11 +59,12 @@ The core tools are intentionally understandable:
 ## Supported clients
 
 The first desktop release configures Claude Desktop, Cursor, Windsurf, Gemini
-CLI, Codex, and Cline CLI. Cline CLI uses its documented settings file at
-`~/.cline/data/settings/cline_mcp_settings.json`. Lians Easy does not modify
-ChatGPT because ChatGPT connectors use a hosted HTTP connection rather than a
-local stdio process. Use a hosted Lians connector when that distribution is
-available.
+CLI, Codex, Cline CLI, and OpenCode. Cline CLI uses its documented settings file
+at `~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its documented
+global configuration at `~/.config/opencode/opencode.json`. Lians Easy does not
+modify ChatGPT because ChatGPT connectors use a hosted HTTP connection rather
+than a local stdio process. Use a hosted Lians connector when that distribution
+is available.
 
 ## IT and enterprise deployment
 
