@@ -202,18 +202,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install nsis.install --version=3.12.0 --yes --no-progress
-          if ($LASTEXITCODE -ne 0) {
-            throw "NSIS installation failed with exit code $LASTEXITCODE"
-          }
-          $nsisCompiler = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          if (-not (Test-Path -LiteralPath $nsisCompiler)) {
-            throw "NSIS compiler was not installed at the expected path: $nsisCompiler"
-          }
-          $nsisVersion = (& $nsisCompiler /VERSION).Trim()
-          if ($nsisVersion -ne 'v3.12') {
-            throw "Expected NSIS v3.12; found '$nsisVersion'"
-          }
+          & packages/lians-easy/scripts/install_nsis.ps1
       - name: Build per-user Windows installer
         if: runner.os == 'Windows'
         shell: pwsh

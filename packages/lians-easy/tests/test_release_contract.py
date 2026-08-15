@@ -69,6 +69,29 @@ def test_windows_identity_resources_match_package_version() -> None:
     assert "StringStruct('OriginalFilename', 'LiansMemory.exe')" in resource
 
 
+def test_windows_packaging_uses_verified_official_nsis_archive() -> None:
+    installer = (PACKAGE_ROOT / "scripts" / "install_nsis.ps1").read_text(
+        encoding="utf-8"
+    )
+    build_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
+    ).read_text(encoding="utf-8")
+    release_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "https://downloads.sourceforge.net/project/nsis/" in installer
+    assert "NSIS%203/3.12/nsis-3.12.zip" in installer
+    assert "56581f90db321581c5381193d796fffcf2d24b2f8fed2160a6c6a3baa67f2c4f" in installer
+    assert "--retry 5" in installer
+    assert "Get-FileHash -Algorithm SHA256" in installer
+    assert 'if ($actualVersion -ne "v$nsisVersion")' in installer
+    assert "choco install nsis" not in build_workflow
+    assert "choco install nsis" not in release_workflow
+    assert "packages/lians-easy/scripts/install_nsis.ps1" in build_workflow
+    assert "packages/lians-easy/scripts/install_nsis.ps1" in release_workflow
+
+
 def test_windows_icon_contains_standard_shell_sizes() -> None:
     icon = (PACKAGE_ROOT / "windows-lians.ico").read_bytes()
     reserved, kind, count = struct.unpack("<HHH", icon[:6])

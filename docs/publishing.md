@@ -114,8 +114,9 @@ variable `PUBLISH_SIGNED_LIANS_DESKTOP=true`, configure:
   the expected publisher certificate, without relying on the PFX contents alone.
 
 The release runner imports the certificate into its ephemeral current-user
-store, confirms the thumbprint, signs `LiansMemory.exe`, builds the per-user
-NSIS setup, signs the setup executable, and validates both Authenticode chains.
+store, confirms the thumbprint, signs `LiansMemory.exe`, downloads the official
+NSIS 3.12 portable compiler with retries, verifies its pinned SHA-256, builds
+the per-user setup, signs the setup executable, and validates both Authenticode chains.
 It then performs an actual silent install, opens the bundled Lians App through
 the installed Bridge, verifies local runtime discovery, silently uninstalls,
 and proves that encrypted memory was preserved. Only then does it upload
