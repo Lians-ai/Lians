@@ -14,7 +14,7 @@ notarization. Until a signed release is published, developers and IT teams
 should evaluate the Bridge from source:
 
 ```bash
-python -m lians_easy install --clients antigravity,claude,cursor,gemini,codex --yes
+python -m lians_easy install --clients antigravity,claude,cursor,gemini,codex,cline,opencode --yes
 python -m lians_easy doctor --json
 python -m lians_easy app
 ```
@@ -104,6 +104,12 @@ opens after the download. A second confirmed action re-hashes the saved file.
 Signed Windows and macOS builds open it only when the candidate matches the
 installed publisher and the operating system accepts the signature; otherwise
 Lians only selects the file in Downloads for the user to review.
+
+Supported targets are Google Antigravity, Claude Desktop, Cursor, Windsurf,
+Gemini CLI, Codex, Cline CLI, and OpenCode. Cline uses its documented CLI
+settings file at `~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses
+its documented global configuration file at
+`~/.config/opencode/opencode.json`.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required for local mode. Optional Lians Cloud continuity uses an

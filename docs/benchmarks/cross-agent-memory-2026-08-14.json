@@ -1,0 +1,51 @@
+{
+  "schema": "lians.cross-agent-memory-evidence.v1",
+  "observed_at": "2026-08-14",
+  "evidence_class": "operator_observed_live_clients_and_provider_usage",
+  "cross_agent_handoff": {
+    "writer": "Cursor Agent CLI 2026.08.11-e8db854",
+    "reader": "Claude Code 2.1.210",
+    "synthetic_data_only": true,
+    "separate_cursor_recall_session": true,
+    "separate_claude_recall_session": true,
+    "cursor_exact_recall": true,
+    "claude_exact_recall": true,
+    "confirmed_forget": true,
+    "cursor_post_forget_absent": true,
+    "claude_post_forget_result": "ABSENT",
+    "claude_additional_shell_fallback_denied": true
+  },
+  "cursor_native_rule_baab": {
+    "execution_order": [
+      "candidate",
+      "native",
+      "native",
+      "candidate"
+    ],
+    "model_requested": "auto",
+    "candidate_context_characters": 568,
+    "native_rule_characters": 21166,
+    "native_rule_lines": 201,
+    "candidate_exact_answers": 2,
+    "native_exact_answers": 2,
+    "candidate_provider_input_tokens": 30048,
+    "native_provider_input_tokens": 39914,
+    "provider_input_token_reduction_percent": 24.7181,
+    "same_input_budget_usage_multiplier": 1.3283,
+    "candidate_to_native_mean_latency_ratio": 0.9333,
+    "provider_reported_cost": null
+  },
+  "prior_claude_balanced_evidence": {
+    "bounded_vs_full_history_input_reduction_percent": 97.1564,
+    "bounded_vs_large_native_auto_memory_input_reduction_percent": 86.0779,
+    "exact_answers_across_both_tests": "8/8"
+  },
+  "platform_status": {
+    "cursor": "passed_live_handoff_and_balanced_token_test",
+    "claude": "passed_live_handoff_and_prior_balanced_token_tests",
+    "codex": "hosted_config_installed_but_restart_and_oauth_pending",
+    "copilot": "blocked_by_organization_policy",
+    "gemini": "blocked_by_google_unsupported_client_response"
+  },
+  "claim_boundary": "One live Cursor-to-Claude handoff and workload-scoped Cursor and Claude measurements; not a five-client, typical-workload, provider-quota, or universal-savings claim."
+}
