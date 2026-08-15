@@ -8,25 +8,51 @@ slice in a later chat.
 
 Use Cursor's official one-click MCP installer:
 
-[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=Lians&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1zZGtbbWNwXSIsImxpYW5zLW1jcCJdLCJlbnYiOnsiTElBTlNfTUNQX0VOQUJMRURfVE9PTFMiOiJyZW1lbWJlcixyZWNhbGwsbGlzdF9tZW1vcmllcyxjb3JyZWN0X21lbW9yeSxmb3JnZXRfbWVtb3J5In19)
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvYTZjOGQ0ZGQxZWVmMjg0ZWYyNGFiODI0ZGJiYzQ2NTA3MDM5MWY3NC56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
 
 The button passes the same local server configuration shown below to Cursor.
 Review it in Cursor before approving the install.
+
+This directory is also a native Cursor plugin package, registered by the
+repository's [Cursor marketplace manifest](../../.cursor-plugin/marketplace.json).
+It bundles the same MCP server plus memory-use guidance and explicit inspect,
+correct, and forget controls. The package is ready for repository validation;
+its presence here does not mean Cursor has approved or listed it in the public
+Marketplace yet.
+
+The native package runs the encrypted Lians Bridge MCP runtime from an immutable
+GitHub source archive. It requires `uv` and network access on first launch, but
+it does not require Git, a preinstalled Python runtime, a Lians account, or an
+API key. The immutable runtime pin is the reviewed Bridge implementation merged
+in [PR #170](https://github.com/Lians-ai/Lians/pull/170) at commit
+`a6c8d4dd1eef284ef24ab824dbbc465070391f74`.
 
 For manual setup:
 
 1. Install [`uv`](https://docs.astral.sh/uv/).
 2. Copy [`mcp.example.json`](mcp.example.json) to `.cursor/mcp.json` in your
-   project. If that file already exists, merge the `lians` server into its
+   project. If that file already exists, merge the `lians-memory` server into its
    `mcpServers` object.
-3. Open Cursor's MCP settings, confirm that `lians` is connected, and leave tool
-   approval enabled while testing.
+3. Open Cursor's MCP settings, confirm that `lians-memory` is connected, and
+   leave tool approval enabled while testing.
 
 To make Lians available in every Cursor project, merge the same server into
 `~/.cursor/mcp.json` instead.
 
-Local mode needs no Lians account or API key. Memories persist in
-`~/.lians/mcp.db` by default.
+Local mode needs no Lians account or API key. Lians Easy uses one OS-native
+database for its default `personal` profile:
+
+- Windows: `%LOCALAPPDATA%\Lians\memory.sqlite3`
+- macOS: `~/Library/Application Support/Lians/memory.sqlite3`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/lians/memory.sqlite3`
+
+Point every supported AI client at Lians Bridge to share that profile across
+clients on the same machine. Memory values are AES-GCM encrypted at rest. On
+Windows, DPAPI protects the local root key; macOS and Linux currently use an
+owner-only key file. Source, scope, timestamps, hashes, and signed context
+receipts remain inspectable by design. Credential-like values are rejected, and
+secrets should still stay in a secret manager. Use the full Lians engine when a
+deployment needs team governance, barriers, or managed key infrastructure.
 
 ## Test it in two chats
 
@@ -42,16 +68,16 @@ Open a new chat in the same project and ask:
 What is this project's release color?
 ```
 
-Approve the `remember` or `recall` tool when Cursor asks. The starter profile
-exposes only those two tools so the first-run surface stays understandable and
-bounded.
+Approve the `remember` or `recall` tool when Cursor asks. The package exposes
+five understandable controls: remember, recall, list, correct, and confirmed
+permanent forget.
 
 ## Optional managed connection
 
-The example defaults to a local SQLite store. A hosted or self-hosted Lians
-server can be selected by adding `LIANS_URL`, `LIANS_API_KEY`, and optionally
-`LIANS_AGENT_ID` to the server's `env` object. Keep credentials in a user-level
-configuration or secret manager; never commit them to the repository.
+The native consumer package is local-only. For a hosted or self-hosted Lians
+deployment, use the [full SDK MCP setup](../../README.md#free-local-setup-add-memory-through-mcp),
+then supply `LIANS_URL`, `LIANS_API_KEY`, and optionally `LIANS_AGENT_ID` in a
+user-level configuration or secret manager. Never commit those credentials.
 
 Lians Cloud and enterprise packages add hosted continuity across supported
 clients and devices, shared/team memory, administration, higher managed limits,
