@@ -13,7 +13,7 @@
 
 ## 1. Secrets & environment
 
-Copy `.env.example` to `.env` and fill every value:
+Copy `agentmem/.env.example` to `agentmem/.env` and fill every value:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/Lians
@@ -64,22 +64,19 @@ WITH (m = 16, ef_construction = 64);
 
 ---
 
-## 3. First API key
+## 3. First API key after deployment
+
+Do not insert authentication rows directly. Once the private operations
+endpoint is ready, provision the tenant through the audited admin API. The
+plaintext key is returned once; store it in the target secret manager and keep
+it out of shell scripts and logs.
 
 ```bash
-python -c "
-import hashlib, secrets
-key = secrets.token_hex(32)
-print('Key:', key)
-print('Hash:', hashlib.sha256(key.encode()).hexdigest())
-"
-```
-
-Insert the hash into the database:
-
-```sql
-INSERT INTO api_keys (key_hash, namespace, scopes, description)
-VALUES ('<hash>', 'prod', ARRAY['read','write'], 'Initial admin key');
+curl --fail-with-body --request POST \
+  --header "X-Admin-Secret: $LIANS_ADMIN_SECRET" \
+  --header "Content-Type: application/json" \
+  --data '{"namespace":"prod","label":"owner","scopes":["read","write","admin"]}' \
+  https://memory.example.com/v1/admin/api-keys
 ```
 
 ---
@@ -89,11 +86,12 @@ VALUES ('<hash>', 'prod', ARRAY['read','write'], 'Initial admin key');
 ### Docker Compose (single node / staging)
 
 ```bash
-# Default build includes sentence-transformers + pre-baked BAAI/bge-large-en-v1.5.
+# Run from the repository root. The default build includes
+# sentence-transformers plus a pinned local model.
 # For Voyage/OpenAI providers (no local model needed), use a lean build:
-# docker build --build-arg EXTRAS= --build-arg PREDOWNLOAD_MODEL= -t Lians .
-docker compose up -d
-docker compose logs -f Lians
+# docker build --build-arg EXTRAS=enterprise --build-arg PREDOWNLOAD_MODEL= -t lians-engine .
+docker compose --file agentmem/docker-compose.yml up --build -d
+docker compose --file agentmem/docker-compose.yml logs -f api
 ```
 
 Liveness check: `curl http://localhost:8000/livez`
@@ -110,37 +108,36 @@ fly secrets set MASTER_ENCRYPTION_KEY=<value> ADMIN_SECRET=<value> PROVISIONING_
 
 ### Kubernetes
 
-```bash
-kubectl apply -f k8s/
-kubectl rollout status deployment/Lians
-```
-
-See `k8s/` for `Deployment`, `Service`, `HorizontalPodAutoscaler`, and
-`PodDisruptionBudget` manifests.
+Use the [Kubernetes operator guide](../k8s/README.md). The default Kustomize
+bundle excludes both the Secret and migration Job so placeholder credentials
+cannot be applied accidentally. Pin the API and migration Job to the same
+verified `ghcr.io/lians-ai/lians-engine@sha256:...` digest, create secrets
+outside Git, run migrations, inspect the rendered bundle, and only then apply
+the rolling Deployment.
 
 ---
 
 ## 5. Grafana dashboard
 
-Import `grafana/Lians-dashboard.json` into your Grafana instance:
+Import `agentmem/grafana/agentmem-dashboard.json` into your Grafana instance:
 
 1. **Grafana → Dashboards → Import → Upload JSON file**
-2. Select `grafana/Lians-dashboard.json`
+2. Select `agentmem/grafana/agentmem-dashboard.json`
 3. Choose your Prometheus datasource when prompted
 
 The dashboard requires `prometheus_client` to be installed on the server:
 
 ```bash
-pip install prometheus-client>=0.19
+pip install "lians[metrics]"
 ```
 
 Prometheus scrape config:
 
 ```yaml
 scrape_configs:
-  - job_name: Lians
+  - job_name: lians-engine
     static_configs:
-      - targets: ["Lians:8000"]
+      - targets: ["agentmem.agentmem.svc.cluster.local:80"]
     metrics_path: /metrics
     scrape_interval: 15s
 ```
@@ -175,8 +172,10 @@ scrape_configs:
 ### Health check
 
 ```bash
-curl https://mem.yourfirm.internal/health
-# Expected: {"status":"ok","db":"ok"}
+curl --fail https://mem.yourfirm.internal/livez
+# Expected: {"status":"alive"}
+curl --fail https://mem.yourfirm.internal/readyz
+# Expected in production: {"status":"ok"}
 ```
 
 ### Conflict queue

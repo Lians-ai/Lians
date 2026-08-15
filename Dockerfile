@@ -77,10 +77,23 @@ ENV PATH="/opt/venv/bin:${PATH}" \
 # duplicates metadata for the multi-gigabyte environment and model layers.
 COPY --from=builder --chown=10001:10001 /opt/venv /opt/venv
 COPY --from=builder --chown=10001:10001 /app/.model_cache /app/.model_cache
-COPY --chown=10001:10001 agentmem/ /app/agentmem/
+# Runtime code is already installed in /opt/venv. Keep only the migration
+# assets needed for an operator-controlled schema upgrade; tests, SDK sources,
+# benchmarks, and local Compose files do not belong in the serving image.
+COPY --chown=10001:10001 agentmem/alembic /app/agentmem/alembic
+COPY --chown=10001:10001 agentmem/alembic.ini /app/agentmem/alembic.ini
 
+ARG LIANS_VERSION=0.5.0
 ARG LIANS_BUILD_SHA=unknown
-ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}"
+ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}" \
+    LIANS_VERSION="${LIANS_VERSION}"
+
+LABEL org.opencontainers.image.title="Lians Engine" \
+      org.opencontainers.image.description="Trusted memory and evidence service for AI systems" \
+      org.opencontainers.image.source="https://github.com/Lians-ai/Lians" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${LIANS_VERSION}" \
+      org.opencontainers.image.revision="${LIANS_BUILD_SHA}"
 
 WORKDIR /app/agentmem
 USER 10001:10001

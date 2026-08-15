@@ -1,0 +1,174 @@
+name: Publish Lians Engine container
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "VERSION"
+      - "agentmem/alembic/**"
+      - "agentmem/alembic.ini"
+      - "agentmem/src/lians/**"
+      - "k8s/**"
+      - "docs/deploy.md"
+      - ".github/workflows/publish-engine-container.yml"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing immutable release tag to publish (for example, v0.6.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lians-engine-container-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/lians-ai/lians-engine
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+jobs:
+  verify:
+    name: Build and exercise enterprise image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out current change
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Check out requested release tag
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_tag }}
+      - name: Verify immutable release context
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          package_version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')"
+          runtime_version="$(PYTHONPATH=agentmem/src python -c 'from lians import __version__; print(__version__)')"
+          if [[ "$package_version" != "$version" || "$runtime_version" != "$version" ]]; then
+            echo "Engine source versions do not match VERSION=$version" >&2
+            exit 1
+          fi
+          echo "LIANS_VERSION=$version" >> "$GITHUB_ENV"
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "release_tag must be an existing stable semver tag (vX.Y.Z)" >&2
+              exit 1
+            fi
+            if [[ "v$version" != "$RELEASE_TAG" ]]; then
+              echo "Lians Engine version $version does not match $RELEASE_TAG" >&2
+              exit 1
+            fi
+            tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+            head_sha="$(git rev-parse HEAD)"
+            if [[ "$tag_sha" != "$head_sha" ]]; then
+              echo "Checked-out SHA $head_sha does not match $RELEASE_TAG ($tag_sha)" >&2
+              exit 1
+            fi
+          fi
+      - name: Build the lean operator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg EXTRAS=enterprise \
+            --build-arg PREDOWNLOAD_MODEL= \
+            --build-arg "LIANS_VERSION=$LIANS_VERSION" \
+            --build-arg "LIANS_BUILD_SHA=$(git rev-parse HEAD)" \
+            --tag lians-engine:verify \
+            .
+      - name: Verify identity, migration assets, and non-root runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect lians-engine:verify --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect lians-engine:verify --format '{{index .Config.Labels "org.opencontainers.image.title"}}')" = "Lians Engine"
+          test "$(docker image inspect lians-engine:verify --format '{{index .Config.Labels "org.opencontainers.image.version"}}')" = "$LIANS_VERSION"
+          test "$(docker image inspect lians-engine:verify --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$(git rev-parse HEAD)"
+          docker run --rm lians-engine:verify python -c \
+            'import importlib.metadata as m; import boto3, hvac, stripe; import prometheus_client; from azure.identity import DefaultAzureCredential; from opentelemetry import trace; import lians.main; assert m.version("lians")'
+          heads="$(docker run --rm lians-engine:verify alembic -c alembic.ini heads)"
+          grep -F "0030_force_hosted_mcp_rls (head)" <<<"$heads"
+          test "$(docker run --rm --entrypoint sh lians-engine:verify -c \
+            'find /app/agentmem -type f | sort | grep -Ev "(/alembic/|/alembic.ini$)" | wc -l')" = "0"
+
+  publish:
+    name: Publish multi-architecture image with evidence
+    needs: verify
+    if: github.event_name != 'pull_request' && vars.PUBLISH_LIANS_ENGINE_CONTAINER == 'true'
+    runs-on: ubuntu-latest
+    environment: ghcr-lians-engine
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Resolve exact release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          test "$(tr -d '\r\n' < VERSION)" = "$version"
+          echo "LIANS_VERSION=$version" >> "$GITHUB_ENV"
+          echo "LIANS_BUILD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse to overwrite a published version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "$IMAGE_NAME:$LIANS_VERSION" >/dev/null 2>&1; then
+            echo "$IMAGE_NAME:$LIANS_VERSION already exists; release tags are immutable" >&2
+            exit 1
+          fi
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+      - name: Publish signed-source multi-architecture image
+        id: publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: .
+          file: Dockerfile
+          build-args: |
+            EXTRAS=enterprise
+            PREDOWNLOAD_MODEL=
+            LIANS_VERSION=${{ env.LIANS_VERSION }}
+            LIANS_BUILD_SHA=${{ env.LIANS_BUILD_SHA }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ env.LIANS_VERSION }}
+          sbom: true
+          provenance: mode=max
+      - name: Verify the published manifest by digest
+        shell: bash
+        env:
+          PUBLISHED_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$PUBLISHED_DIGEST"
+          docker buildx imagetools inspect "$IMAGE_NAME@$PUBLISHED_DIGEST"
+          echo "Published $IMAGE_NAME:$LIANS_VERSION at $PUBLISHED_DIGEST" >> "$GITHUB_STEP_SUMMARY"

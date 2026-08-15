@@ -25,6 +25,7 @@ git push origin v0.4.2
 6. Monitor all publication workflows until completion:
    - `publish-lian.yml`
    - `publish-lians-bridge.yml`
+   - `publish-engine-container.yml`
    - `publish-lian-npm.yml`
    - `release.yml`
 7. Verify the published version from each public registry. A successful workflow is not proof that a registry search index has propagated.
@@ -35,6 +36,7 @@ git push origin v0.4.2
 |---|---|---|---|
 | Python | [PyPI](https://pypi.org/project/lians-sdk/) | `publish-lian.yml` builds the sdist and wheel, then publishes them | PyPI trusted publisher through GitHub OIDC |
 | Lians Bridge | PyPI project `lians-bridge` after first publication | `publish-lians-bridge.yml` builds, verifies, installs, and exercises the wheel before publishing it | Opt-in PyPI trusted publisher through GitHub OIDC; no API token |
+| Lians Engine | GitHub Container Registry package `ghcr.io/lians-ai/lians-engine` after first publication | `publish-engine-container.yml` verifies the operator image, then publishes amd64 and arm64 manifests with SBOM and provenance | Opt-in GitHub OIDC and repository package permission; no registry password |
 | TypeScript | [npm](https://www.npmjs.com/package/@lians-ai/lians) | `publish-lian-npm.yml` builds, tests, and runs `npm publish` | npm trusted publisher through GitHub OIDC; no long-lived publish token |
 | Go | proxy.golang.org and pkg.go.dev | `release.yml` creates a module-path tag | GitHub token supplied to the workflow |
 | Java | Maven Central and GitHub Release JAR | `release.yml` signs and deploys with the `release` Maven profile | Sonatype credentials and GPG signing secrets |
@@ -76,6 +78,29 @@ machines:
 pipx install lians-bridge
 uv tool install lians-bridge
 ```
+
+## Lians Engine container publication
+
+The enterprise operator image is separately gated by the repository variable
+`PUBLISH_LIANS_ENGINE_CONTAINER=true` and the protected GitHub environment
+`ghcr-lians-engine`. It accepts only an existing stable `vX.Y.Z` tag whose
+commit and source versions match. Before publishing, CI verifies the non-root
+UID, OCI product identity, revision, package import, exact migration head,
+enterprise KMS/observability/metering dependencies, and reduced runtime file
+surface.
+
+The release job refuses to overwrite an existing semantic-version tag. It
+publishes only the immutable version tag, not `latest`, for `linux/amd64` and
+`linux/arm64`, with an OCI SBOM and maximum provenance. Record the returned
+manifest digest and make the GHCR package public before describing it as an
+operator install path. Kubernetes and production Compose deployments must pin
+that digest; a semantic-version tag alone is not the production identity.
+
+The published image excludes the large local embedding model. It contains the
+`enterprise` optional dependencies for billing, Prometheus, OpenTelemetry, AWS
+KMS, Azure Key Vault, and HashiCorp Vault. Air-gapped deployments build the
+same reviewed Dockerfile with `EXTRAS=enterprise,local`, an immutable model
+revision, and their approved internal registry.
 
 ## Windows desktop package
 

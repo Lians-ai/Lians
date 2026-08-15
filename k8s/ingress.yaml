@@ -38,10 +38,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - api.agentmem.example.com   # CHANGE: your domain
-      secretName: agentmem-tls
+        - memory.example.com   # CHANGE: your domain
+      secretName: lians-memory-tls
   rules:
-    - host: api.agentmem.example.com   # CHANGE: your domain
+    - host: memory.example.com   # CHANGE: your domain
       http:
         paths:
           - path: /
