@@ -112,7 +112,7 @@ def _wait_for_bridge(origin: str, process: subprocess.Popen[bytes]) -> str:
 
 def _remember(origin: str, cookie: str, content: str) -> None:
     request = Request(
-        f"{origin}/v1/memories",
+        f"{origin}/v1/remember",
         data=json.dumps(
             {
                 "content": content,
