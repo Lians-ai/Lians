@@ -33,6 +33,10 @@ are not directly comparable to LLM-judged answer-accuracy leaderboards.
 
 ## Public retrieval and answer benchmarks
 
+- [Cross-agent memory evidence, August 14, 2026](cross-agent-memory-2026-08-14.md)
+  records a live Cursor-to-Claude handoff, confirmed deletion, a balanced Cursor
+  native-rule comparison, and the exact platform blockers observed during the
+  same test window.
 - [LOCOMO reports](../../agentmem/docs/benchmarks/) preserve the exact protocol,
   embedding configuration, scoring method, and limitations for each published
   run.

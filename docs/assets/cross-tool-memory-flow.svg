@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">The Lians cross-tool memory moment</title>
+  <desc id="description">The Lians blue lotus marks a flow where a preference saved in Cursor is recalled in a new Codex or Claude task with an inspectable receipt and correction and forgetting controls.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#05070b"/>
+      <stop offset="1" stop-color="#0b1324"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3777ff"/>
+      <stop offset="1" stop-color="#7657ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7798ff"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" rx="30" fill="url(#background)"/>
+  <circle cx="1078" cy="42" r="180" fill="#3777ff" opacity="0.08"/>
+  <circle cx="92" cy="620" r="210" fill="#7657ff" opacity="0.07"/>
+
+  <g transform="translate(1064 18) scale(0.1328125)" aria-label="Lians blue lotus">
+    <rect width="512" height="512" rx="88" fill="#05070b"/>
+    <g fill="#1b4da1" stroke="#05070b" stroke-width="12" stroke-linejoin="round">
+      <path d="M256 92c-52 55-75 112-75 169 0 53 25 98 75 139 50-41 75-86 75-139 0-57-23-114-75-169z"/>
+      <path d="M172 142c-22-18-45-31-70-39-8 32-6 65 5 98 12 35 38 68 78 98-11-24-17-49-17-75 0-27 2-55 4-82z"/>
+      <path d="M340 142c22-18 45-31 70-39 8 32 6 65-5 98-12 35-38 68-78 98 11-24 17-49 17-75 0-27-2-55-4-82z"/>
+      <path d="M167 188c-45-28-91-40-139-34 4 58 28 107 72 148 38 36 87 55 147 58-54-38-81-96-80-172z"/>
+      <path d="M345 188c45-28 91-40 139-34-4 58-28 107-72 148-38 36-87 55-147 58 54-38 81-96 80-172z"/>
+      <path d="M91 256c-31 2-58 12-81 31 40 66 99 102 177 107 27 2 52-4 69-15-65-8-120-49-165-123z"/>
+      <path d="M421 256c31 2 58 12 81 31-40 66-99 102-177 107-27 2-52-4-69-15 65-8 120-49 165-123z"/>
+    </g>
+  </g>
+
+  <g font-family="Segoe UI, Inter, Arial, sans-serif">
+    <text x="64" y="67" fill="#4f87ff" font-size="19" font-weight="700" letter-spacing="3">LIANS MEMORY</text>
+    <text x="64" y="116" fill="#f5f7fb" font-size="36" font-weight="700">Say it once. Start a new task. It is already there.</text>
+    <text x="64" y="151" fill="#9ba8ba" font-size="19">One encrypted memory layer for the AI tools you already use.</text>
+
+    <g filter="url(#shadow)">
+      <rect x="64" y="204" width="330" height="250" rx="20" fill="#0d1420" stroke="#25334a"/>
+      <rect x="435" y="204" width="330" height="250" rx="20" fill="#0d1420" stroke="#25334a"/>
+      <rect x="806" y="204" width="330" height="250" rx="20" fill="#0d1420" stroke="#25334a"/>
+    </g>
+
+    <circle cx="98" cy="244" r="18" fill="#263451"/>
+    <text x="98" y="251" text-anchor="middle" fill="#dce6ff" font-size="17" font-weight="700">C</text>
+    <text x="128" y="251" fill="#f5f7fb" font-size="19" font-weight="700">Cursor</text>
+    <text x="92" y="297" fill="#8fa0b8" font-size="15" font-weight="600" letter-spacing="1">YOU SAY</text>
+    <rect x="90" y="316" width="278" height="91" rx="14" fill="#131d2d"/>
+    <text x="109" y="345" fill="#dce4ef" font-size="16">
+      <tspan x="109" dy="0">“Remember that we use FastAPI</tspan>
+      <tspan x="109" dy="24">and never write migrations</tspan>
+      <tspan x="109" dy="24">manually.”</tspan>
+    </text>
+    <circle cx="104" cy="429" r="7" fill="#4fe0a0"/>
+    <text x="120" y="435" fill="#9ba8ba" font-size="15">Saved to this project</text>
+
+    <circle cx="469" cy="244" r="18" fill="#263451"/>
+    <path d="M460 245h18M469 236v18" stroke="#dce6ff" stroke-width="2" stroke-linecap="round"/>
+    <text x="499" y="251" fill="#f5f7fb" font-size="19" font-weight="700">Lians Bridge</text>
+    <text x="463" y="297" fill="#8fa0b8" font-size="15" font-weight="600" letter-spacing="1">BOUNDED RECALL</text>
+    <rect x="461" y="316" width="278" height="91" rx="14" fill="#111c31" stroke="#2c4e91"/>
+    <text x="480" y="344" fill="#dce4ef" font-size="16">
+      <tspan x="480" dy="0">Global preferences</tspan>
+      <tspan x="480" dy="25">Project rules</tspan>
+      <tspan x="480" dy="25">Relevant handoff</tspan>
+    </text>
+    <text x="480" y="435" fill="#7798ff" font-size="15">Encrypted • scoped • current</text>
+
+    <circle cx="840" cy="244" r="18" fill="#263451"/>
+    <text x="840" y="251" text-anchor="middle" fill="#dce6ff" font-size="15" font-weight="700">AI</text>
+    <text x="870" y="251" fill="#f5f7fb" font-size="19" font-weight="700">New Codex or Claude task</text>
+    <text x="834" y="297" fill="#8fa0b8" font-size="15" font-weight="600" letter-spacing="1">LIANS RECEIPT</text>
+    <rect x="832" y="316" width="278" height="91" rx="14" fill="#11251f" stroke="#28684f"/>
+    <circle cx="854" cy="342" r="7" fill="#4fe0a0"/>
+    <text x="871" y="348" fill="#dcf8eb" font-size="16" font-weight="700">3 memories used</text>
+    <text x="851" y="378" fill="#a5c4b7" font-size="15">Lians project • inspect why</text>
+    <text x="851" y="432" fill="#9ba8ba" font-size="15">FastAPI • no manual migrations</text>
+
+    <path d="M400 329 H425" stroke="#7798ff" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M771 329 H796" stroke="#7798ff" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <rect x="64" y="493" width="1072" height="79" rx="18" fill="#0c1320" stroke="#25334a"/>
+    <rect x="84" y="513" width="246" height="39" rx="19" fill="url(#accent)"/>
+    <text x="207" y="539" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">New task. Same rules.</text>
+    <text x="371" y="539" fill="#b1bdcc" font-size="16">Exact source and time</text>
+    <circle cx="351" cy="533" r="4" fill="#4f87ff"/>
+    <text x="589" y="539" fill="#b1bdcc" font-size="16">Why recalled</text>
+    <circle cx="569" cy="533" r="4" fill="#4f87ff"/>
+    <text x="747" y="539" fill="#b1bdcc" font-size="16">Correct</text>
+    <circle cx="727" cy="533" r="4" fill="#4f87ff"/>
+    <text x="857" y="539" fill="#b1bdcc" font-size="16">Pause</text>
+    <circle cx="837" cy="533" r="4" fill="#4f87ff"/>
+    <text x="956" y="539" fill="#b1bdcc" font-size="16">Forget</text>
+    <circle cx="936" cy="533" r="4" fill="#4f87ff"/>
+
+    <text x="64" y="607" fill="#6f7f94" font-size="14">Product flow • receipt values are illustrative; benchmark and live-test claims are documented below.</text>
+  </g>
+</svg>
