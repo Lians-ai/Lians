@@ -317,6 +317,15 @@ class SetupApp:
         self.other_button.configure(
             text="Hide other apps" if self.other_visible else "+ Add another AI app"
         )
+        if self.other_visible:
+            self.root.update_idletasks()
+            requested_height = self.shell.winfo_reqheight()
+            current_height = self.root.winfo_height()
+            available_height = max(current_height, self.root.winfo_screenheight() - 40)
+            if requested_height > current_height:
+                self.root.geometry(
+                    f"{self.root.winfo_width()}x{min(requested_height, available_height)}"
+                )
 
     def _toggle_details(self) -> None:
         self.details_visible = not self.details_visible

@@ -94,7 +94,8 @@ def parser() -> argparse.ArgumentParser:
             "--clients",
             default="detected",
             help=(
-                "Comma-separated antigravity,claude,cursor,windsurf,gemini,codex; "
+                "Comma-separated antigravity,claude,cursor,windsurf,gemini,codex,"
+                "cline,opencode; "
                 "or detected/all"
             ),
         )

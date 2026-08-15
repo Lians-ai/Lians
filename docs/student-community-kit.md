@@ -29,6 +29,12 @@ This kit is for:
 | Project track | 60–90 minutes | Hackathons and build sprints | Add governed memory to an agent project and demonstrate why it helps. |
 | Capstone component | One project milestone | Courses and research teams | Define, test, and report a memory policy for a real agent workflow. |
 
+For a first-time, nontechnical example, use the
+[synthetic market-research walkthrough](../examples/market-research/). It shows
+the complete remember, separate-chat recall, correction, inspection, confirmed
+deletion, and verification loop in Cursor without real respondent or company
+data.
+
 ## Before the session
 
 1. Ask participants which supported client they use:

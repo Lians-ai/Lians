@@ -30,6 +30,22 @@ def test_gemini_extension_uses_the_published_bounded_server():
     assert server["timeout"] == 300000
 
 
+def test_antigravity_starter_uses_current_global_mcp_shape():
+    server = _json("integrations/antigravity/mcp_config.example.json")["mcpServers"]["lians"]
+    guide = (ROOT / "integrations/antigravity/README.md").read_text(encoding="utf-8")
+
+    assert server["command"] == "uvx"
+    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-mcp"]
+    assert server["env"] == {
+        "LIANS_MCP_ENABLED_TOOLS": (
+            "remember,recall,list_memories,correct_memory,forget_memory"
+        )
+    }
+    assert server["disabled"] is False
+    assert "~/.gemini/config/mcp_config.json" in guide
+    assert "consumer Google-login access" in guide
+
+
 def test_cursor_starter_profile_is_local_bounded_stdio():
     server = _json("integrations/cursor/mcp.example.json")["mcpServers"]["lians"]
 
