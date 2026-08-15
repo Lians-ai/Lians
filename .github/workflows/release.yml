@@ -117,6 +117,11 @@ jobs:
     # certificate match before the release can receive any desktop asset.
     if: ${{ vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true' }}
     runs-on: windows-latest
+    environment: windows-lians-desktop
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -146,6 +151,7 @@ jobs:
       - name: Verify frozen Lians App and Bridge API
         run: |
           python packages/lians-easy/tests/artifact_app_smoke.py --binary dist/LiansMemory.exe
+          python packages/lians-easy/tests/artifact_cross_tool_smoke.py --binary dist/LiansMemory.exe
           python packages/lians-easy/tests/artifact_portability_smoke.py --binary dist/LiansMemory.exe
       - name: Verify Windows package identity
         shell: pwsh
@@ -256,21 +262,113 @@ jobs:
           if ($signature.SignerCertificate.Thumbprint -ne $env:LIANS_WINDOWS_CERT_THUMBPRINT) {
             throw 'Windows installer signer does not match the configured publisher certificate'
           }
+      - name: Resolve and verify the latest signed Windows upgrade baseline
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIRE_SIGNED_LIANS_DESKTOP_BASELINE: ${{ vars.REQUIRE_SIGNED_LIANS_DESKTOP_BASELINE }}
+        run: |
+          $catalog = Join-Path $env:RUNNER_TEMP 'lians-release-catalog.json'
+          gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" |
+            Set-Content -LiteralPath $catalog -Encoding utf8
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release catalog lookup failed with exit code $LASTEXITCODE"
+          }
+          $selectionJson = python packages/lians-easy/scripts/select_desktop_baseline.py `
+            --catalog $catalog `
+            --current-tag $env:RELEASE_TAG `
+            --platform windows
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows upgrade baseline selection failed with exit code $LASTEXITCODE"
+          }
+          $selection = $selectionJson | ConvertFrom-Json
+          if ($selection.status -eq 'none') {
+            if ($env:REQUIRE_SIGNED_LIANS_DESKTOP_BASELINE -eq 'true') {
+              throw 'A prior signed Windows release is required, but no exact installer/checksum pair was found'
+            }
+            Write-Host 'No older signed Windows package exists; this release is the baseline.'
+            exit 0
+          }
+
+          $baselineDirectory = Join-Path $env:RUNNER_TEMP 'lians-windows-baseline'
+          New-Item -ItemType Directory -Path $baselineDirectory -Force | Out-Null
+          gh release download $selection.tag `
+            --pattern $selection.artifact_name `
+            --pattern $selection.checksum_name `
+            --dir $baselineDirectory
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows baseline download failed with exit code $LASTEXITCODE"
+          }
+          $baseline = Join-Path $baselineDirectory $selection.artifact_name
+          $checksumFile = Join-Path $baselineDirectory $selection.checksum_name
+          $checksumLine = (Get-Content -LiteralPath $checksumFile -Raw).Trim()
+          if ($checksumLine -notmatch '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
+            throw 'The Windows baseline checksum has an invalid format'
+          }
+          if ([IO.Path]::GetFileName($Matches[2].Trim()) -ne $selection.artifact_name) {
+            throw 'The Windows baseline checksum names a different artifact'
+          }
+          $expectedChecksum = $Matches[1].ToLowerInvariant()
+          $actualChecksum = (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualChecksum -ne $expectedChecksum) {
+            throw 'The Windows baseline checksum does not match the downloaded installer'
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $baseline
+          if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
+            throw "The Windows baseline requires a valid Authenticode signature; status was '$($signature.Status)'"
+          }
+          if ($signature.SignerCertificate.Thumbprint -ne $env:LIANS_WINDOWS_CERT_THUMBPRINT) {
+            throw 'The Windows baseline publisher does not match the current Lians publisher'
+          }
+          "LIANS_WINDOWS_BASELINE_INSTALLER=$baseline" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LIANS_WINDOWS_BASELINE_VERSION=$($selection.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify install, bundled app, and memory-preserving removal
         shell: pwsh
         run: |
           $version = $env:RELEASE_TAG.TrimStart('v')
-          python packages/lians-easy/tests/artifact_windows_installer_smoke.py `
-            --installer "dist/installer/Lians-Setup-$version.exe" `
-            --rollback-fixture "dist/rollback-fixture/Lians-Setup-$version.exe" `
-            --expected-version $version `
-            --expected-signer-thumbprint $env:LIANS_WINDOWS_CERT_THUMBPRINT
+          $arguments = @(
+            'packages/lians-easy/tests/artifact_windows_installer_smoke.py',
+            '--installer', "dist/installer/Lians-Setup-$version.exe",
+            '--rollback-fixture', "dist/rollback-fixture/Lians-Setup-$version.exe",
+            '--expected-version', $version,
+            '--expected-signer-thumbprint', $env:LIANS_WINDOWS_CERT_THUMBPRINT
+          )
+          if ($env:LIANS_WINDOWS_BASELINE_INSTALLER) {
+            $arguments += @(
+              '--baseline-installer', $env:LIANS_WINDOWS_BASELINE_INSTALLER,
+              '--baseline-version', $env:LIANS_WINDOWS_BASELINE_VERSION
+            )
+          }
+          python @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows installed-package qualification failed with exit code $LASTEXITCODE"
+          }
       - name: Write Windows installer checksum
         shell: pwsh
         run: |
           $installer = Get-ChildItem -LiteralPath dist/installer -Filter 'Lians-Setup-*.exe'
           $checksum = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           "$checksum  $($installer.Name)" | Set-Content -LiteralPath "$($installer.FullName).sha256" -Encoding utf8
+      - name: Attest Windows package build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: dist/installer/Lians-Setup-*.exe
+      - name: Verify Windows attestation and refuse existing release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $installer = Get-ChildItem -LiteralPath dist/installer -Filter 'Lians-Setup-*.exe'
+          gh attestation verify $installer.FullName --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows provenance verification failed with exit code $LASTEXITCODE"
+          }
+          $existing = @(gh release view $env:RELEASE_TAG --json assets --jq '.assets[].name')
+          foreach ($asset in @($installer.Name, "$($installer.Name).sha256")) {
+            if ($existing -contains $asset) {
+              throw "Refusing to overwrite existing release asset $asset"
+            }
+          }
       - name: Remove publisher certificate from the runner
         if: always()
         shell: pwsh
@@ -287,7 +385,7 @@ jobs:
           if ($assets.Count -ne 2) {
             throw 'Expected one signed Windows installer and one SHA-256 checksum'
           }
-          gh release upload $env:RELEASE_TAG @($assets.FullName) --clobber
+          gh release upload $env:RELEASE_TAG @($assets.FullName)
           if ($LASTEXITCODE -ne 0) {
             throw "GitHub release upload failed with exit code $LASTEXITCODE"
           }
@@ -310,6 +408,11 @@ jobs:
           - runner: macos-15-intel
             architecture: x86_64
     runs-on: ${{ matrix.runner }}
+    environment: macos-lians-desktop
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
       MACOS_SIGNING_CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
       MACOS_SIGNING_CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
@@ -400,6 +503,8 @@ jobs:
           set -euo pipefail
           python packages/lians-easy/tests/artifact_app_smoke.py \
             --binary dist/LiansMemory
+          python packages/lians-easy/tests/artifact_cross_tool_smoke.py \
+            --binary dist/LiansMemory
           python packages/lians-easy/tests/artifact_portability_smoke.py \
             --binary dist/LiansMemory
           python packages/lians-easy/tests/artifact_crash_smoke.py \
@@ -469,13 +574,33 @@ jobs:
           version="${RELEASE_TAG#v}"
           name="Lians-$version-macos-${{ matrix.architecture }}.dmg"
           (cd dist/installer && shasum -a 256 "$name" > "$name.sha256")
+      - name: Attest macOS package build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: dist/installer/Lians-*-macos-${{ matrix.architecture }}.dmg
+      - name: Verify macOS attestation and refuse existing release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          dmg="dist/installer/Lians-$version-macos-${{ matrix.architecture }}.dmg"
+          gh attestation verify "$dmg" --repo "$GITHUB_REPOSITORY"
+          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          for asset in "$(basename "$dmg")" "$(basename "$dmg.sha256")"; do
+            if grep --fixed-strings --line-regexp --quiet "$asset" <<< "$existing"; then
+              echo "Refusing to overwrite existing release asset $asset" >&2
+              exit 1
+            fi
+          done
       - name: Attach signed and notarized macOS package to release
         shell: bash
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
           dmg="dist/installer/Lians-$version-macos-${{ matrix.architecture }}.dmg"
-          gh release upload "$RELEASE_TAG" "$dmg" "$dmg.sha256" --clobber
+          gh release upload "$RELEASE_TAG" "$dmg" "$dmg.sha256"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Remove macOS publisher credentials from the runner
@@ -530,6 +655,8 @@ jobs:
       - name: Verify frozen Lians App and crash recovery
         run: |
           python packages/lians-easy/tests/artifact_app_smoke.py \
+            --binary dist/LiansMemory
+          python packages/lians-easy/tests/artifact_cross_tool_smoke.py \
             --binary dist/LiansMemory
           python packages/lians-easy/tests/artifact_portability_smoke.py \
             --binary dist/LiansMemory

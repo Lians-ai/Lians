@@ -41,6 +41,26 @@
     const state = status.state || "unavailable";
     const syncState = status.sync_state || "not_started";
     const hasWorkspace = syncState === "ready" || Number(status.head_revision || 0) > 0;
+    const retry = status.sync_retry || {};
+    const retrySeconds = Math.max(0, Number(retry.retry_after_seconds || 0));
+    if (
+      retry.active === true &&
+      (state === "connected" || state === "current" || state === "synced")
+    ) {
+      return {
+        tone: "attention",
+        trigger: "WORKING LOCALLY",
+        status: "LOCAL MEMORY IS READY",
+        title: "Working locally for now",
+        description:
+          "Your AI tools can still use and update memory on this device. " +
+          `Encrypted cloud sync will retry automatically in about ${retrySeconds} seconds.`,
+        primary: "Try sync now",
+        primaryAction: "sync",
+        secondary: "Turn off sync",
+        danger: true,
+      };
+    }
     if ((state === "connected" || state === "current" || state === "synced") && !hasWorkspace) {
       return {
         tone: "on",
@@ -52,7 +72,7 @@
         primary: "Start new cloud memory",
         primaryAction: "sync",
         secondary: "Sign out",
-        danger: false,
+        danger: true,
       };
     }
     if (state === "connected" || state === "current" || state === "synced") {
@@ -259,7 +279,7 @@
     const recoveryWarning = element(
       "p",
       "lians-cloud__managed-device-warning",
-      "Recovery starts new encrypted cloud memory. An inaccessible old encrypted cloud copy may remain until account deletion.",
+      "Recovery starts new encrypted cloud memory. An inaccessible old encrypted cloud copy may remain until you choose Delete all cloud data.",
     );
     const recoveryConfirm = element(
       "button",
@@ -304,7 +324,7 @@
     primary.type = "button";
     const secondary = element("button", "lians-cloud__button lians-cloud__button--secondary");
     secondary.type = "button";
-    const danger = element("button", "lians-cloud__button lians-cloud__button--danger", "Delete cloud copy");
+    const danger = element("button", "lians-cloud__button lians-cloud__button--danger", "Delete all cloud data");
     danger.type = "button";
     actions.append(primary, secondary, danger);
 
@@ -428,7 +448,7 @@
     ui.secondary.textContent = model.secondary;
     ui.danger.hidden = !model.danger;
     ui.danger.dataset.armed = "false";
-    ui.danger.textContent = "Delete cloud copy";
+    ui.danger.textContent = "Delete all cloud data";
     ui.devices.hidden = !connected;
     ui.join.hidden = !connected || ready;
     ui.review.hidden = !connected || !ready;
@@ -790,7 +810,7 @@
       } else if (action === "delete") {
         await request("/v1/cloud/delete", "POST");
         renderEnrollment(null);
-        await refresh("The cloud copy was deleted and sync was turned off. Local memory remains here.");
+        await refresh("All encrypted Lians cloud data was deleted and sync was turned off. Local memory remains here.");
       } else if (action === "join") {
         const result = await request("/v1/cloud/device-enrollment/start", "POST");
         renderEnrollment(result);
@@ -859,11 +879,12 @@
       return;
     }
     ui.danger.dataset.armed = "true";
-    ui.danger.textContent = "Click again to delete cloud copy";
-    ui.feedback.textContent = "This deletes encrypted cloud data and turns sync off. Local memory stays here.";
+    ui.danger.textContent = "Click again to delete all cloud data";
+    ui.feedback.textContent =
+      "This deletes every encrypted workspace and pending device request for this Lians sign-in, then turns sync off. Local memory stays here.";
     deleteTimer = setTimeout(() => {
       ui.danger.dataset.armed = "false";
-      ui.danger.textContent = "Delete cloud copy";
+      ui.danger.textContent = "Delete all cloud data";
     }, 8_000);
   });
   document.addEventListener("keydown", (event) => {

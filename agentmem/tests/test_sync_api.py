@@ -58,9 +58,7 @@ def _device(name: str):
     signing = Ed25519PrivateKey.generate()
     signing_public = _raw_public(signing)
     exchange_public = os.urandom(32)
-    device_id = hashlib.sha256(
-        b"lians-device-v1\0" + exchange_public + signing_public
-    ).hexdigest()
+    device_id = hashlib.sha256(b"lians-device-v1\0" + exchange_public + signing_public).hexdigest()
     return signing, {
         "device_id": device_id,
         "display_name": name,
@@ -109,9 +107,7 @@ def _enrollment_request(device, *, now=None):
         "created_at": created.isoformat(),
         "expires_at": (created + timedelta(minutes=10)).isoformat(),
     }
-    digest = hashlib.sha256(
-        b"lians-enrollment-code-v1\0" + _canonical(request)
-    ).hexdigest()
+    digest = hashlib.sha256(b"lians-enrollment-code-v1\0" + _canonical(request)).hexdigest()
     request["verification_code"] = f"{digest[:4]}-{digest[4:8]}".upper()
     return request
 
@@ -402,8 +398,8 @@ async def test_signed_device_removal_rotates_epoch_and_blocks_future_writes(clie
     )
     by_id = {item["device"]["device_id"]: item for item in devices.json()["devices"]}
     assert by_id[second["device_id"]]["state"] == "revoked"
-    assert by_id[second["device_id"]]["revocation"]["rotation_id"] == (
-        pair["rotation"]["rotation_id"]
+    assert (
+        by_id[second["device_id"]]["revocation"]["rotation_id"] == (pair["rotation"]["rotation_id"])
     )
     rotations = await http.get(
         f"/v1/sync/workspaces/{workspace_id}/key-rotations",
@@ -512,9 +508,7 @@ async def test_short_code_enrollment_exchange_registers_device_without_exposing_
 
     pending = await http.get("/v1/sync/enrollments", headers=_headers())
     assert pending.status_code == 200
-    assert [item["request_id"] for item in pending.json()["enrollments"]] == [
-        request["request_id"]
-    ]
+    assert [item["request_id"] for item in pending.json()["enrollments"]] == [request["request_id"]]
 
     approval = _enrollment_approval(workspace_id, 1, root_key, root, request)
     approved = await http.post(
@@ -590,9 +584,7 @@ async def test_enrollment_exchange_is_tenant_scoped_expiring_and_tamper_rejectin
         headers=_headers(OTHER_KEY),
     )
     assert other_status.status_code == 404
-    wrong_scope = await http.get(
-        "/v1/sync/enrollments", headers=_headers(NO_SYNC_KEY)
-    )
+    wrong_scope = await http.get("/v1/sync/enrollments", headers=_headers(NO_SYNC_KEY))
     assert wrong_scope.status_code == 403
 
     approval = _enrollment_approval(workspace_id, 1, root_key, root, request)
@@ -608,9 +600,7 @@ async def test_enrollment_exchange_is_tenant_scoped_expiring_and_tamper_rejectin
     row = await db.get(SyncEnrollment, request["request_id"])
     row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await db.commit()
-    expired = await http.get(
-        f"/v1/sync/enrollments/{request['request_id']}", headers=_headers()
-    )
+    expired = await http.get(f"/v1/sync/enrollments/{request['request_id']}", headers=_headers())
     assert expired.status_code == 410
 
 
@@ -655,9 +645,79 @@ async def test_cloud_workspace_deletion_requires_exact_confirmation(client):
 
 
 @pytest.mark.asyncio
-async def test_consumer_oauth_sync_is_scoped_opaque_and_api_key_compatible(
-    client, monkeypatch
-):
+async def test_account_cloud_data_deletion_is_complete_confirmed_and_tenant_scoped(client):
+    http, db = client
+    first_workspace = str(uuid.uuid4())
+    second_workspace = str(uuid.uuid4())
+    other_workspace = str(uuid.uuid4())
+    first_key, first_device = _device("Main PC")
+    _, second_device = _device("Replacement PC")
+    _, other_device = _device("Other account")
+    for workspace_id, device, headers in (
+        (first_workspace, first_device, _headers()),
+        (second_workspace, second_device, _headers()),
+        (other_workspace, other_device, _headers(OTHER_KEY)),
+    ):
+        created = await http.post(
+            "/v1/sync/workspaces",
+            headers=headers,
+            json={"workspace_id": workspace_id, "epoch": 1, "root_device": device},
+        )
+        assert created.status_code == 201, created.text
+
+    revision = _revision(first_workspace, 1, 1, None, first_key, first_device)
+    stored = await http.post(
+        f"/v1/sync/workspaces/{first_workspace}/revisions",
+        headers=_headers(),
+        json={"envelope": revision},
+    )
+    assert stored.status_code == 201, stored.text
+    _, pending_device = _device("Pending laptop")
+    pending_request = _enrollment_request(pending_device)
+    pending = await http.post(
+        "/v1/sync/enrollments",
+        headers=_headers(),
+        json={"request": pending_request},
+    )
+    assert pending.status_code == 201, pending.text
+
+    refused = await http.request(
+        "DELETE",
+        "/v1/sync/account-data",
+        headers=_headers(),
+        json={"confirmed": True, "confirmation": "delete"},
+    )
+    assert refused.status_code == 400
+
+    deleted = await http.request(
+        "DELETE",
+        "/v1/sync/account-data",
+        headers=_headers(),
+        json={
+            "confirmed": True,
+            "confirmation": "DELETE ALL LIANS CLOUD DATA",
+        },
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {
+        "status": "deleted",
+        "enrollment_records_deleted": 1,
+        "encrypted_revisions_deleted": 1,
+        "device_records_deleted": 2,
+        "key_rotation_records_deleted": 0,
+        "workspaces_deleted": 2,
+        "encrypted": True,
+    }
+    assert await db.get(SyncWorkspace, first_workspace) is None
+    assert await db.get(SyncWorkspace, second_workspace) is None
+    assert await db.get(SyncEnrollment, pending_request["request_id"]) is None
+    assert await db.get(SyncRevision, (first_workspace, 1)) is None
+    assert await db.get(SyncWorkspace, other_workspace) is not None
+    assert await db.get(SyncDevice, (other_workspace, other_device["device_id"])) is not None
+
+
+@pytest.mark.asyncio
+async def test_consumer_oauth_sync_is_scoped_opaque_and_api_key_compatible(client, monkeypatch):
     http, db = client
 
     class FakeVerifier:

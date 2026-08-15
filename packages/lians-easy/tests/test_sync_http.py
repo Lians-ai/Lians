@@ -215,3 +215,31 @@ def test_cloud_delete_requires_local_confirmation():
         client.delete_workspace("2446b8a9-0f7c-4ea6-9434-8fb1857aa10d")
     with pytest.raises(ValueError, match="workspace ID"):
         client.head("../another-account")
+
+
+def test_account_cloud_data_delete_uses_bounded_exact_confirmation():
+    calls = []
+
+    def opener(request, *, timeout):
+        calls.append((request, timeout))
+        return Response({"status": "deleted", "workspaces_deleted": 2})
+
+    client = OpaqueSyncHTTPClient(
+        "https://cloud.lians.ai",
+        bearer_token_provider=lambda: "access-token",
+        opener=opener,
+    )
+    with pytest.raises(ValueError, match="confirmed=true"):
+        client.delete_account_data()
+
+    result = client.delete_account_data(confirmed=True)
+
+    assert result["workspaces_deleted"] == 2
+    request, timeout = calls[0]
+    assert request.get_method() == "DELETE"
+    assert request.full_url == "https://cloud.lians.ai/v1/sync/account-data"
+    assert timeout == 15
+    assert json.loads(request.data) == {
+        "confirmed": True,
+        "confirmation": "DELETE ALL LIANS CLOUD DATA",
+    }

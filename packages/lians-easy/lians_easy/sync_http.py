@@ -352,3 +352,17 @@ class OpaqueSyncHTTPClient:
                 "confirmation": "DELETE ENCRYPTED LIANS CLOUD MEMORY",
             },
         )
+
+    def delete_account_data(self, *, confirmed: bool = False) -> dict[str, Any]:
+        """Delete all opaque sync objects in the authenticated account namespace."""
+
+        if not confirmed:
+            raise ValueError("Cloud account-data deletion requires confirmed=true")
+        return self._request(
+            "DELETE",
+            "/v1/sync/account-data",
+            {
+                "confirmed": True,
+                "confirmation": "DELETE ALL LIANS CLOUD DATA",
+            },
+        )

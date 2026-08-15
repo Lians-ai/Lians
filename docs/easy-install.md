@@ -143,8 +143,9 @@ than guessing from the hook process directory.
 
 The frozen Bridge now contains the verified React control-center bundle. The
 setup screen ends with **Open Lians**, and later launches open the local control
-center directly. Memory, Activity, Review, Integrations, and Settings all read
-from the same encrypted store used by connected AI clients.
+center directly. Memory, Activity, Review, Integrations, Settings, and the
+private System Check all read from the same encrypted store used by connected
+AI clients.
 
 Developers can still override the bundled app while working on the React source:
 
@@ -156,6 +157,61 @@ The packaged bundle is source-pinned and verified again through each frozen
 release artifact. The hosted control center demonstrates the same information
 architecture, but uses sample data when it is not connected to a loopback
 Bridge. It never asks a user to paste raw AI-provider credentials.
+
+### Trust Review
+
+The local App now turns **Review** into an actionable queue instead of a static
+dashboard label. When two active memories have the same kind and scope and
+either share an explicit topic or have strongly overlapping wording with
+different content, Lians keeps the existing precedent active and holds the
+newer candidate out of recall. Project handoffs become reviewable after 14
+days; project facts, decisions, and project memories become reviewable after
+180 days. Durable preferences do not expire merely because time passed.
+
+Each review shows both memory values, exact source client and reference, saved
+time, scope, and the reason one item was excluded. A normal user can choose
+**Keep existing**, **Use newer**, or **Both are valid** for a possible conflict.
+A stale item can be confirmed current, paused, or permanently forgotten with a
+second click. Confirming a stale item starts a new review interval instead of
+dismissing staleness forever.
+
+Held items do not appear as active in the normal Memory list, do not enter an
+AI context pack, and increment the signed receipt's `excluded.review` count.
+The resolution event contains memory identifiers and the choice, never memory
+content. Its pause state and audit event travel inside the same encrypted cloud
+profile, so another connected device immediately reaches the same result. This
+deterministic local check is deliberately described as a *possible* conflict;
+it does not claim general semantic contradiction detection.
+
+If two devices correct the same memory before either one finishes syncing,
+Lians no longer chooses a winner or leaves the second device stuck. It pauses
+the shared original, detaches the valid correction branches, and holds every
+candidate out of AI context. **Device edit collision** then shows each exact
+edit with its source and time. The user can choose **Use this edit** for one
+candidate or **Keep every edit** when both statements are intentionally valid.
+The identifiers and choice synchronize inside the encrypted profile; the
+audit event contains no memory text. Permanent forgetting follows the virtual
+branch relationship, so forgetting any related version erases the original
+and every divergent candidate instead of leaving an offline copy readable.
+Malformed in-place changes to a memory identity still fail atomically.
+
+### Private System Check
+
+**System Check** gives a nontechnical user one answer to “Is Lians ready for my
+next chat?” It checks the loopback Bridge, SQLite and foreign-key integrity,
+the protected encryption key, one existing encrypted record when available,
+connected AI tools, encrypted cloud continuity, and the Trust Review queue.
+The result is **Ready**, **Attention**, or **Problem**, with a plain-language
+next action. Local memory remains visibly ready when optional cloud continuity
+is signed out or temporarily unavailable.
+
+The check runs only when the user opens it or selects **Run system check
+again**. It does not send telemetry. **Download safe help report** exports the
+same bounded result as JSON without prompts, memory content, sources,
+credentials, account identifiers, local paths, key material, key fingerprints,
+or raw exception text. The user can inspect the file before sharing it with
+support. A failed readability check never attempts to repair or overwrite the
+store; it tells the user to keep the App open and obtain help.
 
 ## Release trust gate
 

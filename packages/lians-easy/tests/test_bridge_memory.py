@@ -4,6 +4,7 @@ import base64
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -199,3 +200,202 @@ def test_scope_change_is_versioned_and_applies_to_other_projects(tmp_path):
     result = store.forget(changed["id"], confirmed=True)
     assert result["erased_versions"] == 2
     assert all(item["content"] is None for item in store.list(state="all"))
+
+
+def test_possible_conflict_holds_newer_memory_until_user_resolves_it(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    project = Project("launch", "Launch", str(tmp_path), None)
+    existing = store.remember(
+        "The launch project uses FastAPI and never writes migrations manually.",
+        kind="preference",
+        scope="project",
+        project_id=project.id,
+        source="explicit user instruction",
+        source_client="cursor",
+        source_ref="cursor-chat-1",
+    )
+    newer = store.remember(
+        "The launch project uses Django and always writes migrations manually.",
+        kind="preference",
+        scope="project",
+        project_id=project.id,
+        source="explicit user instruction",
+        source_client="claude",
+        source_ref="claude-task-2",
+    )
+
+    [review] = store.reviews(project_id=project.id)
+    assert review["type"] == "possible_conflict"
+    assert review["memory_a"]["id"] == existing["id"]
+    assert review["memory_b"]["id"] == newer["id"]
+    assert review["memory_a"]["source_client"] == "cursor"
+    assert review["memory_b"]["source_ref"] == "claude-task-2"
+    assert review["held_memory_ids"] == [newer["id"]]
+
+    before = store.context_pack(
+        "Continue the launch project migrations",
+        project=project,
+        client="codex",
+    )
+    assert existing["content"] in before["context"]
+    assert newer["content"] not in before["context"]
+    assert before["receipt"]["excluded"]["review"] == 1
+
+    result = store.resolve_review(
+        review["id"],
+        resolution="use_newer",
+        project_id=project.id,
+        confirmed=True,
+    )
+    assert result["affected_memory_id"] == existing["id"]
+    assert store.reviews(project_id=project.id) == []
+
+    after = MemoryStore(store.path).context_pack(
+        "Continue the launch project migrations",
+        project=project,
+        client="codex",
+    )
+    assert newer["content"] in after["context"]
+    assert existing["content"] not in after["context"]
+    [paused] = store.list(state="paused")
+    assert paused["id"] == existing["id"]
+    [event] = [item for item in store.activity() if item["event"] == "review_resolved"]
+    assert event["details"] == {
+        "memory_ids": [existing["id"], newer["id"]],
+        "resolution": "use_newer",
+        "review_id": review["id"],
+        "review_type": "possible_conflict",
+    }
+    assert existing["content"] not in json.dumps(event)
+    assert newer["content"] not in json.dumps(event)
+
+
+def test_possible_conflict_can_keep_both_without_reappearing_after_restart(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    first = store.remember(
+        "Campaign launch date is May 1 for university students.",
+        kind="decision",
+    )
+    second = store.remember(
+        "Campaign launch date is June 1 for university students.",
+        kind="decision",
+    )
+    [review] = store.reviews(project_id=None)
+
+    store.resolve_review(
+        review["id"],
+        resolution="keep_both",
+        project_id=None,
+        confirmed=True,
+    )
+
+    reopened = MemoryStore(store.path)
+    assert reopened.reviews(project_id=None) == []
+    recalled = reopened.recall("campaign launch university students", project_id=None)
+    assert {item["id"] for item in recalled} == {first["id"], second["id"]}
+
+
+def test_review_detection_is_topic_aware_and_keeps_project_boundaries(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    first = Project("first", "First", str(tmp_path / "first"), None)
+    second = Project("second", "Second", str(tmp_path / "second"), None)
+    store.remember(
+        "May 1",
+        kind="decision",
+        topic="launch-date",
+        scope="project",
+        project_id=first.id,
+    )
+    store.remember(
+        "June 1",
+        kind="decision",
+        topic="launch-date",
+        scope="project",
+        project_id=first.id,
+    )
+    store.remember(
+        "July 1",
+        kind="decision",
+        topic="launch-date",
+        scope="project",
+        project_id=second.id,
+    )
+    store.remember(
+        "August 1",
+        kind="decision",
+        topic="launch-date",
+        scope="project",
+        project_id=second.id,
+    )
+    store.remember("Never use em dashes.", kind="preference", scope="global")
+    store.remember("Keep status updates concise.", kind="preference", scope="global")
+
+    [review] = store.reviews(project_id=first.id)
+    assert review["type"] == "possible_conflict"
+    assert review["memory_a"]["content"] == "May 1"
+    assert review["memory_b"]["content"] == "June 1"
+    [second_review] = store.reviews(project_id=second.id)
+    assert second_review["memory_a"]["content"] == "July 1"
+    assert second_review["memory_b"]["content"] == "August 1"
+    all_reviews = store.reviews(project_id=first.id, include_all_projects=True)
+    assert {item["project_id"] for item in all_reviews} == {first.id, second.id}
+
+
+def test_stale_handoff_waits_for_review_and_can_be_kept_active(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    project = Project("launch", "Launch", str(tmp_path), None)
+    handoff = store.remember(
+        "Continue the launch API from the completed user routes.",
+        kind="handoff",
+        scope="project",
+        project_id=project.id,
+        source_client="cursor",
+    )
+    old = "2025-01-01T00:00:00+00:00"
+    with store._connect() as db:
+        db.execute(
+            "UPDATE memories SET created_at = ?, updated_at = ? WHERE id = ?",
+            (old, old, handoff["id"]),
+        )
+
+    [review] = store.reviews(
+        project_id=project.id,
+        now=datetime(2026, 8, 15, tzinfo=timezone.utc),  # noqa: UP017
+    )
+    assert review["type"] == "stale"
+    assert review["memory"]["id"] == handoff["id"]
+    assert review["review_after_days"] == 14
+    held = store.context_pack("Continue the API", project=project, client="claude")
+    assert handoff["content"] not in held["context"]
+    assert held["receipt"]["excluded"]["review"] == 1
+
+    resolved = store.resolve_review(
+        review["id"],
+        resolution="keep_active",
+        project_id=project.id,
+        confirmed=True,
+    )
+    active = store.context_pack("Continue the API", project=project, client="claude")
+    assert handoff["content"] in active["context"]
+    confirmed_at = datetime.fromisoformat(resolved["resolved_at"])
+    [next_review] = store.reviews(
+        project_id=project.id,
+        now=confirmed_at + timedelta(days=15),
+    )
+    assert next_review["id"] != review["id"]
+
+
+def test_generic_memory_becomes_reviewable_but_preference_does_not(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    memory = store.remember("The launch audience is students.", kind="memory")
+    store.remember("Never use em dashes.", kind="preference")
+    old = "2025-01-01T00:00:00+00:00"
+    with store._connect() as db:
+        db.execute("UPDATE memories SET updated_at = ?", (old,))
+
+    [review] = store.reviews(
+        project_id=None,
+        now=datetime(2026, 8, 15, tzinfo=timezone.utc),  # noqa: UP017
+    )
+    assert review["type"] == "stale"
+    assert review["memory"]["id"] == memory["id"]

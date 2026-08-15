@@ -12,8 +12,8 @@
       "sha256": "0bcdfdb6c06c78c7cb1ae2021658c6a9e2e8d0a28655b2eb72f78c70860754b2"
     },
     "assets/cloud-controls.js": {
-      "bytes": 32300,
-      "sha256": "a421db19ff3e35eae76fe7b82a20fd2e54541213bd40262fee5bf4fe0aa3bcae"
+      "bytes": 33143,
+      "sha256": "7fa4bc04e0af05aa793be8215e3365bd8213b77cfca92c92eb33e40d07970174"
     },
     "assets/index-CdO50wTw.css": {
       "bytes": 90523,
@@ -22,6 +22,14 @@
     "assets/index-Pp5jvFdb.js": {
       "bytes": 225500,
       "sha256": "a88d7ab73147ca670ea474c0971cdccb9f11eb5e162bab3e2375d5505a655842"
+    },
+    "assets/trust-review.css": {
+      "bytes": 10311,
+      "sha256": "f5e3b682c36b3137ffe64ede119a6d43684b185dbd5378982773cc8575184dee"
+    },
+    "assets/trust-review.js": {
+      "bytes": 22277,
+      "sha256": "96a9e26451a2b3a417ef4594d318462c11928850186283e3387993fb640e31f7"
     },
     "fonts/michroma-latin.woff2": {
       "bytes": 17908,
@@ -32,8 +40,8 @@
       "sha256": "811e11966d29f3a01fcb19b087b61ac067d380665a55aebb7fcdf2cda95e4a93"
     },
     "index.html": {
-      "bytes": 570,
-      "sha256": "ce14f4a83a73574111eac50105e57eea7e275f9d4dae776299a8b057ce0abab3"
+      "bytes": 688,
+      "sha256": "a187d4d9f59f2465e81146aa551bb763e32882e2041f34b7129a52db31057a8b"
     },
     "logo-blue.png": {
       "bytes": 10137,

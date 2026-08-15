@@ -144,13 +144,19 @@ HMAC-derived opaque namespace; the sync tables receive none of those raw values.
 local state file. Connected clients pull encrypted revisions before recall,
 listing, context injection, and local mutations, then publish after remember,
 correction, pause, scope change, or confirmed forgetting. Cloud or identity
-provider failure never prevents the local mutation; the response reports that
-sync is pending and the next connected operation retries. The package test
-suite exercises the critical sequence from a Cursor-origin preference to a
-separate Codex device, then back through Claude correction and cross-device
-forgetting. Confirmed cloud deletion removes the remote workspace and local
-sync state, then signs out so a later memory change cannot recreate a cloud
-copy without the user deliberately turning sync on again.
+provider failure never prevents the local mutation. A bounded, non-secret
+retry marker is shared by Bridge, MCP, and short-lived hook processes, starting
+at five seconds and capping at five minutes. While that pause is active,
+automatic operations use local memory immediately instead of repeating the
+15-second cloud timeout. The App says that Lians is working locally, shows when
+automatic sync will retry, and keeps **Try sync now** available as a deliberate
+backoff bypass. A successful sync clears the marker. The package test suite
+exercises the critical sequence from a Cursor-origin preference to a separate
+Codex device, then back through Claude correction and cross-device forgetting.
+Confirmed cloud deletion removes every encrypted workspace and pending device
+exchange in the authenticated account namespace, plus the local retry marker
+and sync state. It then signs out so a later memory change cannot recreate a
+cloud copy without the user deliberately turning sync on again.
 
 The identity token, raw identity-provider subject, workspace key, device private
 keys, decrypted profile, memory count, project name, source, and receipt body
@@ -178,8 +184,9 @@ Before hosted sync is generally available, Lians still needs:
 - production authorization-server configuration and a tested Google sign-in;
 - an optional cloud-only recovery-key or trusted-contact design for users who
   do not keep an encrypted backup;
-- bounded retry/backoff, offline indicators, and conflict-review UI;
-- account deletion that removes encrypted objects and entitlement metadata;
+- conflict-review UI for competing, stale, or superseded memories;
+- identity-provider account and billing-entitlement deletion orchestration
+  (all Lians sync objects already have one confirmed deletion path);
 - restore, multi-device race, clean-device, and provider-outage qualification;
 - an external review of the protocol and implementation.
 

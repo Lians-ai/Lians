@@ -45,9 +45,7 @@ def _uninstall_registration_exists() -> bool:
     return True
 
 
-def _verify_authenticode(
-    path: Path, thumbprint: str, *, environment: dict[str, str]
-) -> None:
+def _verify_authenticode(path: Path, thumbprint: str, *, environment: dict[str, str]) -> None:
     powershell = shutil.which("pwsh") or shutil.which("powershell")
     if powershell is None:
         raise RuntimeError("PowerShell is required to verify Authenticode")
@@ -163,6 +161,8 @@ def main() -> None:
     parser.add_argument("--rollback-fixture", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--expected-signer-thumbprint")
+    parser.add_argument("--baseline-installer", type=Path)
+    parser.add_argument("--baseline-version")
     arguments = parser.parse_args()
     installer = arguments.installer.resolve()
     rollback_fixture = arguments.rollback_fixture.resolve()
@@ -170,6 +170,13 @@ def main() -> None:
         raise SystemExit(f"Windows installer was not found: {installer}")
     if not rollback_fixture.is_file():
         raise SystemExit(f"Windows rollback fixture was not found: {rollback_fixture}")
+    if bool(arguments.baseline_installer) != bool(arguments.baseline_version):
+        raise SystemExit("--baseline-installer and --baseline-version must be supplied together")
+    baseline_installer = (
+        arguments.baseline_installer.resolve() if arguments.baseline_installer is not None else None
+    )
+    if baseline_installer is not None and not baseline_installer.is_file():
+        raise SystemExit(f"Windows baseline installer was not found: {baseline_installer}")
     if _uninstall_registration_exists():
         raise SystemExit(
             "Refusing to overwrite an existing Lians Windows installation during smoke testing"
@@ -199,8 +206,10 @@ def main() -> None:
         uninstaller = install_root / "Uninstall Lians.exe"
         running_bridge: subprocess.Popen[bytes] | None = None
         try:
+            initial_installer = baseline_installer or installer
+            initial_version = arguments.baseline_version or arguments.expected_version
             installed = _run(
-                [str(installer), "/S", f"/D={install_root}"],
+                [str(initial_installer), "/S", f"/D={install_root}"],
                 environment=environment,
             )
             assert installed.returncode == 0, (installed.stdout, installed.stderr)
@@ -218,10 +227,7 @@ def main() -> None:
                 UNINSTALL_KEY,
                 access=winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
             ) as registry:
-                assert (
-                    winreg.QueryValueEx(registry, "DisplayVersion")[0]
-                    == arguments.expected_version
-                )
+                assert winreg.QueryValueEx(registry, "DisplayVersion")[0] == initial_version
                 assert (
                     Path(winreg.QueryValueEx(registry, "InstallLocation")[0]).resolve()
                     == install_root.resolve()
@@ -237,6 +243,23 @@ def main() -> None:
             assert report["runtime"]["standalone"] is True
             assert Path(report["runtime"]["command"]).resolve() == binary.resolve()
             assert report["runtime"]["installed"] is True
+
+            connected = _run(
+                [
+                    str(binary),
+                    "install",
+                    "--clients",
+                    "cursor",
+                    "--yes",
+                    "--json",
+                ],
+                environment=environment,
+                timeout=60,
+            )
+            assert connected.returncode == 0, (connected.stdout, connected.stderr)
+            assert json.loads(connected.stdout)["status"] == "installed"
+            cursor_config = home / ".cursor" / "mcp.json"
+            connected_config = cursor_config.read_bytes()
 
             preserved = install_root / "memory.sqlite3"
             memory_content = "Upgrade smoke preference: always preserve this encrypted memory."
@@ -268,8 +291,18 @@ def main() -> None:
             assert upgraded.returncode == 0, (upgraded.stdout, upgraded.stderr)
             running_bridge.wait(timeout=15)
             assert running_bridge.returncode == 0
-            assert binary.read_bytes() == original_runtime
+            if baseline_installer is None:
+                assert binary.read_bytes() == original_runtime
+            else:
+                assert binary.read_bytes() != original_runtime
             assert not (install_root / ".lians-previous-runtime.exe").exists()
+            assert cursor_config.read_bytes() == connected_config
+            if arguments.expected_signer_thumbprint:
+                _verify_authenticode(
+                    binary,
+                    arguments.expected_signer_thumbprint,
+                    environment=environment,
+                )
             _recall_memory(binary, preserved, memory_content, environment=environment)
 
             rejected = _run(
@@ -287,8 +320,7 @@ def main() -> None:
                 access=winreg.KEY_READ | winreg.KEY_WOW64_64KEY,
             ) as registry:
                 assert (
-                    winreg.QueryValueEx(registry, "DisplayVersion")[0]
-                    == arguments.expected_version
+                    winreg.QueryValueEx(registry, "DisplayVersion")[0] == arguments.expected_version
                 )
 
             app_smoke = _run(
@@ -321,15 +353,16 @@ def main() -> None:
                 json.dumps(
                     {
                         "app_opened_from_installed_binary": True,
+                        "baseline_version": arguments.baseline_version,
                         "expected_version": arguments.expected_version,
+                        "historical_upgrade_verified": baseline_installer is not None,
+                        "integration_preserved_across_upgrade": True,
                         "per_user_install": True,
                         "running_bridge_stopped_for_upgrade": True,
                         "runtime_detected": True,
                         "runtime_health_checked_before_commit": True,
                         "runtime_rollback_verified": True,
-                        "runtime_signature_verified": bool(
-                            arguments.expected_signer_thumbprint
-                        ),
+                        "runtime_signature_verified": bool(arguments.expected_signer_thumbprint),
                         "successful_upgrade_preserved_memory": True,
                         "silent_uninstall_preserved_memory": True,
                         "uninstaller_removed_runtime": True,

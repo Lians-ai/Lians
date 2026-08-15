@@ -36,7 +36,7 @@ alembic upgrade head
 
 # Verify schema version
 alembic current
-# Expected: 0031_zero_knowledge_sync (head)
+# Expected: 0033_sync_device_key_rotation (head)
 ```
 
 Before deploying a new migration head, complete the guarded staging database

@@ -100,6 +100,13 @@ class WorkspaceDeleteIn(BaseModel):
     confirmation: str
 
 
+class AccountDataDeleteIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: bool
+    confirmation: str
+
+
 def _canonical(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
@@ -1422,4 +1429,48 @@ async def delete_workspace(
         "encrypted_revisions_deleted": revision_count,
         "device_records_deleted": device_count,
         "key_rotation_records_deleted": rotation_count,
+    }
+
+
+@router.delete("/account-data")
+async def delete_account_sync_data(
+    body: AccountDataDeleteIn,
+    auth: Annotated[AuthContext, Depends(get_sync_auth)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Delete every opaque sync object for the authenticated account namespace."""
+
+    auth.require("sync")
+    auth.require_unbarriered()
+    if not body.confirmed or body.confirmation != "DELETE ALL LIANS CLOUD DATA":
+        raise HTTPException(
+            status_code=400,
+            detail="Explicit account cloud-data deletion confirmation is required",
+        )
+
+    models = (
+        ("enrollment_records_deleted", SyncEnrollment),
+        ("encrypted_revisions_deleted", SyncRevision),
+        ("device_records_deleted", SyncDevice),
+        ("key_rotation_records_deleted", SyncKeyRotation),
+        ("workspaces_deleted", SyncWorkspace),
+    )
+    counts = {
+        label: int(
+            await db.scalar(
+                select(func.count()).select_from(model).where(model.namespace == auth.namespace)
+            )
+            or 0
+        )
+        for label, model in models
+    }
+    # Delete children first so this remains correct even when a test or
+    # operator database does not enforce ON DELETE CASCADE.
+    for _, model in models:
+        await db.execute(delete(model).where(model.namespace == auth.namespace))
+    await db.commit()
+    return {
+        "status": "deleted",
+        **counts,
+        "encrypted": True,
     }
