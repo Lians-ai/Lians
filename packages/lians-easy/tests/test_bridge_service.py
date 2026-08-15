@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
 import sys
@@ -521,6 +522,82 @@ def test_control_center_disconnect_and_erasure_are_separate_confirmed_actions(
         thread.join(timeout=5)
 
 
+def test_control_center_exports_verifies_and_imports_encrypted_portable_memory(tmp_path):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    content = "Portable app preference: keep every status update concise."
+    remembered = store.remember(content, scope="global", source="Lians App backup test")
+    app = BridgeApplication(store, port=0)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    passphrase = "a strong app backup passphrase"
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+
+        export_request = Request(
+            f"{app.origin}/v1/backups/export",
+            data=json.dumps(
+                {"passphrase": passphrase, "confirmation": passphrase}
+            ).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "Origin": app.origin,
+            },
+            method="POST",
+        )
+        with urlopen(export_request) as response:
+            backup = response.read()
+            assert response.status == 200
+            assert response.headers["Content-Type"] == "application/vnd.lians.backup+json"
+            assert response.headers["Content-Disposition"] == (
+                'attachment; filename="Lians-Memory.liansbackup"'
+            )
+            assert response.headers["Cache-Control"] == "no-store"
+        assert content.encode() not in backup
+
+        status, verified = _json_request(
+            f"{app.origin}/v1/backups/verify",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "passphrase": passphrase,
+                "backup": base64.b64encode(backup).decode(),
+            },
+        )
+        assert status == 200
+        assert verified["status"] == "verified"
+        assert verified["memories"] == 1
+        assert "path" not in verified
+
+        store.erase_profile(confirmed=True, confirmation=ERASE_ALL_CONFIRMATION)
+        assert store.list(state="all") == []
+        status, imported = _json_request(
+            f"{app.origin}/v1/backups/import",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "passphrase": passphrase,
+                "backup": base64.b64encode(backup).decode(),
+                "confirmed": True,
+            },
+        )
+        assert status == 200
+        assert imported["status"] == "imported"
+        assert imported["imported"]["memories"] == 1
+        assert imported["re_encrypted_for_this_device"] is True
+        assert "path" not in imported
+        [restored] = store.list(state="current")
+        assert restored["id"] == remembered["id"]
+        assert restored["content"] == content
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_loopback_default_serves_the_packaged_control_center(tmp_path):
     app = BridgeApplication(MemoryStore(tmp_path / "bridge.sqlite3"), port=0)
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
@@ -545,8 +622,12 @@ def test_loopback_default_serves_the_packaged_control_center(tmp_path):
             script = response.read().decode("utf-8")
             assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert "MEMORY CONTROL CENTER" in script
+        assert "MOVE MEMORY SAFELY" in script
         assert "/v1/memories?state=all" in script
         assert "/v1/context" in script
+        assert "/v1/backups/export" in script
+        assert "/v1/backups/verify" in script
+        assert "/v1/backups/import" in script
     finally:
         server.shutdown()
         server.server_close()

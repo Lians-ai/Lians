@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hmac
 import json
 import mimetypes
@@ -22,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 from . import __version__
 from .installer import client_targets, uninstall
 from .mcp import default_data_path
+from .portability import export_backup, import_backup, verify_backup
 from .project import detect_project
 from .store import MemoryStore
 from .updates import check_for_update
@@ -29,6 +32,8 @@ from .updates import check_for_update
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7317
 MAX_REQUEST_BYTES = 1_000_000
+MAX_APP_BACKUP_BYTES = 32 * 1024 * 1024
+MAX_BACKUP_REQUEST_BYTES = (MAX_APP_BACKUP_BYTES * 4 // 3) + 65_536
 PACKAGED_APP_DIR = Path(__file__).resolve().with_name("app")
 ERASE_ALL_CONFIRMATION = "ERASE ALL LIANS MEMORY"
 
@@ -190,6 +195,19 @@ class BridgeApplication:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _backup_download(self, body: bytes) -> None:
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/vnd.lians.backup+json")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Disposition", 'attachment; filename="Lians-Memory.liansbackup"')
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header(
+                    "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
+                )
+                self.end_headers()
+                self.wfile.write(body)
+
             def _authenticated(self, *, mutation: bool = False) -> bool:
                 cookie = SimpleCookie(self.headers.get("Cookie", ""))
                 supplied = cookie.get("lians_bridge")
@@ -211,9 +229,9 @@ class BridgeApplication:
                         return False
                 return True
 
-            def _body(self) -> dict[str, Any]:
+            def _body(self, *, maximum: int = MAX_REQUEST_BYTES) -> dict[str, Any]:
                 length = int(self.headers.get("Content-Length", "0"))
-                if length < 0 or length > MAX_REQUEST_BYTES:
+                if length < 0 or length > maximum:
                     raise ValueError("Request is too large")
                 value = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(value, dict):
@@ -335,8 +353,74 @@ class BridgeApplication:
                 if not self._authenticated(mutation=True):
                     return
                 try:
-                    data = self._body()
                     parsed = urlparse(self.path)
+                    backup_upload = parsed.path in {"/v1/backups/verify", "/v1/backups/import"}
+                    data = self._body(
+                        maximum=MAX_BACKUP_REQUEST_BYTES if backup_upload else MAX_REQUEST_BYTES
+                    )
+
+                    def backup_passphrase(*, confirm: bool = False) -> str:
+                        passphrase = data.get("passphrase")
+                        if not isinstance(passphrase, str) or not passphrase or len(passphrase) > 1024:
+                            raise ValueError("Enter a valid backup passphrase")
+                        if confirm:
+                            confirmation = data.get("confirmation")
+                            if not isinstance(confirmation, str) or not hmac.compare_digest(
+                                passphrase, confirmation
+                            ):
+                                raise ValueError("Backup passphrases did not match")
+                        return passphrase
+
+                    def uploaded_backup(path: Path) -> None:
+                        encoded = data.get("backup")
+                        if not isinstance(encoded, str) or not encoded:
+                            raise ValueError("Choose a Lians backup file")
+                        if len(encoded) > (MAX_APP_BACKUP_BYTES * 4 // 3) + 4:
+                            raise ValueError("This backup is too large for the Lians App")
+                        try:
+                            content = base64.b64decode(encoded, validate=True)
+                        except (binascii.Error, ValueError) as exc:
+                            raise ValueError("The selected Lians backup is invalid") from exc
+                        if not content or len(content) > MAX_APP_BACKUP_BYTES:
+                            raise ValueError("This backup is empty or too large for the Lians App")
+                        path.write_bytes(content)
+
+                    if parsed.path == "/v1/backups/export":
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="lians-app-export-") as directory:
+                                backup = Path(directory) / "Lians-Memory.liansbackup"
+                                export_backup(
+                                    application.store,
+                                    backup,
+                                    backup_passphrase(confirm=True),
+                                )
+                                content = backup.read_bytes()
+                        except OSError as exc:
+                            raise RuntimeError("Lians could not prepare the encrypted backup") from exc
+                        self._backup_download(content)
+                        return
+                    if parsed.path in {"/v1/backups/verify", "/v1/backups/import"}:
+                        try:
+                            with tempfile.TemporaryDirectory(prefix="lians-app-import-") as directory:
+                                backup = Path(directory) / "uploaded.liansbackup"
+                                uploaded_backup(backup)
+                                if parsed.path == "/v1/backups/verify":
+                                    result = verify_backup(backup, backup_passphrase())
+                                else:
+                                    if data.get("confirmed") is not True:
+                                        raise ValueError("Importing memory requires confirmed=true")
+                                    result = import_backup(
+                                        application.store,
+                                        backup,
+                                        backup_passphrase(),
+                                    )
+                        except OSError as exc:
+                            raise RuntimeError("Lians could not read the encrypted backup") from exc
+                        self._json(
+                            HTTPStatus.OK,
+                            {key: value for key, value in result.items() if key != "path"},
+                        )
+                        return
 
                     if parsed.path == "/v1/integrations/disconnect":
                         if data.get("confirmed") is not True:

@@ -124,6 +124,12 @@ IDs, and rejects the entire import if any existing ID has different history.
 The passphrase is never accepted as a command-line argument, where process-list
 tools could expose it. Keep the passphrase separately; Lians cannot recover it.
 
+Nontechnical users can do the same from **Lians App → Move memory safely**.
+The App downloads the encrypted file directly, reviews its memory, activity,
+and receipt counts before import, and makes clear that existing history is
+never overwritten. The browser surface caps imports at 32 MiB; the CLI retains
+the full 128 MiB format limit for larger profiles.
+
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client
 uses a first-invocation `PreInvocation` hook and an ephemeral context step, so

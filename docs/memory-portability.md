@@ -36,6 +36,11 @@ uses an atomic no-overwrite publish by default. Use `--overwrite` only after
 deliberately choosing to replace that exact backup path. Verification decrypts
 and validates the full bundle without changing local memory.
 
+The local Lians App exposes this as **Move memory safely**: download an
+encrypted backup, or choose a backup and review its record counts before a
+separate import action. App uploads are capped at 32 MiB to bound loopback
+request memory; the CLI accepts the format-wide 128 MiB limit.
+
 The passphrase is read from the terminal without echo and is deliberately not a
 CLI option. This keeps it out of shell history and process listings. Lians has
 no recovery copy, so users must keep the passphrase separately from the backup.

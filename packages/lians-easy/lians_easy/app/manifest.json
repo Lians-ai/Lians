@@ -2,18 +2,18 @@
   "schema": "https://lians.ai/schemas/bridge-app-bundle/v0.1",
   "source": {
     "project": "Lians Memory Control Center",
-    "commit": "4057088a832c72dc199a5a093446de3a3e6524e8",
-    "sites_version": 28,
+    "commit": "05367322e2f1b3b132ba828affab04a1f8876c76",
+    "sites_version": 30,
     "build": "npm run build:local"
   },
   "files": {
-    "assets/index-BHdWIfzJ.js": {
-      "bytes": 217168,
-      "sha256": "e481a81abdf8f7f292998da0431509cf9bf1d929f4e4b1f64471ac6dcbf3aa82"
+    "assets/index-CpsdKf2o.css": {
+      "bytes": 89963,
+      "sha256": "0a6275f36ba09d9bd447a7d72d7b8805203349a2faa294359e336655a29b9555"
     },
-    "assets/index-CX6N-21N.css": {
-      "bytes": 87053,
-      "sha256": "7f6c8d6fed81972e119ab39ae412e2063fca0ab03fbc68f337fcae21da021d63"
+    "assets/index-CBDKAxmL.js": {
+      "bytes": 223852,
+      "sha256": "8fcc1813f9c8fb7da0ba957ca43b8c9589131e0d5e3d4bfbf7eb91c122f730c2"
     },
     "fonts/michroma-latin.woff2": {
       "bytes": 17908,
@@ -25,7 +25,7 @@
     },
     "index.html": {
       "bytes": 447,
-      "sha256": "59d4c643ba4cc50cfd0a8a580fc39377015341f1590fad1f7837568e12896b15"
+      "sha256": "68b8f50bff08110a0d8261e7fd31296bab1042ef62144308534d23974c840deb"
     },
     "logo-blue.png": {
       "bytes": 10137,

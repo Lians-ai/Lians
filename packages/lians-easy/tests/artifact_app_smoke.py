@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -25,6 +26,22 @@ def _available_port() -> int:
 def _open(url: str, *, cookie: str | None = None):
     headers = {"Cookie": cookie} if cookie else {}
     return urlopen(Request(url, headers=headers), timeout=2)
+
+
+def _post(origin: str, path: str, cookie: str, data: dict):
+    return urlopen(
+        Request(
+            f"{origin}{path}",
+            data=json.dumps(data).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "Origin": origin,
+            },
+            method="POST",
+        ),
+        timeout=20,
+    )
 
 
 def _stop_process_tree(process: subprocess.Popen[bytes]) -> None:
@@ -106,7 +123,13 @@ def main() -> None:
                 raise RuntimeError("Frozen Lians App has no client bundle")
             with _open(f"{origin}{script_match.group(1)}") as script_response:
                 script = script_response.read().decode("utf-8")
-            if "MEMORY CONTROL CENTER" not in script or "/v1/context" not in script:
+            if (
+                "MEMORY CONTROL CENTER" not in script
+                or "MOVE MEMORY SAFELY" not in script
+                or "/v1/context" not in script
+                or "/v1/backups/export" not in script
+                or "/v1/backups/import" not in script
+            ):
                 raise RuntimeError("Frozen Lians App is not the Bridge-enabled control center")
 
             with _open(f"{origin}/v1/status", cookie=cookie) as status_response:
@@ -114,12 +137,72 @@ def main() -> None:
             if status.get("bridge") != "ready" or not status.get("memory", {}).get("encrypted"):
                 raise RuntimeError("Frozen Lians App could not reach encrypted Bridge state")
 
+            memory_content = "Packaged App portability preference: keep status updates concise."
+            with _post(
+                origin,
+                "/v1/remember",
+                cookie,
+                {"content": memory_content, "scope": "global", "kind": "preference"},
+            ) as remember_response:
+                if remember_response.status != 201:
+                    raise RuntimeError("Frozen Lians App could not create portable memory")
+            passphrase = "frozen app backup passphrase"
+            with _post(
+                origin,
+                "/v1/backups/export",
+                cookie,
+                {"passphrase": passphrase, "confirmation": passphrase},
+            ) as export_response:
+                backup = export_response.read()
+                if export_response.headers.get_content_type() != "application/vnd.lians.backup+json":
+                    raise RuntimeError("Frozen Lians App did not return an encrypted backup")
+            if memory_content.encode() in backup:
+                raise RuntimeError("Frozen Lians App backup exposed plaintext memory")
+            encoded_backup = base64.b64encode(backup).decode()
+            with _post(
+                origin,
+                "/v1/backups/verify",
+                cookie,
+                {"passphrase": passphrase, "backup": encoded_backup},
+            ) as verify_response:
+                verified = json.loads(verify_response.read())
+            if verified.get("status") != "verified" or verified.get("memories") != 1:
+                raise RuntimeError("Frozen Lians App did not verify its encrypted backup")
+            with _post(
+                origin,
+                "/v1/privacy/erase",
+                cookie,
+                {"confirmed": True, "confirmation": "ERASE ALL LIANS MEMORY"},
+            ) as erase_response:
+                erased = json.loads(erase_response.read())
+            if erased.get("status") != "erased":
+                raise RuntimeError("Frozen Lians App could not prepare the import fixture")
+            with _post(
+                origin,
+                "/v1/backups/import",
+                cookie,
+                {"passphrase": passphrase, "backup": encoded_backup, "confirmed": True},
+            ) as import_response:
+                imported = json.loads(import_response.read())
+            if imported.get("imported", {}).get("memories") != 1:
+                raise RuntimeError("Frozen Lians App did not import its encrypted backup")
+            with _post(
+                origin,
+                "/v1/context",
+                cookie,
+                {"prompt": memory_content, "client": "packaged-app-smoke"},
+            ) as context_response:
+                context = json.loads(context_response.read())
+            if memory_content not in context.get("context", ""):
+                raise RuntimeError("Frozen Lians App did not recall imported memory")
+
             print(
                 json.dumps(
                     {
                         "packaged_app_served": True,
                         "bridge_api_ready": True,
                         "encrypted_memory": True,
+                        "portable_backup_restored": True,
                         "process_running": process.poll() is None,
                     },
                     sort_keys=True,
