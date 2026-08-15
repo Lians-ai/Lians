@@ -109,10 +109,7 @@ this server to your agent's MCP configuration:
   "mcpServers": {
     "lians": {
       "command": "uvx",
-      "args": ["--from", "lians-sdk[mcp]", "lians-mcp"],
-      "env": {
-        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,list_memories,correct_memory,forget_memory"
-      }
+      "args": ["--from", "lians-sdk[mcp]", "lians-memory-mcp"]
     }
   }
 }
@@ -135,15 +132,12 @@ does not queue the write; keep the MCP server running and retry shortly. Model
 files use the Hugging Face cache controlled by `HF_HOME`.
 
 Local MCP memory is stored in `~/.lians/mcp.db`. The starter configuration
-exposes the basic loop plus the controls needed to trust it:
+exposes the basic memory loop shipped in the current PyPI release:
 
 | Tool | What it does |
 |---|---|
 | `remember` | Store one durable fact, preference, constraint, or decision. |
 | `recall` | Retrieve a small set of relevant, current memories. |
-| `list_memories` | Inspect what Lians currently knows. |
-| `correct_memory` | Replace a stale fact without hiding its history. |
-| `forget_memory` | Permanently erase one memory after explicit confirmation. |
 
 Use the exact setup guide for
 [Cursor](integrations/cursor),
@@ -151,8 +145,8 @@ Use the exact setup guide for
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
 [OpenCode](integrations/opencode), or
-[Codex](integrations/codex). Remove `LIANS_MCP_ENABLED_TOOLS` when you want
-the advanced temporal and audit tools too.
+[Codex](integrations/codex). Use `lians-mcp` instead of
+`lians-memory-mcp` when you want the full temporal and audit tool set.
 
 ## How it works
 

@@ -12,10 +12,8 @@ def test_gemini_starter_profile_is_bounded_and_requires_confirmation():
     server = _json("integrations/gemini/settings.example.json")["mcpServers"]["lians"]
 
     assert server["command"] == "uvx"
-    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-mcp"]
-    assert server["includeTools"] == [
-        "remember", "recall", "list_memories", "correct_memory", "forget_memory"
-    ]
+    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-memory-mcp"]
+    assert "includeTools" not in server
     assert server["trust"] is False
 
 
@@ -50,12 +48,8 @@ def test_cursor_starter_profile_is_local_bounded_stdio():
     server = _json("integrations/cursor/mcp.example.json")["mcpServers"]["lians"]
 
     assert server["command"] == "uvx"
-    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-mcp"]
-    assert server["env"] == {
-        "LIANS_MCP_ENABLED_TOOLS": (
-            "remember,recall,list_memories,correct_memory,forget_memory"
-        )
-    }
+    assert server["args"] == ["--from", "lians-sdk[mcp]", "lians-memory-mcp"]
+    assert "env" not in server
 
 
 def test_cursor_guide_documents_project_and_global_install_without_credentials():

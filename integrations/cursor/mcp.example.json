@@ -5,11 +5,8 @@
       "args": [
         "--from",
         "lians-sdk[mcp]",
-        "lians-mcp"
-      ],
-      "env": {
-        "LIANS_MCP_ENABLED_TOOLS": "remember,recall,list_memories,correct_memory,forget_memory"
-      }
+        "lians-memory-mcp"
+      ]
     }
   }
 }

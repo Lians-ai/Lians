@@ -9,7 +9,7 @@ same MCP configuration, so you only need to add Lians once.
 2. Run this command in a terminal:
 
 ```bash
-codex mcp add lians --env LIANS_MCP_ENABLED_TOOLS=remember,recall,list_memories,correct_memory,forget_memory -- uvx --from "lians-sdk[mcp]" lians-mcp
+codex mcp add lians -- uvx --from "lians-sdk[mcp]" lians-memory-mcp
 ```
 
 3. Restart Codex. Run `codex mcp list` to confirm that `lians` is configured,
@@ -34,9 +34,8 @@ Open a new chat in the same project and ask:
 What is this project's release color?
 ```
 
-Approve the `remember` or `recall` tool if Codex asks. The starter profile also
-includes inspect, correction, and deletion controls so you can see and change
-what the agent remembers.
+Approve the `remember` or `recall` tool if Codex asks. The published starter
+wrapper exposes exactly those two tools.
 
 ## Optional managed connection
 
@@ -50,7 +49,8 @@ is $10/month. The free local version remains available without an account.
   `~/.lians/mcp.db`.
 - Copy the example [`AGENTS.md`](AGENTS.md) into a project to tell Codex what is
   worth remembering and what should never be stored.
-- Remove `LIANS_MCP_ENABLED_TOOLS` from the MCP configuration to expose the
-  advanced temporal, lineage, audit, and backtest tools.
+- Replace `lians-memory-mcp` with `lians-mcp` in the MCP configuration to expose
+  point-in-time recall, reconstruction, conflicts, lineage, feedback, and
+  backtest checks.
 - See the packaged [`lians-memory`](../../plugins/lians-memory) plugin for the
   full Codex workflow.

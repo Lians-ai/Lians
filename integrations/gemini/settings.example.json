@@ -5,17 +5,10 @@
       "args": [
         "--from",
         "lians-sdk[mcp]",
-        "lians-mcp"
+        "lians-memory-mcp"
       ],
       "timeout": 120000,
-      "trust": false,
-      "includeTools": [
-        "remember",
-        "recall",
-        "list_memories",
-        "correct_memory",
-        "forget_memory"
-      ]
+      "trust": false
     }
   }
 }
