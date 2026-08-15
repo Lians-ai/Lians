@@ -46,7 +46,10 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--clients",
             default="detected",
-            help="Comma-separated claude,cursor,windsurf,gemini,codex,opencode; or detected/all",
+            help=(
+                "Comma-separated claude,cursor,windsurf,gemini,codex,cline,opencode; "
+                "or detected/all"
+            ),
         )
         command.add_argument("--yes", action="store_true", help="Confirm a non-interactive change")
         command.add_argument("--plan", action="store_true", help="Show exact targets without changing them")

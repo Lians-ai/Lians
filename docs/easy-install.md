@@ -59,10 +59,12 @@ The core tools are intentionally understandable:
 ## Supported clients
 
 The first desktop release configures Claude Desktop, Cursor, Windsurf, Gemini
-CLI, Codex, and OpenCode. OpenCode uses its documented global configuration at
-`~/.config/opencode/opencode.json`. Lians Easy does not modify ChatGPT because
-ChatGPT connectors use a hosted HTTP connection rather than a local stdio
-process. Use a hosted Lians connector when that distribution is available.
+CLI, Codex, Cline CLI, and OpenCode. Cline CLI uses its documented settings file
+at `~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its documented
+global configuration at `~/.config/opencode/opencode.json`. Lians Easy does not
+modify ChatGPT because ChatGPT connectors use a hosted HTTP connection rather
+than a local stdio process. Use a hosted Lians connector when that distribution
+is available.
 
 ## IT and enterprise deployment
 
@@ -75,19 +77,19 @@ LiansMemory doctor --json
 Preview an exact install without writing anything:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex --plan --json
+LiansMemory install --clients claude,cursor,codex,cline --plan --json
 ```
 
 Install for selected clients:
 
 ```bash
-LiansMemory install --clients claude,cursor,codex --yes --json
+LiansMemory install --clients claude,cursor,codex,cline --yes --json
 ```
 
 Remove the managed client entries while preserving the user's memory database:
 
 ```bash
-LiansMemory uninstall --clients claude,cursor,codex --yes --json
+LiansMemory uninstall --clients claude,cursor,codex,cline --yes --json
 ```
 
 Every write is idempotent and creates a timestamped backup when a configuration
