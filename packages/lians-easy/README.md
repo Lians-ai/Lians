@@ -31,6 +31,7 @@ pipx install lians-bridge
 # or: uv tool install lians-bridge
 
 lians doctor --json
+lians --version
 lians install --clients detected --plan --json
 lians install --clients detected --yes --json
 lians app
@@ -80,11 +81,20 @@ keeping memory and for erasing memory while leaving integrations ready. Moving
 an app to Trash does not silently erase memory. macOS remains a technical
 preview until the real publisher credentials and clean-Mac usability gate pass.
 
+The Linux workflow builds an install-free x86_64
+`Lians-<version>-linux-x86_64.AppImage`. A user can make the single file
+executable and open it without administrator access or a package manager. The
+workflow extracts the finished image, verifies its desktop identity and native
+architecture, and exercises the bundled encrypted Bridge. Stable publication
+is separately gated and adds an exact checksum plus GitHub build provenance;
+Linux remains a technical preview until clean-device desktop integration and
+upgrade/rollback tests pass.
+
 **Check for updates** is user-initiated in this preview. The Bridge recognizes
 only stable releases on the official Lians GitHub repository and offers an
-architecture-specific Windows or macOS package only when its checksum is also
-published. It opens the official release for review and never downloads or
-executes an installer in the background.
+architecture-specific Windows, macOS, or x86_64 Linux package only when its
+checksum is also published. It opens the official release for review and never
+downloads or executes a package in the background.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is

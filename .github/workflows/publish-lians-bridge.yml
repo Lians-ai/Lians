@@ -104,6 +104,9 @@ jobs:
           set -euo pipefail
           python -m venv "$RUNNER_TEMP/lians-bridge-smoke"
           "$RUNNER_TEMP/lians-bridge-smoke/bin/python" -m pip install "$PACKAGE_DIST/lians_bridge-$PACKAGE_VERSION-py3-none-any.whl"
+          test "$("$RUNNER_TEMP/lians-bridge-smoke/bin/lians" --version)" = "lians $PACKAGE_VERSION"
+          test "$("$RUNNER_TEMP/lians-bridge-smoke/bin/lians-bridge" --version)" = "lians $PACKAGE_VERSION"
+          test "$("$RUNNER_TEMP/lians-bridge-smoke/bin/lians-easy" --version)" = "lians $PACKAGE_VERSION"
           "$RUNNER_TEMP/lians-bridge-smoke/bin/lians" doctor --json
           "$RUNNER_TEMP/lians-bridge-smoke/bin/lians-bridge" doctor --json
           "$RUNNER_TEMP/lians-bridge-smoke/bin/lians-easy" doctor --json

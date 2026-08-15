@@ -495,6 +495,119 @@ jobs:
             "$RUNNER_TEMP/AuthKey_${APPLE_NOTARY_KEY_ID:-missing}.p8" \
             "$RUNNER_TEMP/lians-notary-${{ matrix.architecture }}.json"
 
+  lians-easy-linux:
+    name: Attested Lians Bridge (Linux x86_64)
+    needs: release-context
+    # AppImage has no operating-system publisher gate equivalent to Windows or
+    # macOS. Keep publication opt-in and bind the exact artifact to GitHub's
+    # OIDC-backed build provenance before it reaches a stable release.
+    if: ${{ vars.PUBLISH_ATTESTED_LIANS_LINUX == 'true' }}
+    runs-on: ubuntu-latest
+    environment: linux-lians-desktop
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Verify exact desktop version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          if [[ "v$version" != "$RELEASE_TAG" ]]; then
+            echo "Lians Bridge version $version does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+      - name: Build standalone Linux runtime
+        run: |
+          python -m pip install packages/lians-easy pyinstaller==6.22.0 Pillow==11.3.0
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name LiansMemory \
+            --paths packages/lians-easy \
+            --add-data "packages/lians-easy/lians_easy/app:lians_easy/app" \
+            packages/lians-easy/entrypoint.py
+      - name: Verify frozen Lians App and crash recovery
+        run: |
+          python packages/lians-easy/tests/artifact_app_smoke.py \
+            --binary dist/LiansMemory
+          python packages/lians-easy/tests/artifact_crash_smoke.py \
+            --binary dist/LiansMemory
+      - name: Install pinned Linux AppImage tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool="$RUNNER_TEMP/appimagetool-x86_64.AppImage"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage \
+            --output "$tool"
+          printf '%s  %s\n' \
+            ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 \
+            "$tool" | sha256sum --check --strict
+          chmod 0755 "$tool"
+          echo "LIANS_APPIMAGETOOL=$tool" >> "$GITHUB_ENV"
+      - name: Build and exercise install-free AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          python packages/lians-easy/scripts/create_macos_icon.py \
+            --source packages/lians-easy/windows-lians.ico \
+            --output dist/linux-iconset
+          APPIMAGE_EXTRACT_AND_RUN=1 bash packages/lians-easy/scripts/build_linux_appimage.sh \
+            --binary dist/LiansMemory \
+            --icon dist/linux-iconset/icon_256x256.png \
+            --output-directory dist/installer \
+            --version "$version" \
+            --architecture x86_64 \
+            --appimagetool "$LIANS_APPIMAGETOOL"
+          python packages/lians-easy/tests/artifact_linux_appimage_smoke.py \
+            --appimage "dist/installer/Lians-$version-linux-x86_64.AppImage" \
+            --expected-version "$version" \
+            --expected-architecture x86_64
+      - name: Write exact Linux package checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          name="Lians-$version-linux-x86_64.AppImage"
+          (cd dist/installer && sha256sum "$name" > "$name.sha256")
+      - name: Attest Linux package build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: dist/installer/Lians-*-linux-x86_64.AppImage
+      - name: Verify attestation and refuse an existing release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          appimage="dist/installer/Lians-$version-linux-x86_64.AppImage"
+          checksum="$appimage.sha256"
+          gh attestation verify "$appimage" --repo "$GITHUB_REPOSITORY"
+          existing="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          for asset in "$(basename "$appimage")" "$(basename "$checksum")"; do
+            if grep --fixed-strings --line-regexp --quiet "$asset" <<< "$existing"; then
+              echo "Refusing to overwrite existing release asset $asset" >&2
+              exit 1
+            fi
+          done
+      - name: Attach attested Linux package to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          appimage="dist/installer/Lians-$version-linux-x86_64.AppImage"
+          gh release upload "$RELEASE_TAG" "$appimage" "$appimage.sha256"
+
   go-tag:
     name: Tag Go module for go get
     needs: release-context

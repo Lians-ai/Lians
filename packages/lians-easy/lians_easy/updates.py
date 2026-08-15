@@ -41,6 +41,8 @@ def _package_name(*, version: str, system: str, machine: str) -> str | None:
             return f"Lians-{version}-macos-arm64.dmg"
         if normalized_machine in {"amd64", "x86_64"}:
             return f"Lians-{version}-macos-x86_64.dmg"
+    if normalized_system == "linux" and normalized_machine in {"amd64", "x86_64"}:
+        return f"Lians-{version}-linux-x86_64.AppImage"
     return None
 
 

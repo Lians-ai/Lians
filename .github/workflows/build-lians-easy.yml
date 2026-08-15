@@ -52,8 +52,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install packages/lians-easy pyinstaller==6.22.0
-      - name: Install pinned macOS packaging dependency
-        if: runner.os == 'macOS'
+      - name: Install pinned desktop packaging dependency
+        if: runner.os == 'macOS' || runner.os == 'Linux'
         run: python -m pip install Pillow==11.3.0
       - name: Verify consumer layout at common Windows scaling
         if: runner.os == 'Windows'
@@ -122,6 +122,48 @@ jobs:
         run: >-
           python packages/lians-easy/tests/artifact_crash_smoke.py
           --binary dist/LiansMemory
+      - name: Install pinned Linux AppImage tool
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool="$RUNNER_TEMP/appimagetool-x86_64.AppImage"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage \
+            --output "$tool"
+          printf '%s  %s\n' \
+            ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 \
+            "$tool" | sha256sum --check --strict
+          chmod 0755 "$tool"
+          echo "LIANS_APPIMAGETOOL=$tool" >> "$GITHUB_ENV"
+      - name: Build install-free Linux AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          python packages/lians-easy/scripts/create_macos_icon.py \
+            --source packages/lians-easy/windows-lians.ico \
+            --output dist/linux-iconset
+          bash packages/lians-easy/scripts/build_linux_appimage.sh \
+            --binary dist/LiansMemory \
+            --icon dist/linux-iconset/icon_256x256.png \
+            --output-directory dist/installer \
+            --version "$version" \
+            --architecture x86_64 \
+            --appimagetool "$LIANS_APPIMAGETOOL"
+      - name: Verify extracted Linux AppImage and encrypted Bridge
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("packages/lians-easy/pyproject.toml").read_text())["project"]["version"])')"
+          python packages/lians-easy/tests/artifact_linux_appimage_smoke.py \
+            --appimage "dist/installer/Lians-$version-linux-x86_64.AppImage" \
+            --expected-version "$version" \
+            --expected-architecture x86_64
       - name: Build native macOS drag-and-drop package
         if: runner.os == 'macOS'
         shell: bash
@@ -201,6 +243,7 @@ jobs:
             dist/LiansMemory*
             dist/installer/Lians-Setup-*.exe
             dist/installer/Lians-*.dmg
+            dist/installer/Lians-*.AppImage
           if-no-files-found: error
 
   cold-restart:

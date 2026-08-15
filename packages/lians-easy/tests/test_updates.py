@@ -72,6 +72,19 @@ def test_release_selects_the_native_macos_package(machine, package):
     assert result["package_name"] == package
 
 
+def test_release_selects_the_install_free_linux_package():
+    package = "Lians-0.6.0-linux-x86_64.AppImage"
+    result = evaluate_release(
+        _release("0.6.0", assets=[package, f"{package}.sha256"]),
+        current_version="0.5.0",
+        system="Linux",
+        machine="x86_64",
+    )
+
+    assert result["status"] == "available"
+    assert result["package_name"] == package
+
+
 def test_release_never_offers_missing_checksum_prerelease_or_unofficial_urls():
     package = "Lians-Setup-0.6.0.exe"
     missing_checksum = evaluate_release(
@@ -115,7 +128,7 @@ def test_current_or_unsupported_install_never_gets_a_download():
         _release("0.6.0", assets=[]),
         current_version="0.5.0",
         system="Linux",
-        machine="x86_64",
+        machine="aarch64",
     )
     assert unsupported["status"] == "unsupported"
     assert "download_url" not in unsupported

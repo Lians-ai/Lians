@@ -51,6 +51,9 @@ def test_public_python_publish_is_gated_and_exercises_the_exact_wheel() -> None:
     assert "id-token: write" in workflow
     assert "pypa/gh-action-pypi-publish@" in workflow
     assert "skip-existing" not in workflow
+    assert 'bin/lians" --version' in workflow
+    assert 'bin/lians-bridge" --version' in workflow
+    assert 'bin/lians-easy" --version' in workflow
 
 
 def test_windows_identity_resources_match_package_version() -> None:
@@ -137,6 +140,52 @@ def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
     assert "build_macos_dmg.sh" in workflow
     assert "artifact_macos_dmg_smoke.py" in workflow
     assert "dist/installer/Lians-*.dmg" in workflow
+
+
+def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
+    pull_request_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
+    ).read_text(encoding="utf-8")
+    release_workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
+    ).read_text(encoding="utf-8")
+    release_job = release_workflow.split("  lians-easy-linux:\n", 1)[1].split(
+        "\n  go-tag:", 1
+    )[0]
+
+    for contract in (pull_request_workflow, release_job):
+        assert "appimagetool/releases/download/1.9.1" in contract
+        assert (
+            "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+            in contract
+        )
+        assert "build_linux_appimage.sh" in contract
+        assert "artifact_linux_appimage_smoke.py" in contract
+        assert "Lians-$version-linux-x86_64.AppImage" in contract
+
+    script = (PACKAGE_ROOT / "scripts" / "build_linux_appimage.sh").read_text(
+        encoding="utf-8"
+    )
+    smoke = (PACKAGE_ROOT / "tests" / "artifact_linux_appimage_smoke.py").read_text(
+        encoding="utf-8"
+    )
+    assert "Lians-$version-linux-$architecture.AppImage" in script
+    assert "Terminal=false" in script
+    assert "AppRun" in script
+    assert "--appimage-extract" in smoke
+    assert "artifact_app_smoke.py" in smoke
+
+    assert "vars.PUBLISH_ATTESTED_LIANS_LINUX == 'true'" in release_job
+    assert "environment: linux-lians-desktop" in release_job
+    assert "id-token: write" in release_job
+    assert "attestations: write" in release_job
+    assert (
+        "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
+        in release_job
+    )
+    assert "gh attestation verify" in release_job
+    assert "sha256sum" in release_job
+    assert "gh release upload" in release_job
 
 
 def test_macos_drag_and_drop_package_has_stable_identity_and_architecture() -> None:

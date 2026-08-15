@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .bridge import (
     BridgeApplication,
     context_for_event,
@@ -45,6 +46,7 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="lians", description="Local memory for your AI")
+    result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = result.add_subparsers(dest="command")
     mcp = commands.add_parser("mcp", help="Run the local MCP memory server")
     mcp.add_argument("--data", type=Path)
