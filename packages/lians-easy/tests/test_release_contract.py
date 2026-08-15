@@ -123,6 +123,7 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     for build_contract in (workflow, pull_request_workflow):
         assert "--add-data" in build_contract
         assert "lians_easy/app" in build_contract
+        assert "artifact_portability_smoke.py" in build_contract
         assert "--icon packages/lians-easy/windows-lians.ico" in build_contract
         assert "--version-file packages/lians-easy/windows-version-info.txt" in build_contract
         assert "Verify Windows package identity" in build_contract

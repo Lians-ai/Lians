@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import getpass
 import json
 import sys
 from pathlib import Path
@@ -19,6 +20,7 @@ from .bridge import (
 from .installer import client_targets, doctor, install, plan, uninstall
 from .lifecycle import listen_for_windows_installer_shutdown
 from .mcp import default_data_path, run
+from .portability import export_backup, import_backup, verify_backup
 from .store import MemoryStore
 
 
@@ -104,7 +106,56 @@ def parser() -> argparse.ArgumentParser:
 
     diagnostic = commands.add_parser("doctor", help="Show runtime and client detection")
     diagnostic.add_argument("--json", action="store_true")
+
+    backup = commands.add_parser("backup", help="Move encrypted memory safely between devices")
+    backup_commands = backup.add_subparsers(dest="backup_action", required=True)
+    backup_export = backup_commands.add_parser(
+        "export", help="Create a passphrase-encrypted .liansbackup file"
+    )
+    backup_export.add_argument("--output", type=Path, required=True)
+    backup_export.add_argument("--data", type=Path)
+    backup_export.add_argument(
+        "--passphrase-file", type=Path, help="Read the secret from a protected file"
+    )
+    backup_export.add_argument("--overwrite", action="store_true")
+    backup_export.add_argument("--json", action="store_true")
+    backup_verify = backup_commands.add_parser(
+        "verify", help="Check a backup without changing local memory"
+    )
+    backup_verify.add_argument("--input", type=Path, required=True)
+    backup_verify.add_argument(
+        "--passphrase-file", type=Path, help="Read the secret from a protected file"
+    )
+    backup_verify.add_argument("--json", action="store_true")
+    backup_import = backup_commands.add_parser(
+        "import", help="Merge a verified backup and re-encrypt it for this device"
+    )
+    backup_import.add_argument("--input", type=Path, required=True)
+    backup_import.add_argument("--data", type=Path)
+    backup_import.add_argument(
+        "--passphrase-file", type=Path, help="Read the secret from a protected file"
+    )
+    backup_import.add_argument("--yes", action="store_true", help="Confirm the memory import")
+    backup_import.add_argument("--json", action="store_true")
     return result
+
+
+def _read_backup_passphrase(*, confirm: bool, passphrase_file: Path | None) -> str:
+    if passphrase_file is not None:
+        if passphrase_file.stat().st_size > 4096:
+            raise SystemExit("Backup passphrase file is unexpectedly large")
+        if sys.platform != "win32" and passphrase_file.stat().st_mode & 0o077:
+            raise SystemExit("Backup passphrase file must be readable only by its owner")
+        passphrase = passphrase_file.read_text(encoding="utf-8").rstrip("\r\n")
+        if not passphrase:
+            raise SystemExit("Backup passphrase file is empty")
+        return passphrase
+    passphrase = getpass.getpass("Backup passphrase: ")
+    if confirm:
+        repeated = getpass.getpass("Confirm backup passphrase: ")
+        if passphrase != repeated:
+            raise SystemExit("Backup passphrases did not match")
+    return passphrase
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -149,6 +200,40 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "doctor":
         _show(doctor(), as_json=args.json)
+        return
+    if args.command == "backup":
+        if args.backup_action == "export":
+            result = export_backup(
+                MemoryStore(args.data or default_data_path()),
+                args.output,
+                _read_backup_passphrase(
+                    confirm=True,
+                    passphrase_file=args.passphrase_file,
+                ),
+                overwrite=args.overwrite,
+            )
+        elif args.backup_action == "verify":
+            result = verify_backup(
+                args.input,
+                _read_backup_passphrase(
+                    confirm=False,
+                    passphrase_file=args.passphrase_file,
+                ),
+            )
+        else:
+            if not args.yes:
+                raise SystemExit(
+                    "Review the backup, then rerun import with --yes. Existing IDs are never overwritten."
+                )
+            result = import_backup(
+                MemoryStore(args.data or default_data_path()),
+                args.input,
+                _read_backup_passphrase(
+                    confirm=False,
+                    passphrase_file=args.passphrase_file,
+                ),
+            )
+        _show(result, as_json=args.json)
         return
     if args.command in {"install", "uninstall"}:
         keys = _keys(args.clients)

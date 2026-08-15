@@ -104,6 +104,26 @@ editing is required. The local store uses AES-GCM; on Windows its root key is
 protected with DPAPI. The full Lians engine remains available when a team needs
 semantic retrieval, collaboration, governance, or a shared server deployment.
 
+### Move memory to another device
+
+Portable backups never copy a Windows-only DPAPI key and never write plaintext
+memory JSON. The command prompts for the passphrase privately, then encrypts the
+complete memory lineage, activity history, and signed receipts into one
+`.liansbackup` file:
+
+```bash
+lians backup export --output "Lians Memory.liansbackup"
+lians backup verify --input "Lians Memory.liansbackup"
+lians backup import --input "Lians Memory.liansbackup" --yes
+```
+
+Import verifies the AES-GCM envelope, fixed scrypt parameters, record hashes,
+lineage, and every Ed25519 receipt before opening one database transaction. It
+re-encrypts memory with the destination device's local key, skips equivalent
+IDs, and rejects the entire import if any existing ID has different history.
+The passphrase is never accepted as a command-line argument, where process-list
+tools could expose it. Keep the passphrase separately; Lians cannot recover it.
+
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client
 uses a first-invocation `PreInvocation` hook and an ephemeral context step, so
