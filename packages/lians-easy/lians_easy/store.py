@@ -1339,6 +1339,76 @@ class MemoryStore:
             ).fetchall()
         return [json.loads(row["receipt_json"]) for row in rows]
 
+    def health(self) -> dict[str, Any]:
+        """Check local storage and encryption without returning user content.
+
+        This is deliberately an on-demand support check rather than telemetry.
+        It exercises SQLite integrity, foreign-key integrity, the protected
+        device key, and one encrypted record when one exists. No memory value,
+        path, key fingerprint, or exception text leaves this boundary.
+        """
+
+        database_ok = False
+        foreign_keys_ok = False
+        encryption_ok = False
+        record_checked = False
+        record_readable = True
+        sample: sqlite3.Row | None = None
+
+        try:
+            with self._connect() as db:
+                result = db.execute("PRAGMA quick_check(1)").fetchone()
+                database_ok = result is not None and result[0] == "ok"
+                foreign_keys_ok = db.execute("PRAGMA foreign_key_check").fetchone() is None
+                sample = db.execute(
+                    """SELECT * FROM memories
+                       WHERE profile = ? AND forgotten_at IS NULL
+                       ORDER BY updated_at DESC LIMIT 1""",
+                    (self.profile,),
+                ).fetchone()
+        except Exception:  # noqa: BLE001 - diagnostics return only a safe category
+            database_ok = False
+            foreign_keys_ok = False
+
+        try:
+            associated_data = b"lians-local-diagnostics-v1"
+            ciphertext, nonce = self.cipher.seal_bytes(
+                b"lians-ready",
+                associated_data=associated_data,
+            )
+            encryption_ok = (
+                self.cipher.open_bytes(
+                    ciphertext,
+                    nonce,
+                    associated_data=associated_data,
+                )
+                == b"lians-ready"
+            )
+        except Exception:  # noqa: BLE001 - diagnostics return only a safe category
+            encryption_ok = False
+
+        if sample is not None:
+            record_checked = True
+            try:
+                self._content(sample)
+            except Exception:  # noqa: BLE001 - never expose content or crypto errors
+                record_readable = False
+
+        return {
+            "status": (
+                "ready"
+                if database_ok and foreign_keys_ok and encryption_ok and record_readable
+                else "problem"
+            ),
+            "database_integrity": database_ok,
+            "foreign_key_integrity": foreign_keys_ok,
+            "encryption_round_trip": encryption_ok,
+            "record_checked": record_checked,
+            "record_readable": record_readable,
+            "encrypted": True,
+            "key_protection": self.cipher.protection,
+        }
+
     def stats(self) -> dict[str, Any]:
         with self._connect() as db:
             row = db.execute(

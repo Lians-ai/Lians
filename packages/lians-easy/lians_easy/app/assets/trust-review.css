@@ -363,6 +363,125 @@
   width: 100%;
 }
 
+.lians-diagnostics__trigger {
+  right: 585px;
+}
+
+.lians-diagnostics[data-tone="ready"] .lians-diagnostics__trigger {
+  border-color: rgb(51 230 154 / 55%);
+  color: var(--lians-review-green);
+}
+
+.lians-diagnostics[data-tone="attention"] .lians-diagnostics__trigger {
+  border-color: #d39139;
+  color: var(--lians-review-amber);
+}
+
+.lians-diagnostics[data-tone="problem"] .lians-diagnostics__trigger {
+  border-color: #9c4057;
+  color: #ff9bad;
+}
+
+.lians-diagnostics__dialog {
+  max-width: 820px;
+}
+
+.lians-diagnostics__privacy {
+  border-left-color: var(--lians-review-green);
+}
+
+.lians-diagnostics__overall {
+  background: #0a1422;
+  border: 1px solid var(--lians-review-line);
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+  padding: 18px;
+}
+
+.lians-diagnostics__overall span {
+  color: #8eafff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.lians-diagnostics__overall strong {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.lians-diagnostics__overall[data-tone="ready"] span,
+.lians-diagnostics__check[data-tone="ready"] span {
+  color: var(--lians-review-green);
+}
+
+.lians-diagnostics__overall[data-tone="attention"] span,
+.lians-diagnostics__check[data-tone="attention"] span {
+  color: var(--lians-review-amber);
+}
+
+.lians-diagnostics__overall[data-tone="problem"] span,
+.lians-diagnostics__check[data-tone="problem"] span {
+  color: #ff9bad;
+}
+
+.lians-diagnostics__checks {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.lians-diagnostics__check {
+  background: #080f1a;
+  border: 1px solid var(--lians-review-line);
+  border-left: 2px solid var(--lians-review-green);
+  min-width: 0;
+  padding: 16px;
+}
+
+.lians-diagnostics__check[data-tone="attention"] {
+  border-left-color: var(--lians-review-amber);
+}
+
+.lians-diagnostics__check[data-tone="problem"] {
+  border-left-color: #ff6c89;
+}
+
+.lians-diagnostics__check-top {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.lians-diagnostics__check-top strong {
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.lians-diagnostics__check-top span {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.lians-diagnostics__check p {
+  color: var(--lians-review-muted);
+  font-size: 10px;
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+
+.lians-diagnostics__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 .lians-review__feedback {
   color: #bbcae2;
   font-size: 11px;
@@ -379,6 +498,11 @@
   .lians-review__trigger {
     right: 20px;
     top: 118px;
+  }
+
+  .lians-diagnostics__trigger {
+    right: 20px;
+    top: 154px;
   }
 }
 
@@ -403,6 +527,10 @@
   .lians-review__button {
     justify-content: center;
     width: 100%;
+  }
+
+  .lians-diagnostics__checks {
+    grid-template-columns: 1fr;
   }
 }
 

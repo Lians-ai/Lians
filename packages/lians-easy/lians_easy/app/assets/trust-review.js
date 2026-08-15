@@ -3,8 +3,11 @@
 
   const ID = "lians-trust-review";
   const REVIEW_PATH = "/v1/reviews";
+  const DIAGNOSTICS_PATH = "/v1/diagnostics";
   const POLL_MS = 30_000;
   let busy = false;
+  let diagnosticsBusy = false;
+  let diagnosticsReport = null;
   let forgetTimer = null;
   let current = { reviews: [], total: 0, project: { name: "this project" } };
 
@@ -110,6 +113,199 @@
   }
 
   const ui = build();
+
+  function buildDiagnostics() {
+    const root = element("section", "lians-review lians-diagnostics");
+    root.id = "lians-system-check";
+    root.dataset.tone = "unchecked";
+
+    const trigger = element(
+      "button",
+      "lians-review__trigger lians-diagnostics__trigger",
+      "SYSTEM CHECK",
+    );
+    trigger.type = "button";
+    trigger.setAttribute("aria-haspopup", "dialog");
+    trigger.setAttribute("aria-controls", "lians-diagnostics-dialog");
+
+    const backdrop = element("div", "lians-review__backdrop");
+    backdrop.hidden = true;
+    const dialog = element("div", "lians-review__dialog lians-diagnostics__dialog");
+    dialog.id = "lians-diagnostics-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "lians-diagnostics-title");
+    dialog.tabIndex = -1;
+
+    const top = element("div", "lians-review__top");
+    const heading = element("div", "lians-review__heading");
+    heading.append(
+      element("p", "lians-review__eyebrow", "PRIVATE SYSTEM CHECK"),
+      element("h2", "lians-review__title", "Is Lians ready for my next chat?"),
+    );
+    heading.lastChild.id = "lians-diagnostics-title";
+    const close = element("button", "lians-review__close", "Close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close system check");
+    top.append(heading, close);
+
+    const description = element(
+      "p",
+      "lians-review__description",
+      "Check the Bridge, encrypted memory, connected AI tools, cloud continuity, and Trust Review in one place.",
+    );
+    const privacy = element("div", "lians-review__boundary lians-diagnostics__privacy");
+    privacy.append(
+      element("strong", "", "Safe to share with support"),
+      element(
+        "span",
+        "",
+        "The report excludes prompts, memory content, credentials, account identifiers, encryption keys, and local file paths.",
+      ),
+    );
+    const overall = element("div", "lians-diagnostics__overall");
+    overall.append(
+      element("span", "lians-diagnostics__overall-state", "NOT CHECKED"),
+      element("strong", "lians-diagnostics__overall-summary", "Run a private check when you need help."),
+    );
+    const list = element("div", "lians-diagnostics__checks");
+    const feedback = element("p", "lians-review__feedback");
+    feedback.setAttribute("role", "status");
+    feedback.setAttribute("aria-live", "polite");
+    const actions = element("div", "lians-diagnostics__actions");
+    const run = element("button", "lians-review__button lians-review__button--primary", "Run system check");
+    const download = element("button", "lians-review__button", "Download safe help report");
+    run.type = "button";
+    download.type = "button";
+    download.disabled = true;
+    actions.append(run, download);
+    dialog.append(top, description, privacy, overall, list, actions, feedback);
+    backdrop.append(dialog);
+    root.append(trigger, backdrop);
+    document.body.append(root);
+    return {
+      root,
+      trigger,
+      backdrop,
+      dialog,
+      close,
+      overall,
+      list,
+      run,
+      download,
+      feedback,
+    };
+  }
+
+  const diagnosticsUi = buildDiagnostics();
+
+  function renderDiagnostics(report) {
+    diagnosticsReport = report;
+    const overall = ["ready", "attention", "problem"].includes(report.overall)
+      ? report.overall
+      : "problem";
+    diagnosticsUi.root.dataset.tone = overall;
+    diagnosticsUi.overall.dataset.tone = overall;
+    diagnosticsUi.overall.querySelector("span").textContent = overall.toUpperCase();
+    diagnosticsUi.overall.querySelector("strong").textContent =
+      report.summary || "Lians could not complete the system check.";
+    diagnosticsUi.list.replaceChildren();
+    const checks = Array.isArray(report.checks) ? report.checks : [];
+    checks.forEach((check) => {
+      const status = ["ready", "attention", "problem"].includes(check.status)
+        ? check.status
+        : "problem";
+      const card = element("article", "lians-diagnostics__check");
+      card.dataset.tone = status;
+      const heading = element("div", "lians-diagnostics__check-top");
+      heading.append(
+        element("strong", "", check.title || "Lians check"),
+        element("span", "", status.toUpperCase()),
+      );
+      card.append(heading, element("p", "", check.message || "No result was returned."));
+      diagnosticsUi.list.append(card);
+    });
+    diagnosticsUi.download.disabled = !checks.length;
+    diagnosticsUi.trigger.textContent = overall === "ready"
+      ? "SYSTEM · READY"
+      : overall === "attention"
+        ? "SYSTEM · CHECK"
+        : "SYSTEM · HELP";
+  }
+
+  async function runDiagnostics() {
+    if (diagnosticsBusy) return;
+    diagnosticsBusy = true;
+    diagnosticsUi.run.disabled = true;
+    diagnosticsUi.download.disabled = true;
+    diagnosticsUi.run.textContent = "Checking…";
+    diagnosticsUi.feedback.textContent = "Checking only local operational state. No memory content is added to this report.";
+    try {
+      const report = await request(DIAGNOSTICS_PATH);
+      renderDiagnostics(report);
+      diagnosticsUi.feedback.textContent = report.overall === "ready"
+        ? "Check complete. Lians is ready."
+        : "Check complete. Follow the plain-language action shown above.";
+    } catch (error) {
+      diagnosticsUi.root.dataset.tone = "problem";
+      diagnosticsUi.feedback.textContent = "The system check could not run. Keep Lians open and try again.";
+    } finally {
+      diagnosticsBusy = false;
+      diagnosticsUi.run.disabled = false;
+      diagnosticsUi.run.textContent = "Run system check again";
+      diagnosticsUi.download.disabled = !diagnosticsReport;
+    }
+  }
+
+  async function downloadDiagnostics() {
+    if (diagnosticsBusy) return;
+    diagnosticsBusy = true;
+    diagnosticsUi.run.disabled = true;
+    diagnosticsUi.download.disabled = true;
+    diagnosticsUi.feedback.textContent = "Preparing a privacy-safe help report…";
+    try {
+      const response = await fetch("/v1/diagnostics/export", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmed: true }),
+      });
+      if (!response.ok) throw new Error("diagnostics-export-failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "Lians-help-report.json";
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      diagnosticsUi.feedback.textContent = "Safe help report downloaded. You can inspect it before sharing.";
+    } catch (error) {
+      diagnosticsUi.feedback.textContent = "Lians could not download the report. No information was shared.";
+    } finally {
+      diagnosticsBusy = false;
+      diagnosticsUi.run.disabled = false;
+      diagnosticsUi.download.disabled = !diagnosticsReport;
+    }
+  }
+
+  function setDiagnosticsOpen(open) {
+    if (open && !ui.backdrop.hidden) {
+      ui.backdrop.hidden = true;
+      ui.trigger.setAttribute("aria-expanded", "false");
+    }
+    diagnosticsUi.backdrop.hidden = !open;
+    document.documentElement.classList.toggle("lians-review-open", open);
+    diagnosticsUi.trigger.setAttribute("aria-expanded", String(open));
+    if (open) {
+      diagnosticsUi.dialog.focus();
+      runDiagnostics();
+    } else {
+      if (window.location.hash === "#system-check") {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      diagnosticsUi.trigger.focus();
+    }
+  }
 
   function memoryPanel(memory, label, held) {
     const panel = element("section", "lians-review__memory");
@@ -317,6 +513,10 @@
   }
 
   function setOpen(open) {
+    if (open && !diagnosticsUi.backdrop.hidden) {
+      diagnosticsUi.backdrop.hidden = true;
+      diagnosticsUi.trigger.setAttribute("aria-expanded", "false");
+    }
     ui.backdrop.hidden = !open;
     document.documentElement.classList.toggle("lians-review-open", open);
     ui.trigger.setAttribute("aria-expanded", String(open));
@@ -336,6 +536,16 @@
     window.history.replaceState(null, "", "#review-queue");
     setOpen(true);
   });
+  diagnosticsUi.trigger.addEventListener("click", () => {
+    window.history.replaceState(null, "", "#system-check");
+    setDiagnosticsOpen(true);
+  });
+  diagnosticsUi.close.addEventListener("click", () => setDiagnosticsOpen(false));
+  diagnosticsUi.backdrop.addEventListener("click", (event) => {
+    if (event.target === diagnosticsUi.backdrop) setDiagnosticsOpen(false);
+  });
+  diagnosticsUi.run.addEventListener("click", () => runDiagnostics());
+  diagnosticsUi.download.addEventListener("click", () => downloadDiagnostics());
   ui.close.addEventListener("click", () => setOpen(false));
   ui.backdrop.addEventListener("click", (event) => {
     if (event.target === ui.backdrop) setOpen(false);
@@ -349,14 +559,17 @@
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !ui.backdrop.hidden) setOpen(false);
+    if (event.key === "Escape" && !diagnosticsUi.backdrop.hidden) setDiagnosticsOpen(false);
   });
   window.addEventListener("hashchange", () => {
     if (["#review", "#review-queue"].includes(window.location.hash)) setOpen(true);
+    if (window.location.hash === "#system-check") setDiagnosticsOpen(true);
   });
   window.addEventListener("focus", () => refresh());
   window.setInterval(() => {
     if (document.visibilityState === "visible") refresh();
   }, POLL_MS);
   if (["#review", "#review-queue"].includes(window.location.hash)) setOpen(true);
+  if (window.location.hash === "#system-check") setDiagnosticsOpen(true);
   refresh();
 })();

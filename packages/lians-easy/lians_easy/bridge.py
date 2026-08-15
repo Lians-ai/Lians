@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 from . import __version__
 from .cloud_auth import NativeCloudAuth
 from .cloud_service import CloudSyncService
+from .diagnostics import system_check
 from .installer import client_targets, uninstall
 from .mcp import default_data_path
 from .portability import export_backup, import_backup, verify_backup
@@ -178,6 +179,20 @@ class BridgeApplication:
         self.cloud_auth = cloud_auth or NativeCloudAuth.for_store(store)
         self.cloud_sync = cloud_sync or CloudSyncService(store, self.cloud_auth)
 
+    def diagnostics(self) -> dict[str, Any]:
+        try:
+            cloud = self.cloud_sync.status()
+        except Exception:  # noqa: BLE001 - expose a safe state, never provider details
+            cloud = {
+                "state": "needs_attention",
+                "sync_state": "unknown",
+            }
+        try:
+            integrations = client_targets()
+        except Exception:  # noqa: BLE001 - a failed scan must not expose local paths
+            integrations = {}
+        return system_check(self.store, cloud=cloud, integrations=integrations)
+
     @property
     def origin(self) -> str:
         return f"http://{self.host}:{self.port}"
@@ -217,6 +232,22 @@ class BridgeApplication:
                 self.send_header(
                     "Content-Disposition", 'attachment; filename="Lians-Memory.liansbackup"'
                 )
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header(
+                    "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
+                )
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _json_download(self, data: Any, filename: str) -> None:
+                body = (
+                    json.dumps(data, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+                ).encode()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header(
@@ -334,6 +365,9 @@ class BridgeApplication:
                             ],
                         },
                     )
+                    return
+                if parsed.path == "/v1/diagnostics":
+                    self._json(HTTPStatus.OK, application.diagnostics())
                     return
                 if parsed.path == "/v1/cloud/status":
                     self._json(HTTPStatus.OK, application.cloud_sync.status())
@@ -504,6 +538,12 @@ class BridgeApplication:
                                 "Lians could not prepare the encrypted backup"
                             ) from exc
                         self._backup_download(content)
+                        return
+
+                    if parsed.path == "/v1/diagnostics/export":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Saving a help report requires confirmed=true")
+                        self._json_download(application.diagnostics(), "Lians-help-report.json")
                         return
 
                     if parsed.path == "/v1/cloud/sign-in":

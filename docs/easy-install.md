@@ -143,8 +143,9 @@ than guessing from the hook process directory.
 
 The frozen Bridge now contains the verified React control-center bundle. The
 setup screen ends with **Open Lians**, and later launches open the local control
-center directly. Memory, Activity, Review, Integrations, and Settings all read
-from the same encrypted store used by connected AI clients.
+center directly. Memory, Activity, Review, Integrations, Settings, and the
+private System Check all read from the same encrypted store used by connected
+AI clients.
 
 Developers can still override the bundled app while working on the React source:
 
@@ -193,6 +194,24 @@ audit event contains no memory text. Permanent forgetting follows the virtual
 branch relationship, so forgetting any related version erases the original
 and every divergent candidate instead of leaving an offline copy readable.
 Malformed in-place changes to a memory identity still fail atomically.
+
+### Private System Check
+
+**System Check** gives a nontechnical user one answer to “Is Lians ready for my
+next chat?” It checks the loopback Bridge, SQLite and foreign-key integrity,
+the protected encryption key, one existing encrypted record when available,
+connected AI tools, encrypted cloud continuity, and the Trust Review queue.
+The result is **Ready**, **Attention**, or **Problem**, with a plain-language
+next action. Local memory remains visibly ready when optional cloud continuity
+is signed out or temporarily unavailable.
+
+The check runs only when the user opens it or selects **Run system check
+again**. It does not send telemetry. **Download safe help report** exports the
+same bounded result as JSON without prompts, memory content, sources,
+credentials, account identifiers, local paths, key material, key fingerprints,
+or raw exception text. The user can inspect the file before sharing it with
+support. A failed readability check never attempts to repair or overwrite the
+store; it tells the user to keep the App open and obtain help.
 
 ## Release trust gate
 

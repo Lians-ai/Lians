@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import sqlite3
 import sys
 import threading
 from http.server import ThreadingHTTPServer
@@ -357,6 +358,14 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         assert body["cloud"]["state"] == "unavailable"
         assert {item["key"] for item in body["integrations"]} >= {"claude", "cursor", "codex"}
 
+        status, diagnostics = _json_request(
+            f"{app.origin}/v1/diagnostics",
+            cookie=cookie,
+        )
+        assert status == 200
+        assert diagnostics["schema"] == "lians-system-check/v1"
+        assert diagnostics["privacy"]["memory_content_included"] is False
+
         status, remembered = _json_request(
             f"{app.origin}/v1/remember",
             cookie=cookie,
@@ -369,6 +378,36 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         )
         assert status == 201
         assert remembered["memory"]["source_client"] == "cursor"
+
+        report_request = Request(
+            f"{app.origin}/v1/diagnostics/export",
+            data=json.dumps({"confirmed": True}).encode(),
+            headers={
+                "Cookie": cookie,
+                "Content-Type": "application/json",
+                "Origin": app.origin,
+            },
+            method="POST",
+        )
+        with urlopen(report_request) as response:
+            assert response.status == 200
+            assert response.headers["Content-Disposition"] == (
+                'attachment; filename="Lians-help-report.json"'
+            )
+            help_report = json.loads(response.read())
+        serialized_report = json.dumps(help_report)
+        assert "We use FastAPI" not in serialized_report
+        assert str(tmp_path) not in serialized_report
+        assert store.cipher.fingerprint not in serialized_report
+
+        with pytest.raises(HTTPError) as unconfirmed_report:
+            _json_request(
+                f"{app.origin}/v1/diagnostics/export",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": False},
+            )
+        assert unconfirmed_report.value.code == 400
 
         status, pack = _json_request(
             f"{app.origin}/v1/context",
@@ -393,6 +432,22 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
             )
         assert error.value.code == 403
         assert all(item["content"] != "This must not be stored" for item in store.list())
+
+        with sqlite3.connect(store.path) as database:
+            database.execute(
+                "UPDATE memories SET content_cipher = ? WHERE id = ?",
+                (b"invalid-diagnostic-fixture", remembered["memory"]["id"]),
+            )
+        status, degraded = _json_request(f"{app.origin}/v1/diagnostics", cookie=cookie)
+        assert status == 200
+        assert degraded["overall"] == "problem"
+        assert (
+            next(item for item in degraded["checks"] if item["key"] == "memory")[
+                "existing_memory_readable"
+            ]
+            is False
+        )
+        assert "FastAPI" not in json.dumps(degraded)
     finally:
         server.shutdown()
         server.server_close()

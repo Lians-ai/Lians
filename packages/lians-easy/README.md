@@ -4,8 +4,8 @@ Lians Bridge is the local service behind the guided Lians installer. It keeps
 one encrypted memory store for supported AI clients and exposes a small MCP
 surface, automatic bounded recall, project handoffs, and signed context
 receipts. The same package now carries the React Lians App for Memory, Activity,
-Review, Integrations, and Settings; normal users do not install or locate a
-separate web bundle.
+Review, Integrations, Settings, and a private System Check; normal users do not
+install or locate a separate web bundle.
 
 The current desktop artifacts are development builds and are not yet published
 with trusted operating-system signatures. Context receipts are Ed25519-signed,
@@ -148,6 +148,22 @@ or keep every edit. The choice converges through encrypted sync without memory
 text entering the audit record. Forgetting any related version permanently
 erases the original and all branches. Same-ID content or provenance mutation
 that is not a valid correction branch continues to fail atomically.
+
+### Check whether Lians is ready
+
+Open **System Check** in the Lians App for one nontechnical readiness answer.
+It verifies the Bridge, SQLite and foreign-key integrity, the protected local
+key, readability of an existing encrypted record when present, connected AI
+tools, cloud continuity, and memories waiting in Trust Review. It reports
+**Ready**, **Attention**, or **Problem** without treating optional cloud sync
+as a requirement for healthy local memory.
+
+The check is local and user-initiated; it does not upload telemetry. **Download
+safe help report** writes a JSON result that excludes prompts, memory content,
+sources, AI-account identifiers, credentials, local paths, encryption keys,
+key fingerprints, and raw exception text. The report is suitable for a user to
+inspect and then share with a help desk. The authenticated Bridge routes are
+`GET /v1/diagnostics` and confirmed `POST /v1/diagnostics/export`.
 
 ### Move memory to another device
 
