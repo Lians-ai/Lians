@@ -222,6 +222,282 @@
   color: #ffffff;
 }
 
+.lians-cloud__recovery-action {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.lians-cloud__recovery-panel {
+  border-top: 1px solid #2c466c;
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  padding-top: 14px;
+}
+
+.lians-cloud__recovery-panel[hidden],
+.lians-cloud__recovery-summary[hidden] {
+  display: none !important;
+}
+
+.lians-cloud__recovery-panel label {
+  color: #b8c8e4;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lians-cloud__recovery-file,
+.lians-cloud__recovery-passphrase {
+  background: #050a12;
+  border: 1px solid #3a5275;
+  color: #f3f6ff;
+  font: 500 11px/1.4 "Sora", ui-sans-serif, system-ui, sans-serif;
+  min-height: 40px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.lians-cloud__recovery-file:focus-visible,
+.lians-cloud__recovery-passphrase:focus-visible {
+  border-color: #6f98ff;
+  outline: 2px solid rgb(63 120 255 / 25%);
+}
+
+.lians-cloud__recovery-summary {
+  background: rgb(51 230 154 / 5%);
+  border: 1px solid rgb(51 230 154 / 30%);
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 14px;
+}
+
+.lians-cloud__recovery-summary p {
+  margin: 0;
+}
+
+.lians-cloud__devices {
+  background: #080f1a;
+  border: 1px solid var(--lians-cloud-line);
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.lians-cloud__devices[hidden],
+.lians-cloud__enrollment[hidden],
+.lians-cloud__request-list[hidden],
+.lians-cloud__device-list[hidden],
+.lians-cloud__button[hidden] {
+  display: none !important;
+}
+
+.lians-cloud__devices-top {
+  align-items: flex-start;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+
+.lians-cloud__devices-top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lians-cloud__devices-title {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lians-cloud__devices-copy {
+  color: var(--lians-cloud-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.lians-cloud__device-count {
+  border: 1px solid #2c466c;
+  color: #8eafff;
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 7px 9px;
+}
+
+.lians-cloud__device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.lians-cloud__button--device {
+  background: #0d1a2d;
+  border-color: #3a5e91;
+  color: #dbe6ff;
+  min-height: 38px;
+}
+
+.lians-cloud__button--device:hover:not(:disabled) {
+  background: #142746;
+  border-color: #6390ff;
+}
+
+.lians-cloud__enrollment {
+  background: linear-gradient(135deg, rgb(63 120 255 / 13%), rgb(51 230 154 / 5%));
+  border: 1px solid #426cb4;
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.lians-cloud__enrollment-label,
+.lians-cloud__enrollment-copy {
+  margin: 0;
+}
+
+.lians-cloud__enrollment-label,
+.lians-cloud__request-label {
+  color: #8cafff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.lians-cloud__code,
+.lians-cloud__request-code {
+  color: #ffffff;
+  display: block;
+  font-family: "Michroma", "Sora", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(24px, 5vw, 38px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  margin-top: 10px;
+}
+
+.lians-cloud__enrollment-copy,
+.lians-cloud__request-help {
+  color: #b7c7e2;
+  font-size: 11px;
+  line-height: 1.55;
+  margin-top: 10px;
+}
+
+.lians-cloud__enrollment-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 13px;
+}
+
+.lians-cloud__text-action {
+  background: transparent;
+  border: 0;
+  color: #8eafff;
+  cursor: pointer;
+  font: 700 10px/1 "Sora", ui-sans-serif, system-ui, sans-serif;
+  padding: 5px 0;
+}
+
+.lians-cloud__text-action:hover,
+.lians-cloud__text-action:focus-visible {
+  color: #ffffff;
+  outline: none;
+  text-decoration: underline;
+}
+
+.lians-cloud__request-list,
+.lians-cloud__device-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lians-cloud__request {
+  border-left: 2px solid #6f98ff;
+  background: #0b1626;
+  display: grid;
+  gap: 7px;
+  padding: 15px;
+}
+
+.lians-cloud__request-name {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lians-cloud__request-code {
+  font-size: 22px;
+  margin-top: 2px;
+}
+
+.lians-cloud__button--approve {
+  background: #1d8e65;
+  color: #ffffff;
+  justify-self: start;
+  margin-top: 6px;
+  min-height: 38px;
+}
+
+.lians-cloud__button--approve:hover:not(:disabled) {
+  background: #25a878;
+}
+
+.lians-cloud__request-empty {
+  color: #aabbd6;
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 12px 0 2px;
+}
+
+.lians-cloud__managed-device {
+  background: #0b1626;
+  border-left: 2px solid #3f78ff;
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+}
+
+.lians-cloud__managed-device-top,
+.lians-cloud__managed-device-top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lians-cloud__managed-device-name {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lians-cloud__managed-device-state {
+  color: #8eafff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.lians-cloud__managed-device-warning {
+  color: #aabbd6;
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.lians-cloud__button--remove-device {
+  background: transparent;
+  border-color: #744052;
+  color: #ff9bad;
+  justify-self: start;
+  min-height: 38px;
+}
+
+.lians-cloud__button--remove-device[data-armed="true"] {
+  background: #6e2437;
+  border-color: #ff6c89;
+  color: #ffffff;
+}
+
 .lians-cloud__metrics {
   color: #8193b2;
   font-size: 10px;
@@ -338,6 +614,15 @@
 
   .lians-cloud__button--danger {
     margin-left: 0;
+  }
+
+  .lians-cloud__devices-top {
+    flex-direction: column;
+  }
+
+  .lians-cloud__device-actions,
+  .lians-cloud__enrollment-actions {
+    flex-direction: column;
   }
 }
 

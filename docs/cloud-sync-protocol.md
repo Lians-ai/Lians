@@ -8,9 +8,14 @@
 > a verified consumer `memory:sync` OAuth scope. The native Bridge now implements
 > system-browser Authorization Code + PKCE, encrypted rotating-token storage,
 > and automatic pull-before-recall / write-through-after-change orchestration.
-> A production identity provider, recovery, billing enforcement, device UI, and
-> the sync UI are not generally available yet. This document is an engineering
-> contract, not a claim that Lians Cloud is live.
+> The packaged App now includes consumer sync controls and a short-code Add
+> Device / approval flow with encrypted resumable local state. Signed device
+> removal now rotates the workspace key only to surviving devices and publishes
+> a fresh encrypted snapshot. User-held encrypted backups now provide a tested
+> all-devices-lost recovery path. A production identity provider, cloud-only
+> recovery, billing enforcement, external cryptographic review, and signed
+> release qualification are not generally available yet.
+> This document is an engineering contract, not a claim that Lians Cloud is live.
 
 ## Product promise
 
@@ -61,6 +66,28 @@ revisions, duplicate revisions, stale compare-and-swap writes, malformed
 envelopes, and oversized objects without receiving the workspace key or
 plaintext payload.
 
+## Device removal and future confidentiality
+
+The App lists active and previously removed devices without exposing public
+keys or workspace identifiers. Removing a device is a two-step action. The
+initiating active device creates a fresh random workspace key, wraps it
+individually to every other active device, and signs a rotation document that
+binds the old and new epochs, exact prior cloud head, removed device, surviving
+device registry, and every encrypted key wrap.
+
+The service verifies the signer and exact active registry transactionally,
+marks the target unable to write, advances the key epoch, deletes revisions
+encrypted with the obsolete key, and resets the encrypted revision head. The
+initiator then uploads a complete profile snapshot under the new key. An
+offline surviving device verifies the signed rotation and decrypts only its own
+wrap before accepting new revisions. A removed device receives no wrap, cannot
+decrypt future revisions, and cannot publish.
+
+This is future confidentiality, not remote erasure. A removed computer may
+retain memory it downloaded before removal. The App states that limitation next
+to the action and preserves signed rotation evidence instead of claiming that
+old local copies disappeared.
+
 ## Merge, correction, and forgetting
 
 The local merge runs in one SQLite transaction and re-encrypts incoming content
@@ -82,11 +109,13 @@ an automatic merge from silently choosing between contradictory corrections.
 
 ## Cloud storage contract
 
-The authenticated server namespace must own exactly the workspaces, device
-grants, and encrypted revisions associated with that account. A production
+The authenticated server namespace must own exactly the workspaces, short-lived
+enrollment exchanges, device grants, signed key rotations, and encrypted
+revisions associated with that account. A production
 implementation persists only:
 
 - public device descriptors and signed grants;
+- signed removal evidence and recipient-encrypted future-key wraps;
 - encrypted revision envelopes and their public chain metadata;
 - account entitlement, quota, and operational metadata; and
 - security events that do not include decrypted profile fields.
@@ -99,10 +128,12 @@ failure, pulls the missing encrypted revisions, merges locally, and retries.
 The durable `/v1/sync` API implements that same boundary with a 1.5 MB encrypted
 revision limit under the deployment-wide 2 MB request cap, at most 20 active
 devices, 100 revisions per pull page, and a 10,000-revision retention gate. It
-supports workspace creation and head inspection, signed device-grant
-registration and listing, encrypted revision push/pull, and exact confirmed
-workspace deletion. PostgreSQL row-level security is enabled and forced on all
-three sync tables. `OpaqueSyncHTTPClient` gives the Bridge a bounded HTTPS
+supports workspace creation and head inspection, tenant-scoped expiring
+enrollment request/approval exchange, signed device-grant registration and
+listing, device listing, signed removal and key rotation, encrypted revision
+push/pull, and exact confirmed workspace deletion. PostgreSQL row-level
+security is enabled and forced on all five sync tables.
+`OpaqueSyncHTTPClient` gives the Bridge a bounded HTTPS
 transport with redacted API-key or rotating OAuth bearer credentials, sanitized
 failures, stale-head handling, and loopback-only plain HTTP for tests. Consumer
 tokens are verified for signature, issuer, audience, lifetime, and `memory:sync`
@@ -129,20 +160,28 @@ should reuse that mapping rather than create a second account identity.
 
 ## Recovery and revocation gates
 
-The first consumer release may use **another approved device** as the only
-recovery method. That tradeoff must be stated before sync is enabled. Server-
-side password reset cannot decrypt a workspace and must not be presented as
-memory recovery.
+Lians supports two deliberately separate recovery paths. An approved device can
+add a replacement through the matching-code flow. If every approved device is
+lost, a clean device can verify and import a user-held encrypted
+`.liansbackup`, re-encrypt its contents for the new device, and start a fresh
+encrypted cloud workspace. The recovery screen shows memory, activity, and
+receipt counts before import and requires an explicit second confirmation.
+
+Backup recovery requires both the file and its separately kept passphrase.
+Lians cannot reset that encryption. The inaccessible prior cloud workspace may
+remain as ciphertext until account deletion, and the App states that boundary
+instead of claiming it was remotely erased. Server-side password reset cannot
+decrypt a workspace and must not be presented as memory recovery.
 
 Before hosted sync is generally available, Lians still needs:
 
 - production authorization-server configuration and a tested Google sign-in;
-- explicit device revocation plus workspace-key rotation for remaining devices;
-- a recovery-key or trusted-contact design, separately opted into by the user;
+- an optional cloud-only recovery-key or trusted-contact design for users who
+  do not keep an encrypted backup;
 - bounded retry/backoff, offline indicators, and conflict-review UI;
 - account deletion that removes encrypted objects and entitlement metadata;
 - restore, multi-device race, clean-device, and provider-outage qualification;
 - an external review of the protocol and implementation.
 
-Until those gates pass, use the encrypted `.liansbackup` flow for supported
-device migration and disaster recovery.
+The encrypted `.liansbackup` flow is the supported zero-knowledge device
+migration and disaster-recovery path. Cloud-only recovery remains unavailable.

@@ -468,6 +468,176 @@ def test_loopback_cloud_auth_exposes_status_and_confirmed_actions_without_tokens
         thread.join(timeout=5)
 
 
+def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded(tmp_path):
+    calls = []
+
+    class FakeCloudAuth:
+        def status(self):
+            return {"state": "connected", "configured": True, "message": "Connected."}
+
+    class FakeCloudSync:
+        def status(self):
+            return {"state": "connected", "sync_state": "not_started"}
+
+        def pending_device_requests(self):
+            calls.append("list")
+            return {
+                "state": "ready",
+                "count": 1,
+                "requests": [
+                    {
+                        "request_id": "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d",
+                        "verification_code": "ABCD-1234",
+                        "device": {"display_name": "Laptop", "device_id": "device-2"},
+                    }
+                ],
+            }
+
+        def connected_devices(self):
+            calls.append("devices")
+            return {
+                "state": "ready",
+                "count": 2,
+                "devices": [
+                    {
+                        "device_id": "a" * 64,
+                        "display_name": "Laptop",
+                        "state": "active",
+                        "current": False,
+                        "can_remove": True,
+                    }
+                ],
+            }
+
+        def remove_device(self, device_id, *, confirmed=False):
+            if not confirmed:
+                raise ValueError("Protecting future memory requires confirmed=true")
+            assert device_id == "a" * 64
+            calls.append("remove")
+            return {
+                "state": "removed",
+                "future_memory_protected": True,
+                "already_received_may_remain": True,
+                "message": "Laptop cannot decrypt future cloud memory.",
+            }
+
+        def start_device_enrollment(self):
+            calls.append("start")
+            return {
+                "state": "waiting_for_approval",
+                "request_id": "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d",
+                "verification_code": "ABCD-1234",
+            }
+
+        def device_enrollment_status(self):
+            calls.append("check")
+            return {"state": "connected", "device_count": 2}
+
+        def cancel_device_enrollment(self, *, confirmed=False):
+            assert confirmed is True
+            calls.append("cancel")
+            return {"state": "cancelled"}
+
+        def approve_device_request(
+            self, request_id, verification_code, *, confirmed=False
+        ):
+            assert request_id == "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d"
+            assert verification_code == "ABCD-1234"
+            assert confirmed is True
+            calls.append("approve")
+            return {
+                "state": "approved",
+                "device": {"display_name": "Laptop", "device_id": "device-2"},
+            }
+
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        cloud_auth=FakeCloudAuth(),
+        cloud_sync=FakeCloudSync(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        status, requests = _json_request(
+            f"{app.origin}/v1/cloud/device-requests", cookie=cookie
+        )
+        assert status == 200
+        assert requests["requests"][0]["verification_code"] == "ABCD-1234"
+        status, devices = _json_request(
+            f"{app.origin}/v1/cloud/devices", cookie=cookie
+        )
+        assert status == 200
+        assert devices["devices"][0]["display_name"] == "Laptop"
+
+        with pytest.raises(HTTPError) as unconfirmed:
+            _json_request(
+                f"{app.origin}/v1/cloud/device-enrollment/start",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": False},
+            )
+        assert unconfirmed.value.code == 400
+        _, started = _json_request(
+            f"{app.origin}/v1/cloud/device-enrollment/start",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        _, checked = _json_request(
+            f"{app.origin}/v1/cloud/device-enrollment/check",
+            cookie=cookie,
+            origin=app.origin,
+            data={},
+        )
+        _, approved = _json_request(
+            f"{app.origin}/v1/cloud/device-requests/approve",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "request_id": started["request_id"],
+                "verification_code": started["verification_code"],
+                "confirmed": True,
+            },
+        )
+        _, cancelled = _json_request(
+            f"{app.origin}/v1/cloud/device-enrollment/cancel",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        with pytest.raises(HTTPError) as unconfirmed_removal:
+            _json_request(
+                f"{app.origin}/v1/cloud/devices/remove",
+                cookie=cookie,
+                origin=app.origin,
+                data={"device_id": "a" * 64, "confirmed": False},
+            )
+        assert unconfirmed_removal.value.code == 400
+        _, removed = _json_request(
+            f"{app.origin}/v1/cloud/devices/remove",
+            cookie=cookie,
+            origin=app.origin,
+            data={"device_id": "a" * 64, "confirmed": True},
+        )
+        assert checked["state"] == "connected"
+        assert approved["state"] == "approved"
+        assert cancelled["state"] == "cancelled"
+        assert removed["future_memory_protected"] is True
+        assert calls == ["list", "devices", "start", "check", "approve", "cancel", "remove"]
+        public = [requests, devices, started, checked, approved, cancelled, removed]
+        assert "workspace" not in json.dumps(public)
+        assert "signing_public_key" not in json.dumps(public)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
     calls = []
 
@@ -853,10 +1023,25 @@ def test_control_center_disconnect_and_erasure_are_separate_confirmed_actions(
 
 
 def test_control_center_exports_verifies_and_imports_encrypted_portable_memory(tmp_path):
+    recovery_calls = []
+
+    class RecoveryCloudSync:
+        def recover_from_backup(self, *, confirmed=False):
+            assert confirmed is True
+            recovery_calls.append("recover")
+            return {
+                "state": "recovered",
+                "local_memory_recovered": True,
+                "cloud_memory_started": True,
+                "old_cloud_copy_may_remain": True,
+                "memory_scope": "everywhere",
+                "message": "Recovered safely.",
+            }
+
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     content = "Portable app preference: keep every status update concise."
     remembered = store.remember(content, scope="global", source="Lians App backup test")
-    app = BridgeApplication(store, port=0)
+    app = BridgeApplication(store, port=0, cloud_sync=RecoveryCloudSync())
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
     app.port = server.server_port
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -912,12 +1097,16 @@ def test_control_center_exports_verifies_and_imports_encrypted_portable_memory(t
                 "passphrase": passphrase,
                 "backup": base64.b64encode(backup).decode(),
                 "confirmed": True,
+                "recover_cloud": True,
             },
         )
         assert status == 200
         assert imported["status"] == "imported"
         assert imported["imported"]["memories"] == 1
         assert imported["re_encrypted_for_this_device"] is True
+        assert imported["cloud_recovery"]["state"] == "recovered"
+        assert imported["cloud_recovery"]["old_cloud_copy_may_remain"] is True
+        assert recovery_calls == ["recover"]
         assert "path" not in imported
         [restored] = store.list(state="current")
         assert restored["id"] == remembered["id"]

@@ -106,9 +106,10 @@ installed publisher and the operating system accepts the signature; otherwise
 Lians only selects the file in Downloads for the user to review.
 
 Supported targets are Claude Desktop, Cursor, Windsurf, Antigravity CLI, Gemini
-CLI, Codex, Cline CLI, and OpenCode. Cline uses its documented CLI settings file at
-`~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its documented
-global configuration file at `~/.config/opencode/opencode.json`.
+CLI, Codex, Cline CLI, and OpenCode. Cline uses its documented CLI settings
+file at `~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its
+documented global configuration file at
+`~/.config/opencode/opencode.json`.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required for local mode. Optional Lians Cloud continuity uses an
@@ -160,6 +161,30 @@ Cursor-origin preference can appear on a separate Codex device, be corrected
 for Claude, and then be forgotten everywhere. Cloud failure leaves the local
 save successful and reports that encrypted sync is pending.
 
+The packaged Lians App now provides the ordinary Add Device path. A new device
+signs into the same account, chooses **Add this device**, and displays a
+short-lived matching code. An existing connected device reviews the public
+device name and code, explicitly approves it, and wraps the workspace key only
+for that recipient. The request survives an app restart in locally encrypted
+state, is removed after acceptance, and never asks the user for a workspace ID,
+JSON file, terminal command, API key, or recovery phrase.
+
+The same panel can verify connected devices and remove an old device without
+showing keys or workspace identifiers. Removal advances the encryption epoch,
+wraps a fresh workspace key only to surviving devices, deletes obsolete
+encrypted cloud revisions, and immediately publishes a fresh encrypted
+snapshot. The UI deliberately says that memory already downloaded to the old
+device may remain there; removal protects future cloud memory and does not
+pretend to remotely erase that computer.
+
+If every trusted device is unavailable, choose **Recover from encrypted
+backup** after signing in on a clean device. Lians verifies the user-held
+`.liansbackup`, shows its memory, activity, and receipt counts, imports it only
+after a second confirmation, re-encrypts it for the replacement device, and
+starts a fresh encrypted cloud workspace. The backup passphrase cannot be reset
+by Lians, and an inaccessible old encrypted cloud copy may remain until account
+deletion.
+
 Development builds opt into this path with deployment-provided public values;
 there is no client secret:
 
@@ -170,12 +195,12 @@ LIANS_OAUTH_CLIENT_ID=YOUR_PUBLIC_NATIVE_CLIENT_ID
 LIANS_OAUTH_AUDIENCE=https://api.lians.ai
 ```
 
-This technical preview is not a claim that hosted sync or account recovery is
-generally available. The ordinary supported migration path remains **Move
-memory safely** until the production identity provider, device enrollment UI,
-device revocation and key rotation, recovery, provider-outage qualification,
-and consumer sync controls pass their release gates. The complete boundary is
-documented in [`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
+This technical preview is not a claim that hosted sync or cloud-only account
+recovery is generally available. **Move memory safely** is the supported
+zero-knowledge migration and all-devices-lost recovery path until the production
+identity provider, provider-outage qualification, external cryptographic review,
+and signed release gates are complete. The complete boundary is documented in
+[`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
 
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through
 prompt hooks. Gemini CLI uses `BeforeAgent`; Google's current Antigravity client

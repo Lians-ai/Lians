@@ -56,12 +56,12 @@ def test_database_gates_require_current_alembic_head() -> None:
     for workflow_path in (WORKFLOW_PATH, STAGING_WORKFLOW_PATH):
         workflow = workflow_path.read_text(encoding="utf-8")
 
-        assert "--expected-revision 0031_zero_knowledge_sync" in workflow
+        assert "--expected-revision 0033_sync_device_key_rotation" in workflow
 
     production_workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     staging_workflow = STAGING_WORKFLOW_PATH.read_text(encoding="utf-8")
     assert production_workflow.count("--expected-revision") == 1
-    assert staging_workflow.count("--expected-revision 0031_zero_knowledge_sync") == 1
+    assert staging_workflow.count("--expected-revision 0033_sync_device_key_rotation") == 1
 
 
 def test_post_deploy_release_identity_and_smoke_gates_remain() -> None:

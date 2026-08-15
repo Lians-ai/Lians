@@ -16,6 +16,7 @@ from .sync import SyncPreconditionError, SyncProtocolError, SyncState
 MAX_CLOUD_REQUEST_BYTES = 1_800_000
 MAX_CLOUD_RESPONSE_BYTES = 2_000_000
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
@@ -78,6 +79,19 @@ def _workspace_id(value: str) -> str:
     return value
 
 
+def _request_id(value: str) -> str:
+    try:
+        return _workspace_id(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Lians device request ID is invalid") from exc
+
+
+def _device_id(value: str) -> str:
+    if not isinstance(value, str) or not _HEX_64.fullmatch(value):
+        raise ValueError("Lians device ID is invalid")
+    return value
+
+
 def _detail(body: bytes, *, status: int) -> str:
     if not body:
         return f"Lians Cloud request failed with status {status}"
@@ -88,7 +102,11 @@ def _detail(body: bytes, *, status: int) -> str:
             return detail
         if isinstance(detail, dict):
             message = detail.get("message")
-            if isinstance(message, str) and 0 < len(message) <= 300 and not _CONTROL.search(message):
+            if (
+                isinstance(message, str)
+                and 0 < len(message) <= 300
+                and not _CONTROL.search(message)
+            ):
                 return message
     except (json.JSONDecodeError, UnicodeDecodeError):
         pass
@@ -129,12 +147,16 @@ class OpaqueSyncHTTPClient:
     ) -> dict[str, Any]:
         if not path.startswith("/v1/sync/") or ".." in path or _CONTROL.search(path):
             raise ValueError("Lians Cloud request path is invalid")
-        encoded = None if payload is None else json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
+        encoded = (
+            None
+            if payload is None
+            else json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        )
         if encoded is not None and len(encoded) > MAX_CLOUD_REQUEST_BYTES:
             raise SyncProtocolError("Encrypted sync request exceeds the cloud safety limit")
         headers = {
@@ -146,9 +168,7 @@ class OpaqueSyncHTTPClient:
             headers["X-API-Key"] = self._credential
         else:
             assert self._bearer_token_provider is not None
-            headers["Authorization"] = (
-                "Bearer " + _credential(self._bearer_token_provider())
-            )
+            headers["Authorization"] = "Bearer " + _credential(self._bearer_token_provider())
         request = urllib.request.Request(
             f"{self.base_url}{path}",
             data=encoded,
@@ -187,6 +207,48 @@ class OpaqueSyncHTTPClient:
             },
         )
 
+    def create_enrollment(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            raise TypeError("Lians device request is invalid")
+        return self._request("POST", "/v1/sync/enrollments", {"request": request})
+
+    def enrollments(self) -> list[dict[str, Any]]:
+        document = self._request("GET", "/v1/sync/enrollments")
+        enrollments = document.get("enrollments")
+        if not isinstance(enrollments, list) or not all(
+            isinstance(item, dict) for item in enrollments
+        ):
+            raise SyncCloudError("Lians Cloud returned an invalid device request list")
+        return enrollments
+
+    def enrollment(self, request_id: str) -> dict[str, Any]:
+        request_id = _request_id(request_id)
+        return self._request("GET", f"/v1/sync/enrollments/{request_id}")
+
+    def approve_enrollment(
+        self,
+        request_id: str,
+        approval: dict[str, Any],
+    ) -> dict[str, Any]:
+        request_id = _request_id(request_id)
+        if not isinstance(approval, dict):
+            raise TypeError("Lians device approval is invalid")
+        return self._request(
+            "POST",
+            f"/v1/sync/enrollments/{request_id}/approval",
+            {"approval": approval},
+        )
+
+    def delete_enrollment(self, request_id: str, *, confirmed: bool = False) -> dict[str, Any]:
+        request_id = _request_id(request_id)
+        if not confirmed:
+            raise ValueError("Device request removal requires confirmed=true")
+        return self._request(
+            "DELETE",
+            f"/v1/sync/enrollments/{request_id}",
+            {"confirmed": True},
+        )
+
     def head(self, workspace_id: str) -> dict[str, Any]:
         workspace_id = _workspace_id(workspace_id)
         return self._request("GET", f"/v1/sync/workspaces/{workspace_id}/head")
@@ -208,13 +270,52 @@ class OpaqueSyncHTTPClient:
 
     def grants(self, workspace_id: str) -> list[dict[str, Any]]:
         workspace_id = _workspace_id(workspace_id)
-        document = self._request(
-            "GET", f"/v1/sync/workspaces/{workspace_id}/devices/grants"
-        )
+        document = self._request("GET", f"/v1/sync/workspaces/{workspace_id}/devices/grants")
         grants = document.get("grants")
         if not isinstance(grants, list) or not all(isinstance(item, dict) for item in grants):
             raise SyncCloudError("Lians Cloud returned an invalid device registry")
         return grants
+
+    def devices(self, workspace_id: str) -> dict[str, Any]:
+        workspace_id = _workspace_id(workspace_id)
+        document = self._request("GET", f"/v1/sync/workspaces/{workspace_id}/devices")
+        devices = document.get("devices")
+        if not isinstance(devices, list) or not all(isinstance(item, dict) for item in devices):
+            raise SyncCloudError("Lians Cloud returned an invalid device registry")
+        return document
+
+    def key_rotations(self, workspace_id: str, *, after: int) -> dict[str, Any]:
+        workspace_id = _workspace_id(workspace_id)
+        if type(after) is not int or after < 0:
+            raise ValueError("Lians key-rotation cursor is invalid")
+        document = self._request(
+            "GET",
+            f"/v1/sync/workspaces/{workspace_id}/key-rotations?after={after}",
+        )
+        rotations = document.get("rotations")
+        if not isinstance(rotations, list) or not all(isinstance(item, dict) for item in rotations):
+            raise SyncCloudError("Lians Cloud returned an invalid key-rotation list")
+        return document
+
+    def remove_device(
+        self,
+        workspace_id: str,
+        device_id: str,
+        rotation: dict[str, Any],
+        *,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        workspace_id = _workspace_id(workspace_id)
+        device_id = _device_id(device_id)
+        if not confirmed:
+            raise ValueError("Protecting future memory requires confirmed=true")
+        if not isinstance(rotation, dict) or set(rotation) != {"rotation", "signature"}:
+            raise TypeError("Lians workspace-key rotation is invalid")
+        return self._request(
+            "POST",
+            f"/v1/sync/workspaces/{workspace_id}/devices/{device_id}/remove",
+            rotation,
+        )
 
     def push(self, workspace_id: str, envelope: dict[str, Any]) -> dict[str, Any]:
         workspace_id = _workspace_id(workspace_id)

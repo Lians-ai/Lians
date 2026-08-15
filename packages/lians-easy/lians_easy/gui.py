@@ -142,10 +142,16 @@ class SetupApp:
 
         app_list = tk.Frame(self.card, background=PANEL)
         app_list.pack(fill="x")
-        for target in self.targets.values():
+        app_columns = [
+            tk.Frame(app_list, background=PANEL),
+            tk.Frame(app_list, background=PANEL),
+        ]
+        app_columns[0].pack(side="left", fill="x", expand=True, padx=(0, 14))
+        app_columns[1].pack(side="left", fill="x", expand=True, padx=(14, 0))
+        for index, target in enumerate(self.targets.values()):
             variable = tk.BooleanVar(value=target.detected or target.configured)
             self.choices[target.key] = variable
-            row = self._client_row(app_list, target, variable)
+            row = self._client_row(app_columns[index % 2], target, variable)
             if detected and not target.detected and not target.configured:
                 row.pack_forget()
                 self.other_rows.append(row)

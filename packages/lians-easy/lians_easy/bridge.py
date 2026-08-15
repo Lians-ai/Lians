@@ -214,7 +214,9 @@ class BridgeApplication:
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "application/vnd.lians.backup+json")
                 self.send_header("Content-Length", str(len(body)))
-                self.send_header("Content-Disposition", 'attachment; filename="Lians-Memory.liansbackup"')
+                self.send_header(
+                    "Content-Disposition", 'attachment; filename="Lians-Memory.liansbackup"'
+                )
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header(
@@ -336,6 +338,34 @@ class BridgeApplication:
                 if parsed.path == "/v1/cloud/status":
                     self._json(HTTPStatus.OK, application.cloud_sync.status())
                     return
+                if parsed.path == "/v1/cloud/device-requests":
+                    try:
+                        result = application.cloud_sync.pending_device_requests()
+                    except (
+                        OSError,
+                        RuntimeError,
+                        ValueError,
+                        LookupError,
+                        TypeError,
+                    ) as exc:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                        return
+                    self._json(HTTPStatus.OK, result)
+                    return
+                if parsed.path == "/v1/cloud/devices":
+                    try:
+                        result = application.cloud_sync.connected_devices()
+                    except (
+                        OSError,
+                        RuntimeError,
+                        ValueError,
+                        LookupError,
+                        TypeError,
+                    ) as exc:
+                        self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                        return
+                    self._json(HTTPStatus.OK, result)
+                    return
                 if parsed.path == "/v1/update":
                     try:
                         result = application.update_checker()
@@ -398,7 +428,11 @@ class BridgeApplication:
 
                     def backup_passphrase(*, confirm: bool = False) -> str:
                         passphrase = data.get("passphrase")
-                        if not isinstance(passphrase, str) or not passphrase or len(passphrase) > 1024:
+                        if (
+                            not isinstance(passphrase, str)
+                            or not passphrase
+                            or len(passphrase) > 1024
+                        ):
                             raise ValueError("Enter a valid backup passphrase")
                         if confirm:
                             confirmation = data.get("confirmation")
@@ -424,7 +458,9 @@ class BridgeApplication:
 
                     if parsed.path == "/v1/backups/export":
                         try:
-                            with tempfile.TemporaryDirectory(prefix="lians-app-export-") as directory:
+                            with tempfile.TemporaryDirectory(
+                                prefix="lians-app-export-"
+                            ) as directory:
                                 backup = Path(directory) / "Lians-Memory.liansbackup"
                                 export_backup(
                                     application.store,
@@ -433,7 +469,9 @@ class BridgeApplication:
                                 )
                                 content = backup.read_bytes()
                         except OSError as exc:
-                            raise RuntimeError("Lians could not prepare the encrypted backup") from exc
+                            raise RuntimeError(
+                                "Lians could not prepare the encrypted backup"
+                            ) from exc
                         self._backup_download(content)
                         return
 
@@ -463,9 +501,65 @@ class BridgeApplication:
                             ),
                         )
                         return
+                    if parsed.path == "/v1/cloud/device-enrollment/start":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Adding this device requires confirmed=true")
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.start_device_enrollment(),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-enrollment/check":
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.device_enrollment_status(),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-enrollment/cancel":
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.cancel_device_enrollment(
+                                confirmed=data.get("confirmed") is True
+                            ),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/device-requests/approve":
+                        request_id = data.get("request_id")
+                        verification_code = data.get("verification_code")
+                        if not isinstance(request_id, str) or len(request_id) > 64:
+                            raise ValueError("Choose a valid device request")
+                        if not isinstance(verification_code, str) or len(verification_code) > 16:
+                            raise ValueError("Enter the matching verification code")
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.approve_device_request(
+                                request_id,
+                                verification_code,
+                                confirmed=data.get("confirmed") is True,
+                            ),
+                        )
+                        return
+                    if parsed.path == "/v1/cloud/devices/remove":
+                        device_id = data.get("device_id")
+                        if not isinstance(device_id, str) or len(device_id) != 64:
+                            raise ValueError("Choose a valid connected device")
+                        self._json(
+                            HTTPStatus.OK,
+                            application.cloud_sync.remove_device(
+                                device_id,
+                                confirmed=data.get("confirmed") is True,
+                            ),
+                        )
+                        return
                     if parsed.path in {"/v1/backups/verify", "/v1/backups/import"}:
+                        recover_cloud = data.get("recover_cloud", False)
+                        if type(recover_cloud) is not bool:
+                            raise TypeError("recover_cloud must be true or false")
+                        cloud_recovery = None
                         try:
-                            with tempfile.TemporaryDirectory(prefix="lians-app-import-") as directory:
+                            with tempfile.TemporaryDirectory(
+                                prefix="lians-app-import-"
+                            ) as directory:
                                 backup = Path(directory) / "uploaded.liansbackup"
                                 uploaded_backup(backup)
                                 if parsed.path == "/v1/backups/verify":
@@ -478,11 +572,20 @@ class BridgeApplication:
                                         backup,
                                         backup_passphrase(),
                                     )
+                                    if recover_cloud:
+                                        cloud_recovery = application.cloud_sync.recover_from_backup(
+                                            confirmed=True
+                                        )
                         except OSError as exc:
                             raise RuntimeError("Lians could not read the encrypted backup") from exc
+                        public_result = {
+                            key: value for key, value in result.items() if key != "path"
+                        }
+                        if cloud_recovery is not None:
+                            public_result["cloud_recovery"] = cloud_recovery
                         self._json(
                             HTTPStatus.OK,
-                            {key: value for key, value in result.items() if key != "path"},
+                            public_result,
                         )
                         return
 
@@ -562,11 +665,7 @@ class BridgeApplication:
                             }
                             self._json(
                                 HTTPStatus.OK,
-                                {
-                                    key: value
-                                    for key, value in result.items()
-                                    if key in public_keys
-                                },
+                                {key: value for key, value in result.items() if key in public_keys},
                             )
                         return
 
@@ -574,8 +673,10 @@ class BridgeApplication:
                         if data.get("confirmed") is not True:
                             raise ValueError("Disconnecting AI apps requires confirmed=true")
                         requested = data.get("clients")
-                        if not isinstance(requested, list) or not requested or not all(
-                            isinstance(client, str) and client for client in requested
+                        if (
+                            not isinstance(requested, list)
+                            or not requested
+                            or not all(isinstance(client, str) and client for client in requested)
                         ):
                             raise TypeError("clients must be a non-empty list of AI app IDs")
                         keys = list(dict.fromkeys(requested))
@@ -584,9 +685,7 @@ class BridgeApplication:
                         if unknown:
                             raise ValueError("Unknown clients: " + ", ".join(unknown))
                         result = uninstall(keys)
-                        statuses = {
-                            item["client"]: item["status"] for item in result["clients"]
-                        }
+                        statuses = {item["client"]: item["status"] for item in result["clients"]}
                         self._json(
                             HTTPStatus.OK,
                             {

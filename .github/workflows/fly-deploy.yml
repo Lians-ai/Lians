@@ -81,7 +81,7 @@ jobs:
           python scripts/check_staging_database.py \
             --host 127.0.0.1 \
             --port 15432 \
-            --expected-revision 0031_zero_knowledge_sync
+            --expected-revision 0033_sync_device_key_rotation
 
   deploy:
     name: Snapshot and deploy production

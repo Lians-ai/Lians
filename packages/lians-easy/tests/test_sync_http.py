@@ -75,6 +75,77 @@ def test_http_transport_uses_rotating_oauth_bearer_without_retaining_it():
     assert "access-token" not in repr(client)
 
 
+def test_http_transport_supports_the_short_code_device_exchange():
+    request_id = "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d"
+    enrollment = {"request_id": request_id, "device": {"display_name": "Laptop"}}
+    calls = []
+
+    def opener(request, *, timeout):
+        calls.append(request)
+        if request.get_method() == "GET" and request.full_url.endswith("/enrollments"):
+            return Response({"enrollments": [enrollment]})
+        return Response({"status": "ok", **enrollment})
+
+    client = OpaqueSyncHTTPClient(
+        "https://cloud.lians.ai",
+        bearer_token_provider=lambda: "access-token",
+        opener=opener,
+    )
+    assert client.create_enrollment(enrollment)["status"] == "ok"
+    assert client.enrollments() == [enrollment]
+    assert client.enrollment(request_id)["request_id"] == request_id
+    assert client.approve_enrollment(request_id, {"signed": True})["status"] == "ok"
+    assert client.delete_enrollment(request_id, confirmed=True)["status"] == "ok"
+
+    assert [request.get_method() for request in calls] == [
+        "POST",
+        "GET",
+        "GET",
+        "POST",
+        "DELETE",
+    ]
+    assert json.loads(calls[0].data) == {"request": enrollment}
+    assert json.loads(calls[3].data) == {"approval": {"signed": True}}
+    assert json.loads(calls[4].data) == {"confirmed": True}
+    with pytest.raises(ValueError, match="confirmed=true"):
+        client.delete_enrollment(request_id)
+
+
+def test_http_transport_supports_key_free_device_management_and_rotation():
+    workspace_id = "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d"
+    device_id = "a" * 64
+    pair = {"rotation": {"rotation_id": workspace_id}, "signature": {"value": "signed"}}
+    calls = []
+
+    def opener(request, *, timeout):
+        calls.append(request)
+        if request.full_url.endswith("/devices"):
+            return Response({"epoch": 2, "devices": []})
+        if "key-rotations" in request.full_url:
+            return Response({"epoch": 2, "rotations": [pair]})
+        return Response({"status": "removed", "future_memory_protected": True})
+
+    client = OpaqueSyncHTTPClient(
+        "https://cloud.lians.ai",
+        bearer_token_provider=lambda: "access-token",
+        opener=opener,
+    )
+    assert client.devices(workspace_id)["devices"] == []
+    assert client.key_rotations(workspace_id, after=1)["rotations"] == [pair]
+    with pytest.raises(ValueError, match="confirmed=true"):
+        client.remove_device(workspace_id, device_id, pair)
+    removed = client.remove_device(
+        workspace_id,
+        device_id,
+        pair,
+        confirmed=True,
+    )
+    assert removed["future_memory_protected"] is True
+    assert calls[1].full_url.endswith("/key-rotations?after=1")
+    assert calls[2].full_url.endswith(f"/devices/{device_id}/remove")
+    assert json.loads(calls[2].data) == pair
+
+
 def test_http_transport_requires_exactly_one_auth_mode():
     with pytest.raises(ValueError, match="exactly one"):
         OpaqueSyncHTTPClient("https://cloud.lians.ai")

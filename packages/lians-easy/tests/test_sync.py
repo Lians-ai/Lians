@@ -7,16 +7,20 @@ import pytest
 from lians_easy.store import MemoryStore
 from lians_easy.sync import (
     DeviceIdentity,
+    DeviceRevokedError,
     OpaqueRevisionLog,
+    PendingEnrollment,
     SyncPreconditionError,
     SyncProtocolError,
     SyncState,
     accept_enrollment,
     acknowledge_revision,
     apply_device_grant,
+    apply_key_rotation,
     apply_revision,
     approve_enrollment,
     create_enrollment_request,
+    prepare_key_rotation,
     prepare_revision,
 )
 
@@ -126,6 +130,23 @@ def test_state_is_local_key_protected_signed_and_bound_to_device(tmp_path):
     other_store, other_identity = _device(tmp_path, "Other PC")
     with pytest.raises(SyncProtocolError):
         SyncState.load(path, other_store.cipher, other_identity)
+
+
+def test_pending_enrollment_is_encrypted_resumable_and_device_bound(tmp_path):
+    store, identity = _device(tmp_path, "New laptop")
+    pending = PendingEnrollment.create(identity)
+    path = tmp_path / "New laptop" / "pending-enrollment.json"
+    pending.save(path, store.cipher, identity)
+
+    encoded = path.read_bytes()
+    assert pending.request["verification_code"].encode() not in encoded
+    assert pending.request["device"]["display_name"].encode() not in encoded
+    loaded = PendingEnrollment.load(path, store.cipher, identity)
+    assert loaded.request == pending.request
+
+    other_store, other_identity = _device(tmp_path, "Other laptop")
+    with pytest.raises(SyncProtocolError, match="different local device"):
+        PendingEnrollment.load(path, other_store.cipher, other_identity)
 
 
 def test_revision_tampering_replay_and_stale_push_fail_closed(tmp_path):
@@ -240,3 +261,104 @@ def test_transitive_signed_device_grant_can_be_applied_before_revision(tmp_path)
         apply_device_grant(first_state, item["grant"], item["signature"])
     assert third_identity.device_id in first_state.trusted_devices
     assert third_state.workspace_key == first_state.workspace_key
+
+
+def test_signed_removal_rotates_key_for_survivors_and_excludes_removed_device(tmp_path):
+    first_store, first_identity = _device(tmp_path, "Main PC")
+    first_state = SyncState.create(first_identity)
+    cloud = OpaqueRevisionLog()
+    cloud.create_workspace(first_state)
+    first_store.remember("Launch notes from before removal", scope="global")
+    _push(first_store, first_identity, first_state, cloud)
+
+    second_store, second_identity, second_state, _, _ = _enroll_second_device(
+        tmp_path, first_state, first_identity, cloud
+    )
+    _pull(second_store, second_state, cloud)
+    third_store, third_identity = _device(tmp_path, "Work laptop")
+    request = create_enrollment_request(third_identity, now=NOW)
+    approval = approve_enrollment(first_state, first_identity, request, now=NOW)
+    cloud.register_approval(approval)
+    third_state = accept_enrollment(
+        third_store,
+        third_identity,
+        request,
+        approval,
+        tmp_path / "Work laptop" / "sync-state.json",
+        now=NOW,
+    )
+    for item in cloud.grants(first_state.workspace_id):
+        apply_device_grant(second_state, item["grant"], item["signature"])
+
+    previous_key = first_state.workspace_key
+    pair = prepare_key_rotation(
+        first_state,
+        first_identity,
+        second_identity.device_id,
+        now=NOW,
+    )
+    result = cloud.remove_device(first_state.workspace_id, second_identity.device_id, pair)
+    assert result["future_memory_protected"] is True
+    assert result["encrypted_revisions_deleted"] == 1
+    assert previous_key not in json.dumps(pair).encode()
+
+    first_report = apply_key_rotation(first_state, first_identity, pair)
+    third_report = apply_key_rotation(third_state, third_identity, pair)
+    assert first_report["epoch"] == third_report["epoch"] == 2
+    assert first_state.workspace_key == third_state.workspace_key != previous_key
+    assert second_identity.device_id in first_state.revoked_device_ids
+    with pytest.raises(DeviceRevokedError, match="removed"):
+        apply_key_rotation(second_state, second_identity, pair)
+
+    first_store.remember("Future launch phrase is cobalt", scope="global")
+    future = _push(first_store, first_identity, first_state, cloud)
+    apply_revision(third_store, third_state, future)
+    assert third_store.recall("future launch phrase")[0]["content"] == (
+        "Future launch phrase is cobalt"
+    )
+    with pytest.raises(SyncProtocolError, match="another workspace"):
+        apply_revision(second_store, second_state, future)
+
+    fourth_store, fourth_identity = _device(tmp_path, "New tablet")
+    fourth_request = create_enrollment_request(fourth_identity, now=NOW)
+    fourth_approval = approve_enrollment(
+        first_state, first_identity, fourth_request, now=NOW
+    )
+    assert fourth_approval["grant"]["version"] == 2
+    registry_ids = {
+        device["device_id"]
+        for device in fourth_approval["grant"]["trusted_devices"]
+    }
+    assert second_identity.device_id not in registry_ids
+    assert registry_ids == {
+        first_identity.device_id,
+        third_identity.device_id,
+        fourth_identity.device_id,
+    }
+    cloud.register_approval(fourth_approval)
+    fourth_state = accept_enrollment(
+        fourth_store,
+        fourth_identity,
+        fourth_request,
+        fourth_approval,
+        tmp_path / "New tablet" / "sync-state.json",
+        now=NOW,
+    )
+    assert fourth_state.epoch == 2
+    assert fourth_state.workspace_key == first_state.workspace_key
+    assert set(fourth_state.active_devices) == registry_ids
+
+    tampered = json.loads(json.dumps(pair))
+    ciphertext = tampered["rotation"]["key_wraps"][0]["ciphertext"]
+    tampered["rotation"]["key_wraps"][0]["ciphertext"] = (
+        ("A" if ciphertext[0] != "A" else "B") + ciphertext[1:]
+    )
+    replay_state = SyncState(
+        workspace_id=third_state.workspace_id,
+        epoch=1,
+        workspace_key=previous_key,
+        device=third_state.device,
+        trusted_devices=third_state.trusted_devices,
+    )
+    with pytest.raises(SyncProtocolError, match="signature"):
+        apply_key_rotation(replay_state, third_identity, tampered)

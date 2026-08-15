@@ -50,4 +50,4 @@ def test_expected_revision_defaults_to_current_alembic_head(
 ) -> None:
     monkeypatch.setattr(sys, "argv", [str(SCRIPT_PATH)])
 
-    assert MODULE.parse_args().expected_revision == "0031_zero_knowledge_sync"
+    assert MODULE.parse_args().expected_revision == "0033_sync_device_key_rotation"
