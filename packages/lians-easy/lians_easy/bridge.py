@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import webbrowser
+from collections.abc import Callable
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,10 +19,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from . import __version__
 from .installer import client_targets, uninstall
 from .mcp import default_data_path
 from .project import detect_project
 from .store import MemoryStore
+from .updates import check_for_update
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7317
@@ -143,6 +146,7 @@ class BridgeApplication:
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
         app_dir: str | Path | None = None,
+        update_checker: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         if host not in {"127.0.0.1", "::1", "localhost"}:
             raise ValueError("Lians Bridge only binds to the loopback interface")
@@ -152,6 +156,7 @@ class BridgeApplication:
         selected_app_dir = Path(app_dir).resolve() if app_dir else PACKAGED_APP_DIR
         self.app_dir = selected_app_dir if (selected_app_dir / "index.html").is_file() else None
         self.session_token = secrets.token_urlsafe(32)
+        self.update_checker = update_checker or check_for_update
 
     @property
     def origin(self) -> str:
@@ -279,6 +284,7 @@ class BridgeApplication:
                         HTTPStatus.OK,
                         {
                             "bridge": "ready",
+                            "version": __version__,
                             "project": detect_project(cwd).public(),
                             "memory": application.store.stats(),
                             "integrations": [
@@ -292,6 +298,23 @@ class BridgeApplication:
                             ],
                         },
                     )
+                    return
+                if parsed.path == "/v1/update":
+                    try:
+                        result = application.update_checker()
+                    except (
+                        OSError,
+                        RuntimeError,
+                        TypeError,
+                        ValueError,
+                        json.JSONDecodeError,
+                    ):
+                        result = {
+                            "status": "unavailable",
+                            "current_version": __version__,
+                            "message": "Lians could not securely check for an update. Try again later.",
+                        }
+                    self._json(HTTPStatus.OK, result)
                     return
                 if parsed.path == "/v1/memories":
                     state = query.get("state", ["current"])[0]

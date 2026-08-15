@@ -68,6 +68,15 @@ repeats the mounted-package test, writes a SHA-256 checksum, and only then
 uploads the architecture-labelled asset. Linux remains a separate unfinished
 publisher path.
 
+The control center exposes a manual **Check for updates** action without making
+a background network request. The Bridge accepts only a stable `X.Y.Z` release
+from the official Lians GitHub repository, selects the exact package for the
+current Windows or macOS architecture, and offers it only when the matching
+SHA-256 checksum is also published. This preview opens the official release for
+review; it does not silently download or execute an installer. A future
+hands-off updater must additionally preserve the previous signed runtime until
+the new signed runtime starts successfully.
+
 ## First-run experience
 
 The setup sequence has four moments:
@@ -164,7 +173,7 @@ Lians-Setup-<version>.exe / Lians.dmg
   -> detects supported AI clients
   -> configures selected integrations with backups
   -> starts Bridge and verifies a bounded recall receipt
-  -> enables signed automatic updates
+  -> enables trusted, user-initiated update discovery
 ```
 
 The installed product should expose:
@@ -187,6 +196,8 @@ Do not call the installer generally available until all of these pass:
   bypass;
 - Windows Authenticode, macOS Developer ID, notarization, package checksums,
   provenance, and update signatures verify in CI;
+- an update from the previous signed release preserves memory and integrations,
+  and a failed first launch restores the previous signed runtime;
 - setup succeeds without administrator access for the normal per-user path;
 - an interrupted setup resumes or rolls back without corrupting client files,
   including a clean virtual-machine reboot/power-loss run;

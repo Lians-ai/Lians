@@ -42,6 +42,12 @@ keeping memory and for erasing memory while leaving integrations ready. Moving
 an app to Trash does not silently erase memory. macOS remains a technical
 preview until the real publisher credentials and clean-Mac usability gate pass.
 
+**Check for updates** is user-initiated in this preview. The Bridge recognizes
+only stable releases on the official Lians GitHub repository and offers an
+architecture-specific Windows or macOS package only when its checksum is also
+published. It opens the official release for review and never downloads or
+executes an installer in the background.
+
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is
 protected with DPAPI. The full Lians engine remains available when a team needs

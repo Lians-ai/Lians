@@ -34,6 +34,13 @@ integrations ready. Moving the app to Trash does not erase memory implicitly.
 A consumer macOS launch still requires the real publisher credentials and a
 clean-Mac usability pass.
 
+The local control center now checks for updates only when the user asks. It
+validates the stable version, official GitHub release URL, exact package name
+for the current Windows or macOS architecture, and presence of the matching
+checksum before offering the official release page. It never downloads or runs
+an update in the background. This keeps preview update discovery useful without
+pretending the full signed upgrade-and-rollback lifecycle is complete.
+
 ## Personal setup
 
 Developers evaluating the preview can run it from a source checkout:

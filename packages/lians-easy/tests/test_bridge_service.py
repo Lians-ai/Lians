@@ -10,9 +10,10 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
+from lians_easy import __version__
 from lians_easy.bridge import (
-    BridgeApplication,
     ERASE_ALL_CONFIRMATION,
+    BridgeApplication,
     context_for_event,
     render_hook_output,
     run_hook,
@@ -317,6 +318,7 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         status, body = _json_request(f"{app.origin}/v1/status", cookie=cookie)
         assert status == 200
         assert body["bridge"] == "ready"
+        assert body["version"] == __version__
         assert body["memory"]["encrypted"] is True
         assert {item["key"] for item in body["integrations"]} >= {"claude", "cursor", "codex"}
 
@@ -356,6 +358,71 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
             )
         assert error.value.code == 403
         assert all(item["content"] != "This must not be stored" for item in store.list())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_update_check_returns_only_validated_public_release_state(tmp_path):
+    calls = []
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        update_checker=lambda: calls.append(True)
+        or {
+            "status": "available",
+            "current_version": "0.5.0",
+            "available_version": "0.6.0",
+            "release_url": "https://github.com/Lians-ai/Lians/releases/tag/v0.6.0",
+            "package_name": "Lians-Setup-0.6.0.exe",
+            "download_url": (
+                "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
+                "Lians-Setup-0.6.0.exe"
+            ),
+            "checksum_published": True,
+        },
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        assert calls == []
+        status, result = _json_request(f"{app.origin}/v1/update", cookie=cookie)
+        assert status == 200
+        assert result["status"] == "available"
+        assert result["checksum_published"] is True
+        assert calls == [True]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_update_check_fails_closed_without_exposing_network_errors(tmp_path):
+    def unavailable():
+        raise OSError("C:/Users/private-name was present in a proxy error")
+
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        update_checker=unavailable,
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        status, result = _json_request(f"{app.origin}/v1/update", cookie=cookie)
+        assert status == 200
+        assert result["status"] == "unavailable"
+        assert result["current_version"] == __version__
+        assert "private-name" not in json.dumps(result)
     finally:
         server.shutdown()
         server.server_close()
