@@ -56,6 +56,7 @@ def test_codex_managed_block_is_idempotent(tmp_path, monkeypatch):
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
 def test_cline_cli_target_uses_supplied_home_on_every_platform(platform, tmp_path, monkeypatch):
     home = tmp_path / platform
+    monkeypatch.setattr("lians_easy.installer.shutil.which", lambda _name: None)
     monkeypatch.setattr("sys.platform", platform)
 
     target = client_targets(home)["cline"]
@@ -241,6 +242,7 @@ def test_antigravity_invalid_registry_fails_before_writing_plugin(tmp_path, monk
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
 def test_opencode_target_uses_documented_global_path(platform, tmp_path, monkeypatch):
     home = tmp_path / platform
+    monkeypatch.setattr("lians_easy.installer.shutil.which", lambda _name: None)
     monkeypatch.setattr("sys.platform", platform)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
 
