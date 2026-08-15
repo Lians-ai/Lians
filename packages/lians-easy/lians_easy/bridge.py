@@ -27,7 +27,7 @@ from .mcp import default_data_path
 from .portability import export_backup, import_backup, verify_backup
 from .project import detect_project
 from .store import MemoryStore
-from .updates import check_for_update
+from .updates import check_for_update, download_verified_update, open_prepared_update
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7317
@@ -152,6 +152,8 @@ class BridgeApplication:
         port: int = DEFAULT_PORT,
         app_dir: str | Path | None = None,
         update_checker: Callable[[], dict[str, Any]] | None = None,
+        update_downloader: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        update_opener: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         if host not in {"127.0.0.1", "::1", "localhost"}:
             raise ValueError("Lians Bridge only binds to the loopback interface")
@@ -162,6 +164,10 @@ class BridgeApplication:
         self.app_dir = selected_app_dir if (selected_app_dir / "index.html").is_file() else None
         self.session_token = secrets.token_urlsafe(32)
         self.update_checker = update_checker or check_for_update
+        self.update_downloader = update_downloader or download_verified_update
+        self.update_opener = update_opener or open_prepared_update
+        self.prepared_update: dict[str, Any] | None = None
+        self.update_lock = threading.Lock()
 
     @property
     def origin(self) -> str:
@@ -320,6 +326,8 @@ class BridgeApplication:
                 if parsed.path == "/v1/update":
                     try:
                         result = application.update_checker()
+                        if not isinstance(result, dict):
+                            raise TypeError("The update checker returned invalid state")
                     except (
                         OSError,
                         RuntimeError,
@@ -332,7 +340,19 @@ class BridgeApplication:
                             "current_version": __version__,
                             "message": "Lians could not securely check for an update. Try again later.",
                         }
-                    self._json(HTTPStatus.OK, result)
+                    public_keys = {
+                        "status",
+                        "current_version",
+                        "available_version",
+                        "release_url",
+                        "package_name",
+                        "checksum_published",
+                        "message",
+                    }
+                    self._json(
+                        HTTPStatus.OK,
+                        {key: value for key, value in result.items() if key in public_keys},
+                    )
                     return
                 if parsed.path == "/v1/memories":
                     state = query.get("state", ["current"])[0]
@@ -420,6 +440,90 @@ class BridgeApplication:
                             HTTPStatus.OK,
                             {key: value for key, value in result.items() if key != "path"},
                         )
+                        return
+
+                    if parsed.path == "/v1/update/download":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Downloading an update requires confirmed=true")
+                        with application.update_lock:
+                            try:
+                                release = application.update_checker()
+                                if not isinstance(release, dict):
+                                    raise TypeError("The update checker returned invalid state")
+                                prepared = application.update_downloader(release)
+                                if not isinstance(prepared, dict):
+                                    raise TypeError("The update downloader returned invalid state")
+                            except (
+                                OSError,
+                                RuntimeError,
+                                TypeError,
+                                ValueError,
+                                json.JSONDecodeError,
+                            ) as exc:
+                                raise RuntimeError(
+                                    "Lians could not securely download this update. Nothing was opened."
+                                ) from exc
+                            prepared_id = secrets.token_urlsafe(24)
+                            prepared["prepared_id"] = prepared_id
+                            application.prepared_update = prepared
+                            public_keys = {
+                                "status",
+                                "available_version",
+                                "package_name",
+                                "sha256",
+                                "saved_location",
+                                "trust",
+                                "trust_message",
+                                "can_open",
+                                "prepared_id",
+                            }
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    key: value
+                                    for key, value in prepared.items()
+                                    if key in public_keys
+                                },
+                            )
+                        return
+                    if parsed.path == "/v1/update/open":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Opening an update requires confirmed=true")
+                        prepared_id = data.get("prepared_id")
+                        if not isinstance(prepared_id, str) or len(prepared_id) > 256:
+                            raise ValueError("No verified Lians update is ready to open")
+                        with application.update_lock:
+                            prepared = application.prepared_update
+                            if prepared is None or not hmac.compare_digest(
+                                prepared_id, str(prepared.get("prepared_id") or "")
+                            ):
+                                raise ValueError("No verified Lians update is ready to open")
+                            try:
+                                result = application.update_opener(prepared)
+                                if not isinstance(result, dict):
+                                    raise TypeError("The update opener returned invalid state")
+                            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                                raise RuntimeError(
+                                    "Lians could not safely open this update. Download it again."
+                                ) from exc
+                            finally:
+                                application.prepared_update = None
+                            public_keys = {
+                                "status",
+                                "package_name",
+                                "saved_location",
+                                "trust",
+                                "trust_message",
+                                "can_open",
+                            }
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    key: value
+                                    for key, value in result.items()
+                                    if key in public_keys
+                                },
+                            )
                         return
 
                     if parsed.path == "/v1/integrations/disconnect":

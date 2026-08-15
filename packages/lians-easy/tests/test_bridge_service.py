@@ -381,6 +381,10 @@ def test_update_check_returns_only_validated_public_release_state(tmp_path):
                 "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
                 "Lians-Setup-0.6.0.exe"
             ),
+            "checksum_url": (
+                "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
+                "Lians-Setup-0.6.0.exe.sha256"
+            ),
             "checksum_published": True,
         },
     )
@@ -396,7 +400,161 @@ def test_update_check_returns_only_validated_public_release_state(tmp_path):
         assert status == 200
         assert result["status"] == "available"
         assert result["checksum_published"] is True
+        assert "download_url" not in result
+        assert "checksum_url" not in result
         assert calls == [True]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_update_download_and_open_are_separate_confirmed_path_private_actions(tmp_path):
+    package = tmp_path / "private" / "Lians-Setup-0.6.0.exe"
+    package.parent.mkdir()
+    package.write_bytes(b"verified package")
+    checks = []
+    downloads = []
+    opens = []
+    release = {
+        "status": "available",
+        "current_version": "0.5.0",
+        "available_version": "0.6.0",
+        "release_url": "https://github.com/Lians-ai/Lians/releases/tag/v0.6.0",
+        "package_name": package.name,
+        "download_url": (
+            "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
+            "Lians-Setup-0.6.0.exe"
+        ),
+        "checksum_url": (
+            "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
+            "Lians-Setup-0.6.0.exe.sha256"
+        ),
+        "checksum_published": True,
+    }
+
+    def downloader(candidate):
+        downloads.append(candidate)
+        return {
+            "status": "downloaded",
+            "available_version": "0.6.0",
+            "package_name": package.name,
+            "original_package_name": package.name,
+            "path": str(package),
+            "sha256": "a" * 64,
+            "saved_location": "Downloads",
+            "trust": "publisher_verified",
+            "trust_message": "Checksum and Windows publisher verified.",
+            "can_open": True,
+        }
+
+    def opener(prepared):
+        opens.append(prepared)
+        return {
+            "status": "opened",
+            "package_name": prepared["package_name"],
+            "saved_location": "Downloads",
+            "trust": "publisher_verified",
+            "trust_message": "Checksum and Windows publisher verified.",
+            "can_open": True,
+        }
+
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        update_checker=lambda: checks.append(True) or release,
+        update_downloader=downloader,
+        update_opener=opener,
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+
+        with pytest.raises(HTTPError) as error:
+            _json_request(
+                f"{app.origin}/v1/update/download",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": False},
+            )
+        assert error.value.code == 400
+        assert downloads == []
+
+        status, downloaded = _json_request(
+            f"{app.origin}/v1/update/download",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True},
+        )
+        assert status == 200
+        assert downloaded["status"] == "downloaded"
+        assert downloaded["can_open"] is True
+        assert downloaded["prepared_id"]
+        assert "path" not in downloaded
+        assert "private" not in json.dumps(downloaded)
+        assert checks == [True]
+        assert downloads == [release]
+        assert opens == []
+
+        status, opened = _json_request(
+            f"{app.origin}/v1/update/open",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True, "prepared_id": downloaded["prepared_id"]},
+        )
+        assert status == 200
+        assert opened["status"] == "opened"
+        assert "path" not in opened
+        assert len(opens) == 1
+
+        with pytest.raises(HTTPError) as replay:
+            _json_request(
+                f"{app.origin}/v1/update/open",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": True, "prepared_id": downloaded["prepared_id"]},
+            )
+        assert replay.value.code == 400
+        assert len(opens) == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_update_download_failure_is_sanitized_and_never_prepares_an_action(tmp_path):
+    def fail(_release):
+        raise OSError("C:/Users/private-name/Downloads appeared in a network failure")
+
+    app = BridgeApplication(
+        MemoryStore(tmp_path / "bridge.sqlite3"),
+        port=0,
+        update_checker=lambda: {"status": "available"},
+        update_downloader=fail,
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        with pytest.raises(HTTPError) as error:
+            _json_request(
+                f"{app.origin}/v1/update/download",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": True},
+            )
+        body = error.value.read().decode()
+        assert error.value.code == 400
+        assert "private-name" not in body
+        assert "Nothing was opened" in body
+        assert app.prepared_update is None
     finally:
         server.shutdown()
         server.server_close()

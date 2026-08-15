@@ -71,11 +71,16 @@ publisher path.
 The control center exposes a manual **Check for updates** action without making
 a background network request. The Bridge accepts only a stable `X.Y.Z` release
 from the official Lians GitHub repository, selects the exact package for the
-current Windows or macOS architecture, and offers it only when the matching
-SHA-256 checksum is also published. This preview opens the official release for
-review; it does not silently download or execute an installer. A future
-hands-off updater must additionally preserve the previous signed runtime until
-the new signed runtime starts successfully.
+current Windows, macOS, or x86_64 Linux architecture, and offers it only when
+the matching SHA-256 checksum is also published. **Download verified update** is a separate
+user action: the Bridge fetches the bounded checksum first, streams the exact
+package under a 512 MiB cap, verifies the complete digest, and saves it to
+Downloads without overwriting anything. Downloading does not open the package.
+A second confirmed action re-hashes the file and opens it only when Windows or
+macOS validates the same publisher as the installed signed app; otherwise it
+only reveals the file in Downloads. A future hands-off updater must additionally
+preserve the previous signed runtime until the new signed runtime starts
+successfully.
 
 ## First-run experience
 

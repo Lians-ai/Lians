@@ -96,8 +96,14 @@ upgrade/rollback tests pass.
 **Check for updates** is user-initiated in this preview. The Bridge recognizes
 only stable releases on the official Lians GitHub repository and offers an
 architecture-specific Windows, macOS, or x86_64 Linux package only when its
-checksum is also published. It opens the official release for review and never
-downloads or executes a package in the background.
+checksum is also published. A separate **Download verified update** action
+fetches the tiny checksum first, streams the exact package under a 512 MiB cap,
+verifies its complete SHA-256 digest, and saves it to Downloads without
+overwriting an existing file. Nothing downloads in the background and nothing
+opens after the download. A second confirmed action re-hashes the saved file.
+Signed Windows and macOS builds open it only when the candidate matches the
+installed publisher and the operating system accepts the signature; otherwise
+Lians only selects the file in Downloads for the user to review.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is

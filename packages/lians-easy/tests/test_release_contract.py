@@ -311,8 +311,8 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     app_root = PACKAGE_ROOT / "lians_easy" / "app"
     manifest = json.loads((app_root / "manifest.json").read_text(encoding="utf-8"))
 
-    assert manifest["source"]["commit"] == "05367322e2f1b3b132ba828affab04a1f8876c76"
-    assert manifest["source"]["sites_version"] == 30
+    assert manifest["source"]["commit"] == "8dd0a27e167ed19b94877224d5f3d1cbda2c6ce5"
+    assert manifest["source"]["sites_version"] == 31
     assert manifest["source"]["build"] == "npm run build:local"
 
     expected = set(manifest["files"])
@@ -339,9 +339,13 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "/v1/integrations/disconnect" in script
     assert "/v1/privacy/erase" in script
     assert "/v1/update" in script
+    assert "/v1/update/download" in script
+    assert "/v1/update/open" in script
     assert "/v1/backups/export" in script
     assert "/v1/backups/verify" in script
     assert "/v1/backups/import" in script
     assert "Nothing existing will be overwritten" in script
     assert "ERASE ALL LIANS MEMORY" in script
     assert "checks only when you ask" in script
+    assert "Download verified update" in script
+    assert "Downloading never opens an installer" in script

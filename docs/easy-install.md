@@ -36,10 +36,14 @@ clean-Mac usability pass.
 
 The local control center now checks for updates only when the user asks. It
 validates the stable version, official GitHub release URL, exact package name
-for the current Windows or macOS architecture, and presence of the matching
-checksum before offering the official release page. It never downloads or runs
-an update in the background. This keeps preview update discovery useful without
-pretending the full signed upgrade-and-rollback lifecycle is complete.
+for the current Windows, macOS, or x86_64 Linux architecture, and presence of
+the matching checksum before offering the update. A separate click downloads the checksum
+and exact package with strict size bounds, verifies SHA-256, and saves a unique
+file to Downloads. Another click re-verifies the file and publisher before
+opening it; unsigned preview builds and platforms without a matching publisher
+gate only reveal the downloaded file. Nothing downloads or runs in the
+background. This keeps the preview honest without pretending the full
+hands-off upgrade-and-rollback lifecycle is complete.
 
 ## Personal setup
 
