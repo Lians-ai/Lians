@@ -131,10 +131,15 @@ class LocalCipher:
     def _read_key(self) -> bytes:
         try:
             document = json.loads(self.key_path.read_text(encoding="utf-8"))
+            if document.get("version") != 1:
+                raise ValueError("Unsupported Lians key version")
+            protection = document.get("protection")
+            if protection not in {"windows-dpapi", "owner-file"}:
+                raise ValueError("Unsupported Lians key protection")
             wrapped = base64.b64decode(document["key"], validate=True)
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+        except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ValueError("Lians encryption key file is invalid") from exc
-        if document.get("protection") == "windows-dpapi":
+        if protection == "windows-dpapi":
             if sys.platform != "win32":
                 raise OSError("This Lians key is protected for a Windows account")
             return _windows_unprotect(wrapped)

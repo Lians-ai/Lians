@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
+import json
 import sqlite3
 
 import pytest
+from lians_easy.crypto import LocalCipher
 from lians_easy.store import MemoryStore
 
 
@@ -28,6 +31,17 @@ def test_remember_recall_correct_and_confirmed_forget(tmp_path):
     assert store.recall("campaign coffee") == []
 
 
+def test_correct_memory_rejects_oversized_content_without_superseding_original(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    original = store.remember("The campaign targets coffee shops")
+
+    with pytest.raises(ValueError, match="20,000 characters or fewer"):
+        store.correct(original["id"], "x" * 20_001)
+
+    current = store.list()
+    assert [item["id"] for item in current] == [original["id"]]
+
+
 def test_profiles_are_isolated(tmp_path):
     personal = MemoryStore(tmp_path / "memory.sqlite3", profile="personal")
     work = MemoryStore(tmp_path / "memory.sqlite3", profile="work")
@@ -51,6 +65,27 @@ def test_local_cipher_protects_binary_state_and_domain_separates_derived_keys(tm
     assert store.cipher.derive_key(info=b"lians-sync-exchange-v1") != store.cipher.derive_key(
         info=b"lians-sync-signing-v1"
     )
+
+
+@pytest.mark.parametrize(
+    ("version", "protection"),
+    [(2, "owner-file"), (1, "plaintext"), (None, "owner-file")],
+)
+def test_local_cipher_rejects_unknown_key_descriptors(tmp_path, version, protection):
+    key_path = tmp_path / "memory.key"
+    key_path.write_text(
+        json.dumps(
+            {
+                "version": version,
+                "protection": protection,
+                "key": base64.b64encode(b"x" * 32).decode("ascii"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="key file is invalid"):
+        LocalCipher(key_path)
 
 
 def test_every_operation_closes_its_sqlite_connection(tmp_path, monkeypatch):

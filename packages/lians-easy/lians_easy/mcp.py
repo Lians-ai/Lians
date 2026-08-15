@@ -41,7 +41,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "type": "object",
                 "required": ["content"],
                 "properties": {
-                    "content": {"type": "string", "minLength": 1},
+                    "content": {"type": "string", "minLength": 1, "maxLength": 20000},
                     "topic": {"type": "string"},
                     "source": {"type": "string"},
                     "kind": {
@@ -110,7 +110,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "required": ["memory_id", "content"],
                 "properties": {
                     "memory_id": {"type": "string"},
-                    "content": {"type": "string", "minLength": 1},
+                    "content": {"type": "string", "minLength": 1, "maxLength": 20000},
                     "project_root": {"type": "string"},
                 },
                 "additionalProperties": False,

@@ -62,3 +62,10 @@ def test_initialize_and_tool_contract(tmp_path):
         }
     )
     assert unsupported["result"]["protocolVersion"] == "2025-06-18"
+
+    definitions = {tool["name"]: tool for tool in listed["result"]["tools"]}
+    assert definitions["remember"]["inputSchema"]["properties"]["content"]["maxLength"] == 20_000
+    assert (
+        definitions["correct_memory"]["inputSchema"]["properties"]["content"]["maxLength"]
+        == 20_000
+    )

@@ -557,6 +557,8 @@ class MemoryStore:
         content = content.strip()
         if not content:
             raise ValueError("Corrected memory content cannot be blank")
+        if len(content) > 20_000:
+            raise ValueError("Memory content must be 20,000 characters or fewer")
         _reject_sensitive(content)
         replacement_id = str(uuid.uuid4())
         timestamp = _now()
