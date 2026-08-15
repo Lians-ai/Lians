@@ -5,11 +5,14 @@
   const STATUS_PATH = "/v1/cloud/status";
   const POLL_MS = 30_000;
   const ENROLLMENT_POLL_MS = 3_000;
+  const MAX_RECOVERY_BACKUP_BYTES = 32 * 1024 * 1024;
   let deleteTimer = null;
   let enrollmentTimer = null;
   let busy = false;
   let currentStatus = { state: "loading", sync_state: "not_started" };
   let currentEnrollment = null;
+  let recoveryBackup = "";
+  let recoveryReview = null;
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -224,13 +227,71 @@
     devices.append(devicesTop, deviceActions, enrollment, requestList, deviceList);
 
     const recovery = element("div", "lians-cloud__recovery");
+    const recoveryButton = element(
+      "button",
+      "lians-cloud__text-action lians-cloud__recovery-action",
+      "Recover from encrypted backup",
+    );
+    recoveryButton.type = "button";
+    const recoveryPanel = element("div", "lians-cloud__recovery-panel");
+    recoveryPanel.hidden = true;
+    const recoveryFileLabel = element("label", "", "Encrypted Lians backup");
+    recoveryFileLabel.htmlFor = "lians-cloud-recovery-file";
+    const recoveryFile = element("input", "lians-cloud__recovery-file");
+    recoveryFile.id = "lians-cloud-recovery-file";
+    recoveryFile.type = "file";
+    recoveryFile.accept = ".liansbackup,application/vnd.lians.backup+json";
+    const recoveryPassphraseLabel = element("label", "", "Backup passphrase");
+    recoveryPassphraseLabel.htmlFor = "lians-cloud-recovery-passphrase";
+    const recoveryPassphrase = element("input", "lians-cloud__recovery-passphrase");
+    recoveryPassphrase.id = "lians-cloud-recovery-passphrase";
+    recoveryPassphrase.type = "password";
+    recoveryPassphrase.autocomplete = "current-password";
+    const recoveryReviewButton = element(
+      "button",
+      "lians-cloud__button lians-cloud__button--device",
+      "Review encrypted backup",
+    );
+    recoveryReviewButton.type = "button";
+    const recoverySummary = element("div", "lians-cloud__recovery-summary");
+    recoverySummary.hidden = true;
+    const recoverySummaryText = element("p", "");
+    const recoveryWarning = element(
+      "p",
+      "lians-cloud__managed-device-warning",
+      "Recovery starts new encrypted cloud memory. An inaccessible old encrypted cloud copy may remain until account deletion.",
+    );
+    const recoveryConfirm = element(
+      "button",
+      "lians-cloud__button lians-cloud__button--approve",
+      "Recover here & start new cloud memory",
+    );
+    recoveryConfirm.type = "button";
+    const recoveryCancel = element("button", "lians-cloud__text-action", "Cancel recovery");
+    recoveryCancel.type = "button";
+    recoverySummary.append(
+      recoverySummaryText,
+      recoveryWarning,
+      recoveryConfirm,
+      recoveryCancel,
+    );
+    recoveryPanel.append(
+      recoveryFileLabel,
+      recoveryFile,
+      recoveryPassphraseLabel,
+      recoveryPassphrase,
+      recoveryReviewButton,
+      recoverySummary,
+    );
     recovery.append(
-      element("strong", "", "You control trust"),
+      element("strong", "", "You control trust and recovery"),
       element(
         "span",
         "",
-        "Removing a device gives every remaining device a new key. It cannot erase memory that device already received. Keep an encrypted Lians backup in case every trusted device is lost.",
+        "Removing a device gives every remaining device a new key. If every trusted device is lost, only your encrypted backup and its separate passphrase can restore memory. Lians cannot reset that encryption.",
       ),
+      recoveryButton,
+      recoveryPanel,
     );
 
     const metrics = element("p", "lians-cloud__metrics");
@@ -286,6 +347,15 @@
       cancel,
       requestList,
       deviceList,
+      recoveryButton,
+      recoveryPanel,
+      recoveryFile,
+      recoveryPassphrase,
+      recoveryReviewButton,
+      recoverySummary,
+      recoverySummaryText,
+      recoveryConfirm,
+      recoveryCancel,
       metrics,
       feedback,
       primary,
@@ -316,6 +386,8 @@
       refresh().then(() => restoreEnrollment());
     } else {
       clearEnrollmentPoll();
+      clearRecovery();
+      ui.recoveryPanel.hidden = true;
       if (window.location.hash === "#cloud-sync") {
         window.history.replaceState(null, "", window.location.pathname + window.location.search);
       }
@@ -376,9 +448,19 @@
       ui.manage,
       ui.check,
       ui.cancel,
+      ui.recoveryButton,
+      ui.recoveryFile,
+      ui.recoveryPassphrase,
+      ui.recoveryReviewButton,
+      ui.recoveryConfirm,
+      ui.recoveryCancel,
     ].forEach((button) => {
       button.disabled = busy;
     });
+    ui.recoveryButton.disabled = busy || !connected;
+    ui.recoveryButton.textContent = connected
+      ? "Recover from encrypted backup"
+      : "Sign in to recover a backup";
   }
 
   async function refresh(feedback = "") {
@@ -597,6 +679,98 @@
     }
   }
 
+  function clearRecovery() {
+    recoveryBackup = "";
+    recoveryReview = null;
+    ui.recoveryFile.value = "";
+    ui.recoveryPassphrase.value = "";
+    ui.recoverySummary.hidden = true;
+    ui.recoverySummaryText.textContent = "";
+  }
+
+  async function encodeRecoveryBackup(file) {
+    if (!file || file.size < 1) throw new Error("Choose an encrypted Lians backup.");
+    if (file.size > MAX_RECOVERY_BACKUP_BYTES) {
+      throw new Error("This backup is too large for the Lians App.");
+    }
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Lians could not read that backup."));
+      reader.onload = () => {
+        const encoded = String(reader.result || "");
+        const separator = encoded.indexOf(",");
+        if (separator < 0 || !encoded.slice(separator + 1)) {
+          reject(new Error("The selected backup is invalid."));
+          return;
+        }
+        resolve(encoded.slice(separator + 1));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function reviewRecovery() {
+    if (busy) return;
+    const file = ui.recoveryFile.files && ui.recoveryFile.files[0];
+    const passphrase = ui.recoveryPassphrase.value;
+    if (!file || !passphrase) {
+      ui.feedback.textContent = "Choose your encrypted backup and enter its passphrase.";
+      return;
+    }
+    busy = true;
+    render(currentStatus, "Checking the encrypted backup before changing memory…");
+    try {
+      recoveryBackup = await encodeRecoveryBackup(file);
+      recoveryReview = await request("/v1/backups/verify", "POST", {
+        backup: recoveryBackup,
+        passphrase,
+      });
+      ui.recoverySummaryText.textContent =
+        `${Number(recoveryReview.memories || 0)} memories · ` +
+        `${Number(recoveryReview.activity || 0)} activity records · ` +
+        `${Number(recoveryReview.receipts || 0)} receipts verified`;
+      ui.recoverySummary.hidden = false;
+      ui.feedback.textContent = "Backup verified. Review the recovery boundary, then confirm.";
+    } catch (error) {
+      clearRecovery();
+      ui.feedback.textContent =
+        error instanceof Error ? error.message : "Lians could not verify that backup.";
+    } finally {
+      busy = false;
+      render(currentStatus, ui.feedback.textContent);
+    }
+  }
+
+  async function confirmRecovery() {
+    if (busy || !recoveryBackup || !recoveryReview) return;
+    busy = true;
+    render(currentStatus, "Recovering memory locally before starting new encrypted sync…");
+    try {
+      const result = await request("/v1/backups/import", "POST", {
+        backup: recoveryBackup,
+        passphrase: ui.recoveryPassphrase.value,
+        confirmed: true,
+        recover_cloud: true,
+      });
+      const cloud = result.cloud_recovery || {};
+      const message =
+        cloud.message ||
+        "Memory was recovered locally. Sign in or retry sync to carry it to your AI tools.";
+      clearRecovery();
+      ui.recoveryPanel.hidden = true;
+      await refresh(message);
+    } catch (error) {
+      await refresh(
+        error instanceof Error
+          ? error.message
+          : "Lians could not complete cloud recovery. Check local Memory before retrying.",
+      );
+    } finally {
+      busy = false;
+      render(currentStatus, ui.feedback.textContent);
+    }
+  }
+
   async function act(action) {
     if (busy) return;
     busy = true;
@@ -647,6 +821,35 @@
   ui.join.addEventListener("click", () => act("join"));
   ui.review.addEventListener("click", loadDeviceRequests);
   ui.manage.addEventListener("click", loadDevices);
+  ui.recoveryButton.addEventListener("click", () => {
+    if (!ui.recoveryPanel.hidden) {
+      clearRecovery();
+      ui.recoveryPanel.hidden = true;
+      ui.feedback.textContent = "Recovery form closed. Nothing was replaced.";
+      return;
+    }
+    ui.recoveryPanel.hidden = false;
+    ui.requestList.hidden = true;
+    ui.deviceList.hidden = true;
+    ui.recoveryFile.focus();
+  });
+  ui.recoveryFile.addEventListener("change", () => {
+    recoveryBackup = "";
+    recoveryReview = null;
+    ui.recoverySummary.hidden = true;
+  });
+  ui.recoveryPassphrase.addEventListener("input", () => {
+    recoveryBackup = "";
+    recoveryReview = null;
+    ui.recoverySummary.hidden = true;
+  });
+  ui.recoveryReviewButton.addEventListener("click", reviewRecovery);
+  ui.recoveryConfirm.addEventListener("click", confirmRecovery);
+  ui.recoveryCancel.addEventListener("click", () => {
+    clearRecovery();
+    ui.recoveryPanel.hidden = true;
+    ui.feedback.textContent = "Recovery cancelled. Nothing was replaced.";
+  });
   ui.check.addEventListener("click", () => checkEnrollment(false));
   ui.cancel.addEventListener("click", () => act("cancel-enrollment"));
   ui.danger.addEventListener("click", () => {

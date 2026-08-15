@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 from lians_easy.cloud_service import CloudSyncService
 from lians_easy.mcp import call_tool
+from lians_easy.portability import export_backup, import_backup
 from lians_easy.store import MemoryStore
 from lians_easy.sync import (
     DeviceIdentity,
@@ -434,6 +435,112 @@ def test_device_management_rotates_future_key_without_claiming_remote_erasure(tm
     cloud_document = json.dumps(cloud.log._workspaces)
     assert "Future-only launch color" not in cloud_document
     assert "Private note after removal" not in cloud_document
+
+    # Explicit backup recovery can replace this device's now-useless old key
+    # state and create a new workspace. It must not claim to delete the old one.
+    workspace_count = len(cloud.log._workspaces)
+    recovered = second.recover_from_backup(confirmed=True)
+    assert recovered["state"] == "recovered"
+    assert recovered["replaced_unusable_device_state"] is True
+    assert recovered["old_cloud_copy_may_remain"] is True
+    assert len(cloud.log._workspaces) == workspace_count + 1
+    assert second_store.recall("private note after removal")[0]["content"] == (
+        "Private note after removal"
+    )
+
+
+def test_encrypted_backup_recovers_after_every_trusted_device_is_lost(tmp_path):
+    cloud = HTTPShapeCloud()
+    source_store = MemoryStore(tmp_path / "lost-device" / "memory.sqlite3")
+    source = _service(
+        source_store,
+        FakeAuth(),
+        cloud,
+        tmp_path / "lost-device" / "sync-state.json",
+        "Lost laptop",
+    )
+    source_store.remember(
+        "Recovered preference: use FastAPI and reviewed Alembic migrations.",
+        scope="global",
+        source_client="cursor",
+    )
+    source.sync_now()
+    old_workspace_ids = set(cloud.log._workspaces)
+    backup = tmp_path / "recovery.liansbackup"
+    passphrase = "a separate disaster recovery passphrase"
+    export_backup(source_store, backup, passphrase)
+
+    # Only the encrypted backup and passphrase reach this clean device. The old
+    # device identity and sync-state file are deliberately unavailable.
+    recovered_store = MemoryStore(tmp_path / "clean-device" / "memory.sqlite3")
+    imported = import_backup(recovered_store, backup, passphrase)
+    assert imported["imported"]["memories"] == 1
+    recovered = _service(
+        recovered_store,
+        FakeAuth(),
+        cloud,
+        tmp_path / "clean-device" / "sync-state.json",
+        "Replacement laptop",
+    )
+    report = recovered.recover_from_backup(confirmed=True)
+
+    assert report["state"] == "recovered"
+    assert report["local_memory_recovered"] is True
+    assert report["cloud_memory_started"] is True
+    assert report["old_cloud_copy_may_remain"] is True
+    assert report["memory_scope"] == "everywhere"
+    assert len(cloud.log._workspaces) == 2
+    assert old_workspace_ids < set(cloud.log._workspaces)
+    assert (tmp_path / "clean-device" / "sync-state.json").is_file()
+
+    recalled = call_tool(
+        recovered_store,
+        "recall",
+        {"query": "FastAPI migration policy", "client": "codex"},
+        cloud_sync=recovered,
+    )["structuredContent"]
+    assert recalled["memories"][0]["content"] == (
+        "Recovered preference: use FastAPI and reviewed Alembic migrations."
+    )
+    assert recalled["receipt"]["client"] == "codex"
+    assert "Recovered preference" not in json.dumps(cloud.log._workspaces)
+
+    # Repeating recovery on an active workspace must not silently fork it.
+    repeated = recovered.recover_from_backup(confirmed=True)
+    assert repeated["state"] == "active_workspace"
+    assert repeated["cloud_memory_started"] is False
+    assert repeated["memory_scope"] == "local"
+    assert len(cloud.log._workspaces) == 2
+
+
+def test_backup_recovery_requires_confirmation_and_preserves_unreadable_state(
+    tmp_path, monkeypatch
+):
+    cloud = HTTPShapeCloud()
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    state_path = tmp_path / "sync-state.json"
+    state_path.write_text("existing state", encoding="utf-8")
+    service = _service(store, FakeAuth(), cloud, state_path, "Replacement laptop")
+
+    with pytest.raises(ValueError, match="confirmed=true"):
+        service.recover_from_backup()
+
+    def unreadable_state(_identity):
+        raise OSError("private path and operating-system details")
+
+    monkeypatch.setattr(service, "_load", unreadable_state)
+    report = service.recover_from_backup(confirmed=True)
+    assert report == {
+        "state": "needs_attention",
+        "local_memory_recovered": True,
+        "cloud_memory_started": False,
+        "old_cloud_copy_may_remain": True,
+        "message": (
+            "Memory was recovered locally, but Lians could not safely read this device's "
+            "existing cloud-memory state."
+        ),
+    }
+    assert state_path.read_text(encoding="utf-8") == "existing state"
 
 
 def test_cloud_failure_never_blocks_or_leaks_from_a_local_remember(tmp_path):

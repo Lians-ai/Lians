@@ -1023,10 +1023,25 @@ def test_control_center_disconnect_and_erasure_are_separate_confirmed_actions(
 
 
 def test_control_center_exports_verifies_and_imports_encrypted_portable_memory(tmp_path):
+    recovery_calls = []
+
+    class RecoveryCloudSync:
+        def recover_from_backup(self, *, confirmed=False):
+            assert confirmed is True
+            recovery_calls.append("recover")
+            return {
+                "state": "recovered",
+                "local_memory_recovered": True,
+                "cloud_memory_started": True,
+                "old_cloud_copy_may_remain": True,
+                "memory_scope": "everywhere",
+                "message": "Recovered safely.",
+            }
+
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     content = "Portable app preference: keep every status update concise."
     remembered = store.remember(content, scope="global", source="Lians App backup test")
-    app = BridgeApplication(store, port=0)
+    app = BridgeApplication(store, port=0, cloud_sync=RecoveryCloudSync())
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
     app.port = server.server_port
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1082,12 +1097,16 @@ def test_control_center_exports_verifies_and_imports_encrypted_portable_memory(t
                 "passphrase": passphrase,
                 "backup": base64.b64encode(backup).decode(),
                 "confirmed": True,
+                "recover_cloud": True,
             },
         )
         assert status == 200
         assert imported["status"] == "imported"
         assert imported["imported"]["memories"] == 1
         assert imported["re_encrypted_for_this_device"] is True
+        assert imported["cloud_recovery"]["state"] == "recovered"
+        assert imported["cloud_recovery"]["old_cloud_copy_may_remain"] is True
+        assert recovery_calls == ["recover"]
         assert "path" not in imported
         [restored] = store.list(state="current")
         assert restored["id"] == remembered["id"]

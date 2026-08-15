@@ -746,6 +746,102 @@ class CloudSyncService:
                 "message": "Saved locally. Encrypted cloud sync will retry when available.",
             }
 
+    def recover_from_backup(self, *, confirmed: bool = False) -> dict[str, Any]:
+        """Start fresh encrypted cloud memory after a verified local backup import.
+
+        A clean device has no workspace key state, so recovery creates a new
+        workspace from the locally restored profile. If this device still has
+        an active workspace, recovery stops instead of silently forking it. A
+        state that is cryptographically invalid or signed as removed can be
+        replaced because the user has explicitly confirmed backup recovery.
+        """
+
+        if not confirmed:
+            raise ValueError("Recovering cloud memory requires confirmed=true")
+        auth_status = self._auth_status()
+        if auth_status.get("state") not in {"connected", "refresh_required"}:
+            return {
+                "state": "sign_in_required",
+                "local_memory_recovered": True,
+                "cloud_memory_started": False,
+                "old_cloud_copy_may_remain": True,
+                "message": (
+                    "Memory was recovered on this device. Sign in to start new encrypted "
+                    "cloud memory."
+                ),
+            }
+
+        replaced_unusable_state = False
+        with self._exclusive():
+            identity = self._identity()
+            try:
+                state = self._load(identity)
+            except SyncProtocolError:
+                self.state_path.unlink(missing_ok=True)
+                self.pending_path.unlink(missing_ok=True)
+                state = None
+                replaced_unusable_state = True
+            except OSError:
+                return {
+                    "state": "needs_attention",
+                    "local_memory_recovered": True,
+                    "cloud_memory_started": False,
+                    "old_cloud_copy_may_remain": True,
+                    "message": (
+                        "Memory was recovered locally, but Lians could not safely read this "
+                        "device's existing cloud-memory state."
+                    ),
+                }
+            if state is not None:
+                try:
+                    self._pull(self._client(), state, identity)
+                except DeviceRevokedError:
+                    self.state_path.unlink(missing_ok=True)
+                    self.pending_path.unlink(missing_ok=True)
+                    replaced_unusable_state = True
+                except (CloudAuthError, OSError, SyncCloudError, SyncProtocolError, ValueError):
+                    return {
+                        "state": "needs_attention",
+                        "local_memory_recovered": True,
+                        "cloud_memory_started": False,
+                        "old_cloud_copy_may_remain": True,
+                        "message": (
+                            "Memory was recovered locally, but Lians could not safely determine "
+                            "whether this device still has active cloud memory."
+                        ),
+                    }
+                else:
+                    self._save(state, identity)
+                    return {
+                        "state": "active_workspace",
+                        "local_memory_recovered": True,
+                        "cloud_memory_started": False,
+                        "old_cloud_copy_may_remain": False,
+                        "memory_scope": "local",
+                        "message": (
+                            "The backup was imported locally, but this device already has "
+                            "active cloud memory. Nothing in cloud was replaced."
+                        ),
+                    }
+            self.pending_path.unlink(missing_ok=True)
+
+        sync = self.sync_if_connected()
+        cloud_started = sync.get("state") == "synced"
+        return {
+            "state": "recovered" if cloud_started else "recovery_pending",
+            "local_memory_recovered": True,
+            "cloud_memory_started": cloud_started,
+            "old_cloud_copy_may_remain": True,
+            "replaced_unusable_device_state": replaced_unusable_state,
+            "memory_scope": sync.get("memory_scope", "local"),
+            "message": (
+                "Memory is recovered here and a new encrypted cloud memory is ready. "
+                "An inaccessible old encrypted cloud copy may remain until account deletion."
+                if cloud_started
+                else "Memory is recovered locally. New encrypted cloud memory will retry when available."
+            ),
+        }
+
     def delete_cloud_memory(self, *, confirmed: bool = False) -> dict[str, Any]:
         """Delete the exact remote workspace, then remove its local key state."""
 

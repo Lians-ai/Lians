@@ -171,6 +171,14 @@ snapshot. The UI deliberately says that memory already downloaded to the old
 device may remain there; removal protects future cloud memory and does not
 pretend to remotely erase that computer.
 
+If every trusted device is unavailable, choose **Recover from encrypted
+backup** after signing in on a clean device. Lians verifies the user-held
+`.liansbackup`, shows its memory, activity, and receipt counts, imports it only
+after a second confirmation, re-encrypts it for the replacement device, and
+starts a fresh encrypted cloud workspace. The backup passphrase cannot be reset
+by Lians, and an inaccessible old encrypted cloud copy may remain until account
+deletion.
+
 Development builds opt into this path with deployment-provided public values;
 there is no client secret:
 
@@ -181,11 +189,11 @@ LIANS_OAUTH_CLIENT_ID=YOUR_PUBLIC_NATIVE_CLIENT_ID
 LIANS_OAUTH_AUDIENCE=https://api.lians.ai
 ```
 
-This technical preview is not a claim that hosted sync or account recovery is
-generally available. The ordinary supported migration path remains **Move
-memory safely** until the production identity provider, lost-device recovery,
-provider-outage qualification, external cryptographic review, and signed release gates
-are complete. The complete boundary is documented in
+This technical preview is not a claim that hosted sync or cloud-only account
+recovery is generally available. **Move memory safely** is the supported
+zero-knowledge migration and all-devices-lost recovery path until the production
+identity provider, provider-outage qualification, external cryptographic review,
+and signed release gates are complete. The complete boundary is documented in
 [`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
 
 Antigravity, Claude, Codex, and Gemini CLI receive bounded context through

@@ -11,9 +11,10 @@
 > The packaged App now includes consumer sync controls and a short-code Add
 > Device / approval flow with encrypted resumable local state. Signed device
 > removal now rotates the workspace key only to surviving devices and publishes
-> a fresh encrypted snapshot. A production identity provider, recovery, billing
-> enforcement, external cryptographic review, and signed release qualification
-> are not generally available yet.
+> a fresh encrypted snapshot. User-held encrypted backups now provide a tested
+> all-devices-lost recovery path. A production identity provider, cloud-only
+> recovery, billing enforcement, external cryptographic review, and signed
+> release qualification are not generally available yet.
 > This document is an engineering contract, not a claim that Lians Cloud is live.
 
 ## Product promise
@@ -159,20 +160,28 @@ should reuse that mapping rather than create a second account identity.
 
 ## Recovery and revocation gates
 
-The first consumer release may use **another approved device** as the only
-recovery method. That tradeoff must be stated before sync is enabled. Server-
-side password reset cannot decrypt a workspace and must not be presented as
-memory recovery.
+Lians supports two deliberately separate recovery paths. An approved device can
+add a replacement through the matching-code flow. If every approved device is
+lost, a clean device can verify and import a user-held encrypted
+`.liansbackup`, re-encrypt its contents for the new device, and start a fresh
+encrypted cloud workspace. The recovery screen shows memory, activity, and
+receipt counts before import and requires an explicit second confirmation.
+
+Backup recovery requires both the file and its separately kept passphrase.
+Lians cannot reset that encryption. The inaccessible prior cloud workspace may
+remain as ciphertext until account deletion, and the App states that boundary
+instead of claiming it was remotely erased. Server-side password reset cannot
+decrypt a workspace and must not be presented as memory recovery.
 
 Before hosted sync is generally available, Lians still needs:
 
 - production authorization-server configuration and a tested Google sign-in;
-- a recovery-key or trusted-contact design, separately opted into by the user;
-- recovery qualification after all trusted devices are lost;
+- an optional cloud-only recovery-key or trusted-contact design for users who
+  do not keep an encrypted backup;
 - bounded retry/backoff, offline indicators, and conflict-review UI;
 - account deletion that removes encrypted objects and entitlement metadata;
 - restore, multi-device race, clean-device, and provider-outage qualification;
 - an external review of the protocol and implementation.
 
-Until those gates pass, use the encrypted `.liansbackup` flow for supported
-device migration and disaster recovery.
+The encrypted `.liansbackup` flow is the supported zero-knowledge device
+migration and disaster-recovery path. Cloud-only recovery remains unavailable.

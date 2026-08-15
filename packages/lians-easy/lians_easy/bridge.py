@@ -552,6 +552,10 @@ class BridgeApplication:
                         )
                         return
                     if parsed.path in {"/v1/backups/verify", "/v1/backups/import"}:
+                        recover_cloud = data.get("recover_cloud", False)
+                        if type(recover_cloud) is not bool:
+                            raise TypeError("recover_cloud must be true or false")
+                        cloud_recovery = None
                         try:
                             with tempfile.TemporaryDirectory(
                                 prefix="lians-app-import-"
@@ -568,11 +572,20 @@ class BridgeApplication:
                                         backup,
                                         backup_passphrase(),
                                     )
+                                    if recover_cloud:
+                                        cloud_recovery = application.cloud_sync.recover_from_backup(
+                                            confirmed=True
+                                        )
                         except OSError as exc:
                             raise RuntimeError("Lians could not read the encrypted backup") from exc
+                        public_result = {
+                            key: value for key, value in result.items() if key != "path"
+                        }
+                        if cloud_recovery is not None:
+                            public_result["cloud_recovery"] = cloud_recovery
                         self._json(
                             HTTPStatus.OK,
-                            {key: value for key, value in result.items() if key != "path"},
+                            public_result,
                         )
                         return
 

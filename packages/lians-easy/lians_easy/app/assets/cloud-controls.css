@@ -222,6 +222,60 @@
   color: #ffffff;
 }
 
+.lians-cloud__recovery-action {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.lians-cloud__recovery-panel {
+  border-top: 1px solid #2c466c;
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  padding-top: 14px;
+}
+
+.lians-cloud__recovery-panel[hidden],
+.lians-cloud__recovery-summary[hidden] {
+  display: none !important;
+}
+
+.lians-cloud__recovery-panel label {
+  color: #b8c8e4;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lians-cloud__recovery-file,
+.lians-cloud__recovery-passphrase {
+  background: #050a12;
+  border: 1px solid #3a5275;
+  color: #f3f6ff;
+  font: 500 11px/1.4 "Sora", ui-sans-serif, system-ui, sans-serif;
+  min-height: 40px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.lians-cloud__recovery-file:focus-visible,
+.lians-cloud__recovery-passphrase:focus-visible {
+  border-color: #6f98ff;
+  outline: 2px solid rgb(63 120 255 / 25%);
+}
+
+.lians-cloud__recovery-summary {
+  background: rgb(51 230 154 / 5%);
+  border: 1px solid rgb(51 230 154 / 30%);
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 14px;
+}
+
+.lians-cloud__recovery-summary p {
+  margin: 0;
+}
+
 .lians-cloud__devices {
   background: #080f1a;
   border: 1px solid var(--lians-cloud-line);
