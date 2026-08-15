@@ -15,7 +15,7 @@ import json
 import os
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -49,7 +49,10 @@ REQUEST_FORMAT = "lians-device-enrollment-request"
 APPROVAL_FORMAT = "lians-device-enrollment-approval"
 GRANT_FORMAT = "lians-device-grant"
 REVISION_FORMAT = "lians-encrypted-profile-revision"
+ROTATION_FORMAT = "lians-workspace-key-rotation"
 SYNC_VERSION = 1
+STATE_VERSION = 2
+GRANT_VERSION = 2
 MAX_REVISION_BYTES = 128 * 1024 * 1024
 MAX_STATE_BYTES = 1024 * 1024
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
@@ -62,6 +65,10 @@ class SyncProtocolError(ValueError):
 
 class SyncPreconditionError(SyncProtocolError):
     """The cloud head changed and the caller must pull before retrying."""
+
+
+class DeviceRevokedError(SyncProtocolError):
+    """This device was deliberately excluded from future cloud memory."""
 
 
 def _now() -> datetime:
@@ -136,9 +143,7 @@ def _display_name(value: str) -> str:
 
 
 def _device_id(exchange_public: bytes, signing_public: bytes) -> str:
-    return hashlib.sha256(
-        b"lians-device-v1\0" + exchange_public + signing_public
-    ).hexdigest()
+    return hashlib.sha256(b"lians-device-v1\0" + exchange_public + signing_public).hexdigest()
 
 
 def _validate_device(document: Any) -> dict[str, str]:
@@ -175,9 +180,7 @@ class DeviceIdentity:
     @classmethod
     def from_store(cls, store: MemoryStore, display_name: str) -> DeviceIdentity:
         profile = store.profile.encode("utf-8")
-        exchange_seed = store.cipher.derive_key(
-            info=b"lians-sync-exchange-v1\0" + profile
-        )
+        exchange_seed = store.cipher.derive_key(info=b"lians-sync-exchange-v1\0" + profile)
         signing_seed = store.cipher.derive_key(info=b"lians-sync-signing-v1\0" + profile)
         return cls(
             display_name=_display_name(display_name),
@@ -215,6 +218,7 @@ class SyncState:
     trusted_devices: dict[str, dict[str, str]]
     head_revision: int = 0
     head_hash: str | None = None
+    revoked_device_ids: set[str] = field(default_factory=set)
 
     @classmethod
     def create(cls, identity: DeviceIdentity) -> SyncState:
@@ -234,6 +238,14 @@ class SyncState:
             raise SyncProtocolError("A trusted device changed its public identity")
         self.trusted_devices[validated["device_id"]] = validated
 
+    @property
+    def active_devices(self) -> dict[str, dict[str, str]]:
+        return {
+            device_id: device
+            for device_id, device in self.trusted_devices.items()
+            if device_id not in self.revoked_device_ids
+        }
+
     def save(
         self,
         path: str | Path,
@@ -246,7 +258,7 @@ class SyncState:
             raise SyncProtocolError("Sync state belongs to a different local device")
         header = {
             "format": STATE_FORMAT,
-            "version": SYNC_VERSION,
+            "version": STATE_VERSION,
             "workspace_id": self.workspace_id,
             "epoch": self.epoch,
             "device": self.device,
@@ -265,6 +277,7 @@ class SyncState:
             "trusted_devices": sorted(
                 self.trusted_devices.values(), key=lambda item: item["device_id"]
             ),
+            "revoked_device_ids": sorted(self.revoked_device_ids),
             "head": {"revision": self.head_revision, "object_hash": self.head_hash},
         }
         document = {**protected, "signature": identity.signature(_canonical(protected))}
@@ -287,21 +300,24 @@ class SyncState:
             document = json.loads(state_path.read_bytes())
         except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise SyncProtocolError("Sync state is invalid") from exc
-        _exact(
-            document,
-            {
-                "format",
-                "version",
-                "workspace_id",
-                "epoch",
-                "device",
-                "workspace_key",
-                "trusted_devices",
-                "head",
-                "signature",
-            },
-            label="Sync state",
-        )
+        fields = set(document) if isinstance(document, dict) else set()
+        expected = {
+            "format",
+            "version",
+            "workspace_id",
+            "epoch",
+            "device",
+            "workspace_key",
+            "trusted_devices",
+            "head",
+            "signature",
+        }
+        if fields == expected | {"revoked_device_ids"}:
+            state_version = STATE_VERSION
+        elif fields == expected:
+            state_version = SYNC_VERSION
+        else:
+            raise SyncProtocolError("Sync state contains unexpected or missing fields")
         signature = document.pop("signature")
         try:
             _verify_signature(
@@ -312,7 +328,7 @@ class SyncState:
             )
         finally:
             document["signature"] = signature
-        if document["format"] != STATE_FORMAT or document["version"] != SYNC_VERSION:
+        if document["format"] != STATE_FORMAT or document["version"] != state_version:
             raise SyncProtocolError("Sync state uses an unsupported format")
         workspace_id = _uuid(document["workspace_id"], label="Sync workspace ID")
         if type(document["epoch"]) is not int or document["epoch"] < 1:
@@ -327,7 +343,9 @@ class SyncState:
         )
         if wrapped["cipher"] != "AES-256-GCM":
             raise SyncProtocolError("Wrapped workspace key cipher is unsupported")
-        header = {key: document[key] for key in ("format", "version", "workspace_id", "epoch", "device")}
+        header = {
+            key: document[key] for key in ("format", "version", "workspace_id", "epoch", "device")
+        }
         try:
             workspace_key = cipher.open_bytes(
                 _unb64(wrapped["ciphertext"], label="Wrapped workspace key"),
@@ -335,7 +353,9 @@ class SyncState:
                 associated_data=_canonical(header),
             )
         except InvalidTag as exc:
-            raise SyncProtocolError("Sync state was changed or belongs to another OS account") from exc
+            raise SyncProtocolError(
+                "Sync state was changed or belongs to another OS account"
+            ) from exc
         if len(workspace_key) != 32:
             raise SyncProtocolError("Workspace key is invalid")
         if not isinstance(document["trusted_devices"], list) or not document["trusted_devices"]:
@@ -348,6 +368,15 @@ class SyncState:
             trusted[validated["device_id"]] = validated
         if device["device_id"] not in trusted:
             raise SyncProtocolError("Sync state does not trust its local device")
+        revoked_values = document.get("revoked_device_ids", [])
+        if (
+            not isinstance(revoked_values, list)
+            or not all(isinstance(value, str) for value in revoked_values)
+            or len(set(revoked_values)) != len(revoked_values)
+            or any(value not in trusted for value in revoked_values)
+        ):
+            raise SyncProtocolError("Sync state contains an invalid revoked-device list")
+        revoked_device_ids = set(revoked_values)
         head = _exact(document["head"], {"revision", "object_hash"}, label="Sync head")
         if type(head["revision"]) is not int or head["revision"] < 0:
             raise SyncProtocolError("Sync head revision is invalid")
@@ -364,6 +393,7 @@ class SyncState:
             trusted_devices=trusted,
             head_revision=head["revision"],
             head_hash=head["object_hash"],
+            revoked_device_ids=revoked_device_ids,
         )
 
 
@@ -568,12 +598,19 @@ def approve_enrollment(
     issued_at = _timestamp(now or _now())
     grant = {
         "format": GRANT_FORMAT,
-        "version": SYNC_VERSION,
+        "version": GRANT_VERSION,
         "workspace_id": state.workspace_id,
         "epoch": state.epoch,
         "request_id": request["request_id"],
         "recipient_device": recipient,
         "approver_device": state.device,
+        "trusted_devices": sorted(
+            {
+                **state.active_devices,
+                recipient["device_id"]: recipient,
+            }.values(),
+            key=lambda item: item["device_id"],
+        ),
         "issued_at": issued_at,
     }
     grant_signature = identity.signature(_canonical(grant))
@@ -618,22 +655,23 @@ def _validate_grant(
     signature: Any,
     *,
     workspace_id: str | None = None,
-) -> tuple[dict[str, Any], dict[str, str], dict[str, str]]:
-    grant = _exact(
-        grant,
-        {
-            "format",
-            "version",
-            "workspace_id",
-            "epoch",
-            "request_id",
-            "recipient_device",
-            "approver_device",
-            "issued_at",
-        },
-        label="Device grant",
-    )
-    if grant["format"] != GRANT_FORMAT or grant["version"] != SYNC_VERSION:
+) -> tuple[dict[str, Any], dict[str, str], dict[str, str], list[dict[str, str]] | None]:
+    if not isinstance(grant, dict):
+        raise SyncProtocolError("Device grant contains unexpected or missing fields")
+    common_fields = {
+        "format",
+        "version",
+        "workspace_id",
+        "epoch",
+        "request_id",
+        "recipient_device",
+        "approver_device",
+        "issued_at",
+    }
+    version = grant.get("version")
+    expected_fields = common_fields | ({"trusted_devices"} if version == GRANT_VERSION else set())
+    grant = _exact(grant, expected_fields, label="Device grant")
+    if grant["format"] != GRANT_FORMAT or version not in {SYNC_VERSION, GRANT_VERSION}:
         raise SyncProtocolError("Device grant uses an unsupported format")
     _uuid(grant["workspace_id"], label="Grant workspace ID")
     if workspace_id is not None and grant["workspace_id"] != workspace_id:
@@ -644,13 +682,31 @@ def _validate_grant(
     _parse_timestamp(grant["issued_at"], label="Grant issue time")
     recipient = _validate_device(grant["recipient_device"])
     approver = _validate_device(grant["approver_device"])
+    registry = None
+    if version == GRANT_VERSION:
+        values = grant["trusted_devices"]
+        if not isinstance(values, list) or not values:
+            raise SyncProtocolError("Device grant registry is invalid")
+        registry_map: dict[str, dict[str, str]] = {}
+        for value in values:
+            validated = _validate_device(value)
+            if validated["device_id"] in registry_map:
+                raise SyncProtocolError("Device grant registry contains a duplicate")
+            registry_map[validated["device_id"]] = validated
+        if (
+            list(registry_map) != sorted(registry_map)
+            or registry_map.get(recipient["device_id"]) != recipient
+            or registry_map.get(approver["device_id"]) != approver
+        ):
+            raise SyncProtocolError("Device grant registry does not match its devices")
+        registry = list(registry_map.values())
     _verify_signature(
         signature,
         approver["signing_public_key"],
         _canonical(grant),
         label="Device grant",
     )
-    return grant, recipient, approver
+    return grant, recipient, approver, registry
 
 
 def accept_enrollment(
@@ -685,7 +741,7 @@ def accept_enrollment(
         or approval["verification_code"] != request["verification_code"]
     ):
         raise SyncProtocolError("Enrollment approval does not match this request")
-    grant, recipient, approver = _validate_grant(
+    grant, recipient, approver, registry = _validate_grant(
         approval["grant"], approval["grant_signature"]
     )
     if grant["request_id"] != request["request_id"] or recipient != identity.descriptor:
@@ -738,7 +794,9 @@ def accept_enrollment(
             _canonical(wrap_header),
         )
     except InvalidTag as exc:
-        raise SyncProtocolError("Enrollment approval was changed or targets another device") from exc
+        raise SyncProtocolError(
+            "Enrollment approval was changed or targets another device"
+        ) from exc
     if len(workspace_key) != 32:
         raise SyncProtocolError("Enrollment workspace key is invalid")
     state = SyncState(
@@ -746,7 +804,11 @@ def accept_enrollment(
         epoch=grant["epoch"],
         workspace_key=workspace_key,
         device=recipient,
-        trusted_devices={recipient["device_id"]: recipient, approver["device_id"]: approver},
+        trusted_devices=(
+            {device["device_id"]: device for device in registry}
+            if registry is not None
+            else {recipient["device_id"]: recipient, approver["device_id"]: approver}
+        ),
     )
     state.save(state_path, store.cipher, identity, overwrite=False)
     return state
@@ -757,16 +819,285 @@ def apply_device_grant(
     grant: dict[str, Any],
     signature: dict[str, str],
 ) -> dict[str, str]:
-    validated, recipient, approver = _validate_grant(
+    validated, recipient, approver, registry = _validate_grant(
         grant, signature, workspace_id=state.workspace_id
     )
-    if validated["epoch"] != state.epoch:
+    if validated["epoch"] > state.epoch:
         raise SyncProtocolError("Device grant belongs to another workspace-key epoch")
     trusted_approver = state.trusted_devices.get(approver["device_id"])
     if trusted_approver != approver:
         raise SyncProtocolError("Device grant was not signed by a trusted device")
-    state.trust(recipient)
+    if registry is not None:
+        for device in registry:
+            state.trust(device)
+    else:
+        state.trust(recipient)
     return recipient
+
+
+def _rotation_wrap_key(
+    private_key: X25519PrivateKey,
+    public_key: X25519PublicKey,
+    *,
+    rotation_id: str,
+    recipient_device_id: str,
+) -> bytes:
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=uuid.UUID(rotation_id).bytes,
+        info=b"lians-workspace-key-rotation-v1\0" + recipient_device_id.encode("ascii"),
+    ).derive(private_key.exchange(public_key))
+
+
+def prepare_key_rotation(
+    state: SyncState,
+    identity: DeviceIdentity,
+    revoked_device_id: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Create a signed rotation that withholds the next key from one device."""
+
+    if state.device != identity.descriptor or identity.device_id not in state.active_devices:
+        raise SyncProtocolError("Only an active local device can protect future memory")
+    revoked = state.active_devices.get(revoked_device_id)
+    if revoked is None:
+        raise LookupError("Choose an active connected device")
+    if revoked_device_id == identity.device_id:
+        raise ValueError("Use Turn off sync on this device instead")
+    remaining = {
+        device_id: device
+        for device_id, device in state.active_devices.items()
+        if device_id != revoked_device_id
+    }
+    if not remaining:
+        raise SyncProtocolError("At least one device must keep the future-memory key")
+    rotation_id = str(uuid.uuid4())
+    next_epoch = state.epoch + 1
+    next_key = os.urandom(32)
+    wraps: list[dict[str, Any]] = []
+    for device_id, device in sorted(remaining.items()):
+        ephemeral = X25519PrivateKey.generate()
+        ephemeral_public = _raw_public(ephemeral.public_key())
+        recipient_public = X25519PublicKey.from_public_bytes(
+            _unb64(device["exchange_public_key"], label="Rotation recipient key", length=32)
+        )
+        wrap_key = _rotation_wrap_key(
+            ephemeral,
+            recipient_public,
+            rotation_id=rotation_id,
+            recipient_device_id=device_id,
+        )
+        nonce = os.urandom(12)
+        header = {
+            "cipher": "X25519-HKDF-SHA256+A256GCM",
+            "workspace_id": state.workspace_id,
+            "epoch": next_epoch,
+            "rotation_id": rotation_id,
+            "recipient_device_id": device_id,
+            "initiator_device_id": identity.device_id,
+            "ephemeral_public_key": _b64(ephemeral_public),
+            "nonce": _b64(nonce),
+        }
+        wraps.append(
+            {
+                **header,
+                "ciphertext": _b64(AESGCM(wrap_key).encrypt(nonce, next_key, _canonical(header))),
+            }
+        )
+    document = {
+        "format": ROTATION_FORMAT,
+        "version": SYNC_VERSION,
+        "rotation_id": rotation_id,
+        "workspace_id": state.workspace_id,
+        "previous_epoch": state.epoch,
+        "epoch": next_epoch,
+        "previous_head": {
+            "revision": state.head_revision,
+            "object_hash": state.head_hash,
+        },
+        "revoked_device": revoked,
+        "initiator_device": identity.descriptor,
+        "active_devices": sorted(remaining.values(), key=lambda item: item["device_id"]),
+        "key_wraps": wraps,
+        "created_at": _timestamp(now or _now()),
+    }
+    return {"rotation": document, "signature": identity.signature(_canonical(document))}
+
+
+def _validated_rotation(
+    state: SyncState,
+    pair: Any,
+) -> tuple[dict[str, Any], dict[str, dict[str, str]], dict[str, Any]]:
+    pair = _exact(pair, {"rotation", "signature"}, label="Workspace key rotation")
+    rotation = _exact(
+        pair["rotation"],
+        {
+            "format",
+            "version",
+            "rotation_id",
+            "workspace_id",
+            "previous_epoch",
+            "epoch",
+            "previous_head",
+            "revoked_device",
+            "initiator_device",
+            "active_devices",
+            "key_wraps",
+            "created_at",
+        },
+        label="Workspace key rotation",
+    )
+    if rotation["format"] != ROTATION_FORMAT or rotation["version"] != SYNC_VERSION:
+        raise SyncProtocolError("Workspace key rotation uses an unsupported format")
+    _uuid(rotation["rotation_id"], label="Workspace key rotation ID")
+    if rotation["workspace_id"] != state.workspace_id:
+        raise SyncProtocolError("Workspace key rotation belongs to another workspace")
+    if (
+        type(rotation["previous_epoch"]) is not int
+        or rotation["previous_epoch"] != state.epoch
+        or type(rotation["epoch"]) is not int
+        or rotation["epoch"] != state.epoch + 1
+    ):
+        raise SyncPreconditionError("Workspace key rotation is missing, stale, or replayed")
+    _parse_timestamp(rotation["created_at"], label="Workspace key rotation time")
+    previous_head = _exact(
+        rotation["previous_head"], {"revision", "object_hash"}, label="Rotation previous head"
+    )
+    if type(previous_head["revision"]) is not int or previous_head["revision"] < 0:
+        raise SyncProtocolError("Workspace key rotation head is invalid")
+    if previous_head["revision"] == 0:
+        if previous_head["object_hash"] is not None:
+            raise SyncProtocolError("Workspace key rotation head is invalid")
+    elif not isinstance(previous_head["object_hash"], str) or not _HEX_64.fullmatch(
+        previous_head["object_hash"]
+    ):
+        raise SyncProtocolError("Workspace key rotation head is invalid")
+    revoked = _validate_device(rotation["revoked_device"])
+    initiator = _validate_device(rotation["initiator_device"])
+    if (
+        state.active_devices.get(revoked["device_id"]) != revoked
+        or state.active_devices.get(initiator["device_id"]) != initiator
+        or revoked["device_id"] == initiator["device_id"]
+    ):
+        raise SyncProtocolError("Workspace key rotation names an inactive device")
+    values = rotation["active_devices"]
+    if not isinstance(values, list) or not values:
+        raise SyncProtocolError("Workspace key rotation has no active devices")
+    active: dict[str, dict[str, str]] = {}
+    for value in values:
+        device = _validate_device(value)
+        if device["device_id"] in active:
+            raise SyncProtocolError("Workspace key rotation repeats an active device")
+        active[device["device_id"]] = device
+    expected = {
+        device_id: device
+        for device_id, device in state.active_devices.items()
+        if device_id != revoked["device_id"]
+    }
+    if list(active) != sorted(active) or active != expected:
+        raise SyncProtocolError("Workspace key rotation changes the wrong device set")
+    wraps = rotation["key_wraps"]
+    if not isinstance(wraps, list) or len(wraps) != len(active):
+        raise SyncProtocolError("Workspace key rotation wraps are incomplete")
+    wrap_map: dict[str, dict[str, Any]] = {}
+    for value in wraps:
+        wrap = _exact(
+            value,
+            {
+                "cipher",
+                "workspace_id",
+                "epoch",
+                "rotation_id",
+                "recipient_device_id",
+                "initiator_device_id",
+                "ephemeral_public_key",
+                "nonce",
+                "ciphertext",
+            },
+            label="Workspace key rotation wrap",
+        )
+        recipient_id = wrap["recipient_device_id"]
+        expected_wrap = {
+            "cipher": "X25519-HKDF-SHA256+A256GCM",
+            "workspace_id": state.workspace_id,
+            "epoch": rotation["epoch"],
+            "rotation_id": rotation["rotation_id"],
+            "initiator_device_id": initiator["device_id"],
+        }
+        if (
+            not isinstance(recipient_id, str)
+            or recipient_id not in active
+            or recipient_id in wrap_map
+            or any(wrap.get(key) != expected_value for key, expected_value in expected_wrap.items())
+        ):
+            raise SyncProtocolError("Workspace key rotation wrap does not match")
+        _unb64(wrap["ephemeral_public_key"], label="Rotation ephemeral key", length=32)
+        _unb64(wrap["nonce"], label="Rotation nonce", length=12)
+        _unb64(wrap["ciphertext"], label="Wrapped future-memory key", length=48)
+        wrap_map[recipient_id] = wrap
+    if list(wrap_map) != sorted(wrap_map) or set(wrap_map) != set(active):
+        raise SyncProtocolError("Workspace key rotation wraps are incomplete")
+    _verify_signature(
+        pair["signature"],
+        initiator["signing_public_key"],
+        _canonical(rotation),
+        label="Workspace key rotation",
+    )
+    return rotation, active, wrap_map
+
+
+def apply_key_rotation(
+    state: SyncState,
+    identity: DeviceIdentity,
+    pair: dict[str, Any],
+) -> dict[str, Any]:
+    """Verify and accept a next-epoch key only when this device remains active."""
+
+    if state.device != identity.descriptor:
+        raise SyncProtocolError("Sync state belongs to a different local device")
+    rotation, active, wraps = _validated_rotation(state, pair)
+    wrap = wraps.get(identity.device_id)
+    if wrap is None:
+        raise DeviceRevokedError(
+            "This device was removed from future cloud memory; local memory remains here"
+        )
+    ephemeral_public = X25519PublicKey.from_public_bytes(
+        _unb64(wrap["ephemeral_public_key"], label="Rotation ephemeral key", length=32)
+    )
+    wrap_key = _rotation_wrap_key(
+        identity.exchange_private,
+        ephemeral_public,
+        rotation_id=rotation["rotation_id"],
+        recipient_device_id=identity.device_id,
+    )
+    header = {key: wrap[key] for key in wrap if key != "ciphertext"}
+    try:
+        next_key = AESGCM(wrap_key).decrypt(
+            _unb64(wrap["nonce"], label="Rotation nonce", length=12),
+            _unb64(wrap["ciphertext"], label="Wrapped future-memory key", length=48),
+            _canonical(header),
+        )
+    except InvalidTag as exc:
+        raise SyncProtocolError(
+            "Future-memory key wrap was changed or targets another device"
+        ) from exc
+    if len(next_key) != 32:
+        raise SyncProtocolError("Future-memory key is invalid")
+    revoked_id = rotation["revoked_device"]["device_id"]
+    for device in active.values():
+        state.trust(device)
+    state.revoked_device_ids.add(revoked_id)
+    state.workspace_key = next_key
+    state.epoch = rotation["epoch"]
+    state.head_revision = 0
+    state.head_hash = None
+    return {
+        "rotation_id": rotation["rotation_id"],
+        "epoch": state.epoch,
+        "revoked_device_id": revoked_id,
+    }
 
 
 def prepare_revision(
@@ -883,7 +1214,10 @@ def apply_revision(
         workspace_id=state.workspace_id,
         epoch=state.epoch,
     )
-    if envelope["revision"] != state.head_revision + 1 or envelope["previous_hash"] != state.head_hash:
+    if (
+        envelope["revision"] != state.head_revision + 1
+        or envelope["previous_hash"] != state.head_hash
+    ):
         raise SyncPreconditionError("Sync revision is missing, stale, or replayed")
     header = {
         key: envelope[key]
@@ -928,7 +1262,10 @@ def acknowledge_revision(state: SyncState, envelope: dict[str, Any]) -> None:
         workspace_id=state.workspace_id,
         epoch=state.epoch,
     )
-    if envelope["revision"] != state.head_revision + 1 or envelope["previous_hash"] != state.head_hash:
+    if (
+        envelope["revision"] != state.head_revision + 1
+        or envelope["previous_hash"] != state.head_hash
+    ):
         raise SyncPreconditionError("Cloud acknowledgement does not extend the local sync head")
     state.head_revision = envelope["revision"]
     state.head_hash = envelope["object_hash"]
@@ -950,7 +1287,9 @@ class OpaqueRevisionLog:
         self._workspaces[state.workspace_id] = {
             "epoch": state.epoch,
             "devices": {state.device["device_id"]: copy.deepcopy(state.device)},
+            "revoked": [],
             "grants": [],
+            "rotations": [],
             "revisions": [],
         }
 
@@ -968,30 +1307,148 @@ class OpaqueRevisionLog:
             },
             label="Enrollment approval",
         )
-        grant, recipient, approver = _validate_grant(
+        grant, recipient, approver, registry = _validate_grant(
             approval["grant"], approval["grant_signature"]
         )
         workspace = self._workspaces.get(grant["workspace_id"])
         if workspace is None or workspace["epoch"] != grant["epoch"]:
             raise SyncProtocolError("Device grant targets an unknown workspace")
-        if workspace["devices"].get(approver["device_id"]) != approver:
+        if (
+            workspace["devices"].get(approver["device_id"]) != approver
+            or approver["device_id"] in workspace["revoked"]
+        ):
             raise SyncProtocolError("Device grant approver is not registered")
+        if registry is not None:
+            expected = {
+                device_id: device
+                for device_id, device in workspace["devices"].items()
+                if device_id not in workspace["revoked"]
+            }
+            expected[recipient["device_id"]] = recipient
+            if {device["device_id"]: device for device in registry} != expected:
+                raise SyncProtocolError("Device grant registry changed")
         existing = workspace["devices"].get(recipient["device_id"])
         if existing is not None and existing != recipient:
             raise SyncProtocolError("Registered device public identity changed")
         workspace["devices"][recipient["device_id"]] = copy.deepcopy(recipient)
-        pair = {"grant": copy.deepcopy(grant), "signature": copy.deepcopy(approval["grant_signature"])}
+        pair = {
+            "grant": copy.deepcopy(grant),
+            "signature": copy.deepcopy(approval["grant_signature"]),
+        }
         if pair not in workspace["grants"]:
             workspace["grants"].append(pair)
 
     def grants(self, workspace_id: str) -> list[dict[str, Any]]:
-        return copy.deepcopy(self._workspace(workspace_id)["grants"])
+        workspace = self._workspace(workspace_id)
+        return copy.deepcopy(
+            [
+                item
+                for item in workspace["grants"]
+                if item["grant"]["recipient_device"]["device_id"]
+                not in workspace["revoked"]
+            ]
+        )
+
+    def key_rotations(self, workspace_id: str, *, after: int) -> dict[str, Any]:
+        workspace = self._workspace(workspace_id)
+        return {
+            "workspace_id": workspace_id,
+            "epoch": workspace["epoch"],
+            "rotations": copy.deepcopy(
+                [
+                    item
+                    for item in workspace["rotations"]
+                    if item["rotation"]["epoch"] > after
+                ]
+            ),
+        }
+
+    def devices(self, workspace_id: str) -> dict[str, Any]:
+        workspace = self._workspace(workspace_id)
+        rotations = {
+            item["rotation"]["revoked_device"]["device_id"]: item
+            for item in workspace["rotations"]
+        }
+        return {
+            "workspace_id": workspace_id,
+            "epoch": workspace["epoch"],
+            "devices": [
+                {
+                    "device": copy.deepcopy(device),
+                    "state": "revoked" if device_id in workspace["revoked"] else "active",
+                    "enrolled_at": _timestamp(_now()),
+                    "revoked_at": (
+                        rotations[device_id]["rotation"]["created_at"]
+                        if device_id in rotations
+                        else None
+                    ),
+                    "revocation": (
+                        {
+                            "rotation_id": rotations[device_id]["rotation"]["rotation_id"],
+                            "epoch": rotations[device_id]["rotation"]["epoch"],
+                            "initiator_device_id": rotations[device_id]["rotation"][
+                                "initiator_device"
+                            ]["device_id"],
+                            "created_at": rotations[device_id]["rotation"]["created_at"],
+                            "signature": rotations[device_id]["signature"],
+                        }
+                        if device_id in rotations
+                        else None
+                    ),
+                }
+                for device_id, device in sorted(workspace["devices"].items())
+            ],
+        }
+
+    def remove_device(self, workspace_id: str, device_id: str, pair: dict[str, Any]) -> dict[str, Any]:
+        workspace = self._workspace(workspace_id)
+        initiator = pair.get("rotation", {}).get("initiator_device")
+        if not isinstance(initiator, dict):
+            raise SyncProtocolError("Workspace key rotation is invalid")
+        current_devices = copy.deepcopy(workspace["devices"])
+        state = SyncState(
+            workspace_id=workspace_id,
+            epoch=workspace["epoch"],
+            workspace_key=b"\0" * 32,
+            device=initiator,
+            trusted_devices=current_devices,
+            head_revision=len(workspace["revisions"]),
+            head_hash=(
+                workspace["revisions"][-1]["object_hash"]
+                if workspace["revisions"]
+                else None
+            ),
+            revoked_device_ids=set(workspace["revoked"]),
+        )
+        rotation, _, _ = _validated_rotation(state, pair)
+        if rotation["revoked_device"]["device_id"] != device_id:
+            raise SyncProtocolError("Workspace key rotation removes another device")
+        if rotation["previous_head"] != {
+            "revision": state.head_revision,
+            "object_hash": state.head_hash,
+        }:
+            raise SyncPreconditionError("Cloud sync head changed; sync before removal")
+        revision_count = len(workspace["revisions"])
+        workspace["epoch"] = rotation["epoch"]
+        workspace["revoked"].append(device_id)
+        workspace["rotations"].append(copy.deepcopy(pair))
+        workspace["revisions"] = []
+        return {
+            "status": "removed",
+            "epoch": workspace["epoch"],
+            "encrypted_revisions_deleted": revision_count,
+            "future_memory_protected": True,
+        }
 
     def push(self, envelope: dict[str, Any]) -> dict[str, Any]:
         workspace = self._workspace(envelope.get("workspace_id"))
         envelope = _validated_revision_public(
             envelope,
-            workspace["devices"],
+            {
+                device_id: device
+                for device_id, device in workspace["devices"].items()
+                if device_id not in workspace["revoked"]
+            },
             workspace_id=envelope["workspace_id"],
             epoch=workspace["epoch"],
         )

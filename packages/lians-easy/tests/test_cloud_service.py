@@ -93,6 +93,18 @@ class HTTPShapeCloud:
             def grants(self, workspace_id):
                 return outer.log.grants(workspace_id)
 
+            def key_rotations(self, workspace_id, *, after):
+                return outer.log.key_rotations(workspace_id, after=after)
+
+            def devices(self, workspace_id):
+                return outer.log.devices(workspace_id)
+
+            def remove_device(
+                self, workspace_id, device_id, rotation, *, confirmed=False
+            ):
+                assert confirmed is True
+                return outer.log.remove_device(workspace_id, device_id, rotation)
+
             def revisions_after(self, workspace_id, revision):
                 rows = outer.log.revisions_after(workspace_id, revision)
                 workspace = outer.log._workspace(workspace_id)
@@ -358,6 +370,70 @@ def test_cursor_memory_reaches_codex_and_claude_with_correction_and_forgetting(t
     )["structuredContent"]
     assert after_forgetting["memories"] == []
     assert after_forgetting["receipt"]["memory_count"] == 0
+
+
+def test_device_management_rotates_future_key_without_claiming_remote_erasure(tmp_path):
+    auth = FakeAuth()
+    cloud = HTTPShapeCloud()
+    first_store = MemoryStore(tmp_path / "first" / "memory.sqlite3")
+    first_path = tmp_path / "first" / "sync-state.json"
+    first = _service(first_store, auth, cloud, first_path, "Main PC")
+    first_store.remember("Shared before removal", scope="global", source_client="cursor")
+    first.sync_now()
+
+    second_store = MemoryStore(tmp_path / "second" / "memory.sqlite3")
+    second_path = tmp_path / "second" / "sync-state.json"
+    second = _service(second_store, auth, cloud, second_path, "Old laptop")
+    enrollment = second.start_device_enrollment()
+    first.approve_device_request(
+        enrollment["request_id"],
+        enrollment["verification_code"],
+        confirmed=True,
+    )
+    second.device_enrollment_status()
+    second_identity = DeviceIdentity.from_store(second_store, "Old laptop")
+    old_state = SyncState.load(second_path, second_store.cipher, second_identity)
+
+    registry = first.connected_devices()
+    assert registry["count"] == 2
+    old_laptop = next(
+        item for item in registry["devices"] if item["display_name"] == "Old laptop"
+    )
+    assert old_laptop["can_remove"] is True
+    assert all("signing_public_key" not in item for item in registry["devices"])
+
+    removed = first.remove_device(old_laptop["device_id"], confirmed=True)
+    assert removed["future_memory_protected"] is True
+    assert removed["already_received_may_remain"] is True
+    assert "already received" in removed["message"]
+    first_identity = DeviceIdentity.from_store(first_store, "Main PC")
+    rotated_state = SyncState.load(first_path, first_store.cipher, first_identity)
+    assert rotated_state.epoch == 2
+    assert rotated_state.workspace_key != old_state.workspace_key
+
+    first_store.remember("Future-only launch color is cobalt", scope="global")
+    first.sync_now()
+    denied = second.pull_if_connected()
+    assert denied["state"] == "device_removed"
+    assert second_store.recall("future-only launch color") == []
+    assert second_store.recall("shared before removal")[0]["content"] == (
+        "Shared before removal"
+    )
+    second_store.remember("Private note after removal", scope="global")
+    local_only = second.sync_if_connected()
+    assert local_only == {
+        "state": "device_removed",
+        "attempted": True,
+        "memory_scope": "local",
+        "pending": False,
+        "message": "Saved locally. This device no longer receives future cloud memory.",
+    }
+    assert second_store.recall("private note after removal")[0]["content"] == (
+        "Private note after removal"
+    )
+    cloud_document = json.dumps(cloud.log._workspaces)
+    assert "Future-only launch color" not in cloud_document
+    assert "Private note after removal" not in cloud_document
 
 
 def test_cloud_failure_never_blocks_or_leaks_from_a_local_remember(tmp_path):

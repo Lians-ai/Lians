@@ -360,6 +360,10 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "/v1/cloud/device-enrollment/cancel" in cloud_script
     assert "/v1/cloud/device-requests" in cloud_script
     assert "/v1/cloud/device-requests/approve" in cloud_script
+    assert "/v1/cloud/devices" in cloud_script
+    assert "/v1/cloud/devices/remove" in cloud_script
+    assert "Memory already saved on this device may remain there" in cloud_script
+    assert "Removing a device gives every remaining device a new key" in cloud_script
     assert "Add this device" in cloud_script
     assert "Code matches · approve" in cloud_script
     assert "Lians cannot read it" in cloud_script

@@ -196,7 +196,13 @@
       "Approve a device",
     );
     review.type = "button";
-    deviceActions.append(join, review);
+    const manage = element(
+      "button",
+      "lians-cloud__button lians-cloud__button--device",
+      "Manage devices",
+    );
+    manage.type = "button";
+    deviceActions.append(join, review, manage);
 
     const enrollment = element("div", "lians-cloud__enrollment");
     enrollment.hidden = true;
@@ -213,7 +219,9 @@
 
     const requestList = element("div", "lians-cloud__request-list");
     requestList.hidden = true;
-    devices.append(devicesTop, deviceActions, enrollment, requestList);
+    const deviceList = element("div", "lians-cloud__device-list");
+    deviceList.hidden = true;
+    devices.append(devicesTop, deviceActions, enrollment, requestList, deviceList);
 
     const recovery = element("div", "lians-cloud__recovery");
     recovery.append(
@@ -221,7 +229,7 @@
       element(
         "span",
         "",
-        "Only approve a device when the code shown there matches exactly. Keep an encrypted Lians backup as a separate recovery path.",
+        "Removing a device gives every remaining device a new key. It cannot erase memory that device already received. Keep an encrypted Lians backup in case every trusted device is lost.",
       ),
     );
 
@@ -269,6 +277,7 @@
       deviceCount,
       join,
       review,
+      manage,
       enrollment,
       enrollmentLabel,
       enrollmentCode,
@@ -276,6 +285,7 @@
       check,
       cancel,
       requestList,
+      deviceList,
       metrics,
       feedback,
       primary,
@@ -350,6 +360,7 @@
     ui.devices.hidden = !connected;
     ui.join.hidden = !connected || ready;
     ui.review.hidden = !connected || !ready;
+    ui.manage.hidden = !connected || !ready;
     const revision = Number(status.head_revision || 0);
     const devices = Math.max(1, Number(status.device_count || 1));
     ui.deviceCount.textContent = `${devices} ${devices === 1 ? "DEVICE" : "DEVICES"}`;
@@ -362,6 +373,7 @@
       ui.danger,
       ui.join,
       ui.review,
+      ui.manage,
       ui.check,
       ui.cancel,
     ].forEach((button) => {
@@ -460,6 +472,7 @@
 
   async function loadDeviceRequests() {
     if (busy) return;
+    ui.deviceList.hidden = true;
     ui.requestList.hidden = false;
     ui.requestList.replaceChildren(
       element("p", "lians-cloud__request-empty", "Checking for new devices…"),
@@ -481,6 +494,105 @@
     } catch {
       ui.requestList.replaceChildren(
         element("p", "lians-cloud__request-empty", "Lians could not load device requests yet."),
+      );
+    }
+  }
+
+  function deviceCard(item) {
+    const card = element("article", "lians-cloud__managed-device");
+    const top = element("div", "lians-cloud__managed-device-top");
+    const identity = element("div");
+    const name = item.display_name || "Connected device";
+    identity.append(
+      element("strong", "lians-cloud__managed-device-name", name),
+      element(
+        "span",
+        "lians-cloud__managed-device-state",
+        item.current
+          ? "THIS DEVICE · ACTIVE"
+          : item.state === "active"
+            ? "ACTIVE · RECEIVES FUTURE MEMORY"
+            : "FUTURE SYNC BLOCKED · SIGNED RECEIPT",
+      ),
+    );
+    top.append(identity);
+    card.append(top);
+
+    if (item.can_remove) {
+      const warning = element(
+        "p",
+        "lians-cloud__managed-device-warning",
+        "Removing rotates the memory key. Memory already saved on this device may remain there.",
+      );
+      const remove = element(
+        "button",
+        "lians-cloud__button lians-cloud__button--remove-device",
+        "Protect future memory",
+      );
+      remove.type = "button";
+      remove.dataset.armed = "false";
+      remove.addEventListener("click", async () => {
+        if (busy) return;
+        if (remove.dataset.armed !== "true") {
+          remove.dataset.armed = "true";
+          remove.textContent = "Click again to remove & rotate key";
+          ui.feedback.textContent =
+            `${name} will stop receiving future memory. Data it already received cannot be remotely erased.`;
+          window.setTimeout(() => {
+            remove.dataset.armed = "false";
+            remove.textContent = "Protect future memory";
+          }, 8_000);
+          return;
+        }
+        busy = true;
+        render(currentStatus, `Rotating the memory key without ${name}…`);
+        try {
+          const result = await request("/v1/cloud/devices/remove", "POST", {
+            device_id: item.device_id,
+          });
+          await refresh(result.message || `${name} cannot decrypt future cloud memory.`);
+          busy = false;
+          await loadDevices();
+        } catch {
+          await refresh(`Lians could not remove ${name}. The current key and device access were unchanged.`);
+        } finally {
+          busy = false;
+          render(currentStatus, ui.feedback.textContent);
+        }
+      });
+      card.append(warning, remove);
+    } else if (item.state === "revoked") {
+      card.append(
+        element(
+          "p",
+          "lians-cloud__managed-device-warning",
+          "This signed removal blocks decryption of future cloud memory. Previously received local memory may remain.",
+        ),
+      );
+    }
+    return card;
+  }
+
+  async function loadDevices() {
+    if (busy) return;
+    ui.requestList.hidden = true;
+    ui.deviceList.hidden = false;
+    ui.deviceList.replaceChildren(
+      element("p", "lians-cloud__request-empty", "Verifying connected devices…"),
+    );
+    try {
+      const result = await request("/v1/cloud/devices");
+      const devices = Array.isArray(result.devices) ? result.devices : [];
+      if (!devices.length) {
+        ui.deviceList.replaceChildren(
+          element("p", "lians-cloud__request-empty", result.message || "No active devices found."),
+        );
+        return;
+      }
+      ui.deviceList.replaceChildren(...devices.map(deviceCard));
+    } catch {
+      ui.deviceList.replaceChildren(
+        element("p", "lians-cloud__request-empty", "Lians could not verify devices yet."),
       );
     }
   }
@@ -534,6 +646,7 @@
   ui.secondary.addEventListener("click", () => act("signout"));
   ui.join.addEventListener("click", () => act("join"));
   ui.review.addEventListener("click", loadDeviceRequests);
+  ui.manage.addEventListener("click", loadDevices);
   ui.check.addEventListener("click", () => checkEnrollment(false));
   ui.cancel.addEventListener("click", () => act("cancel-enrollment"));
   ui.danger.addEventListener("click", () => {

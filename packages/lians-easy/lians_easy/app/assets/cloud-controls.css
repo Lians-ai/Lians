@@ -232,6 +232,7 @@
 .lians-cloud__devices[hidden],
 .lians-cloud__enrollment[hidden],
 .lians-cloud__request-list[hidden],
+.lians-cloud__device-list[hidden],
 .lians-cloud__button[hidden] {
   display: none !important;
 }
@@ -350,7 +351,8 @@
   text-decoration: underline;
 }
 
-.lians-cloud__request-list {
+.lians-cloud__request-list,
+.lians-cloud__device-list {
   display: grid;
   gap: 10px;
   margin-top: 16px;
@@ -392,6 +394,54 @@
   line-height: 1.55;
   margin: 0;
   padding: 12px 0 2px;
+}
+
+.lians-cloud__managed-device {
+  background: #0b1626;
+  border-left: 2px solid #3f78ff;
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+}
+
+.lians-cloud__managed-device-top,
+.lians-cloud__managed-device-top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.lians-cloud__managed-device-name {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lians-cloud__managed-device-state {
+  color: #8eafff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.lians-cloud__managed-device-warning {
+  color: #aabbd6;
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.lians-cloud__button--remove-device {
+  background: transparent;
+  border-color: #744052;
+  color: #ff9bad;
+  justify-self: start;
+  min-height: 38px;
+}
+
+.lians-cloud__button--remove-device[data-armed="true"] {
+  background: #6e2437;
+  border-color: #ff6c89;
+  color: #ffffff;
 }
 
 .lians-cloud__metrics {

@@ -163,6 +163,14 @@ for that recipient. The request survives an app restart in locally encrypted
 state, is removed after acceptance, and never asks the user for a workspace ID,
 JSON file, terminal command, API key, or recovery phrase.
 
+The same panel can verify connected devices and remove an old device without
+showing keys or workspace identifiers. Removal advances the encryption epoch,
+wraps a fresh workspace key only to surviving devices, deletes obsolete
+encrypted cloud revisions, and immediately publishes a fresh encrypted
+snapshot. The UI deliberately says that memory already downloaded to the old
+device may remain there; removal protects future cloud memory and does not
+pretend to remotely erase that computer.
+
 Development builds opt into this path with deployment-provided public values;
 there is no client secret:
 
@@ -175,8 +183,8 @@ LIANS_OAUTH_AUDIENCE=https://api.lians.ai
 
 This technical preview is not a claim that hosted sync or account recovery is
 generally available. The ordinary supported migration path remains **Move
-memory safely** until the production identity provider, device revocation and
-key rotation, recovery, provider-outage qualification, and signed release gates
+memory safely** until the production identity provider, lost-device recovery,
+provider-outage qualification, external cryptographic review, and signed release gates
 are complete. The complete boundary is documented in
 [`docs/cloud-sync-protocol.md`](../../docs/cloud-sync-protocol.md).
 

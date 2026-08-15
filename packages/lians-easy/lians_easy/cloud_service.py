@@ -17,6 +17,7 @@ from .cloud_auth import CloudAuthError, NativeCloudAuth
 from .store import MemoryStore
 from .sync import (
     DeviceIdentity,
+    DeviceRevokedError,
     PendingEnrollment,
     SyncPreconditionError,
     SyncProtocolError,
@@ -24,8 +25,10 @@ from .sync import (
     accept_enrollment,
     acknowledge_revision,
     apply_device_grant,
+    apply_key_rotation,
     apply_revision,
     approve_enrollment,
+    prepare_key_rotation,
     prepare_revision,
 )
 from .sync_http import OpaqueSyncHTTPClient, SyncCloudError
@@ -99,9 +102,7 @@ class CloudSyncService:
     ) -> None:
         self.store = store
         self.auth = auth
-        self.state_path = Path(
-            state_path or store.path.with_name("sync-state.json")
-        ).expanduser()
+        self.state_path = Path(state_path or store.path.with_name("sync-state.json")).expanduser()
         self.lock_path = self.state_path.with_name(f".{self.state_path.name}.lock")
         self.pending_path = self.state_path.with_name("pending-device-enrollment.json")
         self.device_name = (device_name or platform.node() or "This device")[:80]
@@ -183,7 +184,7 @@ class CloudSyncService:
             **auth_status,
             "sync_state": "ready",
             "head_revision": state.head_revision,
-            "device_count": len(state.trusted_devices),
+            "device_count": len(state.active_devices),
         }
 
     @staticmethod
@@ -216,17 +217,13 @@ class CloudSyncService:
                     pending.save(self.pending_path, self.store.cipher, identity)
                 except (OSError, SyncProtocolError):
                     try:
-                        client.delete_enrollment(
-                            pending.request["request_id"], confirmed=True
-                        )
+                        client.delete_enrollment(pending.request["request_id"], confirmed=True)
                     except (OSError, SyncCloudError, ValueError):
                         pass
                     raise
             return {
                 **self._pending_summary(pending.request, state="waiting_for_approval"),
-                "message": (
-                    "On a connected device, open Lians and approve this matching code."
-                ),
+                "message": ("On a connected device, open Lians and approve this matching code."),
             }
 
     def device_enrollment_status(self) -> dict[str, Any]:
@@ -241,7 +238,7 @@ class CloudSyncService:
                 return {
                     "state": "connected",
                     "device": state.device,
-                    "device_count": len(state.trusted_devices),
+                    "device_count": len(state.active_devices),
                     "head_revision": state.head_revision,
                     "message": "This device can use encrypted memory everywhere.",
                 }
@@ -274,9 +271,7 @@ class CloudSyncService:
             approval = remote.get("approval")
             if approval is None:
                 return {
-                    **self._pending_summary(
-                        pending.request, state="waiting_for_approval"
-                    ),
+                    **self._pending_summary(pending.request, state="waiting_for_approval"),
                     "message": "Waiting for approval on a connected device.",
                 }
             if not isinstance(approval, dict):
@@ -312,7 +307,7 @@ class CloudSyncService:
             return {
                 "state": "connected",
                 "device": state.device,
-                "device_count": len(state.trusted_devices),
+                "device_count": len(state.active_devices),
                 "revisions_pulled": pulled,
                 "revision_pushed": pushed,
                 "head_revision": state.head_revision,
@@ -336,13 +331,9 @@ class CloudSyncService:
                 if request["device"].get("device_id") == identity.device_id:
                     continue
                 try:
-                    requests.append(
-                        self._pending_summary(request, state="waiting_for_approval")
-                    )
+                    requests.append(self._pending_summary(request, state="waiting_for_approval"))
                 except (KeyError, TypeError) as exc:
-                    raise SyncCloudError(
-                        "Lians Cloud returned an invalid device request"
-                    ) from exc
+                    raise SyncCloudError("Lians Cloud returned an invalid device request") from exc
             return {"state": "ready", "requests": requests, "count": len(requests)}
 
     def approve_device_request(
@@ -384,7 +375,7 @@ class CloudSyncService:
                     "device_id": recipient["device_id"],
                     "display_name": recipient["display_name"],
                 },
-                "device_count": len(state.trusted_devices),
+                "device_count": len(state.active_devices),
                 "message": f"{recipient['display_name']} can now finish connecting.",
             }
 
@@ -398,9 +389,7 @@ class CloudSyncService:
             if pending is None:
                 raise LookupError("No Add Device request is waiting")
             try:
-                self._client().delete_enrollment(
-                    pending.request["request_id"], confirmed=True
-                )
+                self._client().delete_enrollment(pending.request["request_id"], confirmed=True)
             except SyncCloudError as exc:
                 if exc.status not in {404, 410}:
                     raise
@@ -408,6 +397,157 @@ class CloudSyncService:
             return {
                 "state": "cancelled",
                 "message": "The device request was cancelled. Nothing was connected.",
+            }
+
+    def connected_devices(self) -> dict[str, Any]:
+        """Return a key-free device list after applying signed registry changes."""
+
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            state = self._load(identity)
+            if state is None:
+                raise ValueError("Start or join cloud memory before managing devices")
+            client = self._client()
+            try:
+                self._pull(client, state, identity)
+            except DeviceRevokedError:
+                return {
+                    "state": "device_removed",
+                    "devices": [],
+                    "count": 0,
+                    "message": (
+                        "This device no longer receives future cloud memory. "
+                        "Local memory remains here."
+                    ),
+                }
+            document = client.devices(state.workspace_id)
+            if document.get("epoch") != state.epoch:
+                raise SyncProtocolError("Cloud device registry uses another key epoch")
+            values = document.get("devices")
+            if not isinstance(values, list):
+                raise SyncCloudError("Lians Cloud returned an invalid device registry")
+            devices: list[dict[str, Any]] = []
+            active_count = 0
+            for value in values:
+                if not isinstance(value, dict) or not isinstance(value.get("device"), dict):
+                    raise SyncCloudError("Lians Cloud returned an invalid device registry")
+                descriptor = value["device"]
+                device_id = descriptor.get("device_id")
+                display_name = descriptor.get("display_name")
+                device_state = value.get("state")
+                if (
+                    not isinstance(device_id, str)
+                    or not isinstance(display_name, str)
+                    or device_state not in {"active", "revoked"}
+                ):
+                    raise SyncProtocolError("Cloud device registry does not match signed trust")
+                if device_state == "active":
+                    if state.active_devices.get(device_id) != descriptor:
+                        raise SyncProtocolError(
+                            "Cloud device registry does not match signed trust"
+                        )
+                elif device_id not in state.revoked_device_ids:
+                    # A device enrolled after an older rotation has no local
+                    # trust path for that historical descriptor. Do not turn a
+                    # server-only claim into a verified receipt in the App.
+                    continue
+                elif state.trusted_devices.get(device_id) != descriptor:
+                    raise SyncProtocolError("Cloud device registry does not match signed trust")
+                if device_state == "active":
+                    active_count += 1
+                revocation = value.get("revocation")
+                public_revocation = None
+                if isinstance(revocation, dict):
+                    public_revocation = {
+                        "rotation_id": revocation.get("rotation_id"),
+                        "epoch": revocation.get("epoch"),
+                        "initiator_device_id": revocation.get("initiator_device_id"),
+                        "created_at": revocation.get("created_at"),
+                        "verified": True,
+                    }
+                devices.append(
+                    {
+                        "device_id": device_id,
+                        "display_name": display_name,
+                        "state": device_state,
+                        "current": device_id == identity.device_id,
+                        "can_remove": device_state == "active" and device_id != identity.device_id,
+                        "enrolled_at": value.get("enrolled_at"),
+                        "revoked_at": value.get("revoked_at"),
+                        "revocation": public_revocation,
+                    }
+                )
+            return {
+                "state": "ready",
+                "devices": devices,
+                "count": active_count,
+                "epoch": state.epoch,
+                "message": "Only active devices receive the current future-memory key.",
+            }
+
+    def remove_device(
+        self,
+        device_id: str,
+        *,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Exclude one device and rotate the shared key before the next revision."""
+
+        if not confirmed:
+            raise ValueError("Protecting future memory requires confirmed=true")
+        with self._exclusive():
+            self._require_connected()
+            identity = self._identity()
+            state = self._load(identity)
+            if state is None:
+                raise ValueError("Start or join cloud memory before managing devices")
+            client = self._client()
+            self._pull(client, state, identity)
+            target = state.active_devices.get(device_id)
+            if target is None:
+                raise LookupError("Choose an active connected device")
+            if device_id == identity.device_id:
+                raise ValueError("Use Turn off sync on this device instead")
+            pair = prepare_key_rotation(state, identity, device_id)
+            result = client.remove_device(
+                state.workspace_id,
+                device_id,
+                pair,
+                confirmed=True,
+            )
+            apply_key_rotation(state, identity, pair)
+            self._save(state, identity)
+            pushed = False
+            for attempt in range(2):
+                revision = prepare_revision(self.store, state, identity)
+                try:
+                    client.push(state.workspace_id, revision)
+                except SyncPreconditionError:
+                    if attempt:
+                        raise
+                    self._pull(client, state, identity)
+                    continue
+                acknowledge_revision(state, revision)
+                self._save(state, identity)
+                pushed = True
+                break
+            return {
+                "state": "removed",
+                "device": {
+                    "device_id": target["device_id"],
+                    "display_name": target["display_name"],
+                },
+                "device_count": len(state.active_devices),
+                "epoch": state.epoch,
+                "revision_pushed": pushed,
+                "encrypted_revisions_deleted": result.get("encrypted_revisions_deleted", 0),
+                "future_memory_protected": True,
+                "already_received_may_remain": True,
+                "message": (
+                    f"{target['display_name']} cannot decrypt future cloud memory. "
+                    "Memory already received on that device may remain there."
+                ),
             }
 
     @staticmethod
@@ -443,6 +583,18 @@ class CloudSyncService:
         state: SyncState,
         identity: DeviceIdentity,
     ) -> int:
+        rotation_page = client.key_rotations(state.workspace_id, after=state.epoch)
+        rotations = rotation_page.get("rotations")
+        if not isinstance(rotations, list) or not all(
+            isinstance(rotation, dict) for rotation in rotations
+        ):
+            raise SyncCloudError("Lians Cloud returned an invalid key-rotation list")
+        for rotation in rotations:
+            apply_key_rotation(state, identity, rotation)
+            self._save(state, identity)
+        remote_epoch = rotation_page.get("epoch")
+        if type(remote_epoch) is not int or remote_epoch != state.epoch:
+            raise SyncProtocolError("Cloud key-rotation history is incomplete")
         self._apply_grants(state, client.grants(state.workspace_id))
         self._save(state, identity)
         pulled = 0
@@ -483,7 +635,7 @@ class CloudSyncService:
                 "state": "current",
                 "revisions_pulled": pulled,
                 "head_revision": state.head_revision,
-                "device_count": len(state.trusted_devices),
+                "device_count": len(state.active_devices),
                 "message": "The latest encrypted memory is available on this device.",
             }
 
@@ -499,6 +651,13 @@ class CloudSyncService:
             }
         try:
             return {**self.pull_now(), "attempted": True}
+        except DeviceRevokedError:
+            return {
+                "state": "device_removed",
+                "attempted": True,
+                "revisions_pulled": 0,
+                "message": "This device no longer receives future cloud memory. Local memory remains here.",
+            }
         except (CloudAuthError, OSError, SyncCloudError, SyncProtocolError, ValueError):
             return {
                 "state": "pending",
@@ -545,7 +704,7 @@ class CloudSyncService:
                 "revisions_pulled": pulled,
                 "revision_pushed": pushed,
                 "head_revision": state.head_revision,
-                "device_count": len(state.trusted_devices),
+                "device_count": len(state.active_devices),
                 "message": "Encrypted memory is up to date across connected devices.",
             }
 
@@ -567,6 +726,16 @@ class CloudSyncService:
                 "attempted": True,
                 "memory_scope": "everywhere",
                 "pending": False,
+            }
+        except DeviceRevokedError:
+            return {
+                "state": "device_removed",
+                "attempted": True,
+                "memory_scope": "local",
+                "pending": False,
+                "message": (
+                    "Saved locally. This device no longer receives future cloud memory."
+                ),
             }
         except (CloudAuthError, OSError, SyncCloudError, SyncProtocolError, ValueError):
             return {

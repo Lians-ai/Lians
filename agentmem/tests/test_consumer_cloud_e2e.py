@@ -14,7 +14,14 @@ import pytest
 from sqlalchemy import select
 from src.lians.db import get_db
 from src.lians.main import app
-from src.lians.models import ApiKey, SyncEnrollment, SyncRevision
+from src.lians.models import (
+    ApiKey,
+    SyncDevice,
+    SyncEnrollment,
+    SyncKeyRotation,
+    SyncRevision,
+    SyncWorkspace,
+)
 from uvicorn import Config, Server
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "packages" / "lians-easy"
@@ -191,10 +198,76 @@ async def test_two_clean_stores_enroll_and_share_corrected_memory_through_real_a
         assert after_forgetting["structuredContent"]["memories"] == []
         assert after_forgetting["structuredContent"]["receipt"]["memory_count"] == 0
 
+        devices = await asyncio.to_thread(first.connected_devices)
+        laptop = next(item for item in devices["devices"] if item["display_name"] == "Laptop")
+        removed = await asyncio.to_thread(
+            first.remove_device,
+            laptop["device_id"],
+            confirmed=True,
+        )
+        assert removed["future_memory_protected"] is True
+        assert removed["already_received_may_remain"] is True
+        await asyncio.to_thread(
+            call_tool,
+            first_store,
+            "remember",
+            {
+                "content": "Future-only release code is cobalt.",
+                "kind": "project",
+                "scope": "global",
+                "source_client": "cursor",
+            },
+            cloud_sync=first,
+        )
+        removed_device_recall = await asyncio.to_thread(
+            call_tool,
+            second_store,
+            "recall",
+            {"query": "future-only release code", "client": "codex"},
+            cloud_sync=second,
+        )
+        assert removed_device_recall["structuredContent"]["memories"] == []
+        assert removed_device_recall["structuredContent"]["cloud_sync"]["state"] == (
+            "device_removed"
+        )
+        removed_device_write = await asyncio.to_thread(
+            call_tool,
+            second_store,
+            "remember",
+            {
+                "content": "Removed-device private note stays local.",
+                "kind": "project",
+                "scope": "global",
+                "source_client": "codex",
+            },
+            cloud_sync=second,
+        )
+        removed_cloud = removed_device_write["structuredContent"]["cloud_sync"]
+        assert removed_cloud["state"] == "device_removed"
+        assert removed_cloud["memory_scope"] == "local"
+        assert removed_cloud["pending"] is False
+        surviving_device_recall = await asyncio.to_thread(
+            call_tool,
+            first_store,
+            "recall",
+            {"query": "removed-device private note", "client": "claude"},
+            cloud_sync=first,
+        )
+        assert surviving_device_recall["structuredContent"]["memories"] == []
+
         rows = (await db.execute(select(SyncRevision))).scalars().all()
         opaque = json.dumps([row.envelope for row in rows])
         assert "FastAPI" not in opaque
         assert "migrations" not in opaque
+        assert "Future-only release code" not in opaque
+        assert "Removed-device private note" not in opaque
+        [rotation] = (await db.execute(select(SyncKeyRotation))).scalars().all()
+        assert rotation.revoked_device_id == laptop["device_id"]
+        assert "workspace_key" not in json.dumps(rotation.document)
+        [workspace] = (await db.execute(select(SyncWorkspace))).scalars().all()
+        assert workspace.epoch == 2
+        removed_row = await db.get(SyncDevice, (workspace.workspace_id, laptop["device_id"]))
+        assert removed_row.revoked_at is not None
         assert (await db.execute(select(SyncEnrollment))).scalars().all() == []
     finally:
         server.should_exit = True

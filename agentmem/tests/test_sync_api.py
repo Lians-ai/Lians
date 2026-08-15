@@ -25,6 +25,7 @@ from src.lians.models import (
     ApiKey,
     SyncDevice,
     SyncEnrollment,
+    SyncKeyRotation,
     SyncRevision,
     SyncWorkspace,
 )
@@ -168,6 +169,52 @@ def _revision(workspace_id, epoch, revision, previous_hash, private, device):
     }
 
 
+def _key_rotation(
+    workspace_id,
+    previous_epoch,
+    previous_head,
+    initiator_key,
+    initiator,
+    revoked,
+    active_devices,
+):
+    rotation_id = str(uuid.uuid4())
+    epoch = previous_epoch + 1
+    remaining = sorted(
+        [device for device in active_devices if device["device_id"] != revoked["device_id"]],
+        key=lambda device: device["device_id"],
+    )
+    wraps = [
+        {
+            "cipher": "X25519-HKDF-SHA256+A256GCM",
+            "workspace_id": workspace_id,
+            "epoch": epoch,
+            "rotation_id": rotation_id,
+            "recipient_device_id": device["device_id"],
+            "initiator_device_id": initiator["device_id"],
+            "ephemeral_public_key": base64.b64encode(os.urandom(32)).decode(),
+            "nonce": base64.b64encode(os.urandom(12)).decode(),
+            "ciphertext": base64.b64encode(os.urandom(48)).decode(),
+        }
+        for device in remaining
+    ]
+    rotation = {
+        "format": "lians-workspace-key-rotation",
+        "version": 1,
+        "rotation_id": rotation_id,
+        "workspace_id": workspace_id,
+        "previous_epoch": previous_epoch,
+        "epoch": epoch,
+        "previous_head": previous_head,
+        "revoked_device": revoked,
+        "initiator_device": initiator,
+        "active_devices": remaining,
+        "key_wraps": wraps,
+        "created_at": datetime.now(UTC).isoformat(),
+    }
+    return {"rotation": rotation, "signature": _signature(initiator_key, rotation)}
+
+
 @pytest_asyncio.fixture
 async def client(db):
     for key, namespace, scopes in (
@@ -277,6 +324,114 @@ async def test_opaque_workspace_device_and_revision_lifecycle(client):
     )
     assert head.json()["active_devices"] == 2
     assert head.json()["head"]["revision"] == 2
+
+
+@pytest.mark.asyncio
+async def test_signed_device_removal_rotates_epoch_and_blocks_future_writes(client):
+    http, db = client
+    workspace_id = str(uuid.uuid4())
+    root_key, root = _device("Main PC")
+    second_key, second = _device("Old laptop")
+    _, third = _device("Work laptop")
+    await http.post(
+        "/v1/sync/workspaces",
+        headers=_headers(),
+        json={"workspace_id": workspace_id, "epoch": 1, "root_device": root},
+    )
+    for device in (second, third):
+        grant = _grant(workspace_id, 1, root_key, root, device)
+        response = await http.post(
+            f"/v1/sync/workspaces/{workspace_id}/devices",
+            headers=_headers(),
+            json=grant,
+        )
+        assert response.status_code == 201, response.text
+    first_revision = _revision(workspace_id, 1, 1, None, root_key, root)
+    pushed = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/revisions",
+        headers=_headers(),
+        json={"envelope": first_revision},
+    )
+    assert pushed.status_code == 201
+
+    pair = _key_rotation(
+        workspace_id,
+        1,
+        {"revision": 1, "object_hash": first_revision["object_hash"]},
+        root_key,
+        root,
+        second,
+        [root, second, third],
+    )
+    incomplete = json.loads(json.dumps(pair))
+    incomplete["rotation"]["key_wraps"] = incomplete["rotation"]["key_wraps"][:-1]
+    incomplete["signature"] = _signature(root_key, incomplete["rotation"])
+    rejected = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/devices/{second['device_id']}/remove",
+        headers=_headers(),
+        json=incomplete,
+    )
+    assert rejected.status_code == 422
+    assert (await db.get(SyncWorkspace, workspace_id)).epoch == 1
+
+    isolated = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/devices/{second['device_id']}/remove",
+        headers=_headers(OTHER_KEY),
+        json=pair,
+    )
+    assert isolated.status_code == 404
+    removed = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/devices/{second['device_id']}/remove",
+        headers=_headers(),
+        json=pair,
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["future_memory_protected"] is True
+    assert removed.json()["encrypted_revisions_deleted"] == 1
+    workspace = await db.get(SyncWorkspace, workspace_id)
+    assert (workspace.epoch, workspace.head_revision, workspace.head_hash) == (2, 0, None)
+    assert await db.get(SyncRevision, (workspace_id, 1)) is None
+    assert (await db.get(SyncDevice, (workspace_id, second["device_id"]))).revoked_at
+    rotation_row = await db.get(SyncKeyRotation, (workspace_id, 2))
+    assert rotation_row.document == pair["rotation"]
+    assert "workspace_key" not in json.dumps(rotation_row.document)
+
+    devices = await http.get(
+        f"/v1/sync/workspaces/{workspace_id}/devices",
+        headers=_headers(),
+    )
+    by_id = {item["device"]["device_id"]: item for item in devices.json()["devices"]}
+    assert by_id[second["device_id"]]["state"] == "revoked"
+    assert by_id[second["device_id"]]["revocation"]["rotation_id"] == (
+        pair["rotation"]["rotation_id"]
+    )
+    rotations = await http.get(
+        f"/v1/sync/workspaces/{workspace_id}/key-rotations",
+        headers=_headers(),
+        params={"after": 1},
+    )
+    assert rotations.json()["rotations"] == [pair]
+
+    removed_writer = _revision(workspace_id, 2, 1, None, second_key, second)
+    denied = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/revisions",
+        headers=_headers(),
+        json={"envelope": removed_writer},
+    )
+    assert denied.status_code == 403
+    surviving_writer = _revision(workspace_id, 2, 1, None, root_key, root)
+    accepted = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/revisions",
+        headers=_headers(),
+        json={"envelope": surviving_writer},
+    )
+    assert accepted.status_code == 201
+    replay = await http.post(
+        f"/v1/sync/workspaces/{workspace_id}/devices/{second['device_id']}/remove",
+        headers=_headers(),
+        json=pair,
+    )
+    assert replay.json()["status"] == "exists"
 
 
 @pytest.mark.asyncio

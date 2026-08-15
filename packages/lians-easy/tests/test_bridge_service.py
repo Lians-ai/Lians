@@ -493,6 +493,34 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
                 ],
             }
 
+        def connected_devices(self):
+            calls.append("devices")
+            return {
+                "state": "ready",
+                "count": 2,
+                "devices": [
+                    {
+                        "device_id": "a" * 64,
+                        "display_name": "Laptop",
+                        "state": "active",
+                        "current": False,
+                        "can_remove": True,
+                    }
+                ],
+            }
+
+        def remove_device(self, device_id, *, confirmed=False):
+            if not confirmed:
+                raise ValueError("Protecting future memory requires confirmed=true")
+            assert device_id == "a" * 64
+            calls.append("remove")
+            return {
+                "state": "removed",
+                "future_memory_protected": True,
+                "already_received_may_remain": True,
+                "message": "Laptop cannot decrypt future cloud memory.",
+            }
+
         def start_device_enrollment(self):
             calls.append("start")
             return {
@@ -540,6 +568,11 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
         )
         assert status == 200
         assert requests["requests"][0]["verification_code"] == "ABCD-1234"
+        status, devices = _json_request(
+            f"{app.origin}/v1/cloud/devices", cookie=cookie
+        )
+        assert status == 200
+        assert devices["devices"][0]["display_name"] == "Laptop"
 
         with pytest.raises(HTTPError) as unconfirmed:
             _json_request(
@@ -577,12 +610,28 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
             origin=app.origin,
             data={"confirmed": True},
         )
+        with pytest.raises(HTTPError) as unconfirmed_removal:
+            _json_request(
+                f"{app.origin}/v1/cloud/devices/remove",
+                cookie=cookie,
+                origin=app.origin,
+                data={"device_id": "a" * 64, "confirmed": False},
+            )
+        assert unconfirmed_removal.value.code == 400
+        _, removed = _json_request(
+            f"{app.origin}/v1/cloud/devices/remove",
+            cookie=cookie,
+            origin=app.origin,
+            data={"device_id": "a" * 64, "confirmed": True},
+        )
         assert checked["state"] == "connected"
         assert approved["state"] == "approved"
         assert cancelled["state"] == "cancelled"
-        assert calls == ["list", "start", "check", "approve", "cancel"]
-        assert "workspace" not in json.dumps([requests, started, checked, approved, cancelled])
-        assert "key" not in json.dumps([requests, started, checked, approved, cancelled])
+        assert removed["future_memory_protected"] is True
+        assert calls == ["list", "devices", "start", "check", "approve", "cancel", "remove"]
+        public = [requests, devices, started, checked, approved, cancelled, removed]
+        assert "workspace" not in json.dumps(public)
+        assert "signing_public_key" not in json.dumps(public)
     finally:
         server.shutdown()
         server.server_close()
