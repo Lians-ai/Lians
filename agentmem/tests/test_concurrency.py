@@ -45,12 +45,15 @@ async def session_factory(test_settings):
     """
     from src.lians.models import Base as AppBase
 
-    # Use SQLite shared-cache URI so each session gets its own connection
-    # but all sessions share the same in-memory database â€” avoids StaticPool's
-    # single-connection limit when multiple sessions run concurrently.
+    # Keep the SQLite unit path on one aiosqlite connection. SQLite shared-cache
+    # mode permits only one write transaction across its connections and raises
+    # SQLITE_LOCKED immediately (busy_timeout does not apply), which makes this
+    # state-invariant test scheduler-dependent. PostgreSQL integration tests
+    # exercise the real multi-connection advisory-lock path.
     engine = create_async_engine(
-        "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true",
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
 
     pg_indexes = [
