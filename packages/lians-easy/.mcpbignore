@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+benchmarks/
+scripts/
+tests/
+windows-installer.nsi
+windows-lians.ico
+windows-version-info.txt
+server/lib/
+server/venv/
