@@ -44,6 +44,9 @@ def user_data_dir() -> Path:
 
 def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
     home = home or Path.home()
+    cline_config = home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
+    config_root = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
+    opencode_config = config_root / "opencode" / "opencode.json"
     if sys.platform == "win32":
         roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
         paths = {
@@ -52,6 +55,8 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
+            "cline": ("Cline CLI", cline_config),
+            "opencode": ("OpenCode", opencode_config),
         }
     elif sys.platform == "darwin":
         paths = {
@@ -63,15 +68,19 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
+            "cline": ("Cline CLI", cline_config),
+            "opencode": ("OpenCode", opencode_config),
         }
     else:
-        config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
+        config = config_root
         paths = {
             "claude": ("Claude Desktop", config / "Claude" / "claude_desktop_config.json"),
             "cursor": ("Cursor", home / ".cursor" / "mcp.json"),
             "windsurf": ("Windsurf", home / ".codeium" / "windsurf" / "mcp_config.json"),
             "gemini": ("Gemini CLI", home / ".gemini" / "settings.json"),
             "codex": ("Codex", home / ".codex" / "config.toml"),
+            "cline": ("Cline CLI", cline_config),
+            "opencode": ("OpenCode", opencode_config),
         }
     targets: dict[str, ClientTarget] = {}
     for key, (label, path) in paths.items():
@@ -81,6 +90,11 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
             try:
                 if key == "codex":
                     configured = MANAGED_START in path.read_text(encoding="utf-8")
+                elif key == "opencode":
+                    existing = json.loads(path.read_text(encoding="utf-8"))
+                    configured = isinstance(existing.get("mcp"), dict) and (
+                        "lians" in existing["mcp"]
+                    )
                 else:
                     existing = json.loads(path.read_text(encoding="utf-8"))
                     configured = isinstance(existing.get("mcpServers"), dict) and (
@@ -168,6 +182,33 @@ def _json_config(path: Path, command: str, args: list[str]) -> Path | None:
     return backup
 
 
+def _opencode_config(path: Path, command: str, args: list[str]) -> Path | None:
+    """OpenCode uses 'mcp' key with a different structure than other clients."""
+    backup = _backup(path)
+    if path.exists():
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"Cannot safely update invalid JSON: {path}") from exc
+        if not isinstance(document, dict):
+            raise ValueError(f"Cannot safely update non-object JSON: {path}")
+    else:
+        document = {}
+    mcp = document.setdefault("mcp", {})
+    if not isinstance(mcp, dict):
+        raise TypeError(f"mcp must be an object in {path}")
+    mcp["lians"] = {
+        "type": "local",
+        "command": [command] + args,
+        "enabled": True,
+        "environment": {
+            "LIANS_MCP_ENABLED_TOOLS": "remember,recall,list_memories,correct_memory,forget_memory"
+        },
+    }
+    _write_text(path, json.dumps(document, indent=2) + "\n")
+    return backup
+
+
 def _managed_toml(command: str, args: list[str]) -> str:
     rendered_args = ", ".join(json.dumps(value) for value in args)
     return (
@@ -210,11 +251,12 @@ def install(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
     results = []
     for key in keys:
         target = targets[key]
-        backup = (
-            _toml_config(target.config_path, command, args)
-            if target.kind == "toml"
-            else _json_config(target.config_path, command, args)
-        )
+        if key == "opencode":
+            backup = _opencode_config(target.config_path, command, args)
+        elif target.kind == "toml":
+            backup = _toml_config(target.config_path, command, args)
+        else:
+            backup = _json_config(target.config_path, command, args)
         results.append(
             {
                 "client": key,
@@ -264,6 +306,12 @@ def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
         if target.kind == "toml":
             content = _strip_managed_toml(target.config_path.read_text(encoding="utf-8"))
             _write_text(target.config_path, content + ("\n" if content else ""))
+        elif key == "opencode":
+            document = json.loads(target.config_path.read_text(encoding="utf-8"))
+            mcp = document.get("mcp")
+            if isinstance(mcp, dict):
+                mcp.pop("lians", None)
+            _write_text(target.config_path, json.dumps(document, indent=2) + "\n")
         else:
             document = json.loads(target.config_path.read_text(encoding="utf-8"))
             servers = document.get("mcpServers")
