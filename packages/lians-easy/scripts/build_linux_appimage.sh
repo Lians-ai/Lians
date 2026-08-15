@@ -7,6 +7,7 @@ output_directory=""
 version=""
 architecture=""
 appimagetool=""
+runtime_file=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,11 +17,12 @@ while [[ $# -gt 0 ]]; do
     --version) version="$2"; shift 2 ;;
     --architecture) architecture="$2"; shift 2 ;;
     --appimagetool) appimagetool="$2"; shift 2 ;;
+    --runtime-file) runtime_file="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
-for name in binary icon output_directory version architecture appimagetool; do
+for name in binary icon output_directory version architecture appimagetool runtime_file; do
   if [[ -z "${!name}" ]]; then
     echo "Missing required --${name//_/-}" >&2
     exit 2
@@ -39,7 +41,7 @@ if [[ "$(uname -m)" != "$architecture" ]]; then
   echo "Build host architecture $(uname -m) does not match $architecture" >&2
   exit 2
 fi
-for source in "$binary" "$icon" "$appimagetool"; do
+for source in "$binary" "$icon" "$appimagetool" "$runtime_file"; do
   if [[ ! -f "$source" ]]; then
     echo "Required AppImage input was not found: $source" >&2
     exit 2
@@ -89,6 +91,8 @@ printf '%s\n' \
 install -m 0644 "$app_directory/lians.desktop" \
   "$app_directory/usr/share/applications/lians.desktop"
 
-ARCH="$architecture" "$appimagetool" "$app_directory" "$output"
+ARCH="$architecture" "$appimagetool" \
+  --runtime-file "$runtime_file" \
+  "$app_directory" "$output"
 chmod 0755 "$output"
 printf '%s\n' "$output"

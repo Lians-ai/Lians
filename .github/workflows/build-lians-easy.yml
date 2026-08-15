@@ -135,7 +135,15 @@ jobs:
             ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 \
             "$tool" | sha256sum --check --strict
           chmod 0755 "$tool"
+          runtime="$RUNNER_TEMP/appimage-runtime-x86_64"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64 \
+            --output "$runtime"
+          printf '%s  %s\n' \
+            2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d \
+            "$runtime" | sha256sum --check --strict
           echo "LIANS_APPIMAGETOOL=$tool" >> "$GITHUB_ENV"
+          echo "LIANS_APPIMAGE_RUNTIME=$runtime" >> "$GITHUB_ENV"
       - name: Build install-free Linux AppImage
         if: runner.os == 'Linux'
         shell: bash
@@ -153,7 +161,8 @@ jobs:
             --output-directory dist/installer \
             --version "$version" \
             --architecture x86_64 \
-            --appimagetool "$LIANS_APPIMAGETOOL"
+            --appimagetool "$LIANS_APPIMAGETOOL" \
+            --runtime-file "$LIANS_APPIMAGE_RUNTIME"
       - name: Verify extracted Linux AppImage and encrypted Bridge
         if: runner.os == 'Linux'
         shell: bash

@@ -159,6 +159,11 @@ def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
             "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
             in contract
         )
+        assert "type2-runtime/releases/download/20251108/runtime-x86_64" in contract
+        assert (
+            "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
+            in contract
+        )
         assert "build_linux_appimage.sh" in contract
         assert "artifact_linux_appimage_smoke.py" in contract
         assert "Lians-$version-linux-x86_64.AppImage" in contract
@@ -172,6 +177,7 @@ def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
     assert "Lians-$version-linux-$architecture.AppImage" in script
     assert "Terminal=false" in script
     assert "AppRun" in script
+    assert '--runtime-file "$runtime_file"' in script
     assert "--appimage-extract" in smoke
     assert "artifact_app_smoke.py" in smoke
 
