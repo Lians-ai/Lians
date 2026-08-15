@@ -61,3 +61,32 @@ def test_every_operation_closes_its_sqlite_connection(tmp_path, monkeypatch):
 
     assert connections
     assert all(connection.closed for connection in connections)
+
+
+def test_confirmed_profile_erasure_clears_history_and_keeps_store_usable(tmp_path):
+    data = tmp_path / "memory.sqlite3"
+    store = MemoryStore(data)
+    original = store.remember("The project uses FastAPI", scope="global")
+    store.correct(original["id"], "The project uses Django")
+    store.context_pack("Which framework?", project=None, client="codex")
+
+    with pytest.raises(ValueError, match="ERASE ALL LIANS MEMORY"):
+        store.erase_profile(confirmed=True, confirmation="erase")
+
+    result = store.erase_profile(
+        confirmed=True,
+        confirmation="ERASE ALL LIANS MEMORY",
+    )
+
+    assert result["status"] == "erased"
+    assert result["memory_records_erased"] == 2
+    assert result["activity_records_erased"] >= 2
+    assert result["receipt_records_erased"] == 1
+    assert store.list(state="all") == []
+    assert store.activity() == []
+    assert store.receipts() == []
+    assert store.stats()["current"] == 0
+    assert not data.with_name(f"{data.name}-wal").exists()
+
+    replacement = store.remember("Fresh memory after erasure", scope="global")
+    assert store.recall("fresh erasure")[0]["id"] == replacement["id"]

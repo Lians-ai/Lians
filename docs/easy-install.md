@@ -27,9 +27,12 @@ image, verifies its Lians bundle identity and architecture, copies the app from
 the same **Lians -> Applications** layout a person sees, and exercises the real
 encrypted Bridge. Those images are ad-hoc-signed technical fixtures. The stable
 macOS publisher path requires the exact Lians Developer ID, Apple notarization,
-a stapled ticket, Gatekeeper acceptance, and a checksum before upload. A
-consumer macOS launch still waits on an in-app disconnect flow with a separate,
-default-safe memory-erasure choice.
+a stapled ticket, Gatekeeper acceptance, and a checksum before upload. The
+control center now separates two confirmed actions: disconnect selected AI apps
+while preserving memory, or erase all personal memory and history while leaving
+integrations ready. Moving the app to Trash does not erase memory implicitly.
+A consumer macOS launch still requires the real publisher credentials and a
+clean-Mac usability pass.
 
 ## Personal setup
 

@@ -12,11 +12,13 @@ from urllib.request import Request, urlopen
 import pytest
 from lians_easy.bridge import (
     BridgeApplication,
+    ERASE_ALL_CONFIRMATION,
     context_for_event,
     render_hook_output,
     run_hook,
     write_cursor_rule,
 )
+from lians_easy.installer import ClientTarget
 from lians_easy.mcp import call_tool
 from lians_easy.store import MemoryStore
 
@@ -354,6 +356,98 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
             )
         assert error.value.code == 403
         assert all(item["content"] != "This must not be stored" for item in store.list())
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_control_center_disconnect_and_erasure_are_separate_confirmed_actions(
+    tmp_path, monkeypatch
+):
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    store.remember("Keep this until erasure is separately confirmed", scope="global")
+    target = ClientTarget(
+        key="cursor",
+        label="Cursor",
+        config_path=tmp_path / ".cursor" / "mcp.json",
+        detected=True,
+        configured=True,
+    )
+    disconnected: list[list[str]] = []
+
+    monkeypatch.setattr("lians_easy.bridge.client_targets", lambda: {"cursor": target})
+
+    def fake_uninstall(keys):
+        disconnected.append(keys)
+        return {
+            "status": "uninstalled",
+            "clients": [
+                {
+                    "client": "cursor",
+                    "status": "removed",
+                    "backup": str(tmp_path / "private-backup-path"),
+                }
+            ],
+        }
+
+    monkeypatch.setattr("lians_easy.bridge.uninstall", fake_uninstall)
+    app = BridgeApplication(store, port=0)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+
+        with pytest.raises(HTTPError) as error:
+            _json_request(
+                f"{app.origin}/v1/integrations/disconnect",
+                cookie=cookie,
+                origin=app.origin,
+                data={"clients": ["cursor"]},
+            )
+        assert error.value.code == 400
+        assert disconnected == []
+
+        status, result = _json_request(
+            f"{app.origin}/v1/integrations/disconnect",
+            cookie=cookie,
+            origin=app.origin,
+            data={"clients": ["cursor"], "confirmed": True},
+        )
+        assert status == 200
+        assert result == {
+            "clients": [{"key": "cursor", "label": "Cursor", "status": "removed"}],
+            "memory_preserved": True,
+            "status": "disconnected",
+        }
+        assert disconnected == [["cursor"]]
+        assert store.stats()["current"] == 1
+        assert "private-backup-path" not in json.dumps(result)
+
+        with pytest.raises(HTTPError) as error:
+            _json_request(
+                f"{app.origin}/v1/privacy/erase",
+                cookie=cookie,
+                origin=app.origin,
+                data={"confirmed": True, "confirmation": "ERASE"},
+            )
+        assert error.value.code == 400
+        assert store.stats()["current"] == 1
+
+        status, erased = _json_request(
+            f"{app.origin}/v1/privacy/erase",
+            cookie=cookie,
+            origin=app.origin,
+            data={"confirmed": True, "confirmation": ERASE_ALL_CONFIRMATION},
+        )
+        assert status == 200
+        assert erased["status"] == "erased"
+        assert erased["memory_records_erased"] == 1
+        assert store.list(state="all") == []
+        assert store.activity() == []
     finally:
         server.shutdown()
         server.server_close()

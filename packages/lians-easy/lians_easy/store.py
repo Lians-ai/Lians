@@ -765,6 +765,53 @@ class MemoryStore:
             "erased_versions": len(lineage_ids),
         }
 
+    def erase_profile(
+        self,
+        *,
+        confirmed: bool = False,
+        confirmation: str = "",
+    ) -> dict[str, Any]:
+        """Permanently clear this profile while keeping Lians ready for new memory."""
+        if not confirmed or confirmation != "ERASE ALL LIANS MEMORY":
+            raise ValueError(
+                'Permanent erasure requires confirmed=true and confirmation="ERASE ALL LIANS MEMORY"'
+            )
+
+        with self._connect() as db:
+            db.execute("PRAGMA secure_delete=ON")
+            memory_count = db.execute(
+                "SELECT COUNT(*) FROM memories WHERE profile = ?", (self.profile,)
+            ).fetchone()[0]
+            activity_count = db.execute(
+                "SELECT COUNT(*) FROM bridge_activity WHERE profile = ?", (self.profile,)
+            ).fetchone()[0]
+            receipt_count = db.execute(
+                "SELECT COUNT(*) FROM context_receipts WHERE profile = ?", (self.profile,)
+            ).fetchone()[0]
+            db.execute("DELETE FROM context_receipts WHERE profile = ?", (self.profile,))
+            db.execute("DELETE FROM bridge_activity WHERE profile = ?", (self.profile,))
+            db.execute("DELETE FROM memories WHERE profile = ?", (self.profile,))
+
+        # Connections are short-lived, so no Bridge restart is required. Secure
+        # deletion overwrites freed cells, VACUUM rebuilds the file, and the
+        # final checkpoint removes prior WAL frames that held encrypted rows.
+        connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
+        try:
+            connection.execute("PRAGMA secure_delete=ON")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            connection.execute("VACUUM")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            connection.close()
+
+        return {
+            "status": "erased",
+            "profile": self.profile,
+            "memory_records_erased": memory_count,
+            "activity_records_erased": activity_count,
+            "receipt_records_erased": receipt_count,
+        }
+
     def activity(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with self._connect() as db:
             rows = db.execute(

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from .installer import client_targets
+from .installer import client_targets, uninstall
 from .mcp import default_data_path
 from .project import detect_project
 from .store import MemoryStore
@@ -27,6 +27,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7317
 MAX_REQUEST_BYTES = 1_000_000
 PACKAGED_APP_DIR = Path(__file__).resolve().with_name("app")
+ERASE_ALL_CONFIRMATION = "ERASE ALL LIANS MEMORY"
 
 
 def context_for_event(
@@ -313,6 +314,48 @@ class BridgeApplication:
                 try:
                     data = self._body()
                     parsed = urlparse(self.path)
+
+                    if parsed.path == "/v1/integrations/disconnect":
+                        if data.get("confirmed") is not True:
+                            raise ValueError("Disconnecting AI apps requires confirmed=true")
+                        requested = data.get("clients")
+                        if not isinstance(requested, list) or not requested or not all(
+                            isinstance(client, str) and client for client in requested
+                        ):
+                            raise TypeError("clients must be a non-empty list of AI app IDs")
+                        keys = list(dict.fromkeys(requested))
+                        targets = client_targets()
+                        unknown = sorted(set(keys) - set(targets))
+                        if unknown:
+                            raise ValueError("Unknown clients: " + ", ".join(unknown))
+                        result = uninstall(keys)
+                        statuses = {
+                            item["client"]: item["status"] for item in result["clients"]
+                        }
+                        self._json(
+                            HTTPStatus.OK,
+                            {
+                                "status": "disconnected",
+                                "clients": [
+                                    {
+                                        "key": key,
+                                        "label": targets[key].label,
+                                        "status": statuses[key],
+                                    }
+                                    for key in keys
+                                ],
+                                "memory_preserved": True,
+                            },
+                        )
+                        return
+                    if parsed.path == "/v1/privacy/erase":
+                        result = application.store.erase_profile(
+                            confirmed=data.get("confirmed") is True,
+                            confirmation=str(data.get("confirmation") or ""),
+                        )
+                        self._json(HTTPStatus.OK, result)
+                        return
+
                     cwd = str(data.get("cwd") or Path.cwd())
                     project = detect_project(cwd)
 
@@ -381,7 +424,14 @@ class BridgeApplication:
                             self._json(HTTPStatus.OK, result)
                             return
                     self._json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
-                except (ValueError, LookupError, TypeError, json.JSONDecodeError) as exc:
+                except (
+                    OSError,
+                    RuntimeError,
+                    ValueError,
+                    LookupError,
+                    TypeError,
+                    json.JSONDecodeError,
+                ) as exc:
                     self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
         return Handler

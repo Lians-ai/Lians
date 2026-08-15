@@ -36,9 +36,11 @@ The macOS workflow builds separate native Apple-silicon and Intel
 **Lians.app -> Applications** drag-and-drop layout and is mounted, copied, and
 exercised on its matching macOS runner. Pull-request DMGs are ad-hoc-signed test
 fixtures. A stable asset requires the exact Lians Developer ID identity, Apple
-notarization, a stapled ticket, Gatekeeper acceptance, and a checksum. macOS is
-not a consumer release until the app also provides separate disconnect and
-memory-erasure controls; moving an app to Trash must not silently erase memory.
+notarization, a stapled ticket, Gatekeeper acceptance, and a checksum. The app
+now exposes separate, confirmed controls for disconnecting AI clients while
+keeping memory and for erasing memory while leaving integrations ready. Moving
+an app to Trash does not silently erase memory. macOS remains a technical
+preview until the real publisher credentials and clean-Mac usability gate pass.
 
 No Lians account, API key, database server, model download, or manual JSON
 editing is required. The local store uses AES-GCM; on Windows its root key is

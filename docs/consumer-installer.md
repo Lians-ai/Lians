@@ -202,8 +202,10 @@ experience, multiple integrations**. The CLI and raw log remain valuable for
 developers and IT, but normal users should never need to know they exist.
 
 The macOS DMG now proves delivery, identity, architecture, signing, notarization,
-and the real packaged runtime. It is not yet generally available because moving
-an app to Trash cannot safely express Lians' two different actions: disconnect
-managed AI integrations, and optionally erase encrypted memory. The control
-center must expose those as separate, plain-language choices before the macOS
-package clears the consumer uninstall gate.
+and the real packaged runtime. The control center also exposes Lians' two
+different removal actions as separate plain-language choices: disconnect
+selected AI integrations while keeping memory, or erase personal memory and
+history while leaving integrations ready. Both require explicit confirmation,
+and moving the app to Trash does not silently erase memory. The package remains
+outside general availability until the real publisher credentials are supplied
+and a nontechnical user passes the clean-Mac setup and removal flow.
