@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 
 import pytest
+from lians_easy.project import Project
 from lians_easy.store import MemoryStore
 from lians_easy.sync import (
     DeviceIdentity,
@@ -230,7 +232,7 @@ def test_revision_tampering_replay_and_stale_push_fail_closed(tmp_path):
         apply_revision(second_store, second_state, revision)
 
 
-def test_divergent_corrections_surface_conflict_without_partial_merge(tmp_path):
+def test_divergent_corrections_become_reviewable_and_converge_after_resolution(tmp_path):
     first_store, first_identity = _device(tmp_path, "Main PC")
     first_state = SyncState.create(first_identity)
     cloud = OpaqueRevisionLog()
@@ -242,8 +244,207 @@ def test_divergent_corrections_surface_conflict_without_partial_merge(tmp_path):
     )
     _pull(second_store, second_state, cloud)
 
-    first_store.correct(original["id"], "The project uses FastAPI")
-    second_store.correct(original["id"], "The project uses Django")
+    first_branch = first_store.correct(original["id"], "The project uses FastAPI")
+    second_branch = second_store.correct(original["id"], "The project uses Django")
+    _push(first_store, first_identity, first_state, cloud)
+
+    [report] = _pull(second_store, second_state, cloud)
+    assert report["divergences_detected"] == 1
+    assert second_state.head_revision == 2
+    [review] = second_store.reviews(project_id=None)
+    assert review["type"] == "divergent_edit"
+    assert review["original_memory"]["id"] == original["id"]
+    assert {candidate["id"] for candidate in review["candidates"]} == {
+        first_branch["id"],
+        second_branch["id"],
+    }
+    assert set(review["held_memory_ids"]) == {
+        original["id"],
+        first_branch["id"],
+        second_branch["id"],
+    }
+    assert second_store.stats()["current"] == 0
+    assert second_store.stats()["held_for_review"] == 3
+    with pytest.raises(ValueError, match="waiting in Review"):
+        second_store.correct(original["id"], "A fourth unresolved edit")
+    with pytest.raises(ValueError, match="waiting in Review"):
+        second_store.pause(second_branch["id"])
+    with pytest.raises(ValueError, match="waiting in Review"):
+        second_store.rescope(first_branch["id"], scope="global")
+    held = second_store.context_pack(
+        "project web framework",
+        project=Project("general", "General", str(tmp_path), None),
+        client="codex",
+    )
+    assert held["memories"] == []
+    assert held["receipt"]["excluded"]["review"] == 2
+
+    resolved = second_store.resolve_review(
+        review["id"],
+        resolution="use_candidate",
+        candidate_id=first_branch["id"],
+        project_id=None,
+        confirmed=True,
+    )
+    assert resolved["affected_memory_id"] == first_branch["id"]
+    revision = _push(second_store, second_identity, second_state, cloud)
+    encoded = json.dumps(revision).encode()
+    assert b"FastAPI" not in encoded
+    assert b"Django" not in encoded
+    _pull(first_store, first_state, cloud)
+
+    for store in (first_store, second_store):
+        assert store.reviews(project_id=None) == []
+        [recalled] = store.recall("project web framework", project_id=None)
+        assert recalled["id"] == first_branch["id"]
+        assert recalled["content"] == "The project uses FastAPI"
+        [paused] = [
+            item for item in store.list(state="paused") if item["id"] == second_branch["id"]
+        ]
+        assert paused["content"] == "The project uses Django"
+        [event] = [item for item in store.activity() if item["event"] == "sync_divergence_detected"]
+        assert set(event["details"]["candidate_memory_ids"]) == {
+            first_branch["id"],
+            second_branch["id"],
+        }
+        assert "FastAPI" not in json.dumps(event)
+        assert "Django" not in json.dumps(event)
+
+
+def test_preserved_divergent_branches_share_permanent_forgetting(tmp_path):
+    first_store, first_identity = _device(tmp_path, "Main PC")
+    first_state = SyncState.create(first_identity)
+    cloud = OpaqueRevisionLog()
+    cloud.create_workspace(first_state)
+    original = first_store.remember("The project uses Flask", scope="global")
+    _push(first_store, first_identity, first_state, cloud)
+    second_store, second_identity, second_state, _, _ = _enroll_second_device(
+        tmp_path, first_state, first_identity, cloud
+    )
+    _pull(second_store, second_state, cloud)
+    first_branch = first_store.correct(original["id"], "The project uses FastAPI")
+    second_branch = second_store.correct(original["id"], "The project uses Django")
+    _push(first_store, first_identity, first_state, cloud)
+    _pull(second_store, second_state, cloud)
+    [review] = second_store.reviews(project_id=None)
+    second_store.resolve_review(
+        review["id"],
+        resolution="keep_both",
+        project_id=None,
+        confirmed=True,
+    )
+    _push(second_store, second_identity, second_state, cloud)
+    _pull(first_store, first_state, cloud)
+
+    assert {item["id"] for item in first_store.recall("project web framework")} == {
+        first_branch["id"],
+        second_branch["id"],
+    }
+    forgotten = first_store.forget(first_branch["id"], confirmed=True)
+    assert forgotten["erased_versions"] == 3
+    _push(first_store, first_identity, first_state, cloud)
+    _pull(second_store, second_state, cloud)
+    assert all(item["content"] is None for item in first_store.list(state="all"))
+    assert all(item["content"] is None for item in second_store.list(state="all"))
+
+
+def test_three_offline_correction_branches_collapse_into_one_review(tmp_path):
+    first_store, first_identity = _device(tmp_path, "Main PC")
+    first_state = SyncState.create(first_identity)
+    cloud = OpaqueRevisionLog()
+    cloud.create_workspace(first_state)
+    original = first_store.remember("The project uses Flask", scope="global")
+    _push(first_store, first_identity, first_state, cloud)
+    second_store, second_identity, second_state, _, _ = _enroll_second_device(
+        tmp_path, first_state, first_identity, cloud
+    )
+    _pull(second_store, second_state, cloud)
+
+    third_store, third_identity = _device(tmp_path, "Studio desktop")
+    third_request = create_enrollment_request(third_identity, now=NOW)
+    third_approval = approve_enrollment(first_state, first_identity, third_request, now=NOW)
+    cloud.register_approval(third_approval)
+    third_state = accept_enrollment(
+        third_store,
+        third_identity,
+        third_request,
+        third_approval,
+        tmp_path / "Studio desktop" / "sync-state.json",
+        now=NOW,
+    )
+    apply_device_grant(
+        second_state,
+        third_approval["grant"],
+        third_approval["grant_signature"],
+    )
+    _pull(third_store, third_state, cloud)
+
+    first_branch = first_store.correct(original["id"], "The project uses FastAPI")
+    second_branch = second_store.correct(original["id"], "The project uses Django")
+    third_branch = third_store.correct(original["id"], "The project uses Litestar")
+    _push(first_store, first_identity, first_state, cloud)
+    _pull(second_store, second_state, cloud)
+    _push(second_store, second_identity, second_state, cloud)
+    reports = _pull(third_store, third_state, cloud)
+    assert len(reports) == 2
+
+    [review] = third_store.reviews(project_id=None)
+    assert review["type"] == "divergent_edit"
+    assert {candidate["id"] for candidate in review["candidates"]} == {
+        first_branch["id"],
+        second_branch["id"],
+        third_branch["id"],
+    }
+    third_store.resolve_review(
+        review["id"],
+        resolution="use_candidate",
+        candidate_id=third_branch["id"],
+        project_id=None,
+        confirmed=True,
+    )
+    _push(third_store, third_identity, third_state, cloud)
+    _pull(first_store, first_state, cloud)
+    _pull(second_store, second_state, cloud)
+
+    for store in (first_store, second_store, third_store):
+        assert store.reviews(project_id=None) == []
+        assert store.stats()["current"] == 1
+        assert store.stats()["held_for_review"] == 0
+        assert [item["content"] for item in store.recall("project web framework")] == [
+            "The project uses Litestar"
+        ]
+
+
+def test_same_id_content_mutation_still_fails_closed_without_partial_merge(tmp_path):
+    first_store, first_identity = _device(tmp_path, "Main PC")
+    first_state = SyncState.create(first_identity)
+    cloud = OpaqueRevisionLog()
+    cloud.create_workspace(first_state)
+    original = first_store.remember("The project uses Flask", scope="global")
+    _push(first_store, first_identity, first_state, cloud)
+    second_store, _, second_state, _, _ = _enroll_second_device(
+        tmp_path, first_state, first_identity, cloud
+    )
+    _pull(second_store, second_state, cloud)
+
+    changed_content = "The project uses an unreviewed in-place mutation"
+    ciphertext, nonce = first_store.cipher.seal(
+        changed_content,
+        associated_data=first_store._associated_data(original["id"], first_store.profile),
+    )
+    with first_store._connect() as database:
+        database.execute(
+            """UPDATE memories SET content_cipher = ?, content_nonce = ?,
+               content_sha256 = ?, token_estimate = ?, updated_at = ? WHERE id = ?""",
+            (
+                ciphertext,
+                nonce,
+                hashlib.sha256(changed_content.encode()).hexdigest(),
+                max(1, (len(changed_content) + 3) // 4),
+                "2026-08-16T12:00:00+00:00",
+                original["id"],
+            ),
+        )
     _push(first_store, first_identity, first_state, cloud)
 
     before = second_store.list(state="all", limit=50)
@@ -251,10 +452,6 @@ def test_divergent_corrections_surface_conflict_without_partial_merge(tmp_path):
         _pull(second_store, second_state, cloud)
     assert second_state.head_revision == 1
     assert second_store.list(state="all", limit=50) == before
-
-    stale = prepare_revision(second_store, second_state, second_identity, now=NOW)
-    with pytest.raises(SyncPreconditionError, match="pull"):
-        cloud.push(stale)
 
 
 def test_forget_tombstone_erases_an_offline_correction_branch(tmp_path):

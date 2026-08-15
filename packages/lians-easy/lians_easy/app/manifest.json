@@ -24,12 +24,12 @@
       "sha256": "a88d7ab73147ca670ea474c0971cdccb9f11eb5e162bab3e2375d5505a655842"
     },
     "assets/trust-review.css": {
-      "bytes": 7673,
-      "sha256": "f5f36ace5d74b8c552ffa46f5a060aea78866433b362e9ca3b50fe42573dff50"
+      "bytes": 7745,
+      "sha256": "0fca4b357ccfc9fc97ab871a347b4481c13a358b3934929b12558fdd59121927"
     },
     "assets/trust-review.js": {
-      "bytes": 11958,
-      "sha256": "3e0301e0e2d953e0280e21b753093d3aed2e5d9e4534546673b4ad52df2e91ca"
+      "bytes": 13518,
+      "sha256": "577fc3e13cfc9036cd12aaad6321e62cc7f034f7abd4ec97c69deb963ab74c78"
     },
     "fonts/michroma-latin.woff2": {
       "bytes": 17908,

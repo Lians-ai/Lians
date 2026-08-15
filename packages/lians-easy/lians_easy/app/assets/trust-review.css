@@ -358,6 +358,11 @@
   opacity: 0.55;
 }
 
+.lians-review__candidate-action {
+  margin-top: 14px;
+  width: 100%;
+}
+
 .lians-review__feedback {
   color: #bbcae2;
   font-size: 11px;

@@ -140,6 +140,15 @@ Memory content remains encrypted, and the resulting pause state plus resolution
 event synchronize to other approved devices. This is a deterministic possible-
 conflict check, not a claim of universal semantic contradiction detection.
 
+Concurrent offline corrections are handled separately. When two or more
+devices update the same memory before syncing, Lians pauses the original and
+holds every valid correction branch from recall. **Device edit collision**
+shows each candidate with its source and time so the user can select one edit
+or keep every edit. The choice converges through encrypted sync without memory
+text entering the audit record. Forgetting any related version permanently
+erases the original and all branches. Same-ID content or provenance mutation
+that is not a valid correction branch continues to fail atomically.
+
 ### Move memory to another device
 
 Portable backups never copy a Windows-only DPAPI key and never write plaintext

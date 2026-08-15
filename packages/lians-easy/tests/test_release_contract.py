@@ -465,6 +465,10 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "Still current" in review_script
     assert "Pause it" in review_script
     assert "Forget permanently" in review_script
+    assert "DEVICE EDIT COLLISION" in review_script
+    assert "Use this edit" in review_script
+    assert "Keep every edit" in review_script
+    assert "candidate_id" in review_script
     assert "confirmed: true" in review_script
     assert "innerHTML" not in review_script
     assert "Authorization" not in review_script

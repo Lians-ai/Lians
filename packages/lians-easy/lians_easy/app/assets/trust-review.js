@@ -85,7 +85,7 @@
     const description = element(
       "p",
       "lians-review__description",
-      "Lians holds possible contradictions and stale work out of AI context until you decide. Nothing here is silently deleted.",
+      "Lians holds device edit collisions, possible contradictions, and stale work out of AI context until you decide. Nothing here is silently deleted.",
     );
     const boundary = element("div", "lians-review__boundary");
     boundary.append(
@@ -132,7 +132,7 @@
     return panel;
   }
 
-  function actionButton(label, resolution, review, className = "") {
+  function actionButton(label, resolution, review, className = "", candidateId = null) {
     const button = element(
       "button",
       `lians-review__button ${className}`.trim(),
@@ -140,7 +140,9 @@
     );
     button.type = "button";
     button.disabled = busy;
-    button.addEventListener("click", () => resolve(review, resolution, button));
+    button.addEventListener("click", () => {
+      resolve(review, resolution, button, candidateId);
+    });
     return button;
   }
 
@@ -188,6 +190,41 @@
     return card;
   }
 
+  function divergentEditCard(review) {
+    const card = element("article", "lians-review__card");
+    const label = element("div", "lians-review__card-label");
+    label.append(
+      element("span", "lians-review__type", "DEVICE EDIT COLLISION"),
+      element("span", "lians-review__review-id", review.id.slice(-8).toUpperCase()),
+    );
+    const original = memoryPanel(review.original_memory, "ORIGINAL MEMORY", true);
+    const comparison = element("div", "lians-review__comparison");
+    const candidates = Array.isArray(review.candidates) ? review.candidates : [];
+    candidates.forEach((candidate, index) => {
+      const panel = memoryPanel(candidate, `EDIT ${index + 1}`, true);
+      panel.append(
+        actionButton(
+          "Use this edit",
+          "use_candidate",
+          review,
+          "lians-review__button--primary lians-review__candidate-action",
+          candidate.id,
+        ),
+      );
+      comparison.append(panel);
+    });
+    const actions = element("div", "lians-review__actions");
+    actions.append(actionButton("Keep every edit", "keep_both", review));
+    card.append(
+      label,
+      element("p", "lians-review__reason", review.reason),
+      original,
+      comparison,
+      actions,
+    );
+    return card;
+  }
+
   function render(document, feedback = "") {
     current = document;
     const reviews = Array.isArray(document.reviews) ? document.reviews : [];
@@ -211,9 +248,12 @@
       ui.list.append(empty);
     } else {
       reviews.forEach((review) => {
-        ui.list.append(
-          review.type === "possible_conflict" ? conflictCard(review) : staleCard(review),
-        );
+        const card = review.type === "possible_conflict"
+          ? conflictCard(review)
+          : review.type === "divergent_edit"
+            ? divergentEditCard(review)
+            : staleCard(review);
+        ui.list.append(card);
       });
     }
     ui.feedback.textContent = feedback;
@@ -230,7 +270,7 @@
     }
   }
 
-  async function resolve(review, resolution, button) {
+  async function resolve(review, resolution, button, candidateId = null) {
     if (busy) return;
     if (resolution === "forget" && button.dataset.armed !== "true") {
       button.dataset.armed = "true";
@@ -249,10 +289,12 @@
     });
     ui.feedback.textContent = "Saving your decision…";
     try {
+      const payload = { resolution };
+      if (candidateId) payload.candidate_id = candidateId;
       const result = await request(
         `/v1/reviews/${encodeURIComponent(review.id)}/resolve`,
         "POST",
-        { resolution },
+        payload,
       );
       const cloud = result.cloud_sync || {};
       const message = cloud.memory_scope === "everywhere"

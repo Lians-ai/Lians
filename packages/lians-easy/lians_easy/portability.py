@@ -28,6 +28,9 @@ MAX_RECORDS = 100_000
 SCRYPT_N = 1 << 15
 SCRYPT_R = 8
 SCRYPT_P = 1
+SYNC_DIVERGENCE_EVENT = "sync_divergence_detected"
+SYNC_DIVERGENCE_REASON = "two_devices_corrected_the_same_memory"
+MAX_DIVERGENT_BRANCHES = 64
 
 
 def _canonical(value: Any) -> bytes:
@@ -389,9 +392,7 @@ def _validate_receipt(record: dict[str, Any], *, memory_ids: set[str]) -> None:
         selected = receipt.get("memories")
         if not isinstance(selected, list) or len(selected) != record["memory_count"]:
             raise ValueError("Backup receipt memory index is invalid")
-        if any(
-            not isinstance(item, dict) or item.get("id") not in memory_ids for item in selected
-        ):
+        if any(not isinstance(item, dict) or item.get("id") not in memory_ids for item in selected):
             raise ValueError("Backup receipt references a missing memory")
         signature = receipt["signature"]
         if not isinstance(signature, dict) or signature.get("algorithm") != "Ed25519":
@@ -437,6 +438,153 @@ def _ordered_timestamp(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.astimezone()
     return parsed
+
+
+def _sync_divergence_groups(
+    activity: list[dict[str, Any]],
+) -> dict[str, set[str]]:
+    groups: dict[str, set[str]] = {}
+    for record in activity:
+        if record["event"] != SYNC_DIVERGENCE_EVENT:
+            continue
+        details = record.get("details")
+        if not isinstance(details, dict) or set(details) != {
+            "candidate_memory_ids",
+            "original_memory_id",
+            "reason",
+        }:
+            raise ValueError("Synchronized divergence record is invalid")
+        original_id = details.get("original_memory_id")
+        candidates = details.get("candidate_memory_ids")
+        if (
+            not isinstance(original_id, str)
+            or not original_id
+            or not isinstance(candidates, list)
+            or not 2 <= len(candidates) <= MAX_DIVERGENT_BRANCHES
+            or not all(isinstance(candidate, str) and candidate for candidate in candidates)
+            or len(set(candidates)) != len(candidates)
+            or original_id in candidates
+            or details.get("reason") != SYNC_DIVERGENCE_REASON
+            or record.get("memory_id") != original_id
+        ):
+            raise ValueError("Synchronized divergence record is invalid")
+        groups.setdefault(original_id, set()).update(candidates)
+    return groups
+
+
+def _lineage_divergence(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+) -> set[str]:
+    """Identify only legitimate concurrent correction branches for one identity."""
+
+    immutable_fields = (
+        "id",
+        "kind",
+        "scope",
+        "project_id",
+        "source",
+        "source_client",
+        "source_ref",
+        "topic",
+        "created_at",
+        "supersedes_id",
+    )
+    if any(existing[field] != incoming[field] for field in immutable_fields):
+        return set()
+    if existing["forgotten_at"] is None and incoming["forgotten_at"] is None:
+        protected_fields = ("content", "content_sha256", "token_estimate", "metadata")
+        if any(existing[field] != incoming[field] for field in protected_fields):
+            return set()
+    candidates = {
+        value
+        for value in (existing["superseded_by_id"], incoming["superseded_by_id"])
+        if value is not None
+    }
+    return candidates if len(candidates) > 1 else set()
+
+
+def _divergence_activity_record(
+    *,
+    profile: str,
+    original: dict[str, Any],
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    candidate_ids = sorted(candidate["id"] for candidate in candidates)
+    protected = {
+        "profile": profile,
+        "original_memory_id": original["id"],
+        "candidate_memory_ids": candidate_ids,
+    }
+    event_id = "sync-divergence-" + hashlib.sha256(_canonical(protected)).hexdigest()[:32]
+    return {
+        "id": event_id,
+        "event": SYNC_DIVERGENCE_EVENT,
+        "memory_id": original["id"],
+        "project_id": original["project_id"],
+        "client": "lians-sync",
+        "details": {
+            "original_memory_id": original["id"],
+            "candidate_memory_ids": candidate_ids,
+            "reason": SYNC_DIVERGENCE_REASON,
+        },
+        "created_at": max(
+            (candidate["created_at"] for candidate in candidates),
+            key=_ordered_timestamp,
+        ),
+    }
+
+
+def _normalize_divergence_groups(
+    memories: dict[str, dict[str, Any]],
+    groups: dict[str, set[str]],
+    *,
+    profile: str,
+) -> list[dict[str, Any]]:
+    generated: list[dict[str, Any]] = []
+    for original_id, candidate_ids in sorted(groups.items()):
+        original = memories.get(original_id)
+        candidates = [memories.get(candidate_id) for candidate_id in sorted(candidate_ids)]
+        if original is None or any(candidate is None for candidate in candidates):
+            raise ValueError("Synchronized divergence references a missing memory")
+        candidate_records = [candidate for candidate in candidates if candidate is not None]
+        if len(candidate_records) < 2:
+            raise ValueError("Synchronized divergence has too few correction branches")
+        for candidate in candidate_records:
+            if candidate["supersedes_id"] not in {None, original_id}:
+                raise ValueError("Synchronized divergence has invalid correction lineage")
+            metadata = candidate["metadata"]
+            if (
+                candidate["forgotten_at"] is None
+                and metadata.get("correction_of") != original_id
+                and metadata.get("scope_change_of") != original_id
+            ):
+                raise ValueError("Synchronized divergence lacks correction provenance")
+
+        detected_at = max(
+            (candidate["created_at"] for candidate in candidate_records),
+            key=_ordered_timestamp,
+        )
+        original["superseded_by_id"] = None
+        if original["forgotten_at"] is None:
+            original["paused_at"] = max(
+                (value for value in (original["paused_at"], detected_at) if value is not None),
+                key=_ordered_timestamp,
+            )
+            original["updated_at"] = max(
+                (original["updated_at"], original["paused_at"]),
+                key=_ordered_timestamp,
+            )
+        for candidate in candidate_records:
+            candidate["supersedes_id"] = None
+        generated.append(
+            _divergence_activity_record(
+                profile=profile,
+                original=original,
+                candidates=candidate_records,
+            )
+        )
+    return generated
 
 
 def _merge_sync_memory(
@@ -542,7 +690,10 @@ def _validate_combined_lineage(memories: dict[str, dict[str, Any]]) -> None:
         completed.update(lineage)
 
 
-def _propagate_forgotten_lineages(memories: dict[str, dict[str, Any]]) -> None:
+def _propagate_forgotten_lineages(
+    memories: dict[str, dict[str, Any]],
+    divergence_groups: dict[str, set[str]],
+) -> None:
     """Make a tombstone cover every version, including an offline branch."""
 
     neighbors: dict[str, set[str]] = {memory_id: set() for memory_id in memories}
@@ -551,6 +702,13 @@ def _propagate_forgotten_lineages(memories: dict[str, dict[str, Any]]) -> None:
             if related is not None and related in neighbors:
                 neighbors[record["id"]].add(related)
                 neighbors[related].add(record["id"])
+    for original_id, candidate_ids in divergence_groups.items():
+        if original_id not in neighbors:
+            continue
+        for candidate_id in candidate_ids:
+            if candidate_id in neighbors:
+                neighbors[original_id].add(candidate_id)
+                neighbors[candidate_id].add(original_id)
 
     visited: set[str] = set()
     for memory_id in memories:
@@ -581,9 +739,7 @@ def _propagate_forgotten_lineages(memories: dict[str, dict[str, Any]]) -> None:
                     "content_sha256": None,
                     "token_estimate": 0,
                     "metadata": {},
-                    "updated_at": max(
-                        (record["updated_at"], forgotten_at), key=_ordered_timestamp
-                    ),
+                    "updated_at": max((record["updated_at"], forgotten_at), key=_ordered_timestamp),
                     "paused_at": None,
                     "forgotten_at": forgotten_at,
                 }
@@ -616,19 +772,73 @@ def merge_profile_payload(
             "SELECT * FROM memories WHERE profile = ?",
             (store.profile,),
         ).fetchall()
-        combined_memories = {row["id"]: _memory_record(store, row) for row in local_rows}
+        stored_local_memories = {row["id"]: _memory_record(store, row) for row in local_rows}
         local_memories = {
             memory_id: {**record, "metadata": dict(record["metadata"])}
-            for memory_id, record in combined_memories.items()
+            for memory_id, record in stored_local_memories.items()
+        }
+        local_activity_rows = database.execute(
+            "SELECT * FROM bridge_activity WHERE profile = ?",
+            (store.profile,),
+        ).fetchall()
+        local_activity = [_activity_record(row) for row in local_activity_rows]
+
+        divergence_groups: dict[str, set[str]] = {}
+        if sync:
+            divergence_groups = _sync_divergence_groups(
+                [*local_activity, *incoming_activity.values()]
+            )
+            for memory_id in set(local_memories) & set(incoming_memories):
+                candidates = _lineage_divergence(
+                    local_memories[memory_id], incoming_memories[memory_id]
+                )
+                if candidates:
+                    divergence_groups.setdefault(memory_id, set()).update(candidates)
+            for original_id, candidates in divergence_groups.items():
+                for collection in (local_memories, incoming_memories):
+                    original = collection.get(original_id)
+                    if original is not None and original["superseded_by_id"] is not None:
+                        candidates.add(original["superseded_by_id"])
+
+        candidate_owners: dict[str, str] = {}
+        for original_id, candidates in divergence_groups.items():
+            for candidate_id in candidates:
+                owner = candidate_owners.setdefault(candidate_id, original_id)
+                if owner != original_id:
+                    raise ValueError("Synchronized divergence branches overlap")
+
+        def normalized(record: dict[str, Any]) -> dict[str, Any]:
+            result = {**record, "metadata": dict(record["metadata"])}
+            if result["id"] in divergence_groups:
+                result["superseded_by_id"] = None
+            owner = candidate_owners.get(result["id"])
+            if owner is not None:
+                if result["supersedes_id"] not in {None, owner}:
+                    raise ValueError("Synchronized divergence has invalid correction lineage")
+                result["supersedes_id"] = None
+            return result
+
+        local_memories = {
+            memory_id: normalized(record) for memory_id, record in local_memories.items()
+        }
+        incoming_memories = {
+            memory_id: normalized(record) for memory_id, record in incoming_memories.items()
+        }
+        combined_memories = {
+            memory_id: {**record, "metadata": dict(record["metadata"])}
+            for memory_id, record in local_memories.items()
         }
         for record in incoming_memories.values():
             existing = _existing_record(database, "memories", record["id"])
             if existing is None:
-                combined_memories[record["id"]] = record
+                combined_memories[record["id"]] = {
+                    **record,
+                    "metadata": dict(record["metadata"]),
+                }
             elif existing["profile"] != store.profile:
                 raise ValueError(f"Import conflict for memory ID {record['id']}")
             else:
-                current = _memory_record(store, existing)
+                current = local_memories[record["id"]]
                 if current == record:
                     skipped["memories"] += 1
                 elif not sync:
@@ -636,28 +846,41 @@ def merge_profile_payload(
                 else:
                     merged = _merge_sync_memory(current, record)
                     combined_memories[record["id"]] = merged
+        generated_activity: list[dict[str, Any]] = []
         if sync:
-            _propagate_forgotten_lineages(combined_memories)
+            generated_activity = _normalize_divergence_groups(
+                combined_memories,
+                divergence_groups,
+                profile=store.profile,
+            )
+            _propagate_forgotten_lineages(combined_memories, divergence_groups)
         _validate_combined_lineage(combined_memories)
         missing_memories = [
             record
             for memory_id, record in combined_memories.items()
-            if memory_id not in local_memories
+            if memory_id not in stored_local_memories
         ]
         changed_memories = [
             record
             for memory_id, record in combined_memories.items()
-            if memory_id in local_memories and record != local_memories[memory_id]
+            if memory_id in stored_local_memories and record != stored_local_memories[memory_id]
         ]
         skipped["memories"] = sum(
             1
             for memory_id in incoming_memories
-            if memory_id in local_memories
-            and combined_memories[memory_id] == local_memories[memory_id]
+            if memory_id in stored_local_memories
+            and combined_memories[memory_id] == stored_local_memories[memory_id]
         )
 
+        merged_activity = dict(incoming_activity)
+        for record in generated_activity:
+            existing_generated = merged_activity.get(record["id"])
+            if existing_generated is not None and existing_generated != record:
+                raise ValueError(f"Import conflict for activity ID {record['id']}")
+            merged_activity[record["id"]] = record
+
         missing_activity: list[dict[str, Any]] = []
-        for record in incoming_activity.values():
+        for record in merged_activity.values():
             existing = _existing_record(database, "bridge_activity", record["id"])
             if existing is None:
                 missing_activity.append(record)
@@ -784,6 +1007,7 @@ def merge_profile_payload(
         "imported": imported,
         "updated": updated,
         "already_present": skipped,
+        "divergences_detected": len(generated_activity),
         "re_encrypted_for_this_device": True,
     }
 

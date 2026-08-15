@@ -795,6 +795,77 @@ def test_loopback_review_queue_explains_and_syncs_a_resolution(tmp_path):
         thread.join(timeout=5)
 
 
+def test_loopback_divergent_review_forwards_the_selected_candidate(tmp_path, monkeypatch):
+    captured = {}
+
+    class FakeCloudSync:
+        def pull_if_connected(self):
+            return {"state": "current", "attempted": True, "revisions_pulled": 0}
+
+        def sync_if_connected(self):
+            return {"state": "synced", "memory_scope": "everywhere", "pending": False}
+
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+
+    def resolve_review(
+        review_id,
+        *,
+        resolution,
+        project_id,
+        candidate_id=None,
+        confirmed=False,
+    ):
+        captured.update(
+            {
+                "review_id": review_id,
+                "resolution": resolution,
+                "project_id": project_id,
+                "candidate_id": candidate_id,
+                "confirmed": confirmed,
+            }
+        )
+        return {
+            "id": review_id,
+            "status": "resolved",
+            "type": "divergent_edit",
+            "resolution": resolution,
+            "affected_memory_id": candidate_id,
+        }
+
+    monkeypatch.setattr(store, "resolve_review", resolve_review)
+    app = BridgeApplication(store, port=0, cloud_sync=FakeCloudSync())
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    review_id = "review-" + "a" * 32
+    candidate_id = "62c62945-9be0-4472-8dc2-7a31a90cc9ae"
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+        status, resolved = _json_request(
+            f"{app.origin}/v1/reviews/{review_id}/resolve",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "resolution": "use_candidate",
+                "candidate_id": candidate_id,
+                "confirmed": True,
+            },
+        )
+        assert status == 200
+        assert resolved["review"]["affected_memory_id"] == candidate_id
+        assert captured["review_id"] == review_id
+        assert captured["resolution"] == "use_candidate"
+        assert isinstance(captured["project_id"], str)
+        assert captured["candidate_id"] == candidate_id
+        assert captured["confirmed"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_update_check_returns_only_validated_public_release_state(tmp_path):
     calls = []
     app = BridgeApplication(

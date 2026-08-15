@@ -758,6 +758,11 @@ class BridgeApplication:
                                 review_id,
                                 resolution=str(data.get("resolution") or ""),
                                 project_id=project.id,
+                                candidate_id=(
+                                    str(data["candidate_id"])
+                                    if data.get("candidate_id") is not None
+                                    else None
+                                ),
                                 confirmed=data.get("confirmed") is True,
                             )
                             refresh_cursor_rule()

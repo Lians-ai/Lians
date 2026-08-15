@@ -822,7 +822,8 @@ class CloudSyncService:
                 pulled = self._pull(client, state, identity)
                 pushed = False
                 # A bounded retry handles one writer that advanced the head between
-                # our pull and push. Divergent edits still fail atomically in merge.
+                # our pull and push. Concurrent correction branches are normalized
+                # into Trust Review; malformed same-ID mutations still fail atomically.
                 for attempt in range(2):
                     revision = prepare_revision(self.store, state, identity)
                     try:

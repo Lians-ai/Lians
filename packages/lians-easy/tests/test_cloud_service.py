@@ -260,6 +260,62 @@ def test_service_provisions_pulls_merges_pushes_and_deletes_opaque_memory(tmp_pa
     assert first_store.stats()["current"] == 2
 
 
+def test_cloud_service_syncs_divergent_edits_into_review_instead_of_stalling(tmp_path):
+    auth = FakeAuth()
+    cloud = HTTPShapeCloud()
+    first_store = MemoryStore(tmp_path / "first" / "memory.sqlite3")
+    first_state_path = tmp_path / "first" / "sync-state.json"
+    first = _service(first_store, auth, cloud, first_state_path, "Main PC")
+    original = first_store.remember("The launch website uses Flask.", scope="global")
+    first.sync_now()
+
+    first_identity = DeviceIdentity.from_store(first_store, "Main PC")
+    first_state = SyncState.load(first_state_path, first_store.cipher, first_identity)
+    second_store = MemoryStore(tmp_path / "second" / "memory.sqlite3")
+    second_state_path = tmp_path / "second" / "sync-state.json"
+    second_identity = DeviceIdentity.from_store(second_store, "Laptop")
+    request = create_enrollment_request(second_identity, now=NOW)
+    approval = approve_enrollment(first_state, first_identity, request, now=NOW)
+    cloud.log.register_approval(approval)
+    accept_enrollment(
+        second_store,
+        second_identity,
+        request,
+        approval,
+        second_state_path,
+        now=NOW,
+    )
+    second = _service(second_store, auth, cloud, second_state_path, "Laptop")
+    second.sync_now()
+
+    first_branch = first_store.correct(original["id"], "The launch website uses FastAPI.")
+    second_store.correct(original["id"], "The launch website uses Django.")
+    first.sync_now()
+    recovered = second.sync_if_connected()
+    assert recovered["state"] == "synced"
+    assert recovered["memory_scope"] == "everywhere"
+    assert recovered["pending"] is False
+    [review] = second_store.reviews(project_id=None)
+    assert review["type"] == "divergent_edit"
+
+    second_store.resolve_review(
+        review["id"],
+        resolution="use_candidate",
+        candidate_id=first_branch["id"],
+        project_id=None,
+        confirmed=True,
+    )
+    second.sync_now()
+    first.sync_now()
+    assert first_store.reviews(project_id=None) == []
+    assert second_store.reviews(project_id=None) == []
+    assert [item["content"] for item in first_store.recall("launch web framework")] == [
+        "The launch website uses FastAPI."
+    ]
+    assert "FastAPI" not in json.dumps(cloud.log._workspaces)
+    assert "Django" not in json.dumps(cloud.log._workspaces)
+
+
 def test_signed_in_clean_device_can_delete_inaccessible_old_cloud_data(tmp_path):
     auth = FakeAuth()
     cloud = HTTPShapeCloud()

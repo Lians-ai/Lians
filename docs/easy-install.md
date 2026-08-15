@@ -182,6 +182,18 @@ profile, so another connected device immediately reaches the same result. This
 deterministic local check is deliberately described as a *possible* conflict;
 it does not claim general semantic contradiction detection.
 
+If two devices correct the same memory before either one finishes syncing,
+Lians no longer chooses a winner or leaves the second device stuck. It pauses
+the shared original, detaches the valid correction branches, and holds every
+candidate out of AI context. **Device edit collision** then shows each exact
+edit with its source and time. The user can choose **Use this edit** for one
+candidate or **Keep every edit** when both statements are intentionally valid.
+The identifiers and choice synchronize inside the encrypted profile; the
+audit event contains no memory text. Permanent forgetting follows the virtual
+branch relationship, so forgetting any related version erases the original
+and every divergent candidate instead of leaving an offline copy readable.
+Malformed in-place changes to a memory identity still fail atomically.
+
 ## Release trust gate
 
 Do not promote the desktop installer broadly until its Windows builds are
