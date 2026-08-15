@@ -34,6 +34,7 @@ When you provision an API key on signup, the `scopes` array you send to `POST /v
 |---|---|---|
 | Memory writes | `write` | All |
 | Memory recalls | `read` | All |
+| Encrypted personal sync | `sync` | All |
 | Semantic search | `read` | All |
 | Domain adapters | `adapters` | Starter+ |
 | Audit log | `audit` | Starter+ |
@@ -52,12 +53,12 @@ When you provision an API key on signup, the `scopes` array you send to `POST /v
 ```ts
 // lib/lians-tiers.ts
 export const TIER_SCOPES: Record<string, string[]> = {
-  free:       ["read", "write"],
-  starter:    ["read", "write", "adapters", "audit"],
-  growth:     ["read", "write", "adapters", "audit", "conflicts", "webhooks", "compliance"],
-  pro:        ["read", "write", "adapters", "audit", "conflicts", "webhooks", "compliance",
+  free:       ["read", "write", "sync"],
+  starter:    ["read", "write", "sync", "adapters", "audit"],
+  growth:     ["read", "write", "sync", "adapters", "audit", "conflicts", "webhooks", "compliance"],
+  pro:        ["read", "write", "sync", "adapters", "audit", "conflicts", "webhooks", "compliance",
                "barriers", "hipaa", "erasure", "backtest", "metrics"],
-  enterprise: ["read", "write", "adapters", "audit", "conflicts", "webhooks", "compliance",
+  enterprise: ["read", "write", "sync", "adapters", "audit", "conflicts", "webhooks", "compliance",
                "barriers", "hipaa", "erasure", "backtest", "metrics", "airgap", "kms"],
 }
 

@@ -1,26 +1,84 @@
-# Lians Easy desktop preview
+# Lians Bridge desktop preview
 
-Lians Easy is a technical preview for adding private, local memory to a
-supported AI client. It is deliberately smaller than the full Lians engine.
+The intended generally available package and nontechnical first-run contract
+are defined in [the consumer installer contract](consumer-installer.md). The
+current preview exercises the same Bridge and client configuration engine but
+does not yet satisfy its signing and release gates.
+
+Lians Bridge is a technical preview for carrying private, local memory across
+supported AI clients. It is deliberately smaller than the full Lians engine.
 There is no account, API key, database server, or embedding-model download.
 
-There are currently no signed Windows, notarized macOS, or Linux
+There are currently no Authenticode-signed Windows, notarized macOS, or Linux
 `LiansMemory` assets in [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
 Do not send normal users to that page expecting a desktop download. For a live,
 managed setup, use [Lians Personal for $10/month](https://www.lians.ai/upgrade?plan=starter).
 For free local memory today, use the [published MCP setup](install.md#mcp--use-lians-as-a-native-tool).
 
+Pull requests now build a real per-user `Lians-Setup-<version>.exe` and exercise
+install, first launch, the bundled app, Bridge readiness, silent removal, and
+memory preservation on a fresh Windows runner. That artifact is still unsigned
+and remains a technical fixture. The stable release path signs the runtime and
+installer with the configured Lians publisher certificate before repeating the
+same package smoke test and attaching the setup executable to a release.
+
+Pull requests also build native `arm64` and `x86_64` macOS DMGs. CI mounts each
+image, verifies its Lians bundle identity and architecture, copies the app from
+the same **Lians -> Applications** layout a person sees, and exercises the real
+encrypted Bridge. Those images are ad-hoc-signed technical fixtures. The stable
+macOS publisher path requires the exact Lians Developer ID, Apple notarization,
+a stapled ticket, Gatekeeper acceptance, and a checksum before upload. The
+control center now separates two confirmed actions: disconnect selected AI apps
+while preserving memory, or erase all personal memory and history while leaving
+integrations ready. Moving the app to Trash does not erase memory implicitly.
+A consumer macOS launch still requires the real publisher credentials and a
+clean-Mac usability pass.
+
+The local control center now checks for updates only when the user asks. It
+validates the stable version, official GitHub release URL, exact package name
+for the current Windows, macOS, or x86_64 Linux architecture, and presence of
+the matching checksum before offering the update. A separate click downloads the checksum
+and exact package with strict size bounds, verifies SHA-256, and saves a unique
+file to Downloads. Another click re-verifies the file and publisher before
+opening it; unsigned preview builds and platforms without a matching publisher
+gate only reveal the downloaded file. Nothing downloads or runs in the
+background. This keeps the preview honest without pretending the full
+hands-off upgrade-and-rollback lifecycle is complete.
+
 ## Personal setup
 
-Developers evaluating the preview can run it from a source checkout:
+Developers evaluating the current preview can run it from a source checkout:
 
 ```bash
 python -m pip install -e packages/lians-easy
 python -m lians_easy
 ```
 
+The product-aligned Python distribution is `lians-bridge`. Its wheel and
+trusted-publishing workflow are tested in pull requests, but it has not yet had
+its first PyPI release. Once the verified package is public, the no-clone path
+will be:
+
+```bash
+pipx install lians-bridge
+# or: uv tool install lians-bridge
+
+lians doctor --json
+lians install --clients detected --plan --json
+lians install --clients detected --yes --json
+lians app
+```
+
+Do not copy these commands into a normal-user onboarding flow until the
+`lians-bridge` project and expected version can be verified on PyPI. A public
+Python wheel removes the repository checkout for developers; it does not
+replace Authenticode, Developer ID, notarization, or clean-device testing for
+the consumer desktop packages.
+
 Choose the clients to configure, select **Install Lians**, restart those
-clients, then ask one to remember a useful fact and recall it in another chat.
+clients, then ask Cursor to remember a useful project rule. Start a new Codex
+or Claude task in the same repository and inspect the receipt attached to the
+recalled context.
 
 For Gemini CLI, an install can succeed while `lians` remains disabled or
 disconnected in an untrusted folder. Review the folder and run `gemini trust`
@@ -35,7 +93,69 @@ for details.
 Existing client configuration files are backed up before every change. Memory
 is stored in a local SQLite file under the operating system's per-user Lians
 data directory. Selected clients use the same `personal` profile, so a fact
-saved in one can be recalled in another.
+saved in one can be recalled in another. Memory values are encrypted at rest;
+Windows protects the root key with DPAPI. Corrections and scope changes create
+inspectable versions, while confirmed forgetting crypto-erases the full
+lineage so old wording cannot return from a different client.
+
+Setup is transactional per AI client. If one integration cannot be verified,
+its exact original files and permissions are restored while successful clients
+remain connected. The GUI retries only the failed client IDs instead of
+repeating work that already passed. **Save help report** writes a redacted JSON
+diagnostic without copying memory content, AI-app settings, exception text,
+credentials, or user paths.
+
+Only one setup mutation process can run at a time. Each client transaction also
+has a small disk-backed rollback journal. If setup is killed after replacing a
+configuration file, the next launch validates the recorded targets, restores
+the protected originals, removes interrupted-transaction residue, and then
+retries. The frozen Windows binary passes this forced-process-exit lifecycle;
+an actual virtual-machine reboot/power-loss run remains a release gate.
+
+Journal, backup, configuration, and installed-runtime replacements flush file
+content before rename. Windows requests a write-through replacement; POSIX
+systems also flush the parent directory entry. This reduces the remaining
+power-loss risk to release-artifact and filesystem behavior.
+
+## Cross-tool experience
+
+The preview implements the first product loop directly:
+
+1. `remember` records an explicit preference, decision, fact, or handoff.
+2. Antigravity, Claude, Codex, and Gemini CLI prompt hooks request a
+   project-aware context pack before the agent starts the task.
+3. Cursor uses the same MCP tools plus a generated, always-applied project rule.
+4. A receipt reports the memories used, project, estimated tokens, selection
+   reasons, and exclusions.
+5. Pause, correction, scope, and confirmed forget changes apply to the shared
+   store immediately.
+
+For Antigravity CLI and other headless runs, mount the repository explicitly:
+
+```bash
+agy --add-dir /path/to/project --print "Start the next task"
+```
+
+Antigravity then includes that path in the `PreInvocation` event so Lians can
+select the matching project handoff. If the client reports no workspace, Lians
+injects global preferences only and excludes project-scoped memories rather
+than guessing from the hook process directory.
+
+The frozen Bridge now contains the verified React control-center bundle. The
+setup screen ends with **Open Lians**, and later launches open the local control
+center directly. Memory, Activity, Review, Integrations, and Settings all read
+from the same encrypted store used by connected AI clients.
+
+Developers can still override the bundled app while working on the React source:
+
+```bash
+python -m lians_easy bridge --app-dir /path/to/memory-checkup/local-dist
+```
+
+The packaged bundle is source-pinned and verified again through each frozen
+release artifact. The hosted control center demonstrates the same information
+architecture, but uses sample data when it is not connected to a loopback
+Bridge. It never asks a user to paste raw AI-provider credentials.
 
 ## Release trust gate
 
@@ -59,8 +179,8 @@ The core tools are intentionally understandable:
 ## Supported clients
 
 The first desktop release configures Claude Desktop, Cursor, Windsurf,
-Antigravity CLI, Gemini CLI, Codex, Cline CLI, and OpenCode. Choose Antigravity for a consumer Google
-account. The Gemini CLI target is for supported Standard or Enterprise
+Antigravity CLI, Gemini CLI, Codex, Cline CLI, and OpenCode. Choose Antigravity
+for a consumer Google account. The Gemini CLI target is for supported Standard or Enterprise
 subscriptions, API keys, and Vertex AI configurations after Google's June 18,
 2026 consumer-login retirement. It does not modify ChatGPT because ChatGPT
 connectors use a hosted HTTP connection rather than a local stdio process. Use
@@ -86,35 +206,47 @@ LiansMemory doctor --json
 Preview an exact install without writing anything:
 
 ```bash
-LiansMemory install --clients claude,cursor,antigravity,codex,cline,opencode --plan --json
+LiansMemory install --clients antigravity,claude,cursor,gemini,codex,cline,opencode --plan --json
 ```
 
 Install for selected clients:
 
 ```bash
-LiansMemory install --clients claude,cursor,antigravity,codex,cline,opencode --yes --json
+LiansMemory install --clients antigravity,claude,cursor,gemini,codex,cline,opencode --yes --json
 ```
 
 Remove the managed client entries while preserving the user's memory database:
 
 ```bash
-LiansMemory uninstall --clients claude,cursor,antigravity,codex,cline,opencode --yes --json
+LiansMemory uninstall --clients antigravity,claude,cursor,gemini,codex,cline,opencode --yes --json
 ```
 
 Every write is idempotent and creates a timestamped backup when a configuration
 already exists. This makes the same flow suitable for MDM, scripted onboarding,
 and help-desk diagnostics.
 
+For a future `pipx` or `uv` deployment, run the managed uninstall before
+removing the Python tool so client settings do not retain a command that no
+longer exists:
+
+```bash
+lians uninstall --clients all --yes --json
+pipx uninstall lians-bridge
+```
+
+This disconnects supported clients and preserves the encrypted memory store.
+
 ## Easy runtime or full engine?
 
-| Need | Lians Easy | Full Lians engine |
+| Need | Lians Bridge | Full Lians engine |
 |---|---:|---:|
 | One person, several local AI clients | Yes | Yes |
-| No dependencies or model download | Yes | No |
+| No account, API key, or model download | Yes | No |
 | Keyword-based bounded recall | Yes | Yes |
+| Encrypted local values and signed context receipts | Yes | Yes |
 | Semantic retrieval and temporal reconstruction | No | Yes |
 | Shared team server and HTTP SDKs | No | Yes |
 | Governance, barriers, receipts, and audit workflows | No | Yes |
 
-Start with Lians Easy. Move to the full engine when the deployment—not the
+Start with Lians Bridge. Move to the full engine when the deployment—not the
 first-run setup—actually requires those capabilities.

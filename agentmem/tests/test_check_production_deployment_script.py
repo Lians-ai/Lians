@@ -51,15 +51,19 @@ def test_build_sha_does_not_invalidate_heavy_runtime_layers() -> None:
     build_env_index = dockerfile.index('ENV LIANS_BUILD_SHA="${LIANS_BUILD_SHA}"')
 
     # Keep the commit-specific build argument after every materialized runtime
-    # artifact so a new SHA does not invalidate the venv, offline model, or app
-    # ownership layers.
+    # artifact so a new SHA does not invalidate the venv, offline model, or
+    # migration-asset ownership layers.
     for runtime_copy in (
         "COPY --from=builder --chown=10001:10001 /opt/venv /opt/venv",
         (
             "COPY --from=builder --chown=10001:10001 "
             "/app/.model_cache /app/.model_cache"
         ),
-        "COPY --chown=10001:10001 agentmem/ /app/agentmem/",
+        "COPY --chown=10001:10001 agentmem/alembic /app/agentmem/alembic",
+        (
+            "COPY --chown=10001:10001 "
+            "agentmem/alembic.ini /app/agentmem/alembic.ini"
+        ),
     ):
         assert dockerfile.index(runtime_copy) < build_arg_index
 

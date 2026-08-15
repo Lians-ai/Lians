@@ -142,11 +142,11 @@ class TestSequentialConsistency:
         """
         meta = {"ticker": "NVDA", "metric": "guidance"}
 
-        m0 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content="NVDA guidance $32B",
             event_time=_t(1), metadata=meta,
         ))
-        m1 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content="NVDA guidance $36B",
             event_time=_t(4), metadata=meta,
         ))
@@ -210,10 +210,9 @@ class TestConcurrentAsyncioWrites:
     session â€” mirroring production where each HTTP request gets its own
     get_db() session.
 
-    On SQLite + StaticPool, the underlying connection is shared, so operations
-    serialise at the aiosqlite level.  This validates the STATE invariant
-    without truly racing.  The advisory lock is exercised against a live
-    PostgreSQL instance in test_pgvector.py.
+    The temporary SQLite WAL database gives each session its own connection.
+    The service's per-agent application lock serialises these writes while the
+    PostgreSQL advisory-lock path is exercised separately in test_pgvector.py.
     """
 
     @pytest.mark.asyncio

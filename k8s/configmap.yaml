@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: agentmem
 data:
   DEPLOYMENT_ENVIRONMENT: "production"
-  CORS_ORIGINS: "https://lians.ai,https://www.lians.ai"
+  CORS_ORIGINS: "https://memory.example.com"  # CHANGE: trusted browser origins
   # Embedding provider — set to "voyage" for production (requires VOYAGE_API_KEY in secret)
   # Options: voyage | openai | sentence-transformers | local
   EMBEDDING_PROVIDER: "voyage"
@@ -38,5 +38,5 @@ data:
   AIRGAP_MODE: "false"
 
   # OpenTelemetry
-  OTEL_SERVICE_NAME: "agentmem"
+  OTEL_SERVICE_NAME: "lians-engine"
   OTEL_EXPORTER_OTLP_ENDPOINT: ""   # e.g. http://otel-collector:4317

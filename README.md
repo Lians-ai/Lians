@@ -221,7 +221,7 @@ Java, C, framework adapters, and self-hosting.
 | Use managed private memory without running a server | [Lians Personal — $10/month](https://www.lians.ai/upgrade?plan=starter) |
 | Give an existing AI client free local memory | [MCP setup](#free-local-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
-| Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
+| Evaluate encrypted cross-tool memory from source | [Lians Bridge preview](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
 | Use Pydantic AI or LangGraph | [Pydantic AI example](integrations/pydantic-ai/python) · [LangGraph example](integrations/langgraph/python) |
 | Use LangChain, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
@@ -265,7 +265,7 @@ them; they are not required to get started.
 agentmem/src/lians/          Core engine and HTTP service
 agentmem/sdk/python/        Python SDK, local client, and MCP server
 agentmem/sdk/typescript/    TypeScript SDK
-packages/lians-easy/        Dependency-free desktop runtime and installer
+packages/lians-easy/        Lians Bridge package source and installer preview
 integrations/               Agent and framework integrations
 plugins/                    Installable agent plugins
 docs/                       Setup, architecture, security, and operations

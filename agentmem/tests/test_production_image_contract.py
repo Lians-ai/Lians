@@ -43,12 +43,17 @@ def test_runtime_artifacts_are_owned_during_copy() -> None:
             "COPY --from=builder --chown=10001:10001 "
             "/app/.model_cache /app/.model_cache"
         ),
-        "COPY --chown=10001:10001 agentmem/ /app/agentmem/",
+        "COPY --chown=10001:10001 agentmem/alembic /app/agentmem/alembic",
+        (
+            "COPY --chown=10001:10001 "
+            "agentmem/alembic.ini /app/agentmem/alembic.ini"
+        ),
     }
     lines = {line.strip() for line in DOCKERFILE.splitlines()}
 
     assert expected_copies <= lines
     assert "chown -R" not in DOCKERFILE
+    assert "COPY --chown=10001:10001 agentmem/ /app/agentmem/" not in DOCKERFILE
     assert "USER 10001:10001" in DOCKERFILE
     assert "WORKDIR /app/agentmem" in DOCKERFILE
     # The ~1.3 GB embedding model is process-local; two Uvicorn workers would

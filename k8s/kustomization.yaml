@@ -1,17 +1,15 @@
-# Kustomize entry point — apply the full stack with:
-# kubectl apply -k k8s/
+# Kustomize entry point. Read k8s/README.md before applying; the Secret and
+# migration Job are intentionally external to this default bundle.
 #
 # Deployment order matters:
 # 1. kubectl apply -f k8s/namespace.yaml
-# 2. kubectl apply -f k8s/secret.yaml        # fill in values first
-# 3. kubectl apply -f k8s/configmap.yaml
-# 4. kubectl apply -f k8s/migrate-job.yaml   # run migrations
-# 5. kubectl wait --for=condition=complete job/agentmem-migrate -n agentmem --timeout=120s
-# 6. kubectl apply -k k8s/               # deploy everything else
+# 2. Create agentmem-secret through your secrets manager or private env file
+# 3. Pin the image by digest in this file and k8s/migrate-job.yaml
+# 4. Apply and wait for k8s/migrate-job.yaml
+# 5. Inspect `kubectl kustomize k8s/`, then apply it
 #
-# To update only the image tag:
-# kustomize edit set image agentmem=ghcr.io/your-org/agentmem:v0.3.0
-# kubectl apply -k k8s/
+# A mutable tag is useful only for source evaluation. Production must replace
+# the tag with the verified GHCR digest emitted by the publication workflow.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -20,7 +18,6 @@ namespace: agentmem
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secret.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
@@ -30,14 +27,16 @@ resources:
   # migrate-job.yaml is intentionally excluded here — run it manually before
   # each deployment to avoid applying the job on every `kubectl apply -k`.
 
-# Image — override tag at deploy time:
-# kustomize edit set image agentmem=ghcr.io/your-org/agentmem:v0.2.0
+# Image candidate. It becomes a supported install path only after this exact
+# version is published and verified in GHCR.
 images:
   - name: agentmem
-    newName: agentmem      # CHANGE: ghcr.io/your-org/agentmem
-    newTag: "0.5.0"        # Replace with an immutable digest in production.
+    newName: ghcr.io/lians-ai/lians-engine
+    newTag: "0.5.0"
 
-commonLabels:
-  app.kubernetes.io/name: agentmem
-  app.kubernetes.io/version: "0.5.0"
-  app.kubernetes.io/managed-by: kustomize
+labels:
+  - pairs:
+      app.kubernetes.io/version: "0.5.0"
+      app.kubernetes.io/managed-by: kustomize
+    # Version labels must never enter immutable Deployment selectors.
+    includeSelectors: false

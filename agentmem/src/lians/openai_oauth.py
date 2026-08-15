@@ -141,7 +141,7 @@ class JWTAccessTokenVerifier:
         resource_url: str,
         jwks_url: str,
         algorithms: tuple[str, ...],
-        tenant_claim: str,
+        tenant_claim: str | None,
         max_token_lifetime_seconds: int = 3600,
         leeway_seconds: int = 30,
         jwks_client: PyJWKClient | None = None,
@@ -289,14 +289,17 @@ class JWTAccessTokenVerifier:
         subject = str(claims.get("sub", ""))
         if not subject or len(subject) > 512 or _CONTROL_CHARACTERS.search(subject):
             return None
-        tenant = claims.get(self.tenant_claim)
-        if (
-            not isinstance(tenant, str)
-            or not tenant
-            or len(tenant) > 512
-            or _CONTROL_CHARACTERS.search(tenant)
-        ):
-            return None
+        tenant = ""
+        if self.tenant_claim:
+            tenant_claim = claims.get(self.tenant_claim)
+            if (
+                not isinstance(tenant_claim, str)
+                or not tenant_claim
+                or len(tenant_claim) > 512
+                or _CONTROL_CHARACTERS.search(tenant_claim)
+            ):
+                return None
+            tenant = tenant_claim
         issued_at = claims.get("iat")
         expires_at = claims.get("exp")
         if (

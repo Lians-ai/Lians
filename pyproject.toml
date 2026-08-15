@@ -54,6 +54,27 @@ otel-receiver = [
 metrics = [
     "prometheus-client>=0.20.0",
 ]
+aws = ["boto3>=1.34,<2"]
+azure = [
+    "azure-identity>=1.16,<2",
+    "azure-keyvault-secrets>=4.8,<5",
+]
+vault = ["hvac>=2.1,<3"]
+# Operator image surface: metering, metrics, tracing, and all supported KMS
+# clients, without the multi-gigabyte local embedding model.
+enterprise = [
+    "stripe>=7.0.0",
+    "prometheus-client>=0.20.0",
+    "opentelemetry-api>=1.24.0",
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-instrumentation-fastapi>=0.45b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.45b0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.24.0",
+    "boto3>=1.34,<2",
+    "azure-identity>=1.16,<2",
+    "azure-keyvault-secrets>=4.8,<5",
+    "hvac>=2.1,<3",
+]
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",

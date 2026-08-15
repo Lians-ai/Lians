@@ -1679,7 +1679,8 @@ def duplicate_user_configuration_warnings(
         except (OSError, UnicodeError, tomllib.TOMLDecodeError):
             document = {}
         servers = document.get("mcp_servers", {}) if isinstance(document, dict) else {}
-        if isinstance(servers, dict) and isinstance(servers.get("lians"), dict):
+        legacy_server = servers.get("lians") if isinstance(servers, dict) else None
+        if isinstance(legacy_server, dict) and legacy_server.get("enabled", True) is not False:
             warnings.append(
                 "Existing [mcp_servers.lians] detected in user config; disable one copy "
                 "before relying on the plugin."

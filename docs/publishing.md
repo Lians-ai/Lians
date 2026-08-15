@@ -9,6 +9,9 @@ Lians ships Python, TypeScript, Go, Java, and C SDKs. A unified `vX.Y.Z` tag run
    - `agentmem/sdk/typescript/package.json`
    - `agentmem/sdk/typescript/package-lock.json`
    - `agentmem/sdk/java/pom.xml`
+   - `packages/lians-easy/pyproject.toml`
+   - `packages/lians-easy/lians_easy/__init__.py`
+   - `packages/lians-easy/windows-version-info.txt`
 2. Update package README installation examples.
 3. Merge the release PR only after the full CI matrix passes.
 4. Confirm PyPI trusted publishing, npm trusted publishing, and Maven Central credentials are configured.
@@ -19,8 +22,10 @@ git tag -a v0.4.2 -m "release: v0.4.2"
 git push origin v0.4.2
 ```
 
-6. Monitor all three workflows until completion:
+6. Monitor all publication workflows until completion:
    - `publish-lian.yml`
+   - `publish-lians-bridge.yml`
+   - `publish-engine-container.yml`
    - `publish-lian-npm.yml`
    - `release.yml`
 7. Verify the published version from each public registry. A successful workflow is not proof that a registry search index has propagated.
@@ -30,10 +35,133 @@ git push origin v0.4.2
 | SDK | Registry | Publication path | Authentication |
 |---|---|---|---|
 | Python | [PyPI](https://pypi.org/project/lians-sdk/) | `publish-lian.yml` builds the sdist and wheel, then publishes them | PyPI trusted publisher through GitHub OIDC |
+| Lians Bridge | PyPI project `lians-bridge` after first publication | `publish-lians-bridge.yml` builds, verifies, installs, and exercises the wheel before publishing it | Opt-in PyPI trusted publisher through GitHub OIDC; no API token |
+| Lians Engine | GitHub Container Registry package `ghcr.io/lians-ai/lians-engine` after first publication | `publish-engine-container.yml` verifies the operator image, then publishes amd64 and arm64 manifests with SBOM and provenance | Opt-in GitHub OIDC and repository package permission; no registry password |
 | TypeScript | [npm](https://www.npmjs.com/package/@lians-ai/lians) | `publish-lian-npm.yml` builds, tests, and runs `npm publish` | npm trusted publisher through GitHub OIDC; no long-lived publish token |
 | Go | proxy.golang.org and pkg.go.dev | `release.yml` creates a module-path tag | GitHub token supplied to the workflow |
 | Java | Maven Central and GitHub Release JAR | `release.yml` signs and deploys with the `release` Maven profile | Sonatype credentials and GPG signing secrets |
 | C | GitHub Release source archive | `release.yml` creates `lians-c-<version>.tar.gz` | GitHub token supplied to the workflow |
+
+## Lians Bridge trusted publishing
+
+`lians-bridge` is the product-aligned developer distribution for the local
+Bridge. The source directory remains `packages/lians-easy` and the import
+namespace remains `lians_easy` for compatibility. The installed commands are
+`lians`, `lians-bridge`, and `lians-easy`; new documentation should lead with
+`lians`.
+
+Before setting the repository variable `PUBLISH_LIANS_BRIDGE_PYPI=true`, create
+or reserve the PyPI project through its pending trusted publisher flow with:
+
+| Field | Value |
+|---|---|
+| Owner | `Lians-ai` |
+| Repository | `Lians` |
+| Workflow filename | `publish-lians-bridge.yml` |
+| Environment | `pypi-lians-bridge` |
+
+Create the GitHub environment with the same name and protect it with a required
+maintainer review. The workflow accepts only an immutable stable `vX.Y.Z` tag,
+requires the package and runtime versions to match it, runs metadata checks,
+installs the exact wheel into a clean virtual environment, exercises all three
+command aliases, and proves the bundled Lians App is present. The publish job
+downloads that same artifact and authenticates with GitHub OIDC. It deliberately
+does not use `skip-existing`; a version collision must fail visibly rather than
+silently accepting registry state that was not produced by this run.
+
+After a successful first publication, verify the exact version from PyPI before
+changing `docs/easy-install.md` or `docs/supported-paths.md` from package
+candidate to published. Then test both supported no-clone paths on clean
+machines:
+
+```bash
+pipx install lians-bridge
+uv tool install lians-bridge
+```
+
+## Lians Engine container publication
+
+The enterprise operator image is separately gated by the repository variable
+`PUBLISH_LIANS_ENGINE_CONTAINER=true` and the protected GitHub environment
+`ghcr-lians-engine`. It accepts only an existing stable `vX.Y.Z` tag whose
+commit and source versions match. Before publishing, CI verifies the non-root
+UID, OCI product identity, revision, package import, exact migration head,
+enterprise KMS/observability/metering dependencies, and reduced runtime file
+surface.
+
+The release job refuses to overwrite an existing semantic-version tag. It
+publishes only the immutable version tag, not `latest`, for `linux/amd64` and
+`linux/arm64`, with an OCI SBOM and maximum provenance. Record the returned
+manifest digest and make the GHCR package public before describing it as an
+operator install path. Kubernetes and production Compose deployments must pin
+that digest; a semantic-version tag alone is not the production identity.
+
+The published image excludes the large local embedding model. It contains the
+`enterprise` optional dependencies for billing, Prometheus, OpenTelemetry, AWS
+KMS, Azure Key Vault, and HashiCorp Vault. Air-gapped deployments build the
+same reviewed Dockerfile with `EXTRAS=enterprise,local`, an immutable model
+revision, and their approved internal registry.
+
+## Windows desktop package
+
+The Windows consumer job is disabled by default. Before setting the repository
+variable `PUBLISH_SIGNED_LIANS_DESKTOP=true`, configure:
+
+- repository secret `WINDOWS_SIGNING_CERT_PFX_BASE64`: the publisher PFX encoded
+  as one base64 string;
+- repository secret `WINDOWS_SIGNING_CERT_PASSWORD`: the PFX password; and
+- repository variable `WINDOWS_SIGNING_CERT_SHA1`: the exact SHA-1 thumbprint of
+  the expected publisher certificate, without relying on the PFX contents alone.
+
+The release runner imports the certificate into its ephemeral current-user
+store, confirms the thumbprint, signs `LiansMemory.exe`, downloads the official
+NSIS 3.12 portable compiler with retries, verifies its pinned SHA-256, builds
+the per-user setup, signs the setup executable, and validates both Authenticode chains.
+It then performs an actual silent install, opens the bundled Lians App through
+the installed Bridge, verifies local runtime discovery, silently uninstalls,
+and proves that encrypted memory was preserved. Only then does it upload
+`Lians-Setup-<version>.exe` and its SHA-256 checksum. The certificate is removed
+from the runner in an `always()` cleanup step; the PFX file is removed
+immediately after import.
+
+This flag publishes Windows only. Do not infer macOS notarization or Linux
+package signing from a successful Windows job.
+
+## macOS desktop packages
+
+The Apple-silicon and Intel consumer jobs are independently disabled by
+default. Before setting `PUBLISH_SIGNED_LIANS_MACOS=true`, configure:
+
+- repository secret `MACOS_SIGNING_CERT_P12_BASE64`: the Developer ID
+  Application certificate and private key encoded as one base64 string;
+- repository secret `MACOS_SIGNING_CERT_PASSWORD`: the P12 password;
+- repository variable `MACOS_SIGNING_IDENTITY`: the exact full identity, such
+  as `Developer ID Application: Example, Inc. (TEAMID)`;
+- repository variable `MACOS_SIGNING_TEAM_ID`: the expected Apple Team ID;
+- repository secret `APPLE_NOTARY_KEY_P8_BASE64`: an App Store Connect API key
+  encoded as one base64 string;
+- repository variable `APPLE_NOTARY_KEY_ID`: that API key's Key ID; and
+- repository variable `APPLE_NOTARY_ISSUER_ID`: its Issuer ID.
+
+The release matrix builds on native `macos-15` (`arm64`) and
+`macos-15-intel` (`x86_64`) runners. It imports the publisher credential into
+an ephemeral keychain and requires exactly one valid identity matching the
+configured full name. The Developer ID identity is passed to PyInstaller during
+the one-file build so its embedded native libraries receive trusted signatures;
+signing only the finished outer executable is not sufficient. The job then
+builds and signs `Lians.app` and the architecture-labelled DMG.
+
+`notarytool` must return `Accepted`. The workflow staples and validates the
+ticket, asks Gatekeeper to assess the disk image, mounts it, checks the bundle
+ID, version, architecture, signing authority, and Team ID, copies the app into
+a temporary Applications directory, and exercises the bundled encrypted
+Bridge. Only then does it upload the DMG and SHA-256 checksum. An `always()`
+step deletes the temporary keychain, P12, API key, and notary response.
+
+Passing this publisher gate proves the package is trusted and executable. Do
+not promote the macOS build to normal users until the Lians App also exposes
+plain-language removal controls that disconnect managed AI integrations and
+separately offer a default-safe choice to keep or permanently erase memory.
 
 ## npm trusted publishing
 
