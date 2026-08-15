@@ -399,11 +399,42 @@ class BridgeApplication:
                     return
                 if parsed.path == "/v1/memories":
                     state = query.get("state", ["current"])[0]
+                    cwd = query.get("cwd", [str(Path.cwd())])[0]
+                    project = detect_project(cwd)
                     cloud = application.cloud_sync.pull_if_connected()
+                    reviews = application.store.reviews(
+                        project_id=project.id,
+                        include_all_projects=True,
+                        limit=1000,
+                    )
+                    held_ids = {
+                        memory_id for review in reviews for memory_id in review["held_memory_ids"]
+                    }
+                    memories = [
+                        memory
+                        for memory in application.store.list(state=state)
+                        if memory["id"] not in held_ids
+                    ]
                     self._json(
                         HTTPStatus.OK,
                         {
-                            "memories": application.store.list(state=state),
+                            "memories": memories,
+                            "held_for_review": len(held_ids),
+                            "cloud_sync": cloud,
+                        },
+                    )
+                    return
+                if parsed.path == "/v1/reviews":
+                    cwd = query.get("cwd", [str(Path.cwd())])[0]
+                    project = detect_project(cwd)
+                    cloud = application.cloud_sync.pull_if_connected()
+                    reviews = application.store.reviews(project_id=project.id)
+                    self._json(
+                        HTTPStatus.OK,
+                        {
+                            "reviews": reviews,
+                            "total": len(reviews),
+                            "project": project.public(),
                             "cloud_sync": cloud,
                         },
                     )
@@ -719,6 +750,26 @@ class BridgeApplication:
                         if force or rule.exists():
                             write_cursor_rule(project.root, store=application.store)
 
+                    review_match = re_match_review_action(parsed.path)
+                    if review_match:
+                        review_id, action = review_match
+                        if action == "resolve":
+                            result = application.store.resolve_review(
+                                review_id,
+                                resolution=str(data.get("resolution") or ""),
+                                project_id=project.id,
+                                confirmed=data.get("confirmed") is True,
+                            )
+                            refresh_cursor_rule()
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    "review": result,
+                                    "cloud_sync": application.cloud_sync.sync_if_connected(),
+                                },
+                            )
+                            return
+
                     if parsed.path == "/v1/remember":
                         scope = str(data.get("scope") or "project")
                         item = application.store.remember(
@@ -841,6 +892,22 @@ def re_match_memory_action(path: str) -> tuple[str, str] | None:
     if parts[3] not in {"correct", "pause", "scope", "forget"}:
         return None
     return parts[2], parts[3]
+
+
+def re_match_review_action(path: str) -> tuple[str, str] | None:
+    parts = [part for part in path.split("/") if part]
+    if len(parts) != 4 or parts[:2] != ["v1", "reviews"]:
+        return None
+    review_id = parts[2]
+    suffix = review_id.removeprefix("review-")
+    if (
+        parts[3] != "resolve"
+        or len(review_id) != 39
+        or len(suffix) != 32
+        or any(character not in "0123456789abcdef" for character in suffix)
+    ):
+        return None
+    return review_id, parts[3]
 
 
 def run_hook(*, client: str, data_path: str | Path | None = None) -> int:

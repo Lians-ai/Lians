@@ -23,6 +23,14 @@
       "bytes": 225500,
       "sha256": "a88d7ab73147ca670ea474c0971cdccb9f11eb5e162bab3e2375d5505a655842"
     },
+    "assets/trust-review.css": {
+      "bytes": 7673,
+      "sha256": "f5f36ace5d74b8c552ffa46f5a060aea78866433b362e9ca3b50fe42573dff50"
+    },
+    "assets/trust-review.js": {
+      "bytes": 11958,
+      "sha256": "3e0301e0e2d953e0280e21b753093d3aed2e5d9e4534546673b4ad52df2e91ca"
+    },
     "fonts/michroma-latin.woff2": {
       "bytes": 17908,
       "sha256": "754fdb31c9906e82cf9c0ecb1d0b528073818fc2c418a39932c83a34cca027b6"
@@ -32,8 +40,8 @@
       "sha256": "811e11966d29f3a01fcb19b087b61ac067d380665a55aebb7fcdf2cda95e4a93"
     },
     "index.html": {
-      "bytes": 570,
-      "sha256": "ce14f4a83a73574111eac50105e57eea7e275f9d4dae776299a8b057ce0abab3"
+      "bytes": 688,
+      "sha256": "a187d4d9f59f2465e81146aa551bb763e32882e2041f34b7129a52db31057a8b"
     },
     "logo-blue.png": {
       "bytes": 10137,

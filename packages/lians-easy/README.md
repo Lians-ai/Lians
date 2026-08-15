@@ -118,6 +118,28 @@ local store uses AES-GCM; on Windows its root key is protected with DPAPI. The
 full Lians engine remains available when a team needs semantic retrieval,
 collaboration, governance, or a shared server deployment.
 
+### Review memory before another AI uses it
+
+The App's **Review** queue compares active memories within the same kind,
+scope, and project boundary. A newer item with the same explicit topic or
+strongly overlapping wording but different content is labeled a possible
+conflict and held out of recall while the existing precedent remains active.
+The queue also holds project handoffs after 14 days and project facts,
+decisions, and project memories after 180 days. Preferences do not become stale
+from age alone.
+
+Each card shows the exact source client, source reference, time, scope, and
+reason for exclusion. Choose **Keep existing**, **Use newer**, or **Both are
+valid**; stale items can be reaffirmed, paused, or permanently forgotten with a
+second click. Reaffirmation starts a fresh review interval. A held item is
+absent from the normal active-memory view and context pack, and the signed
+receipt records it under `excluded.review`.
+
+Only identifiers and the resolution are stored in the review audit event.
+Memory content remains encrypted, and the resulting pause state plus resolution
+event synchronize to other approved devices. This is a deterministic possible-
+conflict check, not a claim of universal semantic contradiction detection.
+
 ### Move memory to another device
 
 Portable backups never copy a Windows-only DPAPI key and never write plaintext

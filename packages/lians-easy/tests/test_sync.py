@@ -106,10 +106,63 @@ def test_two_devices_share_encrypted_memory_and_propagate_forgetting(tmp_path):
     first_store.forget(original["id"], confirmed=True)
     _push(first_store, first_identity, first_state, cloud)
     reports = _pull(second_store, second_state, cloud)
-    forgotten = next(item for item in second_store.list(state="forgotten") if item["id"] == original["id"])
+    forgotten = next(
+        item for item in second_store.list(state="forgotten") if item["id"] == original["id"]
+    )
     assert forgotten["content"] is None
     assert forgotten["content_sha256"] is None
     assert reports[-1]["updated"]["memories"] == 1
+
+
+def test_review_resolution_propagates_without_cloud_receiving_memory_plaintext(tmp_path):
+    first_store, first_identity = _device(tmp_path, "Main PC")
+    first_state = SyncState.create(first_identity)
+    cloud = OpaqueRevisionLog()
+    cloud.create_workspace(first_state)
+    existing = first_store.remember(
+        "The campaign launch date is May 1 for university students.",
+        kind="decision",
+        source_client="cursor",
+        source_ref="cursor-chat-1",
+    )
+    _push(first_store, first_identity, first_state, cloud)
+
+    second_store, second_identity, second_state, _, _ = _enroll_second_device(
+        tmp_path, first_state, first_identity, cloud
+    )
+    _pull(second_store, second_state, cloud)
+    newer = second_store.remember(
+        "The campaign launch date is June 1 for university students.",
+        kind="decision",
+        source_client="claude",
+        source_ref="claude-task-2",
+    )
+    encrypted = _push(second_store, second_identity, second_state, cloud)
+    assert b"campaign launch" not in json.dumps(encrypted).encode()
+    _pull(first_store, first_state, cloud)
+
+    [review] = first_store.reviews(project_id=None)
+    assert review["memory_a"]["id"] == existing["id"]
+    assert review["memory_b"]["id"] == newer["id"]
+    first_store.resolve_review(
+        review["id"],
+        resolution="use_newer",
+        project_id=None,
+        confirmed=True,
+    )
+    resolution_revision = _push(first_store, first_identity, first_state, cloud)
+    assert existing["content"].encode() not in json.dumps(resolution_revision).encode()
+    assert newer["content"].encode() not in json.dumps(resolution_revision).encode()
+    _pull(second_store, second_state, cloud)
+
+    assert first_store.reviews(project_id=None) == []
+    assert second_store.reviews(project_id=None) == []
+    [paused] = second_store.list(state="paused")
+    assert paused["id"] == existing["id"]
+    recalled = second_store.recall("campaign launch university students", project_id=None)
+    assert [item["id"] for item in recalled] == [newer["id"]]
+    [event] = [item for item in second_store.activity() if item["event"] == "review_resolved"]
+    assert event["details"]["review_id"] == review["id"]
 
 
 def test_state_is_local_key_protected_signed_and_bound_to_device(tmp_path):
@@ -321,14 +374,9 @@ def test_signed_removal_rotates_key_for_survivors_and_excludes_removed_device(tm
 
     fourth_store, fourth_identity = _device(tmp_path, "New tablet")
     fourth_request = create_enrollment_request(fourth_identity, now=NOW)
-    fourth_approval = approve_enrollment(
-        first_state, first_identity, fourth_request, now=NOW
-    )
+    fourth_approval = approve_enrollment(first_state, first_identity, fourth_request, now=NOW)
     assert fourth_approval["grant"]["version"] == 2
-    registry_ids = {
-        device["device_id"]
-        for device in fourth_approval["grant"]["trusted_devices"]
-    }
+    registry_ids = {device["device_id"] for device in fourth_approval["grant"]["trusted_devices"]}
     assert second_identity.device_id not in registry_ids
     assert registry_ids == {
         first_identity.device_id,
@@ -351,8 +399,8 @@ def test_signed_removal_rotates_key_for_survivors_and_excludes_removed_device(tm
     tampered = json.loads(json.dumps(pair))
     ciphertext = tampered["rotation"]["key_wraps"][0]["ciphertext"]
     tampered["rotation"]["key_wraps"][0]["ciphertext"] = (
-        ("A" if ciphertext[0] != "A" else "B") + ciphertext[1:]
-    )
+        "A" if ciphertext[0] != "A" else "B"
+    ) + ciphertext[1:]
     replay_state = SyncState(
         workspace_id=third_state.workspace_id,
         epoch=1,

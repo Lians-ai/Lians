@@ -278,9 +278,10 @@ def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "stdout", first_output)
     assert run_hook(client="antigravity", data_path=data) == 0
     first_payload = json.loads(first_output.getvalue())
-    assert "Use FastAPI for Antigravity services." in first_payload["injectSteps"][0][
-        "ephemeralMessage"
-    ]
+    assert (
+        "Use FastAPI for Antigravity services."
+        in first_payload["injectSteps"][0]["ephemeralMessage"]
+    )
 
     later_output = StringIO()
     monkeypatch.setattr(
@@ -538,9 +539,7 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
             calls.append("cancel")
             return {"state": "cancelled"}
 
-        def approve_device_request(
-            self, request_id, verification_code, *, confirmed=False
-        ):
+        def approve_device_request(self, request_id, verification_code, *, confirmed=False):
             assert request_id == "2446b8a9-0f7c-4ea6-9434-8fb1857aa10d"
             assert verification_code == "ABCD-1234"
             assert confirmed is True
@@ -563,14 +562,10 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
     try:
         with urlopen(app.origin) as response:
             cookie = response.headers["Set-Cookie"].split(";", 1)[0]
-        status, requests = _json_request(
-            f"{app.origin}/v1/cloud/device-requests", cookie=cookie
-        )
+        status, requests = _json_request(f"{app.origin}/v1/cloud/device-requests", cookie=cookie)
         assert status == 200
         assert requests["requests"][0]["verification_code"] == "ABCD-1234"
-        status, devices = _json_request(
-            f"{app.origin}/v1/cloud/devices", cookie=cookie
-        )
+        status, devices = _json_request(f"{app.origin}/v1/cloud/devices", cookie=cookie)
         assert status == 200
         assert devices["devices"][0]["display_name"] == "Laptop"
 
@@ -707,28 +702,123 @@ def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
         thread.join(timeout=5)
 
 
+def test_loopback_review_queue_explains_and_syncs_a_resolution(tmp_path):
+    calls = []
+
+    class FakeCloudAuth:
+        def status(self):
+            return {"state": "connected", "configured": True, "message": "Connected."}
+
+    class FakeCloudSync:
+        def status(self):
+            return {"state": "connected", "sync_state": "ready", "head_revision": 2}
+
+        def pull_if_connected(self):
+            calls.append("pull")
+            return {"state": "current", "attempted": True, "revisions_pulled": 0}
+
+        def sync_if_connected(self):
+            calls.append("push")
+            return {
+                "state": "synced",
+                "attempted": True,
+                "memory_scope": "everywhere",
+                "pending": False,
+            }
+
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    existing = store.remember(
+        "The campaign launch date is May 1 for university students.",
+        kind="decision",
+        source_client="cursor",
+        source_ref="cursor-chat-1",
+    )
+    newer = store.remember(
+        "The campaign launch date is June 1 for university students.",
+        kind="decision",
+        source_client="claude",
+        source_ref="claude-task-2",
+    )
+    app = BridgeApplication(
+        store,
+        port=0,
+        cloud_auth=FakeCloudAuth(),
+        cloud_sync=FakeCloudSync(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
+    app.port = server.server_port
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(app.origin) as response:
+            cookie = response.headers["Set-Cookie"].split(";", 1)[0]
+
+        status, queue = _json_request(f"{app.origin}/v1/reviews", cookie=cookie)
+        assert status == 200
+        assert queue["total"] == 1
+        [review] = queue["reviews"]
+        assert review["memory_a"]["id"] == existing["id"]
+        assert review["memory_b"]["id"] == newer["id"]
+        assert review["memory_a"]["source_client"] == "cursor"
+        assert review["memory_b"]["source_ref"] == "claude-task-2"
+        assert queue["cloud_sync"]["state"] == "current"
+
+        status, memory_view = _json_request(f"{app.origin}/v1/memories?state=all", cookie=cookie)
+        assert status == 200
+        assert memory_view["held_for_review"] == 1
+        assert [item["id"] for item in memory_view["memories"]] == [existing["id"]]
+
+        with pytest.raises(HTTPError) as error:
+            _json_request(
+                f"{app.origin}/v1/reviews/{review['id']}/resolve",
+                cookie=cookie,
+                origin=app.origin,
+                data={"resolution": "use_newer"},
+            )
+        assert error.value.code == 400
+
+        status, resolved = _json_request(
+            f"{app.origin}/v1/reviews/{review['id']}/resolve",
+            cookie=cookie,
+            origin=app.origin,
+            data={"resolution": "use_newer", "confirmed": True},
+        )
+        assert status == 200
+        assert resolved["review"]["status"] == "resolved"
+        assert resolved["review"]["affected_memory_id"] == existing["id"]
+        assert resolved["cloud_sync"]["memory_scope"] == "everywhere"
+        assert store.reviews(project_id=queue["project"]["id"]) == []
+        assert calls == ["pull", "pull", "pull", "pull", "push"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_update_check_returns_only_validated_public_release_state(tmp_path):
     calls = []
     app = BridgeApplication(
         MemoryStore(tmp_path / "bridge.sqlite3"),
         port=0,
-        update_checker=lambda: calls.append(True)
-        or {
-            "status": "available",
-            "current_version": "0.5.0",
-            "available_version": "0.6.0",
-            "release_url": "https://github.com/Lians-ai/Lians/releases/tag/v0.6.0",
-            "package_name": "Lians-Setup-0.6.0.exe",
-            "download_url": (
-                "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
-                "Lians-Setup-0.6.0.exe"
-            ),
-            "checksum_url": (
-                "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
-                "Lians-Setup-0.6.0.exe.sha256"
-            ),
-            "checksum_published": True,
-        },
+        update_checker=lambda: (
+            calls.append(True)
+            or {
+                "status": "available",
+                "current_version": "0.5.0",
+                "available_version": "0.6.0",
+                "release_url": "https://github.com/Lians-ai/Lians/releases/tag/v0.6.0",
+                "package_name": "Lians-Setup-0.6.0.exe",
+                "download_url": (
+                    "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
+                    "Lians-Setup-0.6.0.exe"
+                ),
+                "checksum_url": (
+                    "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
+                    "Lians-Setup-0.6.0.exe.sha256"
+                ),
+                "checksum_published": True,
+            }
+        ),
     )
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
     app.port = server.server_port
@@ -765,8 +855,7 @@ def test_update_download_and_open_are_separate_confirmed_path_private_actions(tm
         "release_url": "https://github.com/Lians-ai/Lians/releases/tag/v0.6.0",
         "package_name": package.name,
         "download_url": (
-            "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
-            "Lians-Setup-0.6.0.exe"
+            "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/Lians-Setup-0.6.0.exe"
         ),
         "checksum_url": (
             "https://github.com/Lians-ai/Lians/releases/download/v0.6.0/"
@@ -1053,9 +1142,7 @@ def test_control_center_exports_verifies_and_imports_encrypted_portable_memory(t
 
         export_request = Request(
             f"{app.origin}/v1/backups/export",
-            data=json.dumps(
-                {"passphrase": passphrase, "confirmation": passphrase}
-            ).encode(),
+            data=json.dumps({"passphrase": passphrase, "confirmation": passphrase}).encode(),
             headers={
                 "Content-Type": "application/json",
                 "Cookie": cookie,
@@ -1136,6 +1223,8 @@ def test_loopback_default_serves_the_packaged_control_center(tmp_path):
         assert "object-src 'none'" in policy
         assert "/assets/cloud-controls.js" in html
         assert "/assets/cloud-controls.css" in html
+        assert "/assets/trust-review.js" in html
+        assert "/assets/trust-review.css" in html
 
         script_match = re.search(r'src="([^"]+\.js)"', html)
         assert script_match is not None
@@ -1155,6 +1244,12 @@ def test_loopback_default_serves_the_packaged_control_center(tmp_path):
         assert "/v1/cloud/sign-in" in cloud_script
         assert "/v1/cloud/delete" in cloud_script
         assert "Authorization" not in cloud_script
+        with urlopen(f"{app.origin}/assets/trust-review.js") as response:
+            review_script = response.read().decode("utf-8")
+            assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert "/v1/reviews" in review_script
+        assert "Review what Lians should trust" in review_script
+        assert "Authorization" not in review_script
     finally:
         server.shutdown()
         server.server_close()

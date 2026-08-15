@@ -10,7 +10,7 @@ import sys
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,24 @@ _CREDENTIAL_VALUE = re.compile(
 )
 _KEY_LIKE = re.compile(r"(?<![A-Za-z0-9])(?:sk|rk|pk|lians)[-_][A-Za-z0-9_-]{12,}")
 _BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}")
+
+_CONFLICT_REVIEW_KINDS = {
+    "constraint",
+    "decision",
+    "fact",
+    "memory",
+    "preference",
+    "project",
+}
+_STALE_REVIEW_DAYS = {
+    "handoff": 14,
+    "decision": 180,
+    "fact": 180,
+    "memory": 180,
+    "project": 180,
+}
+_REVIEW_SCAN_LIMIT = 1000
+_REVIEW_COMPARISONS_PER_MEMORY = 20
 
 
 def _reject_sensitive(content: str) -> None:
@@ -249,6 +267,267 @@ class MemoryStore:
             ),
         )
 
+    def _review_id(self, review_type: str, memory_ids: list[str]) -> str:
+        protected = {
+            "profile": self.profile,
+            "type": review_type,
+            "memory_ids": sorted(memory_ids),
+        }
+        return "review-" + hashlib.sha256(_canonical(protected)).hexdigest()[:32]
+
+    @staticmethod
+    def _resolved_review_ids(rows: list[sqlite3.Row]) -> set[str]:
+        resolved: set[str] = set()
+        for row in rows:
+            try:
+                details = json.loads(row["details_json"] or "{}")
+            except (json.JSONDecodeError, TypeError):
+                continue
+            review_id = details.get("review_id") if isinstance(details, dict) else None
+            if isinstance(review_id, str):
+                resolved.add(review_id)
+        return resolved
+
+    @staticmethod
+    def _possible_conflict(
+        first: sqlite3.Row,
+        second: sqlite3.Row,
+        contents: dict[str, str],
+    ) -> bool:
+        if first["content_sha256"] == second["content_sha256"]:
+            return False
+        first_topic = str(first["topic"] or "").strip().casefold()
+        second_topic = str(second["topic"] or "").strip().casefold()
+        if first_topic and first_topic == second_topic:
+            return True
+        first_tokens = set(_tokens(contents[first["id"]]))
+        second_tokens = set(_tokens(contents[second["id"]]))
+        if min(len(first_tokens), len(second_tokens)) < 4:
+            return False
+        common = len(first_tokens & second_tokens)
+        if common < 4:
+            return False
+        union = len(first_tokens | second_tokens)
+        containment = common / min(len(first_tokens), len(second_tokens))
+        similarity = common / union if union else 0.0
+        return similarity >= 0.55 or containment >= 0.75
+
+    def _build_open_reviews(
+        self,
+        rows: list[sqlite3.Row],
+        *,
+        resolved_ids: set[str],
+        project_id: str | None,
+        include_all_projects: bool,
+        now: datetime,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, str]]:
+        applicable = [
+            row
+            for row in rows
+            if row["forgotten_at"] is None
+            and row["superseded_by_id"] is None
+            and row["paused_at"] is None
+            and (
+                include_all_projects
+                or row["scope"] == "global"
+                or (project_id is not None and row["project_id"] == project_id)
+            )
+        ]
+        contents = {row["id"]: self._content(row) or "" for row in applicable}
+        groups: dict[tuple[str, str | None, str], list[sqlite3.Row]] = {}
+        for row in applicable:
+            if row["kind"] not in _CONFLICT_REVIEW_KINDS:
+                continue
+            groups.setdefault((row["scope"], row["project_id"], row["kind"]), []).append(row)
+
+        reviews: list[dict[str, Any]] = []
+        conflict_memory_ids: set[str] = set()
+        for group in groups.values():
+            ordered = sorted(group, key=lambda row: (row["created_at"], row["id"]))
+            for index, newer in enumerate(ordered):
+                start = max(0, index - _REVIEW_COMPARISONS_PER_MEMORY)
+                for existing in reversed(ordered[start:index]):
+                    if not self._possible_conflict(existing, newer, contents):
+                        continue
+                    review_id = self._review_id("possible_conflict", [existing["id"], newer["id"]])
+                    if review_id in resolved_ids:
+                        continue
+                    conflict_memory_ids.update({existing["id"], newer["id"]})
+                    reviews.append(
+                        {
+                            "id": review_id,
+                            "type": "possible_conflict",
+                            "status": "open",
+                            "reason": (
+                                "These memories are very similar but do not say the same thing. "
+                                "The newer one is held out of AI context until you decide."
+                            ),
+                            "project_id": newer["project_id"],
+                            "detected_at": newer["created_at"],
+                            "held_memory_ids": [newer["id"]],
+                            "memory_a": self._public(existing),
+                            "memory_b": self._public(newer),
+                            "resolutions": ["keep_existing", "use_newer", "keep_both"],
+                        }
+                    )
+                    break
+
+        for row in applicable:
+            threshold_days = _STALE_REVIEW_DAYS.get(row["kind"])
+            if threshold_days is None or row["id"] in conflict_memory_ids:
+                continue
+            try:
+                updated = datetime.fromisoformat(row["updated_at"])
+            except (TypeError, ValueError):
+                continue
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)  # noqa: UP017
+            age = now.astimezone(timezone.utc) - updated.astimezone(timezone.utc)  # noqa: UP017
+            if age < timedelta(days=threshold_days):
+                continue
+            review_id = self._review_id(f"stale@{row['updated_at']}", [row["id"]])
+            if review_id in resolved_ids:
+                continue
+            reviews.append(
+                {
+                    "id": review_id,
+                    "type": "stale",
+                    "status": "open",
+                    "reason": (
+                        f"This {row['kind']} has not been updated for {age.days} days. "
+                        "It is held out of AI context until you confirm it is still useful."
+                    ),
+                    "project_id": row["project_id"],
+                    "detected_at": (updated + timedelta(days=threshold_days))
+                    .astimezone(timezone.utc)  # noqa: UP017
+                    .isoformat(),
+                    "age_days": age.days,
+                    "review_after_days": threshold_days,
+                    "held_memory_ids": [row["id"]],
+                    "memory": self._public(row),
+                    "resolutions": ["keep_active", "pause", "forget"],
+                }
+            )
+
+        reviews.sort(key=lambda item: (item["detected_at"], item["id"]))
+        return reviews[: max(1, min(limit, _REVIEW_SCAN_LIMIT))], contents
+
+    def reviews(
+        self,
+        *,
+        project_id: str | None,
+        limit: int = 100,
+        now: datetime | None = None,
+        include_all_projects: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return unresolved conflicts and stale memories for one or all project boundaries."""
+
+        with self._connect() as db:
+            rows = db.execute(
+                """SELECT * FROM memories WHERE profile = ?
+                   ORDER BY created_at DESC, id DESC LIMIT ?""",
+                (self.profile, _REVIEW_SCAN_LIMIT),
+            ).fetchall()
+            resolution_rows = db.execute(
+                """SELECT details_json FROM bridge_activity
+                   WHERE profile = ? AND event = 'review_resolved'""",
+                (self.profile,),
+            ).fetchall()
+        maximum = _REVIEW_SCAN_LIMIT if include_all_projects else 200
+        reviews, _ = self._build_open_reviews(
+            rows,
+            resolved_ids=self._resolved_review_ids(resolution_rows),
+            project_id=project_id,
+            include_all_projects=include_all_projects,
+            now=now or datetime.now(timezone.utc),  # noqa: UP017
+            limit=max(1, min(limit, maximum)),
+        )
+        return reviews
+
+    def resolve_review(
+        self,
+        review_id: str,
+        *,
+        resolution: str,
+        project_id: str | None,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Resolve one review without placing memory content in the audit event."""
+
+        if not confirmed:
+            raise ValueError("Resolving memory review requires confirmed=true")
+        open_reviews = self.reviews(project_id=project_id)
+        review = next((item for item in open_reviews if item["id"] == review_id), None)
+        if review is None:
+            raise LookupError("Memory review was already resolved or is no longer available")
+        if resolution not in review["resolutions"]:
+            raise ValueError("Choose one of the available review actions")
+
+        timestamp = _now()
+        affected_id: str | None = None
+        forgotten: dict[str, Any] | None = None
+        if review["type"] == "possible_conflict":
+            first_id = review["memory_a"]["id"]
+            second_id = review["memory_b"]["id"]
+            if resolution == "keep_existing":
+                affected_id = second_id
+            elif resolution == "use_newer":
+                affected_id = first_id
+            if affected_id is not None:
+                with self._connect() as db:
+                    db.execute(
+                        "UPDATE memories SET paused_at = ?, updated_at = ? "
+                        "WHERE id = ? AND profile = ? AND forgotten_at IS NULL",
+                        (timestamp, timestamp, affected_id, self.profile),
+                    )
+        else:
+            affected_id = review["memory"]["id"]
+            if resolution in {"keep_active", "pause"}:
+                with self._connect() as db:
+                    db.execute(
+                        "UPDATE memories SET paused_at = ?, updated_at = ? "
+                        "WHERE id = ? AND profile = ? AND forgotten_at IS NULL",
+                        (
+                            timestamp if resolution == "pause" else None,
+                            timestamp,
+                            affected_id,
+                            self.profile,
+                        ),
+                    )
+            elif resolution == "forget":
+                forgotten = self.forget(affected_id, confirmed=True)
+
+        memory_ids = (
+            [review["memory_a"]["id"], review["memory_b"]["id"]]
+            if review["type"] == "possible_conflict"
+            else [review["memory"]["id"]]
+        )
+        event_memory_id = affected_id or memory_ids[0]
+        with self._connect() as db:
+            self._activity(
+                db,
+                "review_resolved",
+                memory_id=event_memory_id,
+                project_id=review["project_id"],
+                client="lians-app",
+                details={
+                    "review_id": review_id,
+                    "review_type": review["type"],
+                    "resolution": resolution,
+                    "memory_ids": memory_ids,
+                },
+            )
+        return {
+            "id": review_id,
+            "status": "resolved",
+            "type": review["type"],
+            "resolution": resolution,
+            "affected_memory_id": affected_id,
+            "forgotten": forgotten,
+            "resolved_at": timestamp,
+        }
+
     def remember(
         self,
         content: str,
@@ -329,9 +608,32 @@ class MemoryStore:
                    ORDER BY updated_at DESC LIMIT 1000""",
                 (self.profile,),
             ).fetchall()
+            resolution_rows = db.execute(
+                """SELECT details_json FROM bridge_activity
+                   WHERE profile = ? AND event = 'review_resolved'""",
+                (self.profile,),
+            ).fetchall()
+
+        reviews, review_contents = self._build_open_reviews(
+            rows,
+            resolved_ids=self._resolved_review_ids(resolution_rows),
+            project_id=project_id,
+            include_all_projects=False,
+            now=datetime.now(timezone.utc),  # noqa: UP017
+            limit=_REVIEW_SCAN_LIMIT,
+        )
+        held_memory_ids = {
+            memory_id for review in reviews for memory_id in review["held_memory_ids"]
+        }
 
         ranked: list[tuple[float, str, sqlite3.Row]] = []
-        exclusions = {"scope": 0, "paused": 0, "irrelevant": 0, "budget": 0}
+        exclusions = {
+            "scope": 0,
+            "paused": 0,
+            "review": 0,
+            "irrelevant": 0,
+            "budget": 0,
+        }
         for recency, row in enumerate(rows):
             if row["paused_at"]:
                 exclusions["paused"] += 1
@@ -339,7 +641,12 @@ class MemoryStore:
             if row["scope"] == "project" and row["project_id"] != project_id:
                 exclusions["scope"] += 1
                 continue
-            content = self._content(row) or ""
+            if row["id"] in held_memory_ids:
+                exclusions["review"] += 1
+                continue
+            content = review_contents.get(row["id"])
+            if content is None:
+                content = self._content(row) or ""
             haystack = " ".join((content, row["topic"] or "", row["kind"] or "")).lower()
             matched = [token for token in query_tokens if token in haystack]
             durable_preference = row["kind"] == "preference" and row["scope"] == "global"

@@ -157,6 +157,31 @@ release artifact. The hosted control center demonstrates the same information
 architecture, but uses sample data when it is not connected to a loopback
 Bridge. It never asks a user to paste raw AI-provider credentials.
 
+### Trust Review
+
+The local App now turns **Review** into an actionable queue instead of a static
+dashboard label. When two active memories have the same kind and scope and
+either share an explicit topic or have strongly overlapping wording with
+different content, Lians keeps the existing precedent active and holds the
+newer candidate out of recall. Project handoffs become reviewable after 14
+days; project facts, decisions, and project memories become reviewable after
+180 days. Durable preferences do not expire merely because time passed.
+
+Each review shows both memory values, exact source client and reference, saved
+time, scope, and the reason one item was excluded. A normal user can choose
+**Keep existing**, **Use newer**, or **Both are valid** for a possible conflict.
+A stale item can be confirmed current, paused, or permanently forgotten with a
+second click. Confirming a stale item starts a new review interval instead of
+dismissing staleness forever.
+
+Held items do not appear as active in the normal Memory list, do not enter an
+AI context pack, and increment the signed receipt's `excluded.review` count.
+The resolution event contains memory identifiers and the choice, never memory
+content. Its pause state and audit event travel inside the same encrypted cloud
+profile, so another connected device immediately reaches the same result. This
+deterministic local check is deliberately described as a *possible* conflict;
+it does not claim general semantic contradiction detection.
+
 ## Release trust gate
 
 Do not promote the desktop installer broadly until its Windows builds are

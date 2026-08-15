@@ -394,10 +394,10 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
         assert len(payload) == record["bytes"]
         assert hashlib.sha256(payload).hexdigest() == record["sha256"]
         total_bytes += len(payload)
-    assert total_bytes < 420_000
+    assert total_bytes < 440_000
 
     scripts = [relative for relative in expected if relative.endswith(".js")]
-    assert len(scripts) == 2
+    assert len(scripts) == 3
     script_documents = {
         relative: (app_root / relative).read_text(encoding="utf-8") for relative in scripts
     }
@@ -453,3 +453,18 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "checks only when you ask" in script
     assert "Download verified update" in script
     assert "Downloading never opens an installer" in script
+
+    review_script = script_documents["assets/trust-review.js"]
+    assert "/v1/reviews" in review_script
+    assert "Review what Lians should trust" in review_script
+    assert "HELD FROM AI" in review_script
+    assert "exact source, time, scope" in review_script
+    assert "Keep existing" in review_script
+    assert "Use newer" in review_script
+    assert "Both are valid" in review_script
+    assert "Still current" in review_script
+    assert "Pause it" in review_script
+    assert "Forget permanently" in review_script
+    assert "confirmed: true" in review_script
+    assert "innerHTML" not in review_script
+    assert "Authorization" not in review_script
