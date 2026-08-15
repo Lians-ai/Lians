@@ -8,7 +8,7 @@ slice in a later chat.
 
 Use Cursor's official one-click MCP installer:
 
-[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvNDM3YTlmNTAzODQzNDU3MmYxZWQwMTY0MzRmODg3ODMyOGM4YzQ5OS56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
+[<img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install Lians in Cursor">](https://cursor.com/en/install-mcp?name=lians-memory&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyItLWZyb20iLCJsaWFucy1lYXN5IEAgaHR0cHM6Ly9naXRodWIuY29tL0xpYW5zLWFpL0xpYW5zL2FyY2hpdmUvYTZjOGQ0ZGQxZWVmMjg0ZWYyNGFiODI0ZGJiYzQ2NTA3MDM5MWY3NC56aXAjc3ViZGlyZWN0b3J5PXBhY2thZ2VzL2xpYW5zLWVhc3kiLCJsaWFucy1lYXN5IiwibWNwIl19)
 
 The button passes the same local server configuration shown below to Cursor.
 Review it in Cursor before approving the install.
@@ -23,9 +23,9 @@ Marketplace yet.
 The native package runs the encrypted Lians Bridge MCP runtime from an immutable
 GitHub source archive. It requires `uv` and network access on first launch, but
 it does not require Git, a preinstalled Python runtime, a Lians account, or an
-API key. This package is stacked on the reviewed Bridge implementation in
-[PR #170](https://github.com/Lians-ai/Lians/pull/170); advance the immutable pin
-to the merged commit before marketplace submission.
+API key. The immutable runtime pin is the reviewed Bridge implementation merged
+in [PR #170](https://github.com/Lians-ai/Lians/pull/170) at commit
+`a6c8d4dd1eef284ef24ab824dbbc465070391f74`.
 
 For manual setup:
 
@@ -44,7 +44,7 @@ database for its default `personal` profile:
 
 - Windows: `%LOCALAPPDATA%\Lians\memory.sqlite3`
 - macOS: `~/Library/Application Support/Lians/memory.sqlite3`
-- Linux: `${XDG_DATA_HOME:-~/.local/share}/Lians/memory.sqlite3`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/lians/memory.sqlite3`
 
 Point every supported AI client at Lians Bridge to share that profile across
 clients on the same machine. Memory values are AES-GCM encrypted at rest. On

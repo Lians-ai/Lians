@@ -56,7 +56,7 @@ def test_cursor_starter_profile_is_local_bounded_stdio():
         "--from",
         (
             "lians-easy @ https://github.com/Lians-ai/Lians/archive/"
-            "437a9f5038434572f1ed016434f8878328c8c499.zip"
+            "a6c8d4dd1eef284ef24ab824dbbc465070391f74.zip"
             "#subdirectory=packages/lians-easy"
         ),
         "lians-easy",
