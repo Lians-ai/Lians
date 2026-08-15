@@ -30,7 +30,7 @@ jobs:
     name: Build and exercise public package
     runs-on: ubuntu-latest
     env:
-      PACKAGE_DIST: ${{ runner.temp }}/lians-bridge-dist
+      PACKAGE_DIST: ${{ github.workspace }}/.lians-release/lians-bridge-dist
     steps:
       - name: Check out current change
         if: github.event_name != 'workflow_dispatch'
