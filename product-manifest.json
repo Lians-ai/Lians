@@ -31,7 +31,7 @@
       {
         "label": "Lians Easy desktop installer",
         "status": "Release candidate",
-        "detail": "Guided, dependency-free local setup for nontechnical users, with cross-client memory and managed deployment flags."
+        "detail": "Guided, dependency-free local setup for Claude Desktop, Cursor, Windsurf, Gemini CLI, Codex, and OpenCode, with cross-client memory and managed deployment flags."
       },
       {
         "label": "MCP memory server",
