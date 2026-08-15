@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from lians_easy.installer import (
@@ -9,6 +10,7 @@ from lians_easy.installer import (
     client_targets,
     install,
     plan,
+    runtime_command,
     uninstall,
 )
 
@@ -49,6 +51,57 @@ def test_codex_managed_block_is_idempotent(tmp_path, monkeypatch):
     assert content.count(MANAGED_START) == 1
     assert content.count(MANAGED_END) == 1
     assert 'model = "gpt-5"' in content
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
+def test_cline_cli_target_uses_supplied_home_on_every_platform(platform, tmp_path, monkeypatch):
+    home = tmp_path / platform
+    monkeypatch.setattr("sys.platform", platform)
+
+    target = client_targets(home)["cline"]
+
+    assert target.label == "Cline CLI"
+    assert target.config_path == home / ".cline/data/settings/cline_mcp_settings.json"
+
+
+def test_cline_cli_config_round_trip_is_safe_and_idempotent(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config = home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
+    config.parent.mkdir(parents=True)
+    original = {"theme": "dark", "mcpServers": {"other": {"command": "other-mcp"}}}
+    config.write_text(json.dumps(original), encoding="utf-8")
+    data_home = tmp_path / "lians"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(data_home))
+
+    target = client_targets(home)["cline"]
+    assert target.label == "Cline CLI"
+    assert target.config_path == config
+    assert target.detected is True
+    assert target.configured is False
+
+    first = install(["cline"], home=home)
+    installed = json.loads(config.read_text(encoding="utf-8"))
+    second = install(["cline"], home=home)
+
+    assert json.loads(config.read_text(encoding="utf-8")) == installed
+    assert set(installed) == set(original)
+    assert installed["theme"] == "dark"
+    assert set(installed["mcpServers"]) == {"other", "lians"}
+    assert installed["mcpServers"]["other"] == {"command": "other-mcp"}
+    assert installed["mcpServers"]["lians"]["args"][-1] == "mcp"
+    first_backup = Path(first["clients"][0]["backup"])
+    second_backup = Path(second["clients"][0]["backup"])
+    assert json.loads(first_backup.read_text(encoding="utf-8")) == original
+    assert json.loads(second_backup.read_text(encoding="utf-8")) == installed
+    assert client_targets(home)["cline"].configured is True
+
+    removed = uninstall(["cline"], home=home)
+    after_removal = json.loads(config.read_text(encoding="utf-8"))
+    uninstall(["cline"], home=home)
+
+    assert after_removal == original
+    assert json.loads(config.read_text(encoding="utf-8")) == original
+    assert removed["data_preserved"] == str(data_home / "memory.sqlite3")
 
 
 def test_plan_reports_targets_without_writing(tmp_path, monkeypatch):
@@ -183,3 +236,70 @@ def test_antigravity_invalid_registry_fails_before_writing_plugin(tmp_path, monk
     plugin_dir = home / ".gemini" / "config" / "plugins" / "lians-memory"
     assert not plugin_dir.exists()
     assert json.loads(registry.read_text()) == {"entries": "not-an-array"}
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
+def test_opencode_target_uses_documented_global_path(platform, tmp_path, monkeypatch):
+    home = tmp_path / platform
+    monkeypatch.setattr("sys.platform", platform)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+    target = client_targets(home)["opencode"]
+
+    assert target.label == "OpenCode"
+    assert target.config_path == home / ".config" / "opencode" / "opencode.json"
+
+
+def test_opencode_target_respects_xdg_config_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    config_home = tmp_path / "xdg"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+
+    target = client_targets(home)["opencode"]
+
+    assert target.config_path == config_home / "opencode" / "opencode.json"
+
+
+def test_opencode_config_uses_mcp_key(tmp_path, monkeypatch):
+    """OpenCode uses 'mcp' with a local type and one command array."""
+    home = tmp_path / "home"
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    config = home / ".config" / "opencode" / "opencode.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(json.dumps({"theme": "dark"}))
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    first = install(["opencode"], home=home)
+    updated = json.loads(config.read_text())
+    second = install(["opencode"], home=home)
+
+    assert updated["theme"] == "dark"
+    assert "lians" in updated["mcp"]
+    lians_cfg = updated["mcp"]["lians"]
+    assert lians_cfg["type"] == "local"
+    command, args = runtime_command()
+    assert lians_cfg["command"] == [command, *args]
+    assert lians_cfg["enabled"] is True
+    assert "LIANS_MCP_ENABLED_TOOLS" in lians_cfg["environment"]
+    assert json.loads(config.read_text()) == updated
+    assert json.loads(Path(first["clients"][0]["backup"]).read_text()) == {"theme": "dark"}
+    assert json.loads(Path(second["clients"][0]["backup"]).read_text()) == updated
+    assert client_targets(home)["opencode"].configured is True
+
+    removed = uninstall(["opencode"], home=home)
+    assert "lians" not in json.loads(config.read_text()).get("mcp", {})
+    assert removed["data_preserved"].endswith("memory.sqlite3")
+
+
+def test_opencode_config_creates_new_file(tmp_path, monkeypatch):
+    """OpenCode config should be created if it doesn't exist."""
+    home = tmp_path / "home"
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("LIANS_EASY_HOME", str(tmp_path / "lians"))
+
+    install(["opencode"], home=home)
+    config = home / ".config" / "opencode" / "opencode.json"
+    assert config.exists()
+    updated = json.loads(config.read_text())
+    assert "lians" in updated["mcp"]
+    assert updated["mcp"]["lians"]["type"] == "local"

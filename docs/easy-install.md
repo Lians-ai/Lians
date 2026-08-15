@@ -22,6 +22,16 @@ python -m lians_easy
 Choose the clients to configure, select **Install Lians**, restart those
 clients, then ask one to remember a useful fact and recall it in another chat.
 
+For Gemini CLI, an install can succeed while `lians` remains disabled or
+disconnected in an untrusted folder. Review the folder and run `gemini trust`
+to trust the intended workspace interactively, then check `/mcp list` or
+`gemini mcp list` again. `--skip-trust` and
+`GEMINI_CLI_TRUST_WORKSPACE=true` are available for a single session or a
+disposable test environment, but they bypass the folder trust check and should
+not replace reviewing the workspace. See the
+[Gemini integration guide](../integrations/gemini/README.md#workspace-trust)
+for details.
+
 Existing client configuration files are backed up before every change. Memory
 is stored in a local SQLite file under the operating system's per-user Lians
 data directory. Selected clients use the same `personal` profile, so a fact
@@ -49,12 +59,16 @@ The core tools are intentionally understandable:
 ## Supported clients
 
 The first desktop release configures Claude Desktop, Cursor, Windsurf,
-Antigravity CLI, Gemini CLI, and Codex. Choose Antigravity for a consumer Google
+Antigravity CLI, Gemini CLI, Codex, Cline CLI, and OpenCode. Choose Antigravity for a consumer Google
 account. The Gemini CLI target is for supported Standard or Enterprise
 subscriptions, API keys, and Vertex AI configurations after Google's June 18,
 2026 consumer-login retirement. It does not modify ChatGPT because ChatGPT
 connectors use a hosted HTTP connection rather than a local stdio process. Use
 a hosted Lians connector when that distribution is available.
+
+Cline CLI uses its documented settings file at
+`~/.cline/data/settings/cline_mcp_settings.json`; OpenCode uses its documented
+global configuration at `~/.config/opencode/opencode.json`.
 
 Antigravity is configured through its plugin loader, not the ordinary global
 MCP file. This is the route verified to expose invocable custom MCP tools on
@@ -72,19 +86,19 @@ LiansMemory doctor --json
 Preview an exact install without writing anything:
 
 ```bash
-LiansMemory install --clients claude,cursor,antigravity,codex --plan --json
+LiansMemory install --clients claude,cursor,antigravity,codex,cline,opencode --plan --json
 ```
 
 Install for selected clients:
 
 ```bash
-LiansMemory install --clients claude,cursor,antigravity,codex --yes --json
+LiansMemory install --clients claude,cursor,antigravity,codex,cline,opencode --yes --json
 ```
 
 Remove the managed client entries while preserving the user's memory database:
 
 ```bash
-LiansMemory uninstall --clients claude,cursor,antigravity,codex --yes --json
+LiansMemory uninstall --clients claude,cursor,antigravity,codex,cline,opencode --yes --json
 ```
 
 Every write is idempotent and creates a timestamped backup when a configuration
