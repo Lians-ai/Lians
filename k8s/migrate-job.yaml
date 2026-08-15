@@ -37,14 +37,14 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: 10001
+        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: migrate
-          # CHANGE: match the image tag you are deploying
-          image: agentmem:0.5.0
+          # Pin this to the exact digest used by the Deployment in production.
+          image: ghcr.io/lians-ai/lians-engine:0.5.0
           imagePullPolicy: IfNotPresent
           # alembic.ini lives in /app/agentmem/; alembic is on PATH from pip install
           command:

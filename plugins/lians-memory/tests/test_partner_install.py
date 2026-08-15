@@ -1355,6 +1355,19 @@ def test_duplicate_warning_scan_honors_process_codex_home(tmp_path: Path) -> Non
     assert "disable one copy" in warnings[0]
 
 
+def test_duplicate_warning_scan_allows_disabled_legacy_server(tmp_path: Path) -> None:
+    codex_home = tmp_path / ".codex"
+    codex_home.mkdir()
+    (codex_home / "config.toml").write_text(
+        '[mcp_servers.lians]\nenabled = false\nurl = "https://legacy.invalid"\n',
+        encoding="utf-8",
+    )
+
+    warnings = bootstrap.duplicate_user_configuration_warnings(codex_home=codex_home)
+
+    assert warnings == []
+
+
 def test_duplicate_warning_scan_rejects_relative_process_codex_home() -> None:
     with pytest.raises(bootstrap.BootstrapError, match="CODEX_HOME must be an absolute"):
         bootstrap.duplicate_user_configuration_warnings(environ={"CODEX_HOME": "relative"})

@@ -80,7 +80,15 @@ def main() -> int:
     versions = {
         "root Python package": _toml("pyproject.toml")["project"]["version"],
         "Python SDK": _toml("agentmem/sdk/python/pyproject.toml")["project"]["version"],
-        "Lians Easy": _toml("packages/lians-easy/pyproject.toml")["project"]["version"],
+        "Lians Bridge": _toml("packages/lians-easy/pyproject.toml")["project"]["version"],
+        "Lians Engine image": _match("Dockerfile", r"ARG LIANS_VERSION=([^\s]+)"),
+        "Kustomize image": _match("k8s/kustomization.yaml", r'newTag:\s*"([^"]+)"'),
+        "Kustomize labels": _match(
+            "k8s/kustomization.yaml", r'app\.kubernetes\.io/version:\s*"([^"]+)"'
+        ),
+        "Migration image": _match(
+            "k8s/migrate-job.yaml", r"ghcr\.io/lians-ai/lians-engine:([^\s]+)"
+        ),
         "Python runtime": _match(
             "agentmem/src/lians/__init__.py", r'__version__\s*=\s*"([^"]+)"'
         ),

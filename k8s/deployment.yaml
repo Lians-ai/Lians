@@ -28,7 +28,7 @@ spec:
         app.kubernetes.io/component: api
       annotations:
         # Force pod recreation when secrets/configmaps change (checksum rollout pattern).
-        # Populate with: kubectl get secret agentmem-secret -o json | jq -r '.data | to_entries | map("\(.key)=\(.value)") | join(",")' | sha256sum
+        # Populate from your external-secret revision or sealed-secret digest.
         checksum/secret: "UPDATE_WITH_SECRET_CHECKSUM"
         checksum/config: "UPDATE_WITH_CONFIGMAP_CHECKSUM"
     spec:
@@ -36,9 +36,10 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        # Match the non-root identity baked into the official Lians Engine image.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
 
@@ -52,35 +53,7 @@ spec:
               app.kubernetes.io/name: agentmem
               app.kubernetes.io/component: api
 
-      # ── Init: wait for Postgres to be ready ───────────────────────────────────
-      # Prevents CrashLoopBackOff when the DB pod is still starting.
       initContainers:
-        - name: wait-for-postgres
-          image: postgres:16-alpine@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
-          command:
-            - sh
-            - -c
-            - |
-              until pg_isready -h "${PG_HOST}" -p 5432; do
-                echo "Waiting for Postgres…"
-                sleep 2
-              done
-          env:
-            - name: PG_HOST
-              value: "postgres.agentmem.svc.cluster.local"
-          resources:
-            requests:
-              cpu: "10m"
-              memory: "32Mi"
-            limits:
-              cpu: "100m"
-              memory: "64Mi"
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-
         # ── Init: wait for migrations to reach head ───────────────────────────
         # Blocks the app pod until `alembic check` exits 0 (DB == head).
         # This prevents startup against a schema that is behind the current code.
@@ -121,7 +94,7 @@ spec:
 
       containers:
         - name: agentmem
-          # Replace with your registry/image:tag — e.g. ghcr.io/your-org/agentmem:v0.2.0
+          # Kustomize replaces this with the versioned official Lians Engine image.
           image: agentmem:0.5.0
           imagePullPolicy: IfNotPresent
           ports:
@@ -137,10 +110,10 @@ spec:
                 name: agentmem-secret
 
           # ── Health probes ────────────────────────────────────────────────────
-          # /health checks DB + Redis connectivity, not just process liveness.
+          # Readiness includes dependencies; liveness checks only the process.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -150,7 +123,7 @@ spec:
 
           livenessProbe:
             httpGet:
-              path: /health
+              path: /livez
               port: http
             initialDelaySeconds: 30
             periodSeconds: 20

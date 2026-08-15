@@ -18,6 +18,7 @@
   <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians"><img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry"></a>
   <a href="https://glama.ai/mcp/servers/Lians-ai/Lians"><img src="https://glama.ai/mcp/servers/Lians-ai/Lians/badges/score.svg" alt="Glama MCP quality score"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
+  <a href="https://github.com/Lians-ai/Lians/stargazers"><img src="https://img.shields.io/github/stars/Lians-ai/Lians?style=social" alt="Star Lians on GitHub"></a>
 </p>
 
 # Portable memory for the AI tools you already use.
@@ -34,6 +35,27 @@ The product loop is deliberately small:
 
 Lians works through MCP, plugins, and SDKs. Local mode stores memory in SQLite,
 needs no Lians account or API key, and does not lock memory to one model vendor.
+
+<p align="center">
+  <img src="docs/assets/cross-tool-memory-flow.svg" width="100%" alt="A project preference saved in Cursor flows through the encrypted Lians Bridge into a new Codex or Claude task with an inspectable receipt and controls to correct, pause, or forget it.">
+</p>
+
+## Tested across real AI clients
+
+On August 14, 2026, a live hosted-MCP test stored one synthetic project memory
+through Cursor, recalled it in a separate Cursor chat, and then recalled the
+same exact codeword in a fresh Claude Code session. After confirmed deletion,
+Cursor returned no matching memory.
+
+In a separate balanced Cursor CLI stress test, bounded Lians-style context used
+**24.72% fewer provider-reported input tokens** than a 201-line always-applied
+Cursor rule while preserving all four exact answers. This is one synthetic
+large-rule workload, not a promise of universal token savings.
+
+[Read the methodology, raw aggregate evidence, and current platform blockers](docs/benchmarks/cross-agent-memory-2026-08-14.md).
+If this is the kind of portable memory you want agents to have,
+[star Lians](https://github.com/Lians-ai/Lians/stargazers) and try the
+[three-minute memory challenge](https://github.com/Lians-ai/Lians/discussions/122).
 
 ## One product, two ways to run it
 
@@ -125,6 +147,7 @@ exposes the basic loop plus the controls needed to trust it:
 
 Use the exact setup guide for
 [Cursor](integrations/cursor),
+[Antigravity CLI](integrations/antigravity),
 [Gemini CLI](integrations/gemini),
 [Claude Code](integrations/lians-plugin), or
 [OpenCode](integrations/opencode), or
@@ -198,7 +221,7 @@ Java, C, framework adapters, and self-hosting.
 | Use managed private memory without running a server | [Lians Personal — $10/month](https://www.lians.ai/upgrade?plan=starter) |
 | Give an existing AI client free local memory | [MCP setup](#free-local-setup-add-memory-through-mcp) |
 | Add local memory inside Python | [`LocalLiansClient`](agentmem/sdk/python) |
-| Evaluate the desktop installer preview from source | [Lians Easy](docs/easy-install.md) |
+| Evaluate encrypted cross-tool memory from source | [Lians Bridge preview](docs/easy-install.md) |
 | Connect Python or TypeScript to a Lians server | [Language SDKs](docs/install.md#language-sdks) |
 | Use Pydantic AI or LangGraph | [Pydantic AI example](integrations/pydantic-ai/python) · [LangGraph example](integrations/langgraph/python) |
 | Use LangChain, CrewAI, OpenAI Agents, or AutoGen | [Framework integrations](docs/install.md#framework-integrations) |
@@ -242,7 +265,7 @@ them; they are not required to get started.
 agentmem/src/lians/          Core engine and HTTP service
 agentmem/sdk/python/        Python SDK, local client, and MCP server
 agentmem/sdk/typescript/    TypeScript SDK
-packages/lians-easy/        Dependency-free desktop runtime and installer
+packages/lians-easy/        Lians Bridge package source and installer preview
 integrations/               Agent and framework integrations
 plugins/                    Installable agent plugins
 docs/                       Setup, architecture, security, and operations

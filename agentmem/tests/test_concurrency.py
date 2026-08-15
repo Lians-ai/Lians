@@ -12,21 +12,22 @@ cooperative single-thread model means awaits don't truly interleave at the DB
 level, but the state invariant must still hold after concurrent asyncio tasks.
 
 Each concurrent call gets its own session (mirroring production where each HTTP
-request gets its own session from get_db()).  With StaticPool the underlying
-SQLite connection is shared, so operations serialise at the connection level â€”
-this validates the invariant without truly exercising the advisory lock.
-The advisory lock is exercised against PostgreSQL in test_pgvector.py.
+request gets its own session from get_db()).  The SQLite fixture uses a temporary
+WAL database so read transactions created before the write lock do not make the
+test depend on shared-cache table-lock timing.  The advisory lock itself is
+exercised against PostgreSQL in test_pgvector.py.
 """
 from __future__ import annotations
+
 import asyncio
+from datetime import datetime, timezone
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import StaticPool
-
-from src.lians.schemas import MemoryAdd, RecallRequest
-from src.lians.memory_service import add_memory, recall_memories, _write_lock_keys
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from src.lians.memory_service import _write_lock_keys, add_memory
+from src.lians.schemas import MemoryAdd
 
 NS    = "concurrency-ns"
 AGENT = "concurrency-agent"
@@ -37,21 +38,32 @@ AGENT = "concurrency-agent"
 # ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
-async def session_factory(test_settings):
+async def session_factory(test_settings, tmp_path):
     """
-    In-memory SQLite engine shared across sessions in a single test.
+    Temporary SQLite database shared across sessions in a single test.
     Mirrors production: each add_memory call uses its own session,
     just as each HTTP request uses its own get_db() session.
     """
     from src.lians.models import Base as AppBase
 
-    # Use SQLite shared-cache URI so each session gets its own connection
-    # but all sessions share the same in-memory database â€” avoids StaticPool's
-    # single-connection limit when multiple sessions run concurrently.
+    # A temporary file gives each session its own connection without SQLite's
+    # shared-cache SQLITE_LOCKED behavior. WAL lets the admission reads that
+    # happen before Lians' per-agent write lock coexist with the active writer.
+    database = tmp_path / "concurrency.sqlite3"
     engine = create_async_engine(
-        "sqlite+aiosqlite:///file::memory:?cache=shared&uri=true",
-        connect_args={"check_same_thread": False},
+        f"sqlite+aiosqlite:///{database.as_posix()}",
+        connect_args={"check_same_thread": False, "timeout": 30},
     )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _configure_sqlite(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
 
     pg_indexes = [
         idx for table in AppBase.metadata.tables.values()
@@ -130,11 +142,11 @@ class TestSequentialConsistency:
         """
         meta = {"ticker": "NVDA", "metric": "guidance"}
 
-        m0 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content="NVDA guidance $32B",
             event_time=_t(1), metadata=meta,
         ))
-        m1 = await add_memory(db, NS, MemoryAdd(
+        await add_memory(db, NS, MemoryAdd(
             agent_id=AGENT, content="NVDA guidance $36B",
             event_time=_t(4), metadata=meta,
         ))
@@ -198,10 +210,9 @@ class TestConcurrentAsyncioWrites:
     session â€” mirroring production where each HTTP request gets its own
     get_db() session.
 
-    On SQLite + StaticPool, the underlying connection is shared, so operations
-    serialise at the aiosqlite level.  This validates the STATE invariant
-    without truly racing.  The advisory lock is exercised against a live
-    PostgreSQL instance in test_pgvector.py.
+    The temporary SQLite WAL database gives each session its own connection.
+    The service's per-agent application lock serialises these writes while the
+    PostgreSQL advisory-lock path is exercised separately in test_pgvector.py.
     """
 
     @pytest.mark.asyncio

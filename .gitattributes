@@ -1,0 +1,2 @@
+# The embedded React bundle is source-pinned byte-for-byte in app/manifest.json.
+packages/lians-easy/lians_easy/app/** -text

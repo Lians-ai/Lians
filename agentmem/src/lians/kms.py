@@ -35,12 +35,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from typing import Optional
 
 logger = logging.getLogger("agentmem.kms")
 
 # Module-level cache — populated by load_master_key(), never written after that.
-_master_key_cache: Optional[bytes] = None
+_master_key_cache: bytes | None = None
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -134,7 +133,7 @@ def _env_key(settings) -> bytes:
             return b"\x00" * 32
         raise RuntimeError(
             "MASTER_ENCRYPTION_KEY is not set. "
-            "AgentMem cannot start without an encryption key because storing financial "
+            "Lians cannot start without an encryption key because storing sensitive "
             "data with a predictable key violates the GDPR crypto-shred guarantee.\n\n"
             "Generate a key:\n"
             "  python -c \"import secrets,base64; "
@@ -172,7 +171,7 @@ async def _from_aws(settings) -> bytes:
     except ImportError as exc:
         raise ImportError(
             "boto3 is required for KMS_PROVIDER=aws. "
-            "Install with: pip install boto3  (or pip install agentmem[aws])"
+            "Install with: pip install 'lians[aws]'"
         ) from exc
 
     encrypted_dek = base64.b64decode(settings.kms_aws_encrypted_key)
@@ -210,13 +209,12 @@ async def _from_azure(settings) -> bytes:
         )
 
     try:
-        from azure.keyvault.secrets.aio import SecretClient  # type: ignore[import]
         from azure.identity.aio import DefaultAzureCredential  # type: ignore[import]
+        from azure.keyvault.secrets.aio import SecretClient  # type: ignore[import]
     except ImportError as exc:
         raise ImportError(
             "azure-keyvault-secrets and azure-identity are required for KMS_PROVIDER=azure. "
-            "Install with: pip install azure-keyvault-secrets azure-identity  "
-            "(or pip install agentmem[azure])"
+            "Install with: pip install 'lians[azure]'"
         ) from exc
 
     credential = DefaultAzureCredential()
@@ -252,7 +250,7 @@ async def _from_vault(settings) -> bytes:
     except ImportError as exc:
         raise ImportError(
             "hvac is required for KMS_PROVIDER=vault. "
-            "Install with: pip install hvac  (or pip install agentmem[vault])"
+            "Install with: pip install 'lians[vault]'"
         ) from exc
 
     def _read() -> str:

@@ -128,6 +128,23 @@ class Settings(BaseSettings):
     # Portal-issued domain proof. Empty keeps the challenge endpoint at 404.
     openai_apps_challenge_token: str = ""
 
+    # Consumer Lians Bridge sign-in for opaque, zero-knowledge cloud sync.
+    # This is a public native-client flow: the Bridge holds no client secret,
+    # while this API validates only short-lived JWT access tokens.
+    cloud_sync_oauth_enabled: bool = False
+    cloud_sync_oauth_resource_url: str = "https://api.lians.ai"
+    cloud_sync_oauth_issuer_url: str = ""
+    cloud_sync_oauth_jwks_url: str = ""
+    cloud_sync_oauth_jwt_algorithms: str = "RS256"
+    cloud_sync_oauth_jwt_leeway_seconds: int = Field(default=30, ge=0, le=300)
+    cloud_sync_oauth_max_token_lifetime_seconds: int = Field(
+        default=3600, ge=60, le=86400
+    )
+    cloud_sync_oauth_startup_timeout_seconds: int = Field(default=15, ge=1, le=120)
+    # Optional Auth0 Organization claim. Leave empty for a personal account;
+    # issuer + subject remains the stable identity boundary.
+    cloud_sync_oauth_organization_claim: str = ""
+
     # LLM adjudication (Stage 3 supersession)
     anthropic_api_key: str = ""          # falls back to ANTHROPIC_API_KEY env var
     llm_adjudication_model: str = "claude-haiku-4-5-20251001"

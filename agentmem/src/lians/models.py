@@ -1,14 +1,32 @@
 import uuid
 from datetime import datetime, timezone
+
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    Column, String, Text, DateTime, Float, Boolean,
-    ForeignKey, Index, LargeBinary, JSON, Integer,
-    UniqueConstraint, Uuid as UUID, text, types as sa_types,
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy import (
+    Uuid as UUID,
+)
+from sqlalchemy import (
+    types as sa_types,
 )
 from sqlalchemy.engine import Dialect
-from pgvector.sqlalchemy import Vector
-from .db import Base
+
 from .config import get_settings
+from .db import Base
 
 # Use SQLAlchemy's cross-dialect type: native UUID on PostgreSQL and CHAR(32)
 # on SQLite. PostgreSQL's dialect-only UUID type gives SQLite numeric affinity,
@@ -17,6 +35,7 @@ from .config import get_settings
 
 class _FlexVector(sa_types.TypeDecorator):
     """Vector(dim) on PostgreSQL, JSON list on SQLite/other (for unit tests)."""
+
     impl = sa_types.Text
     cache_ok = True
 
@@ -51,22 +70,25 @@ class _FlexVector(sa_types.TypeDecorator):
             return [float(x) for x in value.strip("[]").split(",")]
         return value  # numpy ndarray or list — both are iterable as floats
 
+
 EMBED_DIM = get_settings().embedding_dim  # 1024 — locked before first migration
 
 
 def _now():
-    return datetime.now(timezone.utc)
+    # datetime.UTC is unavailable on the engine's supported Python 3.10.
+    return datetime.now(timezone.utc)  # noqa: UP017
 
 
 class Memory(Base):
     """Content store — encrypted, erasable."""
+
     __tablename__ = "memories"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     namespace = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False, index=True)
 
-    content_encrypted = Column(LargeBinary, nullable=True)   # null after erasure
+    content_encrypted = Column(LargeBinary, nullable=True)  # null after erasure
     subject_id = Column(String, nullable=True, index=True)
 
     embedding = Column(_FlexVector(EMBED_DIM), nullable=True)
@@ -76,7 +98,7 @@ class Memory(Base):
     ingestion_time = Column(DateTime(timezone=True), nullable=False, default=_now)
 
     valid_from = Column(DateTime(timezone=True), nullable=False)
-    valid_to = Column(DateTime(timezone=True), nullable=True)        # null = still valid
+    valid_to = Column(DateTime(timezone=True), nullable=True)  # null = still valid
 
     superseded_by = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=True)
     supersession_confidence = Column(Float, nullable=True)
@@ -112,6 +134,7 @@ class Memory(Base):
 
 class MemoryFeedback(Base):
     """Append-only outcome signal for a recalled memory."""
+
     __tablename__ = "memory_feedback"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -197,30 +220,34 @@ class SubjectKey(Base):
     tenant, so a bare subject_id PK would let two tenants share one DEK and let
     one tenant's erase crypto-shred another's data. See migration 0019.
     """
+
     __tablename__ = "subject_keys"
 
     namespace = Column(String, primary_key=True)
     subject_id = Column(String, primary_key=True)
-    enc_key = Column(LargeBinary, nullable=True)   # null after destruction
+    enc_key = Column(LargeBinary, nullable=True)  # null after destruction
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     destroyed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class EventLog(Base):
     """Append-only audit trail — never updated, never deleted."""
+
     __tablename__ = "event_log"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     namespace = Column(String, nullable=False, index=True)
     agent_id = Column(String, nullable=False)
-    op = Column(String, nullable=False)          # add | supersede | recall | erase
+    op = Column(String, nullable=False)  # add | supersede | recall | erase
     memory_id = Column(UUID(as_uuid=True), nullable=True)
     content_hash = Column(String, nullable=True)
     payload = Column(JSON, nullable=False, server_default="{}")
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     # Hash chain for SEC 17a-4 tamper-evidence
-    prev_hash = Column(String(64), nullable=True)   # row_hash of the preceding row in this namespace
-    row_hash = Column(String(64), nullable=True)    # SHA-256(prev_hash || this row's canonical fields)
+    prev_hash = Column(String(64), nullable=True)  # row_hash of the preceding row in this namespace
+    row_hash = Column(
+        String(64), nullable=True
+    )  # SHA-256(prev_hash || this row's canonical fields)
     # v1 excludes payload for backward compatibility; v2 hashes canonical JSON payload.
     hash_version = Column(Integer, nullable=False, default=1, server_default="1")
 
@@ -271,6 +298,7 @@ class DecisionRecord(Base):
     Records are append-only at the API layer. Corrections create a new record
     linked through ``supersedes_id`` rather than rewriting history.
     """
+
     __tablename__ = "decision_records"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -361,6 +389,7 @@ class DecisionEvidenceLink(Base):
 
 class LedgerEvent(Base):
     """First-class system-of-record event shared by every LIANS product."""
+
     __tablename__ = "ledger_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -384,6 +413,7 @@ class LedgerEvent(Base):
 
 class OTelSpan(Base):
     """Append-only copy of a span accepted through the OTLP/HTTP receiver."""
+
     __tablename__ = "otel_spans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -411,15 +441,14 @@ class OTelSpan(Base):
     received_at = Column(DateTime(timezone=True), nullable=False, default=_now, index=True)
 
     __table_args__ = (
-        UniqueConstraint(
-            "namespace", "trace_id", "span_id", name="uq_otel_span_ns_trace_span"
-        ),
+        UniqueConstraint("namespace", "trace_id", "span_id", name="uq_otel_span_ns_trace_span"),
         Index("ix_otel_span_ns_received", "namespace", "received_at"),
     )
 
 
 class ValidMindModelLink(Base):
     """Mutable synchronization metadata; source telemetry remains append-only."""
+
     __tablename__ = "validmind_model_links"
 
     namespace = Column(String, primary_key=True)
@@ -439,6 +468,7 @@ class AgentBarrierGroup(Base):
     Walls are enforced at recall time by hybrid_recall — they are NOT enforced at
     write time so that a memory can be tagged with any group by any writer.
     """
+
     __tablename__ = "agent_barrier_groups"
 
     namespace = Column(String, primary_key=True, index=True)
@@ -477,6 +507,117 @@ class ApiKey(Base):
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class SyncWorkspace(Base):
+    """Opaque, zero-knowledge workspace head for one authenticated namespace."""
+
+    __tablename__ = "sync_workspaces"
+
+    workspace_id = Column(String(36), primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    epoch = Column(Integer, nullable=False)
+    root_device = Column(JSON, nullable=False)
+    head_revision = Column(Integer, nullable=False, default=0, server_default="0")
+    head_hash = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (Index("ix_sync_workspaces_namespace_created", "namespace", "created_at"),)
+
+
+class SyncEnrollment(Base):
+    """Short-lived public-key exchange for adding a zero-knowledge device."""
+
+    __tablename__ = "sync_enrollments"
+
+    request_id = Column(String(36), primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    device_id = Column(String(64), nullable=False)
+    device_name = Column(String(80), nullable=False)
+    verification_code = Column(String(9), nullable=False)
+    request = Column(JSON, nullable=False)
+    approval = Column(JSON, nullable=True)
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), nullable=True
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_sync_enrollments_namespace_expires", "namespace", "expires_at"),
+        Index("ix_sync_enrollments_namespace_workspace", "namespace", "workspace_id"),
+    )
+
+
+class SyncDevice(Base):
+    """Public device identity and signed enrollment grant; no private key."""
+
+    __tablename__ = "sync_devices"
+
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), primary_key=True
+    )
+    device_id = Column(String(64), primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    descriptor = Column(JSON, nullable=False)
+    grant = Column(JSON, nullable=True)
+    grant_signature = Column(JSON, nullable=True)
+    enrolled_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_sync_devices_namespace_workspace", "namespace", "workspace_id"),)
+
+
+class SyncKeyRotation(Base):
+    """Signed key change that excludes one device from future cloud memory."""
+
+    __tablename__ = "sync_key_rotations"
+
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), primary_key=True
+    )
+    epoch = Column(Integer, primary_key=True)
+    rotation_id = Column(String(36), nullable=False, unique=True)
+    namespace = Column(String, nullable=False, index=True)
+    revoked_device_id = Column(String(64), nullable=False)
+    initiator_device_id = Column(String(64), nullable=False)
+    document = Column(JSON, nullable=False)
+    signature = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        Index(
+            "ix_sync_key_rotations_namespace_workspace",
+            "namespace",
+            "workspace_id",
+            "epoch",
+        ),
+    )
+
+
+class SyncRevision(Base):
+    """Encrypted profile revision; the service cannot decrypt its envelope."""
+
+    __tablename__ = "sync_revisions"
+
+    workspace_id = Column(
+        String(36), ForeignKey("sync_workspaces.workspace_id", ondelete="CASCADE"), primary_key=True
+    )
+    revision = Column(Integer, primary_key=True)
+    namespace = Column(String, nullable=False, index=True)
+    device_id = Column(String(64), nullable=False)
+    previous_hash = Column(String(64), nullable=True)
+    object_hash = Column(String(64), nullable=False)
+    envelope = Column(JSON, nullable=False)
+    authored_at = Column(DateTime(timezone=True), nullable=False)
+    stored_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "object_hash", name="uq_sync_revision_object_hash"),
+        Index("ix_sync_revisions_namespace_workspace", "namespace", "workspace_id", "revision"),
+    )
+
+
 class LiveFact(Base):
     """Compact read model: one row per live fact per agent.
 
@@ -489,6 +630,7 @@ class LiveFact(Base):
     Content and embedding are denormalized here so recall needs no join back
     to the memories table.
     """
+
     __tablename__ = "live_facts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -529,6 +671,7 @@ class MerkleAnchor(Base):
     serial chain is continued by wiring ``prev_hash``/``row_hash`` exactly
     like a regular EventLog entry so existing verify_chain() logic still works.
     """
+
     __tablename__ = "merkle_anchors"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -553,6 +696,7 @@ class ConflictFlag(Base):
     A "conflict_detected" audit event is written at detection time.
     A "conflict_resolved" audit event is written at resolution time.
     """
+
     __tablename__ = "conflict_flags"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -564,7 +708,7 @@ class ConflictFlag(Base):
     memory_a_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False)
     memory_b_id = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=False)
 
-    confidence = Column(Float, nullable=False)   # engine confidence that these conflict
+    confidence = Column(Float, nullable=False)  # engine confidence that these conflict
     detected_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
     # open | accept_a | accept_b | dismissed
@@ -572,9 +716,7 @@ class ConflictFlag(Base):
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     resolver_note = Column(Text, nullable=True)
 
-    __table_args__ = (
-        Index("ix_conflict_flags_ns_status", "namespace", "status"),
-    )
+    __table_args__ = (Index("ix_conflict_flags_ns_status", "namespace", "status"),)
 
 
 class WebhookEndpoint(Base):
@@ -591,6 +733,7 @@ class WebhookEndpoint(Base):
       memory.erased           — a subject's DEK was destroyed (GDPR Art. 17)
       supersession.rejected   — a human reviewer rejected a supersession
     """
+
     __tablename__ = "webhook_endpoints"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -609,14 +752,17 @@ class WebhookEndpoint(Base):
 
 class WebhookDelivery(Base):
     """Delivery attempt log for a webhook event (used for retry and audit)."""
+
     __tablename__ = "webhook_deliveries"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    endpoint_id = Column(UUID(as_uuid=True), ForeignKey("webhook_endpoints.id"), nullable=False, index=True)
+    endpoint_id = Column(
+        UUID(as_uuid=True), ForeignKey("webhook_endpoints.id"), nullable=False, index=True
+    )
     event_type = Column(String, nullable=False)
     payload = Column(JSON, nullable=False)
     attempt = Column(Integer, nullable=False, default=1)
-    status_code = Column(Integer, nullable=True)   # NULL = not yet attempted / error before HTTP
+    status_code = Column(Integer, nullable=True)  # NULL = not yet attempted / error before HTTP
     error = Column(Text, nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -661,6 +807,7 @@ class NamespacePolicy(Base):
     legal_hold        — when True, prune is blocked regardless of ttl settings.
     stripe_customer_id — Stripe Customer ID for usage metering.  NULL = not billed.
     """
+
     __tablename__ = "namespace_policies"
 
     namespace = Column(String, primary_key=True)
@@ -679,6 +826,7 @@ class PendingAdmission(Base):
     written live; an admin approves (→ the memory is created) or rejects them.
     Content is encrypted at rest and decrypted only for authorized reviewers.
     """
+
     __tablename__ = "pending_admissions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -693,7 +841,9 @@ class PendingAdmission(Base):
     importance = Column(Float, nullable=False, default=0.5)
     risk_tags = Column(JSON, nullable=False, server_default="[]")
     reasons = Column(JSON, nullable=False, server_default="[]")
-    status = Column(String, nullable=False, default="pending", index=True)  # pending|approved|rejected
+    status = Column(
+        String, nullable=False, default="pending", index=True
+    )  # pending|approved|rejected
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     resolver_note = Column(Text, nullable=True)
@@ -707,6 +857,7 @@ class IdempotencyKey(Base):
     a duplicate. The SDK sends the same key on automatic retries, giving
     exactly-once write semantics across network blips.
     """
+
     __tablename__ = "idempotency_keys"
 
     key = Column(String, primary_key=True)
@@ -735,6 +886,7 @@ class Relationship(Base):
       finance    — related-party / beneficial-ownership within N hops (SEC, AML/KYC)
       healthcare — care-network and referral-pattern traversal (anti-kickback)
     """
+
     __tablename__ = "relationships"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

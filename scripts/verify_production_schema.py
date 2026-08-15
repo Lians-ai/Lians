@@ -10,7 +10,7 @@ import time
 from collections.abc import Callable
 
 APP_NAME = "agentmem-lotus"
-EXPECTED_REVISION = "0030_force_hosted_mcp_rls"
+EXPECTED_REVISION = "0033_sync_device_key_rotation"
 MACHINE_ID_PATTERN = re.compile(r"^[0-9a-f]{14}$")
 REVISION_PATTERN = re.compile(rf"(?m)^{EXPECTED_REVISION}(?: \(head\))?$")
 ATTEMPTS = 3
