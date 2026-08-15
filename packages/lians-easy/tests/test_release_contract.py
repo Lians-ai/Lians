@@ -332,8 +332,12 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert total_bytes < 400_000
 
     scripts = [relative for relative in expected if relative.endswith(".js")]
-    assert len(scripts) == 1
-    script = (app_root / scripts[0]).read_text(encoding="utf-8")
+    assert len(scripts) == 2
+    script_documents = {
+        relative: (app_root / relative).read_text(encoding="utf-8")
+        for relative in scripts
+    }
+    script = next(value for value in script_documents.values() if "MEMORY CONTROL CENTER" in value)
     assert "\u00b7" in script
     assert "\u00c2\u00b7" not in script
     assert "/v1/integrations/disconnect" in script
@@ -344,6 +348,18 @@ def test_packaged_control_center_is_source_pinned_and_bounded() -> None:
     assert "/v1/backups/export" in script
     assert "/v1/backups/verify" in script
     assert "/v1/backups/import" in script
+
+    cloud_script = script_documents["assets/cloud-controls.js"]
+    assert "/v1/cloud/status" in cloud_script
+    assert "/v1/cloud/sign-in" in cloud_script
+    assert "/v1/cloud/sync" in cloud_script
+    assert "/v1/cloud/sign-out" in cloud_script
+    assert "/v1/cloud/delete" in cloud_script
+    assert "Lians cannot read it" in cloud_script
+    assert "local memory was not changed" in cloud_script
+    assert "innerHTML" not in cloud_script
+    assert "Authorization" not in cloud_script
+    assert "client_secret" not in cloud_script
     assert "Nothing existing will be overwritten" in script
     assert "ERASE ALL LIANS MEMORY" in script
     assert "checks only when you ask" in script

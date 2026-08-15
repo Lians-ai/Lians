@@ -514,6 +514,7 @@ def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
                 "content": "Use FastAPI.",
                 "scope": "global",
                 "client": "cursor",
+                "cwd": str(tmp_path),
             },
         )
         assert status == 201
@@ -944,6 +945,8 @@ def test_loopback_default_serves_the_packaged_control_center(tmp_path):
         assert "HttpOnly" in cookie
         assert "connect-src 'self'" in policy
         assert "object-src 'none'" in policy
+        assert "/assets/cloud-controls.js" in html
+        assert "/assets/cloud-controls.css" in html
 
         script_match = re.search(r'src="([^"]+\.js)"', html)
         assert script_match is not None
@@ -957,6 +960,12 @@ def test_loopback_default_serves_the_packaged_control_center(tmp_path):
         assert "/v1/backups/export" in script
         assert "/v1/backups/verify" in script
         assert "/v1/backups/import" in script
+        with urlopen(f"{app.origin}/assets/cloud-controls.js") as response:
+            cloud_script = response.read().decode("utf-8")
+            assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert "/v1/cloud/sign-in" in cloud_script
+        assert "/v1/cloud/delete" in cloud_script
+        assert "Authorization" not in cloud_script
     finally:
         server.shutdown()
         server.server_close()

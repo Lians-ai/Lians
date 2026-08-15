@@ -7,6 +7,14 @@
     "build": "npm run build:local"
   },
   "files": {
+    "assets/cloud-controls.css": {
+      "bytes": 6532,
+      "sha256": "81571d46e8c6a1ee7616ef81946b7c3def09fa6d77a44a6b95f0e3a4c696e59a"
+    },
+    "assets/cloud-controls.js": {
+      "bytes": 11812,
+      "sha256": "ce04c8f0faaacf5e1a0323b4967e02392a5b32f0f7d7acd09cfedeb87c2b6b64"
+    },
     "assets/index-CdO50wTw.css": {
       "bytes": 90523,
       "sha256": "b5276ad9d49136c08b077f89bfb9f5e4b433bff8a25c507cba2c70eff15f4bf3"
@@ -24,8 +32,8 @@
       "sha256": "811e11966d29f3a01fcb19b087b61ac067d380665a55aebb7fcdf2cda95e4a93"
     },
     "index.html": {
-      "bytes": 448,
-      "sha256": "b0df0fb1254e669f4b232473201d9c8bd08d9c782abc77fd92d46fc1431afe73"
+      "bytes": 570,
+      "sha256": "ce14f4a83a73574111eac50105e57eea7e275f9d4dae776299a8b057ce0abab3"
     },
     "logo-blue.png": {
       "bytes": 10137,

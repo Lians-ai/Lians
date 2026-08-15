@@ -351,10 +351,15 @@ class CloudSyncService:
                 raise LookupError("No Lians Cloud workspace is connected")
             result = self._client().delete_workspace(state.workspace_id, confirmed=True)
             self.state_path.unlink(missing_ok=True)
+            self.auth.sign_out(confirmed=True)
             return {
                 "state": "deleted",
                 "local_memory_preserved": True,
+                "sync_turned_off": True,
                 "encrypted_revisions_deleted": result.get("encrypted_revisions_deleted", 0),
                 "devices_deleted": result.get("devices_deleted", 0),
-                "message": "Encrypted cloud memory was deleted. Local memory remains here.",
+                "message": (
+                    "Encrypted cloud memory was deleted and sync was turned off. "
+                    "Local memory remains here."
+                ),
             }

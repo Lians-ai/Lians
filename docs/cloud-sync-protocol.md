@@ -117,7 +117,9 @@ provider failure never prevents the local mutation; the response reports that
 sync is pending and the next connected operation retries. The package test
 suite exercises the critical sequence from a Cursor-origin preference to a
 separate Codex device, then back through Claude correction and cross-device
-forgetting.
+forgetting. Confirmed cloud deletion removes the remote workspace and local
+sync state, then signs out so a later memory change cannot recreate a cloud
+copy without the user deliberately turning sync on again.
 
 The identity token, raw identity-provider subject, workspace key, device private
 keys, decrypted profile, memory count, project name, source, and receipt body

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from lians_easy.cloud_service import CloudSyncService
@@ -17,17 +17,29 @@ from lians_easy.sync import (
 )
 from lians_easy.sync_http import SyncCloudError
 
-NOW = datetime(2026, 8, 15, 12, 0, tzinfo=UTC)
+NOW = datetime(2026, 8, 15, 12, 0, tzinfo=timezone.utc)  # noqa: UP017
 
 
 class FakeAuth:
     config = SimpleNamespace(cloud_url="https://api.lians.ai")
 
+    def __init__(self):
+        self.signed_out = False
+
     def status(self):
-        return {"state": "connected", "configured": True, "message": "Connected."}
+        return {
+            "state": "signed_out" if self.signed_out else "connected",
+            "configured": True,
+            "message": "Connected.",
+        }
 
     def access_token(self):
         return "short-lived-access-token"
+
+    def sign_out(self, *, confirmed=False):
+        assert confirmed is True
+        self.signed_out = True
+        return {"state": "signed_out", "local_memory_preserved": True}
 
 
 class HTTPShapeCloud:
@@ -147,6 +159,8 @@ def test_service_provisions_pulls_merges_pushes_and_deletes_opaque_memory(tmp_pa
     deleted = first.delete_cloud_memory(confirmed=True)
     assert deleted["state"] == "deleted"
     assert deleted["local_memory_preserved"] is True
+    assert deleted["sync_turned_off"] is True
+    assert auth.signed_out is True
     assert cloud.deleted is True
     assert first_state_path.exists() is False
     assert first_store.stats()["current"] == 2
