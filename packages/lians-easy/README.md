@@ -43,6 +43,21 @@ For a disposable diagnostic after publication:
 uvx --from lians-bridge lians doctor --json
 ```
 
+### MCPB bundle
+
+The package root is also a self-contained MCPB source for local MCP catalogs
+such as Smithery. It uses the cross-platform UV runtime, starts the same
+credential-free stdio server as `lians mcp`, and does not introduce a second
+memory implementation:
+
+```bash
+npx @anthropic-ai/mcpb validate packages/lians-easy
+npx @anthropic-ai/mcpb pack packages/lians-easy lians-memory.mcpb
+```
+
+The bundle metadata, runtime version, five advertised tools, and stdio
+initialization contract are covered by `tests/test_mcpb.py`.
+
 `lians-bridge` and the older `lians-easy` executable are compatibility aliases
 for `lians`. The distribution is not on PyPI yet, so these commands are a
 release contract rather than a claim that the package can already be

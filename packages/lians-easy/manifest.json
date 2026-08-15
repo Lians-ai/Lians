@@ -1,0 +1,77 @@
+{
+  "manifest_version": "0.4",
+  "name": "lians-memory",
+  "display_name": "Lians Memory",
+  "version": "0.5.0",
+  "description": "Encrypted local memory shared by Cursor, Claude, Codex, and other AI agents.",
+  "long_description": "Remember project facts, preferences, decisions, and handoffs once, then recall only the relevant context in any supported AI agent. Lians runs locally by default, encrypts memory on your device, and needs no account or API key.",
+  "author": {
+    "name": "Lians",
+    "email": "info@lians.ai",
+    "url": "https://www.lians.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lians-ai/Lians.git"
+  },
+  "homepage": "https://www.lians.ai",
+  "documentation": "https://github.com/Lians-ai/Lians/blob/master/docs/easy-install.md",
+  "support": "https://github.com/Lians-ai/Lians/issues",
+  "icon": "mcpb-icon.png",
+  "server": {
+    "type": "uv",
+    "entry_point": "mcp_entrypoint.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "mcp_entrypoint.py"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "remember",
+      "description": "Save one useful fact, preference, decision, or handoff with explicit scope."
+    },
+    {
+      "name": "recall",
+      "description": "Recall a small, relevant set of current memories."
+    },
+    {
+      "name": "list_memories",
+      "description": "Inspect saved memories and their current state."
+    },
+    {
+      "name": "correct_memory",
+      "description": "Replace a stale memory while preserving its version history."
+    },
+    {
+      "name": "forget_memory",
+      "description": "Permanently erase one memory after explicit confirmation."
+    }
+  ],
+  "tools_generated": false,
+  "keywords": [
+    "ai",
+    "agent-memory",
+    "local-first",
+    "encrypted",
+    "cursor",
+    "claude",
+    "codex"
+  ],
+  "license": "Apache-2.0",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  }
+}
