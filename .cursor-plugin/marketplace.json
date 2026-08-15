@@ -1,0 +1,18 @@
+{
+  "name": "lians",
+  "owner": {
+    "name": "Lians",
+    "email": "support@lians.ai"
+  },
+  "metadata": {
+    "description": "Official Lians plugins for Cursor",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "lians-memory",
+      "source": "./integrations/cursor",
+      "description": "Portable, user-controlled memory shared across Cursor and other MCP clients."
+    }
+  ]
+}

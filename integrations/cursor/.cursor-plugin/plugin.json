@@ -1,0 +1,19 @@
+{
+  "name": "lians-memory",
+  "displayName": "Lians Memory",
+  "version": "0.1.0",
+  "description": "Portable, user-controlled AI memory with compact recall and explicit inspect, correct, and forget controls.",
+  "author": {
+    "name": "Lians",
+    "email": "support@lians.ai"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "cursor",
+    "memory",
+    "mcp",
+    "context",
+    "privacy"
+  ],
+  "logo": "assets/logo.svg"
+}
