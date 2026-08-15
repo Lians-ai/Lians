@@ -17,6 +17,7 @@ from .bridge import (
     write_cursor_rule,
 )
 from .installer import client_targets, doctor, install, plan, uninstall
+from .lifecycle import listen_for_windows_installer_shutdown
 from .mcp import default_data_path, run
 from .store import MemoryStore
 
@@ -107,6 +108,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    listen_for_windows_installer_shutdown()
     args = parser().parse_args(argv)
     if args.command == "mcp":
         run(args.data, profile=args.profile)

@@ -213,10 +213,13 @@ jobs:
       - name: Build per-user Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
-        run: >-
-          & packages/lians-easy/scripts/build_windows_installer.ps1
-          -Binary dist/LiansMemory.exe
-          -OutputDirectory dist/installer
+        run: |
+          & packages/lians-easy/scripts/build_windows_installer.ps1 `
+            -Binary dist/LiansMemory.exe `
+            -OutputDirectory dist/installer
+          & packages/lians-easy/scripts/build_windows_installer.ps1 `
+            -Binary packages/lians-easy/README.md `
+            -OutputDirectory dist/rollback-fixture
       - name: Verify install, bundled app, and memory-preserving removal
         if: runner.os == 'Windows'
         shell: pwsh
@@ -228,6 +231,7 @@ jobs:
           $version = $Matches[1]
           python packages/lians-easy/tests/artifact_windows_installer_smoke.py `
             --installer "dist/installer/Lians-Setup-$version.exe" `
+            --rollback-fixture "dist/rollback-fixture/Lians-Setup-$version.exe" `
             --expected-version $version
       - name: Prepare interrupted state for a fresh Windows runner
         if: runner.os == 'Windows'

@@ -107,6 +107,7 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     assert "dist/LiansMemory.exe" in desktop_job
     assert "build_windows_installer.ps1" in desktop_job
     assert "artifact_windows_installer_smoke.py" in desktop_job
+    assert "--rollback-fixture" in desktop_job
     assert "--expected-signer-thumbprint" in desktop_job
     assert "Lians-Setup-*.exe" in desktop_job
     assert "Get-AuthenticodeSignature" in desktop_job
@@ -263,6 +264,23 @@ def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() 
     assert "Permanently erase all encrypted Lians memories" in script
     assert 'StrCmp "$INSTDIR" "$LOCALAPPDATA\\Lians" 0 RefuseUnsafeErase' in script
     assert script.index("IfSilent KeepEncryptedMemory") < script.index('RMDir /r "$INSTDIR"')
+
+
+def test_windows_installer_health_checks_upgrades_and_restores_failed_candidates() -> None:
+    script = (PACKAGE_ROOT / "windows-installer.nsi").read_text(encoding="utf-8")
+    workflow = (
+        REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "PRODUCT_SHUTDOWN_EVENT" in script
+    assert "PRODUCT_RUNTIME_BACKUP" in script
+    assert "CopyFiles /SILENT" in script
+    assert "doctor --json" in script
+    assert "Rename \"$INSTDIR\\${PRODUCT_RUNTIME_BACKUP}\"" in script
+    assert script.index("doctor --json") < script.index("WriteUninstaller")
+    assert "SetErrorLevel 1603" in script
+    assert "--rollback-fixture" in workflow
+    assert "packages/lians-easy/README.md" in workflow
 
 
 def test_packaged_control_center_is_source_pinned_and_bounded() -> None:

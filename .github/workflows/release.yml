@@ -242,10 +242,13 @@ jobs:
           }
       - name: Build per-user Windows installer
         shell: pwsh
-        run: >-
-          & packages/lians-easy/scripts/build_windows_installer.ps1
-          -Binary dist/LiansMemory.exe
-          -OutputDirectory dist/installer
+        run: |
+          & packages/lians-easy/scripts/build_windows_installer.ps1 `
+            -Binary dist/LiansMemory.exe `
+            -OutputDirectory dist/installer
+          & packages/lians-easy/scripts/build_windows_installer.ps1 `
+            -Binary packages/lians-easy/README.md `
+            -OutputDirectory dist/rollback-fixture
       - name: Sign and verify the Windows installer
         shell: pwsh
         run: |
@@ -270,6 +273,7 @@ jobs:
           $version = $env:RELEASE_TAG.TrimStart('v')
           python packages/lians-easy/tests/artifact_windows_installer_smoke.py `
             --installer "dist/installer/Lians-Setup-$version.exe" `
+            --rollback-fixture "dist/rollback-fixture/Lians-Setup-$version.exe" `
             --expected-version $version `
             --expected-signer-thumbprint $env:LIANS_WINDOWS_CERT_THUMBPRINT
       - name: Write Windows installer checksum
