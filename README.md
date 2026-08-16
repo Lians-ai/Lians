@@ -35,10 +35,6 @@ model, editor, and normal workflow.
   the estimated repeated memory context avoided.
 - **Portable:** one local store can support multiple compatible AI tools.
 
-<p align="center">
-  <img src="docs/assets/cross-tool-memory-flow.svg" width="100%" alt="A saved project preference is reused as bounded context in a later Cursor, Codex, or Claude task.">
-</p>
-
 ## Try Lians in two chats
 
 Choose the AI tool you already use:
