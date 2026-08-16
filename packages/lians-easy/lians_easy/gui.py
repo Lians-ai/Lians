@@ -18,8 +18,6 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from PIL import Image, ImageTk
-
 from .installer import (
     ClientTarget,
     client_targets,
@@ -81,6 +79,8 @@ _AI_PROCESS_NAMES = {
     "cursor": {"cursor.exe"},
 }
 _AI_LABELS = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor"}
+
+
 def _anime_in_out_sine(progress: float) -> float:
     """Mirror Anime.js's built-in inOutSine ease for native Tk animation."""
 
@@ -911,6 +911,7 @@ class CompanionApp:
         start_bridge: bool = True,
         owns_bridge: bool | None = None,
         animate_intro: bool = True,
+        auto_minimize: bool = False,
         theme: str | None = None,
     ) -> None:
         self.root = root
@@ -922,10 +923,10 @@ class CompanionApp:
         self._refresh_job: str | None = None
         self._intro_job: str | None = None
         self._intro_frame_job: str | None = None
-        self._intro_lotus_size = 0.0
         self._intro_lotus_item: int | None = None
-        self._intro_frame_image: ImageTk.PhotoImage | None = None
         self._lifeline_lotus_item: int | None = None
+        self._pet_job: str | None = None
+        self._pet_reaction_started: float | None = None
         self._active_client_key = _active_ai_client()
         self._window_handle: int | None = None
         self._drag_origin: tuple[int, int, int, int] | None = None
@@ -952,6 +953,7 @@ class CompanionApp:
         self.activity_labels: list[tk.Label] = []
         self._activity_state: tuple[tuple[str, str, str], ...] | None = None
         self.animate_intro = animate_intro
+        self.auto_minimize = auto_minimize
 
         self.status = tk.StringVar(value="Starting Lians")
         self.memory_status = tk.StringVar(value="0 saved memories")
@@ -961,7 +963,7 @@ class CompanionApp:
         self.reduction_status = tk.StringVar(value="Waiting for the first handoff")
         self.connection_status = tk.StringVar(
             value=(
-                f"{_AI_LABELS[self._active_client_key]} active"
+                _AI_LABELS[self._active_client_key]
                 if self._active_client_key is not None
                 else "No connection detected"
             )
@@ -989,6 +991,8 @@ class CompanionApp:
         else:
             self._build()
             self._refresh_job = self.root.after(200, self._refresh)
+            if self.auto_minimize:
+                self.root.after(260, self._minimize)
 
     def _font(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
         return (self.font_family, size, weight)
@@ -1080,14 +1084,20 @@ class CompanionApp:
         try:
             favicon_path = files("lians_easy").joinpath("desktop", "favicon.png")
             self.intro_favicon = tk.PhotoImage(file=str(favicon_path))
-            with Image.open(str(favicon_path)) as favicon:
-                self.intro_source_image = favicon.convert("RGBA")
         except (OSError, tk.TclError):
             self.intro_favicon = None
-            self.intro_source_image = None
+        self.agent_icons: dict[str, tk.PhotoImage] = {}
+        for key in _AI_LABELS:
+            try:
+                icon_path = files("lians_easy").joinpath(
+                    "desktop", "agents", f"{key}.png"
+                )
+                self.agent_icons[key] = tk.PhotoImage(file=str(icon_path))
+            except (OSError, tk.TclError):
+                continue
 
     def _build_intro(self) -> None:
-        """Contract a single wordless Lotus while the local bridge starts."""
+        """Show the exact Lotus at its native size while the bridge starts."""
         for child in self.root.winfo_children():
             child.destroy()
         self.root.configure(background="#000000")
@@ -1099,10 +1109,9 @@ class CompanionApp:
         )
         self.intro_canvas.pack(fill="both", expand=True)
         self._intro_lotus_item = None
-        self._intro_frame_image = None
         self._intro_started = time.monotonic()
         self._intro_frame_job = self.root.after_idle(self._animate_intro)
-        self._intro_job = self.root.after(1100, self._finish_intro)
+        self._intro_job = self.root.after(460, self._finish_intro)
 
     def _animate_intro(self) -> None:
         if self._stopping or not self.intro_canvas.winfo_exists():
@@ -1110,35 +1119,9 @@ class CompanionApp:
         canvas = self.intro_canvas
         width = max(1, canvas.winfo_width())
         height = max(1, canvas.winfo_height())
-        elapsed = time.monotonic() - self._intro_started
-        hold_seconds = 0.06
-        progress = min(1.0, max(0.0, (elapsed - hold_seconds) / 0.92))
-        eased = _anime_in_out_sine(progress)
         center_x = width / 2
         center_y = height / 2
-        start_size = max(width, height) * 1.38
-        end_size = 128.0
-        self._intro_lotus_size = start_size + (end_size - start_size) * eased
-        frame: tk.PhotoImage | ImageTk.PhotoImage | None
-        if self._intro_lotus_size <= 130 and self.intro_favicon is not None:
-            frame = self.intro_favicon
-            self._intro_frame_image = None
-        elif self.intro_source_image is not None:
-            size = max(1, round(self._intro_lotus_size))
-            resized = self.intro_source_image.resize(
-                (size, size),
-                Image.Resampling.BILINEAR,
-            )
-            opacity = 0.28 + 0.72 * eased
-            softened = Image.blend(
-                Image.new("RGBA", resized.size, (0, 0, 0, 255)),
-                resized,
-                opacity,
-            )
-            self._intro_frame_image = ImageTk.PhotoImage(softened, master=self.root)
-            frame = self._intro_frame_image
-        else:
-            frame = self.lotus_mark
+        frame = self.intro_favicon or self.lotus_mark
         if frame is not None:
             if self._intro_lotus_item is None:
                 self._intro_lotus_item = canvas.create_image(
@@ -1149,13 +1132,10 @@ class CompanionApp:
                 )
             else:
                 canvas.coords(self._intro_lotus_item, center_x, center_y)
-                canvas.itemconfigure(self._intro_lotus_item, image=frame)
-
-        rendered_elapsed = time.monotonic() - self._intro_started
-        frame_interval = 1.0 / 45.0
-        next_frame = (math.floor(rendered_elapsed / frame_interval) + 1) * frame_interval
-        delay_ms = max(1, round((next_frame - rendered_elapsed) * 1000))
-        self._intro_frame_job = self.root.after(delay_ms, self._animate_intro)
+        # The source favicon is intentionally never enlarged. Repositioning the
+        # native bitmap is crisp and avoids the grain caused by resampling it to
+        # the size of a display.
+        self._intro_frame_job = None
 
     def _finish_intro(self) -> None:
         self._intro_job = None
@@ -1167,11 +1147,13 @@ class CompanionApp:
             except tk.TclError:
                 pass
             self._intro_frame_job = None
-        self._intro_frame_image = None
         self._build()
-        self._refresh_job = self.root.after(80, self._refresh)
+        self._refresh_job = self.root.after(20, self._refresh)
+        if self.auto_minimize:
+            self.root.after(180, self._minimize)
 
     def _build(self) -> None:
+        self._cancel_pet_animation()
         for child in self.root.winfo_children():
             child.destroy()
         self.colors = COMPANION_THEMES[self.theme_name]
@@ -1225,47 +1207,20 @@ class CompanionApp:
         hero_left.pack(side="left", fill="both", expand=True, padx=(22, 32), pady=18)
         state = tk.Frame(hero_left, background=self.colors["background"])
         state.pack(fill="x", pady=(0, 16))
-        self.status_dot = self._label(
+        self.connection_icon_label = self._label(
             state,
-            "●",
             background=self.colors["background"],
-            foreground=self.colors["blue"],
-            font=self._font(9, "bold"),
         )
-        self.status_dot.pack(side="left", padx=(0, 7))
-        self._label(
-            state,
-            textvariable=self.status,
-            background=self.colors["background"],
-            foreground=self.colors["muted"],
-            font=self._font(10, "bold"),
-        ).pack(side="left")
-        self._label(
-            state,
-            "·",
-            background=self.colors["background"],
-            foreground=self.colors["border"],
-            font=self._font(11, "bold"),
-        ).pack(side="left", padx=10)
-        self.connection_dot = self._label(
-            state,
-            "●",
-            background=self.colors["background"],
-            foreground=(
-                self.colors["green"]
-                if self._active_client_key is not None
-                else self.colors["muted"]
-            ),
-            font=self._font(8, "bold"),
-        )
-        self.connection_dot.pack(side="left", padx=(0, 7))
-        self._label(
+        self.connection_icon_label.pack(side="left", padx=(0, 9))
+        self.connection_label = self._label(
             state,
             textvariable=self.connection_status,
             background=self.colors["background"],
-            foreground=self.colors["muted"],
+            foreground=self.colors["text"],
             font=self._font(10, "bold"),
-        ).pack(side="left")
+        )
+        self.connection_label.pack(side="left")
+        self._render_connection_identity()
         self._label(
             hero_left,
             "Agent lifeline",
@@ -1276,7 +1231,7 @@ class CompanionApp:
         ).pack(fill="x")
         self._label(
             hero_left,
-            "Less repeated context across Claude, Codex, and Cursor.",
+            "Extended usage. Better memory.",
             background=self.colors["background"],
             foreground=self.colors["muted"],
             font=self._font(11),
@@ -1293,8 +1248,10 @@ class CompanionApp:
             highlightthickness=0,
         )
         self.lifeline_canvas.pack(side="right", fill="y", padx=(0, 28))
+        self.lifeline_canvas.configure(cursor="hand2")
         self._lifeline_lotus_item = None
         self.lifeline_canvas.bind("<Configure>", self._render_lifeline)
+        self.lifeline_canvas.bind("<Button-1>", self._animate_pet)
         self.root.after_idle(self._render_lifeline)
 
         self.metrics_panel, metrics = self._rounded_panel(
@@ -1328,14 +1285,14 @@ class CompanionApp:
             font=self._font(10),
         ).pack(side="right")
 
-        activity_panel, self.activity_frame = self._rounded_panel(
+        self.activity_panel, self.activity_frame = self._rounded_panel(
             self.shell,
             height=168,
             fill_key="surface",
             radius=24,
             padding=20,
         )
-        activity_panel.pack(fill="x")
+        self.activity_panel.pack(fill="both", expand=True)
         self._show_activity([])
 
         actions = tk.Frame(self.shell, background=self.colors["background"])
@@ -1407,10 +1364,11 @@ class CompanionApp:
         ).pack(fill="x", pady=(9, 4), padx=4)
 
     def _resize_shell(self, event: tk.Event, canvas_window: int) -> None:
-        """Keep maximized layouts calm instead of stretching every panel."""
+        """Fill tall windows while keeping short windows scrollable."""
 
         width = min(event.width, 1320)
-        self.body_canvas.itemconfigure(canvas_window, width=width)
+        height = max(event.height, self.shell.winfo_reqheight())
+        self.body_canvas.itemconfigure(canvas_window, width=width, height=height)
         self.body_canvas.coords(canvas_window, max(0, (event.width - width) / 2), 0)
 
     def _scroll_body(self, event: tk.Event) -> str:
@@ -1474,8 +1432,8 @@ class CompanionApp:
         ).pack(side="left")
         mode = tk.Canvas(
             bar,
-            width=34,
-            height=34,
+            width=36,
+            height=36,
             background=self.colors["background"],
             borderwidth=0,
             highlightthickness=0,
@@ -1509,7 +1467,7 @@ class CompanionApp:
             button.pack(side="right", fill="y")
             if text == "×":
                 self.close_button = button
-        mode.pack(side="right", padx=(0, 8), pady=7)
+        mode.pack(side="right", padx=(0, 8), pady=6)
         for widget in (bar, brand, *brand.winfo_children()):
             widget.bind("<ButtonPress-1>", self._begin_drag)
             widget.bind("<B1-Motion>", self._drag_window)
@@ -1521,79 +1479,60 @@ class CompanionApp:
         self._draw_theme_toggle()
 
     def _draw_theme_toggle(self) -> None:
-        """Match the website's compact circular sun and moon theme control."""
+        """Match the website's antialiased 36px glyph-based theme control."""
 
         canvas = self.theme_button
         canvas.delete("all")
-        fill = (
-            self.colors["surface_soft"]
-            if self._theme_toggle_hover
-            else self.colors["surface"]
-        )
-        border = (
-            self.colors["grid_strong"]
-            if self._theme_toggle_hover
-            else self.colors["border"]
-        )
+        if self.theme_name == "dark":
+            fill = self.colors["surface_soft"] if self._theme_toggle_hover else "#0B1019"
+            border = "#76A1FF"
+            color = "#76A1FF"
+            self.theme_toggle_icon = "☼"
+        else:
+            fill = self.colors["surface_soft"] if self._theme_toggle_hover else "#FFFFFF"
+            border = "#C7CDD5"
+            color = "#152530"
+            self.theme_toggle_icon = "◐"
         canvas.create_oval(
             1,
             1,
-            33,
-            33,
+            35,
+            35,
             fill=fill,
             outline=border,
             width=1,
             tags="theme-toggle-ring",
         )
-        color = self.colors["text"]
-        if self.theme_name == "dark":
-            self.theme_toggle_icon = "sun"
-            canvas.create_oval(
-                13,
-                13,
-                21,
-                21,
-                outline=color,
-                width=1,
-                tags="theme-toggle-icon",
+        canvas.create_text(
+            18,
+            18,
+            text=self.theme_toggle_icon,
+            fill=color,
+            font=("Segoe UI Symbol", 16),
+            tags="theme-toggle-icon",
+        )
+
+    def _render_connection_identity(self) -> None:
+        """Show one active AI identity, never a row of passive installations."""
+
+        key = self._active_client_key
+        icon = self.agent_icons.get(key or "")
+        if key is None:
+            self.connection_status.set("No connection detected")
+            self.connection_icon_label.configure(image="")
+            self.connection_icon_label.pack_forget()
+            self.connection_label.configure(foreground=self.colors["muted"])
+            return
+        self.connection_status.set(_AI_LABELS[key])
+        self.connection_icon_label.configure(image=icon or "")
+        if icon is not None and not self.connection_icon_label.winfo_manager():
+            self.connection_icon_label.pack(
+                side="left", padx=(0, 9), before=self.connection_label
             )
-            for degrees in range(0, 360, 45):
-                radians = math.radians(degrees)
-                canvas.create_line(
-                    17 + math.cos(radians) * 7,
-                    17 + math.sin(radians) * 7,
-                    17 + math.cos(radians) * 10,
-                    17 + math.sin(radians) * 10,
-                    fill=color,
-                    width=1,
-                    capstyle="round",
-                    tags="theme-toggle-icon",
-                )
-        else:
-            self.theme_toggle_icon = "moon"
-            canvas.create_oval(
-                10,
-                9,
-                25,
-                24,
-                fill=color,
-                outline=color,
-                width=1,
-                tags="theme-toggle-icon",
-            )
-            canvas.create_oval(
-                15,
-                6,
-                28,
-                20,
-                fill=fill,
-                outline=fill,
-                width=1,
-                tags="theme-toggle-icon",
-            )
+        self.connection_label.configure(foreground=self.colors["text"])
 
     def _render_lifeline(self, _event: tk.Event | None = None) -> None:
-        """Render the exact branded PNG once with no dashboard animation."""
+        """Render the exact branded PNG as the dashboard's small companion."""
         if self._stopping:
             return
         try:
@@ -1616,6 +1555,50 @@ class CompanionApp:
                     canvas.coords(self._lifeline_lotus_item, center_x, center_y)
         except tk.TclError:
             return
+
+    def _cancel_pet_animation(self) -> None:
+        if self._pet_job is not None:
+            try:
+                self.root.after_cancel(self._pet_job)
+            except tk.TclError:
+                pass
+            self._pet_job = None
+        self._pet_reaction_started = None
+
+    def _animate_pet(self, _event: tk.Event | None = None) -> None:
+        """Give the native Lotus a restrained 500ms spring-like hop on click."""
+
+        self._cancel_pet_animation()
+        self._pet_reaction_started = time.monotonic()
+        self._animate_pet_frame()
+
+    def _animate_pet_frame(self) -> None:
+        if self._stopping or self._pet_reaction_started is None:
+            return
+        try:
+            if not self.lifeline_canvas.winfo_exists() or self._lifeline_lotus_item is None:
+                return
+            elapsed = time.monotonic() - self._pet_reaction_started
+            progress = min(1.0, elapsed / 0.5)
+            eased = _anime_in_out_sine(progress)
+            arc = math.sin(math.pi * eased)
+            settle = math.sin(math.pi * 3 * eased) * (1.0 - eased)
+            center_x = max(240, self.lifeline_canvas.winfo_width()) / 2
+            center_y = max(140, self.lifeline_canvas.winfo_height()) / 2
+            self.lifeline_canvas.coords(
+                self._lifeline_lotus_item,
+                center_x,
+                center_y - 10 * arc + 2 * settle,
+            )
+            if progress < 1.0:
+                self._pet_job = self.root.after(16, self._animate_pet_frame)
+                return
+            self._pet_job = None
+            self._pet_reaction_started = None
+            self.lifeline_canvas.coords(self._lifeline_lotus_item, center_x, center_y)
+        except tk.TclError:
+            self._pet_job = None
+            self._pet_reaction_started = None
 
     def _metric_card(
         self,
@@ -1735,12 +1718,10 @@ class CompanionApp:
             return
         if self._bridge_error:
             self.status.set("Lians could not start")
-            self.status_dot.configure(foreground=self.colors["red"])
             self.notice.set(self._bridge_error)
             self.open_button.configure(state="disabled")
         elif self.bridge.running:
             self.status.set("Lians is running")
-            self.status_dot.configure(foreground=self.colors["green"])
             self.open_button.configure(state="normal")
             try:
                 snapshot = lifeline_snapshot(self.bridge.store, limit=3)
@@ -1764,12 +1745,7 @@ class CompanionApp:
             except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
                 self.memory_status.set("Encrypted memory ready")
         self._active_client_key = _active_ai_client(self._active_client_key)
-        if self._active_client_key is None:
-            self.connection_status.set("No connection detected")
-            self.connection_dot.configure(foreground=self.colors["muted"])
-        else:
-            self.connection_status.set(f"{_AI_LABELS[self._active_client_key]} active")
-            self.connection_dot.configure(foreground=self.colors["green"])
+        self._render_connection_identity()
         self._refresh_job = self.root.after(5000, self._refresh)
 
     def _toggle_theme(self) -> None:
@@ -1782,9 +1758,12 @@ class CompanionApp:
         self.theme_name = "light" if self.theme_name == "dark" else "dark"
         _save_companion_theme(self.theme_name)
         self._build()
+        # Repaint the chosen theme before querying receipts. The live website
+        # swaps state immediately; doing I/O inside the click made Tk feel late.
+        self.root.update_idletasks()
         if sys.platform == "win32":
             self.root.after(20, self._apply_windows_taskbar_style)
-        self._refresh()
+        self._refresh_job = self.root.after(20, self._refresh)
 
     def _apply_windows_taskbar_style(self) -> None:
         if sys.platform != "win32":
@@ -1912,6 +1891,7 @@ class CompanionApp:
                 except tk.TclError:
                     pass
                 setattr(self, attribute, None)
+        self._cancel_pet_animation()
 
         if not self.owns_bridge:
             self.root.destroy()
@@ -1976,14 +1956,43 @@ class _AttachedBridge:
         return None
 
 
-def _launch_companion() -> None:
+def _ensure_windows_autostart() -> None:
+    """Register the frozen app for a quiet per-user Windows startup."""
+
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import winreg
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        command = f'"{Path(sys.executable).resolve()}" --background'
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER,
+            key_path,
+            0,
+            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE,
+        ) as key:
+            try:
+                current, _kind = winreg.QueryValueEx(key, "Lians")
+            except FileNotFoundError:
+                current = None
+            if current != command:
+                winreg.SetValueEx(key, "Lians", 0, winreg.REG_SZ, command)
+    except (OSError, ValueError):
+        return
+
+
+def _launch_companion(*, background_start: bool = False) -> None:
     from .bridge import BridgeApplication
     from .mcp import default_data_path
     from .store import MemoryStore
 
+    _ensure_windows_autostart()
     data_path = default_data_path()
     existing = _running_bridge_origin()
     if existing is not None:
+        if background_start:
+            return
         if _focus_existing_companion():
             return
         root = tk.Tk()
@@ -1996,14 +2005,20 @@ def _launch_companion() -> None:
         root.mainloop()
         return
     root = tk.Tk()
-    CompanionApp(root, BridgeApplication(MemoryStore(data_path)))
+    CompanionApp(
+        root,
+        BridgeApplication(MemoryStore(data_path)),
+        auto_minimize=background_start,
+    )
     root.mainloop()
 
 
-def launch() -> None:
+def launch(*, background_start: bool = False) -> None:
     _enable_windows_dpi_awareness()
     if any(target.configured for target in client_targets().values()):
-        _launch_companion()
+        _launch_companion(background_start=background_start)
+        return
+    if background_start:
         return
     root = tk.Tk()
     if sys.platform == "win32":

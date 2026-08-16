@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 
 def test_active_ai_client_prefers_foreground_then_retains_last_open_client() -> None:
     from lians_easy.gui import _active_ai_client
@@ -53,6 +56,56 @@ def test_launch_restores_existing_native_window(monkeypatch) -> None:
     gui._launch_companion()
 
     assert focused == [True]
+
+
+def test_background_launch_does_not_restore_an_existing_window(monkeypatch) -> None:
+    from lians_easy import gui
+
+    monkeypatch.setattr(
+        gui,
+        "_running_bridge_origin",
+        lambda: "http://127.0.0.1:7317",
+    )
+    monkeypatch.setattr(
+        gui,
+        "_focus_existing_companion",
+        lambda: (_ for _ in ()).throw(AssertionError("background launch must stay quiet")),
+    )
+
+    gui._launch_companion(background_start=True)
+
+
+def test_frozen_windows_app_registers_quiet_user_startup(monkeypatch) -> None:
+    from lians_easy import gui
+
+    writes: list[tuple[str, int, str]] = []
+
+    class FakeKey:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    fake_winreg = SimpleNamespace(
+        HKEY_CURRENT_USER=object(),
+        KEY_QUERY_VALUE=1,
+        KEY_SET_VALUE=2,
+        REG_SZ=1,
+        CreateKeyEx=lambda *_args: FakeKey(),
+        QueryValueEx=lambda *_args: (_ for _ in ()).throw(FileNotFoundError()),
+        SetValueEx=lambda _key, name, _reserved, kind, value: writes.append(
+            (name, kind, value)
+        ),
+    )
+    monkeypatch.setattr(gui.sys, "platform", "win32")
+    monkeypatch.setattr(gui.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(gui.sys, "executable", r"C:\Apps\Lians.exe")
+    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
+
+    gui._ensure_windows_autostart()
+
+    assert writes == [("Lians", 1, '"C:\\Apps\\Lians.exe" --background')]
 
 
 def test_launch_attaches_native_window_when_only_bridge_exists(monkeypatch) -> None:

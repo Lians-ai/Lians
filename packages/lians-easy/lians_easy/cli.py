@@ -110,6 +110,7 @@ def parser() -> argparse.ArgumentParser:
         prog="lians", description="Use less repeated context in the AI tools you already use"
     )
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    result.add_argument("--background", action="store_true", help=argparse.SUPPRESS)
     commands = result.add_subparsers(dest="command")
     mcp = commands.add_parser("mcp", help="Run the local MCP memory server")
     mcp.add_argument("--data", type=Path)
@@ -521,7 +522,7 @@ def main(argv: list[str] | None = None) -> None:
             ctypes.windll.user32.ShowWindow(window, 0)  # type: ignore[attr-defined]
     from .gui import launch
 
-    launch()
+    launch(background_start=args.background)
 
 
 if __name__ == "__main__":
