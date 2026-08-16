@@ -132,6 +132,8 @@ class MemoryStore:
                     client TEXT NOT NULL,
                     token_estimate INTEGER NOT NULL,
                     memory_count INTEGER NOT NULL,
+                    available_memory_token_estimate INTEGER NOT NULL DEFAULT 0,
+                    avoided_memory_token_estimate INTEGER NOT NULL DEFAULT 0,
                     receipt_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
@@ -153,6 +155,19 @@ class MemoryStore:
             for name, declaration in additions.items():
                 if name not in existing:
                     db.execute(f"ALTER TABLE memories ADD COLUMN {name} {declaration}")
+
+            existing_receipt_columns = {
+                row[1] for row in db.execute("PRAGMA table_info(context_receipts)")
+            }
+            receipt_additions = {
+                "available_memory_token_estimate": "INTEGER NOT NULL DEFAULT 0",
+                "avoided_memory_token_estimate": "INTEGER NOT NULL DEFAULT 0",
+            }
+            for name, declaration in receipt_additions.items():
+                if name not in existing_receipt_columns:
+                    db.execute(
+                        f"ALTER TABLE context_receipts ADD COLUMN {name} {declaration}"
+                    )
 
             legacy = db.execute(
                 "SELECT id, profile, content FROM memories "
@@ -400,6 +415,21 @@ class MemoryStore:
             used += item_size
         return result
 
+    def _available_memory_totals(self, *, project_id: str | None) -> tuple[int, int]:
+        """Count active memory that a full in-scope replay would have included."""
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT COUNT(*), COALESCE(SUM(token_estimate), 0)
+                   FROM memories
+                   WHERE profile = ?
+                     AND forgotten_at IS NULL
+                     AND superseded_by_id IS NULL
+                     AND paused_at IS NULL
+                     AND (scope != 'project' OR project_id = ?)""",
+                (self.profile, project_id),
+            ).fetchone()
+        return int(row[0] or 0), int(row[1] or 0)
+
     def context_pack(
         self,
         query: str,
@@ -412,6 +442,9 @@ class MemoryStore:
     ) -> dict[str, Any]:
         project_id = project.id if project is not None else None
         project_name = project.name if project is not None else "global"
+        available_memory_count, available_memory_tokens = self._available_memory_totals(
+            project_id=project_id
+        )
         ranked, exclusions = self._ranked(
             query,
             project_id=project_id,
@@ -463,6 +496,23 @@ class MemoryStore:
             token_count = corrected_count
             context = render(token_count)
 
+        selected_memory_tokens = sum(int(item["token_estimate"] or 0) for item in selected)
+        avoided_memory_tokens = max(0, available_memory_tokens - selected_memory_tokens)
+        reduction_percent = (
+            round((avoided_memory_tokens / available_memory_tokens) * 100, 1)
+            if available_memory_tokens
+            else 0.0
+        )
+        efficiency = {
+            "basis": "active in-scope memory content compared with full replay",
+            "available_memory_count": available_memory_count,
+            "available_memory_token_estimate": available_memory_tokens,
+            "selected_memory_count": len(selected),
+            "selected_memory_token_estimate": selected_memory_tokens,
+            "repeated_memory_tokens_avoided_estimate": avoided_memory_tokens,
+            "reduction_percent_estimate": reduction_percent,
+        }
+
         receipt_id = str(uuid.uuid4())
         created_at = _now()
         receipt: dict[str, Any] = {
@@ -480,6 +530,7 @@ class MemoryStore:
             "memory_count": len(selected),
             "token_estimate": token_count,
             "limits": {"max_memories": limit, "max_tokens": max_tokens},
+            "efficiency": efficiency,
             "memories": [
                 {
                     "id": item["id"],
@@ -503,7 +554,8 @@ class MemoryStore:
             db.execute(
                 """INSERT INTO context_receipts
                    (id, profile, project_id, client, token_estimate, memory_count,
-                    receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    available_memory_token_estimate, avoided_memory_token_estimate,
+                    receipt_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     receipt_id,
                     self.profile,
@@ -511,6 +563,8 @@ class MemoryStore:
                     client,
                     token_count,
                     len(selected),
+                    available_memory_tokens,
+                    avoided_memory_tokens,
                     json.dumps(receipt, ensure_ascii=False, sort_keys=True),
                     created_at,
                 ),
@@ -524,6 +578,7 @@ class MemoryStore:
                     "receipt_id": receipt_id,
                     "memory_count": len(selected),
                     "token_estimate": token_count,
+                    "repeated_memory_tokens_avoided_estimate": avoided_memory_tokens,
                 },
             )
         return {
@@ -533,6 +588,7 @@ class MemoryStore:
             ),
             "memories": selected,
             "receipt": receipt,
+            "efficiency": efficiency,
         }
 
     def list(self, *, state: str = "current", limit: int = 50) -> list[dict[str, Any]]:
@@ -857,6 +913,15 @@ class MemoryStore:
                    FROM memories WHERE profile = ?""",
                 (self.profile,),
             ).fetchone()
+            efficiency = db.execute(
+                """SELECT COUNT(*), COALESCE(SUM(memory_count), 0),
+                          COALESCE(SUM(token_estimate), 0),
+                          COALESCE(SUM(available_memory_token_estimate), 0),
+                          COALESCE(SUM(avoided_memory_token_estimate), 0),
+                          COUNT(DISTINCT client)
+                   FROM context_receipts WHERE profile = ?""",
+                (self.profile,),
+            ).fetchone()
         return {
             "current": row[0] or 0,
             "superseded": row[1] or 0,
@@ -867,4 +932,13 @@ class MemoryStore:
             "encrypted": True,
             "key_protection": self.cipher.protection,
             "key_fingerprint": self.cipher.fingerprint,
+            "efficiency": {
+                "context_events": efficiency[0] or 0,
+                "memories_reused": efficiency[1] or 0,
+                "context_tokens_sent_estimate": efficiency[2] or 0,
+                "available_memory_tokens_estimate": efficiency[3] or 0,
+                "repeated_memory_tokens_avoided_estimate": efficiency[4] or 0,
+                "clients_used": efficiency[5] or 0,
+                "basis": "active in-scope memory content compared with full replay",
+            },
         }

@@ -1,7 +1,8 @@
-# Lians Memory for Codex
+# Lians for Codex
 
-Give the Codex app, CLI, and IDE extension durable local memory. They share the
-same MCP configuration, so you only need to add Lians once.
+Help the Codex app, CLI, and IDE extension reuse useful project context instead
+of asking you to repeat it. They share one local MCP configuration, so you
+only need to add Lians once.
 
 ## Install in one command
 

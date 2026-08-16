@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.4",
   "name": "lians-memory",
-  "display_name": "Lians Memory",
+  "display_name": "Lians",
   "version": "0.5.0",
-  "description": "Encrypted local memory shared by Cursor, Claude, Codex, and other AI agents.",
-  "long_description": "Remember project facts, preferences, decisions, and handoffs once, then recall only the relevant context in any supported AI agent. Lians runs locally by default, encrypts memory on your device, and needs no account or API key.",
+  "description": "Use less repeated context in Cursor, Claude, Codex, and other AI tools.",
+  "long_description": "Save a useful preference, fact, or decision once. Lians reuses only the relevant context in later tasks instead of replaying everything. It runs locally by default, encrypts saved context on your device, and needs no AI account password or provider API key.",
   "author": {
     "name": "Lians",
     "email": "info@lians.ai",

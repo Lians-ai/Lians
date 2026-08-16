@@ -45,7 +45,7 @@ class SetupApp:
         self.other_visible = False
         self.open_requested = False
 
-        self.root.title("Lians Setup")
+        self.root.title("Lians — AI Efficiency")
         self.root.geometry("780x720")
         self.root.minsize(680, 620)
         self.root.configure(background=BACKGROUND)
@@ -90,7 +90,7 @@ class SetupApp:
 
         self._label(
             self.shell,
-            "Your AI apps, one memory.",
+            "Use less context. Get more AI.",
             foreground=TEXT,
             font=("Segoe UI", 22, "bold"),
             anchor="w",
@@ -98,8 +98,9 @@ class SetupApp:
         self._label(
             self.shell,
             (
-                "Lians carries your preferences and useful project context between the AI "
-                "apps you already use. No account or API key required."
+                "Lians gives each new task only the useful context it needs, so your AI apps "
+                "do not have to reread everything. Keep using them normally. No AI account "
+                "password or API key required."
             ),
             foreground=MUTED,
             font=("Segoe UI", 11),
@@ -122,7 +123,7 @@ class SetupApp:
         detected_text = (
             f"We found {len(detected)} AI app{'s' if len(detected) != 1 else ''}"
             if detected
-            else "Choose the AI apps you use"
+            else "Choose the AI apps you want to optimize"
         )
         self._label(
             self.card,
@@ -134,7 +135,7 @@ class SetupApp:
         ).pack(fill="x")
         self._label(
             self.card,
-            "Connect at least two to experience memory moving between them.",
+            "Connect one or more. Lians works quietly in the apps you already use.",
             background=PANEL,
             foreground=MUTED,
             anchor="w",
@@ -179,9 +180,9 @@ class SetupApp:
         self._label(
             trust,
             (
-                "✓  Memory stays encrypted on this computer\n"
-                "✓  Existing settings are backed up before Lians changes them\n"
-                "✓  Pause, correct, or permanently forget a memory whenever you want"
+                "✓  No Claude, Cursor, or Codex password is requested\n"
+                "✓  Saved context is encrypted; existing settings are backed up\n"
+                "✓  Only a small, relevant context pack is added to a task"
             ),
             background=PANEL_SOFT,
             foreground=MUTED,
@@ -200,8 +201,8 @@ class SetupApp:
         self.progress_bar.pack(fill="x", pady=(0, 12))
         steps = (
             ("protecting", "Protect your existing settings"),
-            ("connecting", "Connect your AI apps"),
-            ("verifying", "Check that memory is ready"),
+            ("connecting", "Optimize your AI apps"),
+            ("verifying", "Check that Lians is ready"),
         )
         for key, copy in steps:
             label = self._label(
@@ -214,7 +215,7 @@ class SetupApp:
             label.pack(fill="x", pady=2)
             self.step_labels[key] = label
 
-        self.status = tk.StringVar(value="Ready to connect")
+        self.status = tk.StringVar(value="Ready to optimize")
         self.status_label = self._label(
             self.card,
             textvariable=self.status,
@@ -228,7 +229,7 @@ class SetupApp:
         actions.pack(fill="x")
         self.install_button = tk.Button(
             actions,
-            text="Set up Lians",
+            text="Optimize my AI apps",
             command=self._start_install,
             background=BLUE,
             foreground="white",
@@ -349,8 +350,9 @@ class SetupApp:
         detected = "\n".join(paths) if paths else "No supported app settings found yet."
         return (
             "What setup changes\n"
-            "Lians adds a local memory connection only to the apps you select. It does not "
-            "install Git, Python, build tools, or a model. Existing files are backed up first.\n\n"
+            "Lians adds a local context connection only to the apps you select. It does not "
+            "ask for an AI account password, install Git, build tools, or a model. Existing "
+            "files are backed up first.\n\n"
             f"Encrypted memory: {user_data_dir() / 'memory.sqlite3'}\n"
             f"Detected settings:\n{detected}"
         )
@@ -363,7 +365,7 @@ class SetupApp:
             self.status.set("Choose at least one AI app to continue.")
             return
 
-        self.install_button.configure(state="disabled", text="Setting up...")
+        self.install_button.configure(state="disabled", text="Optimizing...")
         self.progress_frame.pack(fill="x", pady=(0, 10), before=self.status_label)
         self._update_progress("protecting", "Protecting your existing settings")
 
@@ -474,7 +476,7 @@ class SetupApp:
         connected = ", ".join(self.connected_labels)
         self._label(
             self.card,
-            "Memory is ready.",
+            "Your AI apps are optimized.",
             background=PANEL,
             foreground=GREEN,
             font=("Segoe UI", 22, "bold"),
@@ -482,7 +484,7 @@ class SetupApp:
         ).pack(fill="x")
         self._label(
             self.card,
-            f"Lians connected {connected}.",
+            f"Lians is active in {connected}. Keep using the apps normally.",
             background=PANEL,
             foreground=TEXT,
             font=("Segoe UI", 11),
@@ -494,7 +496,7 @@ class SetupApp:
         try_card.pack(fill="x")
         self._label(
             try_card,
-            "Try the cross-app memory moment",
+            "Try it in two chats",
             background=BLUE_SOFT,
             foreground=TEXT,
             font=("Segoe UI", 12, "bold"),
@@ -504,8 +506,8 @@ class SetupApp:
             try_card,
             (
                 "1. Restart the connected AI apps.\n"
-                "2. In one app, say: Remember that we use FastAPI and never write migrations manually.\n"
-                "3. Start a new task in another app and ask: What are our project rules?"
+                "2. Say: Remember that this project uses FastAPI and pytest.\n"
+                "3. Start a new chat in the same or another app and ask: What does this project use?"
             ),
             background=BLUE_SOFT,
             foreground=MUTED,
@@ -517,7 +519,7 @@ class SetupApp:
             try_card,
             text="Copy the first prompt",
             command=lambda: self._copy(
-                "Remember that we use FastAPI and never write migrations manually."
+                "Remember that this project uses FastAPI and pytest."
             ),
             background=BLUE,
             foreground="white",
@@ -533,8 +535,8 @@ class SetupApp:
         self._label(
             self.card,
             (
-                "When a memory appears, Lians shows a small receipt with what was used, "
-                "why it was selected, the project, and its estimated token cost."
+                "Lians adds only the saved details relevant to the new task. Its receipt shows "
+                "what was reused, what was left out, and the estimated context size."
             ),
             background=PANEL,
             foreground=MUTED,

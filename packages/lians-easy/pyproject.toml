@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lians-bridge"
 version = "0.5.0"
-description = "Private cross-tool memory for AI clients"
+description = "Less repeated context for the AI tools you already use"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 readme = "README.md"

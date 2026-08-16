@@ -1173,7 +1173,7 @@ def _install_unlocked(
                 item["cleanup_errors"] = cleanup_errors
         results.append(item)
 
-    progress("verifying", "Checking that memory is ready")
+    progress("verifying", "Checking that Lians is ready")
     installed = [item for item in results if item["status"] == "installed"]
     failed = [item for item in results if item["status"] == "failed"]
     status = "installed" if not failed else "partial" if installed else "failed"
@@ -1192,7 +1192,7 @@ def _install_unlocked(
         "requires_trust": [item["client"] for item in installed if item["client"] == "codex"],
         "next_step": (
             "Restart each selected AI client. In Codex, review and trust the Lians hooks in "
-            "/hooks. Then ask Cursor to remember one project preference."
+            "/hooks. Then say 'Remember that...' in any connected app and reuse it in a new chat."
             if status == "installed"
             else "Retry only the failed AI apps. Successful connections were not repeated."
         ),

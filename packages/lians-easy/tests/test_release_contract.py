@@ -22,7 +22,7 @@ def test_public_python_package_has_product_aligned_commands() -> None:
 
     assert 'requires = ["hatchling==1.32.0"]' in pyproject
     assert 'name = "lians-bridge"' in pyproject
-    assert 'description = "Private cross-tool memory for AI clients"' in pyproject
+    assert 'description = "Less repeated context for the AI tools you already use"' in pyproject
     assert 'lians = "lians_easy.cli:main"' in pyproject
     assert 'lians-bridge = "lians_easy.cli:main"' in pyproject
     assert 'lians-easy = "lians_easy.cli:main"' in pyproject

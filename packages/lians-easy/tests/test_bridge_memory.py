@@ -124,6 +124,11 @@ def test_encrypted_cross_tool_context_receipt_and_immediate_correction(tmp_path)
     assert pack["receipt"]["excluded"]["scope"] == 1
     assert pack["receipt"]["excluded"]["paused"] == 1
     assert all(item["reason"] for item in pack["receipt"]["memories"])
+    efficiency = pack["receipt"]["efficiency"]
+    assert efficiency["available_memory_count"] == 3
+    assert efficiency["selected_memory_count"] == 3
+    assert efficiency["repeated_memory_tokens_avoided_estimate"] == 0
+    assert efficiency["basis"] == "active in-scope memory content compared with full replay"
 
     signature = pack["receipt"]["signature"]
     protected = {key: value for key, value in pack["receipt"].items() if key != "signature"}
@@ -142,6 +147,11 @@ def test_encrypted_cross_tool_context_receipt_and_immediate_correction(tmp_path)
     )
     assert corrected["content"] in corrected_pack["context"]
     assert stack["content"] not in corrected_pack["context"]
+
+    totals = codex.stats()["efficiency"]
+    assert totals["context_events"] == 2
+    assert totals["memories_reused"] == 6
+    assert totals["clients_used"] == 2
 
     erased = cursor.forget(corrected["id"], confirmed=True)
     forgotten_pack = codex.context_pack(
