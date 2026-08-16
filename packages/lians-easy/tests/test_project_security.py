@@ -16,12 +16,13 @@ def _repo(tmp_path: Path, remote: str) -> Path:
     return root
 
 
-def test_origin_drops_https_credentials_query_and_fragment(tmp_path):
+def test_origin_drops_https_credentials_query_and_fragment(tmp_path, monkeypatch):
     root = _repo(
         tmp_path,
         "https://build-user:top-secret@example.com/Team/Project.git?token=hidden#fragment",
     )
 
+    monkeypatch.chdir(root)
     project = detect_project(root)
 
     assert project.origin == "example.com/team/project"
@@ -29,24 +30,26 @@ def test_origin_drops_https_credentials_query_and_fragment(tmp_path):
     assert "token" not in project.id
 
 
-def test_origin_drops_ssh_user_information(tmp_path):
+def test_origin_drops_ssh_user_information(tmp_path, monkeypatch):
     root = _repo(tmp_path, "ssh://deploy-key@example.com:2222/Team/Project.git")
 
+    monkeypatch.chdir(root)
     project = detect_project(root)
 
     assert project.origin == "example.com:2222/team/project"
 
 
-def test_local_remote_path_is_not_exposed_as_public_origin(tmp_path):
+def test_local_remote_path_is_not_exposed_as_public_origin(tmp_path, monkeypatch):
     root = _repo(tmp_path, str(tmp_path / "private" / "upstream.git"))
 
+    monkeypatch.chdir(root)
     project = detect_project(root)
 
     assert project.origin is None
     assert project.name == "project"
 
 
-def test_unverified_gitdir_pointer_is_not_followed(tmp_path):
+def test_unverified_gitdir_pointer_is_not_followed(tmp_path, monkeypatch):
     root = tmp_path / "project"
     root.mkdir()
     outside = tmp_path / "private-metadata"
@@ -57,13 +60,14 @@ def test_unverified_gitdir_pointer_is_not_followed(tmp_path):
     )
     (root / ".git").write_text(f"gitdir: {outside}\n", encoding="utf-8")
 
+    monkeypatch.chdir(root)
     project = detect_project(root)
 
     assert project.origin is None
     assert project.root == str(root)
 
 
-def test_verified_linked_worktree_uses_common_git_config(tmp_path):
+def test_verified_linked_worktree_uses_common_git_config(tmp_path, monkeypatch):
     common = tmp_path / "source" / ".git"
     git_dir = common / "worktrees" / "preview"
     git_dir.mkdir(parents=True)
@@ -76,14 +80,29 @@ def test_verified_linked_worktree_uses_common_git_config(tmp_path):
     root.mkdir()
     (root / ".git").write_text(f"gitdir: {git_dir}\n", encoding="utf-8")
 
+    monkeypatch.chdir(root)
     project = detect_project(root)
 
     assert project.origin == "github.com/lians-ai/lians"
 
 
-@pytest.mark.parametrize("value", ["missing", "bad\x00path"])
-def test_invalid_project_paths_fail_closed(tmp_path, value):
-    candidate = tmp_path / value if "\x00" not in value else value
+@pytest.mark.parametrize("value", ["../outside", "bad\x00path"])
+def test_project_hints_outside_the_launched_workspace_fail_closed(tmp_path, monkeypatch, value):
+    root = tmp_path / "project"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    candidate = root / value if "\x00" not in value else value
 
-    with pytest.raises(ValueError, match="project path"):
+    with pytest.raises(ValueError, match="project path must"):
         detect_project(candidate)
+
+
+def test_project_hint_inside_workspace_never_changes_the_trusted_root(tmp_path, monkeypatch):
+    root = tmp_path / "project"
+    nested = root / "src" / "api"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(root)
+
+    project = detect_project(nested)
+
+    assert project.root == str(root)
