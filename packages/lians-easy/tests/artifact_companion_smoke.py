@@ -5,15 +5,33 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
 ORIGIN = "http://127.0.0.1:7317"
+
+
+@contextmanager
+def _temporary_directory() -> Path:
+    root = Path(tempfile.mkdtemp(prefix="lians-companion-smoke-"))
+    try:
+        yield root
+    finally:
+        for attempt in range(20):
+            try:
+                shutil.rmtree(root)
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.25)
 
 
 def _port_is_free() -> bool:
@@ -55,8 +73,7 @@ def main() -> None:
     if not _port_is_free():
         raise SystemExit("Port 7317 is already in use; stop the existing Lians companion first")
 
-    with tempfile.TemporaryDirectory(prefix="lians-companion-smoke-") as directory:
-        fixture = Path(directory)
+    with _temporary_directory() as fixture:
         home = fixture / "home"
         roaming = fixture / "roaming"
         local = fixture / "local"
