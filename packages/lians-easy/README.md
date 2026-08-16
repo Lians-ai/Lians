@@ -54,6 +54,30 @@ python -m lians_easy experiment claude --scenario market-research \
   --output claude-market-research-report.json
 ```
 
+For a large post export or browser-work ledger, compile the raw local history
+into one bounded AI-ready brief:
+
+```bash
+lians brief research posts.jsonl --output research-brief.json
+lians brief browser browser-events.jsonl --output browser-brief.json
+```
+
+This command makes no Claude, Codex, Cursor, or hosted Lians request. It accepts
+a JSON array or JSON Lines file, removes repeated research text or superseded
+browser history locally, preserves representative evidence and a hash receipt,
+and refuses credential-like records. See the
+[large-workload method and measured boundary](../../docs/benchmarks/work-per-token-2026-08-16.md).
+
+The synthetic capacity gate is also offline by default. A live run requires
+subscription-backed sign-in, and raw paired replay is separately explicit and
+safety-capped:
+
+```bash
+lians experiment stretch --workload social-research
+lians experiment stretch --workload social-research --records 1000 \
+  --run --provider claude --paired --output report.json
+```
+
 ## Developer package
 
 The public Python distribution is named `lians-bridge`. It is built as a

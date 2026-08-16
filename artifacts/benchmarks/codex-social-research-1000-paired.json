@@ -1,0 +1,130 @@
+{
+  "schema": "https://lians.ai/schemas/work-per-token-experiment/v0.1",
+  "status": "completed",
+  "workload": "social-research",
+  "fixture": {
+    "name": "synthetic-social-research-10000-v1",
+    "synthetic": true,
+    "raw_record_count": 1000,
+    "expected_answer": {
+      "records_received": 1000,
+      "unique_posts": 900,
+      "duplicate_posts": 100,
+      "negative_posts": 720,
+      "top_topic": "context continuity",
+      "top_topic_posts": 360,
+      "top_requested_integration": "Claude Code",
+      "top_requested_integration_posts": 360
+    }
+  },
+  "variants": {
+    "full_replay": {
+      "prompt_token_estimate": 64223,
+      "prompt_sha256": "dc952e03d51f1aa01aa4236a25339885144f35ca1139f50030330d082f2f31dc"
+    },
+    "lians_compiled": {
+      "prompt_token_estimate": 718,
+      "prompt_sha256": "02826f80870292518b0c3b9d000a3bef8d3dd0b89374ead08ae05f3f9e68476f",
+      "compiler_receipt": {
+        "records_received": 1000,
+        "unique_records": 900,
+        "duplicates_removed": 100,
+        "representative_evidence_count": 8,
+        "raw_records_sha256": "f18b7769b15fcc70b84a9b679e6444f0b55863b243488b02f6195011e1657352",
+        "summary_sha256": "eee9219ef3e8a76a5912b06d6c4aa02a850fea2b8a5503069f666982028b9c1f"
+      }
+    }
+  },
+  "projection": {
+    "estimated_work_per_input_token_multiplier": 89.45,
+    "estimated_usage_extension_percent": 8845.0,
+    "target_multiplier": 3.0,
+    "target_extension_percent": 200.0
+  },
+  "evidence_gate": {
+    "requires_exact_compiler_output": true,
+    "requires_live_answer_quality_when_run": true,
+    "minimum_work_per_input_token_multiplier": 3.0,
+    "offline_met": true,
+    "live_met": true
+  },
+  "claim_boundary": "This benchmark measures estimated raw prompt size, provider-reported input usage for calls that actually run, and exact answer quality on deterministic synthetic workloads. It does not prove that Lians changes a provider context window, subscription quota, rate limit, price, or every real workload. Social labels in this fixture are structured inputs; production classification cost is outside this benchmark.",
+  "next_step": "The bounded paired synthetic gate passed. Validate with consenting real users before making a broader product claim.",
+  "provider": "codex",
+  "model": null,
+  "auth": {
+    "logged_in": true,
+    "auth_method": "chatgpt",
+    "provider": "openai"
+  },
+  "results": {
+    "full_replay": {
+      "runs": [
+        {
+          "answer": "{\"records_received\":1000,\"unique_posts\":900,\"duplicate_posts\":100,\"negative_posts\":720,\"top_topic\":\"context continuity\",\"top_topic_posts\":360,\"top_requested_integration\":\"Claude Code\",\"top_requested_integration_posts\":360}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "records_received": 1000,
+              "unique_posts": 900,
+              "duplicate_posts": 100,
+              "negative_posts": 720,
+              "top_topic": "context continuity",
+              "top_topic_posts": 360,
+              "top_requested_integration": "Claude Code",
+              "top_requested_integration_posts": 360
+            }
+          },
+          "usage": {
+            "input_tokens": 71197,
+            "cached_input_tokens": 5888,
+            "provider_reported_total_input_tokens": 71197,
+            "output_tokens": 310
+          },
+          "duration_seconds": 9.85,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 71197
+    },
+    "lians_compiled": {
+      "runs": [
+        {
+          "answer": "{\"records_received\":1000,\"unique_posts\":900,\"duplicate_posts\":100,\"negative_posts\":720,\"top_topic\":\"context continuity\",\"top_topic_posts\":360,\"top_requested_integration\":\"Claude Code\",\"top_requested_integration_posts\":360}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "records_received": 1000,
+              "unique_posts": 900,
+              "duplicate_posts": 100,
+              "negative_posts": 720,
+              "top_topic": "context continuity",
+              "top_topic_posts": 360,
+              "top_requested_integration": "Claude Code",
+              "top_requested_integration_posts": 360
+            }
+          },
+          "usage": {
+            "input_tokens": 14342,
+            "cached_input_tokens": 12032,
+            "provider_reported_total_input_tokens": 14342,
+            "output_tokens": 54
+          },
+          "duration_seconds": 5.435,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 14342
+    }
+  },
+  "comparison": {
+    "mode": "paired",
+    "compiled_answer_exact": true,
+    "provider_reported_input_token_reduction_percent": 79.9,
+    "provider_reported_work_per_token_multiplier": 4.96,
+    "both_variants_answered_exactly": true,
+    "provider_reported_usage_extension_percent": 396.0
+  }
+}

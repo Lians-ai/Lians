@@ -33,6 +33,12 @@ are not directly comparable to LLM-judged answer-accuracy leaderboards.
 
 ## Public retrieval and answer benchmarks
 
+- [Large-workload work-per-token gate, August 16, 2026](work-per-token-2026-08-16.md)
+  tests 1,000-record paired social-research and browser-history workloads on
+  Claude Code and Codex. All four exact-answer runs exceeded the predefined 3x
+  work-per-input-token target; separate compiled-only checks reached 10,000
+  posts and 2,400 browser events. The report keeps quota claims explicitly out
+  of scope.
 - [Claude Code bounded-context baseline](claude-code-baseline.md) defines an
   offline-first paired test of full replay and Lians-selected context, with a
   fail-closed subscription-auth preflight before any live call. Its first

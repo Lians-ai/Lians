@@ -1,0 +1,159 @@
+{
+  "schema": "https://lians.ai/schemas/work-per-token-experiment/v0.1",
+  "status": "completed",
+  "workload": "browser-marketing",
+  "fixture": {
+    "name": "synthetic-browser-marketing-day-v1",
+    "synthetic": true,
+    "raw_record_count": 1000,
+    "expected_answer": {
+      "events_processed": 1000,
+      "surfaces_tracked": 200,
+      "published_surfaces": 60,
+      "blocked_surfaces": 30,
+      "waiting_surfaces": 30,
+      "candidate_surfaces": 80,
+      "history_events_collapsed": 800,
+      "next_eligible_surfaces": [
+        "surface-0120",
+        "surface-0121",
+        "surface-0122",
+        "surface-0123",
+        "surface-0124"
+      ],
+      "never_repeat_published": true,
+      "never_contact_hard_excluded": true,
+      "approval_gates_respected": true
+    }
+  },
+  "variants": {
+    "full_replay": {
+      "prompt_token_estimate": 65581,
+      "prompt_sha256": "8df5549c905fbc1499467d24f607734fbad39901b53f87536ab44cb231cd13df"
+    },
+    "lians_compiled": {
+      "prompt_token_estimate": 669,
+      "prompt_sha256": "fdeabe7a620cb756df3fe10f7ff193088552c6c3dddb513a9bf70f02f755c84f",
+      "compiler_receipt": {
+        "events_processed": 1000,
+        "surfaces_tracked": 200,
+        "history_events_collapsed": 800,
+        "next_action_evidence_count": 5,
+        "raw_records_sha256": "6f6779daf26dcf44b6f31bbf84af50dcea06b40fbe3f5ffa5a1473ad15cce9fb",
+        "summary_sha256": "6f3e25e7a50cff32b2d1091fffa5e1d2195ed60ea8c8393efb47e8835b1df10f"
+      }
+    }
+  },
+  "projection": {
+    "estimated_work_per_input_token_multiplier": 98.03,
+    "estimated_usage_extension_percent": 9703.0,
+    "target_multiplier": 3.0,
+    "target_extension_percent": 200.0
+  },
+  "evidence_gate": {
+    "requires_exact_compiler_output": true,
+    "requires_live_answer_quality_when_run": true,
+    "minimum_work_per_input_token_multiplier": 3.0,
+    "offline_met": true,
+    "live_met": true
+  },
+  "claim_boundary": "This benchmark measures estimated raw prompt size, provider-reported input usage for calls that actually run, and exact answer quality on deterministic synthetic workloads. It does not prove that Lians changes a provider context window, subscription quota, rate limit, price, or every real workload. Social labels in this fixture are structured inputs; production classification cost is outside this benchmark.",
+  "next_step": "The bounded paired synthetic gate passed. Validate with consenting real users before making a broader product claim.",
+  "provider": "claude",
+  "model": "sonnet",
+  "auth": {
+    "logged_in": true,
+    "auth_method": "claude.ai",
+    "provider": "firstParty"
+  },
+  "results": {
+    "full_replay": {
+      "runs": [
+        {
+          "answer": "{\"events_processed\":1000,\"surfaces_tracked\":200,\"published_surfaces\":60,\"blocked_surfaces\":30,\"waiting_surfaces\":30,\"candidate_surfaces\":80,\"history_events_collapsed\":800,\"next_eligible_surfaces\":[\"surface-0120\",\"surface-0121\",\"surface-0122\",\"surface-0123\",\"surface-0124\"],\"never_repeat_published\":true,\"never_contact_hard_excluded\":true,\"approval_gates_respected\":true}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "events_processed": 1000,
+              "surfaces_tracked": 200,
+              "published_surfaces": 60,
+              "blocked_surfaces": 30,
+              "waiting_surfaces": 30,
+              "candidate_surfaces": 80,
+              "history_events_collapsed": 800,
+              "next_eligible_surfaces": [
+                "surface-0120",
+                "surface-0121",
+                "surface-0122",
+                "surface-0123",
+                "surface-0124"
+              ],
+              "never_repeat_published": true,
+              "never_contact_hard_excluded": true,
+              "approval_gates_respected": true
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 103958,
+            "cache_read_input_tokens": 0,
+            "provider_reported_total_input_tokens": 103960,
+            "output_tokens": 2334
+          },
+          "duration_seconds": 22.122,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 103960
+    },
+    "lians_compiled": {
+      "runs": [
+        {
+          "answer": "{\"events_processed\":1000,\"surfaces_tracked\":200,\"published_surfaces\":60,\"blocked_surfaces\":30,\"waiting_surfaces\":30,\"candidate_surfaces\":80,\"history_events_collapsed\":800,\"next_eligible_surfaces\":[\"surface-0120\",\"surface-0121\",\"surface-0122\",\"surface-0123\",\"surface-0124\"],\"never_repeat_published\":true,\"never_contact_hard_excluded\":true,\"approval_gates_respected\":true}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "events_processed": 1000,
+              "surfaces_tracked": 200,
+              "published_surfaces": 60,
+              "blocked_surfaces": 30,
+              "waiting_surfaces": 30,
+              "candidate_surfaces": 80,
+              "history_events_collapsed": 800,
+              "next_eligible_surfaces": [
+                "surface-0120",
+                "surface-0121",
+                "surface-0122",
+                "surface-0123",
+                "surface-0124"
+              ],
+              "never_repeat_published": true,
+              "never_contact_hard_excluded": true,
+              "approval_gates_respected": true
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 3439,
+            "cache_read_input_tokens": 0,
+            "provider_reported_total_input_tokens": 3441,
+            "output_tokens": 714
+          },
+          "duration_seconds": 8.303,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 3441
+    }
+  },
+  "comparison": {
+    "mode": "paired",
+    "compiled_answer_exact": true,
+    "provider_reported_input_token_reduction_percent": 96.7,
+    "provider_reported_work_per_token_multiplier": 30.21,
+    "both_variants_answered_exactly": true,
+    "provider_reported_usage_extension_percent": 2921.0
+  }
+}

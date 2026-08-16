@@ -93,7 +93,31 @@ def test_claude_experiment_accepts_market_research_scenario() -> None:
     )
 
     assert parsed.scenario == "market-research"
-    assert parsed.repetitions == 2
+
+
+def test_stretch_experiment_defaults_to_an_offline_capacity_plan() -> None:
+    parsed = cli.parser().parse_args(
+        ["experiment", "stretch", "--workload", "social-research", "--json"]
+    )
+
+    assert parsed.experiment_name == "stretch"
+    assert parsed.workload == "social-research"
+    assert parsed.records is None
+    assert parsed.run is False
+    assert parsed.paired is False
+    assert parsed.repetitions == 1
+
+
+def test_brief_command_is_local_and_simple() -> None:
+    parsed = cli.parser().parse_args(
+        ["brief", "research", "posts.jsonl", "--output", "brief.json"]
+    )
+
+    assert parsed.command == "brief"
+    assert parsed.kind == "research"
+    assert parsed.input.name == "posts.jsonl"
+    assert parsed.output.name == "brief.json"
+    assert parsed.evidence == 12
 
 
 def test_claude_experiment_plan_does_not_call_claude(monkeypatch, capsys) -> None:
