@@ -1,6 +1,35 @@
 from __future__ import annotations
 
 
+def test_active_ai_client_prefers_foreground_then_retains_last_open_client() -> None:
+    from lians_easy.gui import _active_ai_client
+
+    processes = {
+        10: "cursor.exe",
+        20: "claude.exe",
+        30: "explorer.exe",
+    }
+
+    assert (
+        _active_ai_client(
+            "cursor", processes=processes, foreground_process_id=20
+        )
+        == "claude"
+    )
+    assert (
+        _active_ai_client(
+            "cursor", processes=processes, foreground_process_id=30
+        )
+        == "cursor"
+    )
+    assert (
+        _active_ai_client(
+            processes={30: "explorer.exe"}, foreground_process_id=30
+        )
+        is None
+    )
+
+
 def test_launch_restores_existing_native_window(monkeypatch) -> None:
     from lians_easy import gui
 

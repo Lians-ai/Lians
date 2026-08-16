@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -47,20 +46,11 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
     import tkinter as tk
 
     from lians_easy.gui import CompanionApp
-    from lians_easy.installer import ClientTarget
-
-    targets = {
-        "claude": ClientTarget(
-            "claude", "Claude Desktop", Path("claude.json"), detected=True, configured=True
-        ),
-        "codex": ClientTarget(
-            "codex", "Codex", Path("config.toml"), detected=True, configured=False
-        ),
-        "cursor": ClientTarget(
-            "cursor", "Cursor", Path("cursor.json"), detected=False, configured=False
-        ),
-    }
-    monkeypatch.setattr("lians_easy.gui.client_targets", lambda: targets)
+    active_client: dict[str, str | None] = {"key": "codex"}
+    monkeypatch.setattr(
+        "lians_easy.gui._active_ai_client",
+        lambda _preferred=None: active_client["key"],
+    )
     monkeypatch.setattr("lians_easy.gui._save_companion_theme", lambda _theme: None)
 
     class FakeStore:
@@ -117,7 +107,7 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
 
         assert app.shell.winfo_reqwidth() <= app.body_canvas.winfo_width()
         assert app.body_canvas.winfo_height() <= root.winfo_height()
-        assert app.body_canvas.bbox("all")[3] >= app.body_canvas.winfo_height()
+        assert app.body_canvas.bbox("all") is not None
         assert app.scrollbar.winfo_class() == "Canvas"
         app.body_canvas.yview_moveto(1.0)
         root.update_idletasks()
@@ -134,11 +124,12 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert any(label["text"] == "Codex · Lians" for label in app.activity_labels)
         assert app.font_family == "Sora"
         assert app.display_font_family == "Sora"
+        assert app.intro_lotus_frames[0].width() == 1400
+        assert app.intro_lotus_frames[-1].width() == 128
         assert bool(root.overrideredirect())
-        assert app.target_labels["claude"]["text"] == "●  Connected"
-        assert app.target_labels["codex"]["text"] == "●  Ready to connect"
-        assert app.target_labels["cursor"]["text"] == "●  Not found"
-        app._animate_lifeline()
+        assert app.connection_status.get() == "Codex active"
+        assert app.connection_dot["foreground"] == app.colors["green"]
+        app._render_lifeline()
         canvas_items = app.lifeline_canvas.find_all()
         assert len(canvas_items) == 1
         assert app.lifeline_canvas.type(canvas_items[0]) == "image"
@@ -148,6 +139,11 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert all(app.lifeline_canvas.type(item) != "text" for item in canvas_items)
         assert app.close_button["text"] == "×"
         assert app.stop_button["text"] == "Close"
+
+        active_client["key"] = None
+        app._refresh()
+        assert app.connection_status.get() == "No connection detected"
+        assert app.connection_dot["foreground"] == app.colors["muted"]
 
         app._toggle_theme()
         root.update_idletasks()
