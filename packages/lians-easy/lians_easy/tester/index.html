@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#05070b">
+    <title>Lians Claude Research Test</title>
+    <link rel="stylesheet" href="style.css">
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <img src="lotus.svg" alt="Lians lotus logo">
+        <span>Lians</span>
+      </header>
+
+      <section class="hero">
+        <h1>See how much context Lians can cut</h1>
+        <p class="lead">
+          Run the same research task with full history and with the small set of
+          decisions Lians selects. Claude answers both so you can compare usage
+          without changing your normal account.
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="test-title">
+        <h2 id="test-title">Test Claude with the same task twice</h2>
+        <p class="body-copy">
+          The test uses synthetic research notes. It runs two matched pairs and
+          checks every answer against the same six decisions.
+        </p>
+
+        <div class="status-row" role="status" aria-live="polite">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Checking Claude Pro</span>
+        </div>
+
+        <button id="run-button" type="button" disabled>Run the research test</button>
+        <p class="helper" id="run-helper">
+          Claude Code must be installed and signed in with a Claude subscription.
+        </p>
+      </section>
+
+      <section class="card progress-card" id="progress-card" hidden aria-live="polite">
+        <h2>Running four matched Claude calls</h2>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-fill"></div>
+        </div>
+        <p class="body-copy">Keep this window open. Most tests finish in less than one minute.</p>
+      </section>
+
+      <section class="card results-card" id="results-card" hidden aria-labelledby="results-title">
+        <h2 id="results-title">Your result</h2>
+        <div class="result-number"><span id="reduction">0</span>%</div>
+        <p class="result-copy">fewer provider reported input tokens</p>
+
+        <div class="metrics">
+          <div class="metric">
+            <span id="full-tokens">0</span>
+            <p>Full history</p>
+          </div>
+          <div class="metric">
+            <span id="lians-tokens">0</span>
+            <p>Lians context</p>
+          </div>
+          <div class="metric">
+            <span id="answers">0/4</span>
+            <p>Exact answers</p>
+          </div>
+        </div>
+
+        <p class="gate" id="gate-result"></p>
+        <div class="result-actions">
+          <a class="button-link" id="download-link" href="api/report">Download test report</a>
+          <button class="secondary" id="close-button" type="button">Close the test</button>
+        </div>
+      </section>
+
+      <section class="plain-section" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">What stays private</h2>
+        <p>
+          The research history is synthetic. Lians does not ask for a Claude
+          password or API key. The local test page is available only on this
+          device and the result stays here until you download it.
+        </p>
+      </section>
+
+      <footer>
+        This test measures one controlled workflow. It does not guarantee the
+        same reduction on every task or extend an interactive Claude plan quota.
+      </footer>
+    </main>
+  </body>
+</html>
