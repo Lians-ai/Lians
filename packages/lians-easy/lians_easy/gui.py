@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import ctypes
+import json
 import sys
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 import webbrowser
 from importlib.resources import files
 from pathlib import Path
@@ -32,6 +35,76 @@ BLUE = "#3777ff"
 BLUE_SOFT = "#13244a"
 GREEN = "#4fe0a0"
 RED = "#ff6d83"
+
+COMPANION_THEMES = {
+    "dark": {
+        "background": "#05070A",
+        "surface": "#0A1019",
+        "surface_soft": "#101824",
+        "border": "#1F2A3A",
+        "text": "#F7F9FC",
+        "muted": "#A4AFBF",
+        "blue": "#3777FF",
+        "blue_hover": "#2D68E5",
+        "blue_soft": "#10224A",
+        "green": "#50E3A4",
+        "amber": "#F2BE5C",
+        "red": "#FF7087",
+    },
+    "light": {
+        "background": "#F5F7FB",
+        "surface": "#FFFFFF",
+        "surface_soft": "#EAF0F8",
+        "border": "#D6DFEA",
+        "text": "#07111F",
+        "muted": "#566477",
+        "blue": "#245FF5",
+        "blue_hover": "#1B50D5",
+        "blue_soft": "#E5EDFF",
+        "green": "#087F58",
+        "amber": "#9A6500",
+        "red": "#C93651",
+    },
+}
+
+
+def _register_sora(root: tk.Tk) -> str:
+    """Load the bundled Sora font privately for this process on Windows."""
+
+    if sys.platform == "win32":
+        try:
+            font_path = files("lians_easy").joinpath(
+                "desktop", "fonts", "Sora-Variable.ttf"
+            )
+            loaded = ctypes.windll.gdi32.AddFontResourceExW(str(font_path), 0x10, None)
+            if loaded:
+                root.update_idletasks()
+        except (AttributeError, OSError, tk.TclError):
+            pass
+    try:
+        if "Sora" in tkfont.families(root):
+            return "Sora"
+    except tk.TclError:
+        pass
+    return "Segoe UI"
+
+
+def _saved_companion_theme() -> str:
+    try:
+        value = json.loads((user_data_dir() / "ui-preferences.json").read_text(encoding="utf-8"))
+        theme = value.get("theme")
+        return theme if theme in COMPANION_THEMES else "dark"
+    except (AttributeError, json.JSONDecodeError, OSError, TypeError):
+        return "dark"
+
+
+def _save_companion_theme(theme: str) -> None:
+    try:
+        destination = user_data_dir() / "ui-preferences.json"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps({"theme": theme}), encoding="utf-8")
+    except OSError:
+        pass
 
 
 class SetupApp:
@@ -607,212 +680,278 @@ class SetupApp:
 
 
 class CompanionApp:
-    """Resident local dashboard shown while AI clients use Lians."""
+    """Resident branded dashboard shown while AI clients use Lians."""
 
-    def __init__(self, root: tk.Tk, bridge: Any, *, start_bridge: bool = True) -> None:
+    def __init__(
+        self,
+        root: tk.Tk,
+        bridge: Any,
+        *,
+        start_bridge: bool = True,
+        theme: str | None = None,
+    ) -> None:
         self.root = root
         self.bridge = bridge
         self._stopping = False
         self._bridge_error: str | None = None
         self._bridge_thread: threading.Thread | None = None
+        self._refresh_job: str | None = None
+        self._window_handle: int | None = None
+        self._drag_origin: tuple[int, int, int, int] | None = None
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        window_width = min(1180, max(920, screen_width - 80))
+        window_height = min(900, max(720, screen_height - 80))
+        self._normal_geometry = f"{window_width}x{window_height}"
+        self._maximized = False
+        self.theme_name = theme if theme in COMPANION_THEMES else _saved_companion_theme()
+        self.colors = COMPANION_THEMES[self.theme_name]
+        self.font_family = _register_sora(root)
         self.target_labels: dict[str, tk.Label] = {}
+        self.target_details: dict[str, tk.Label] = {}
         self.activity_labels: list[tk.Label] = []
         self._activity_state: tuple[tuple[str, str, str], ...] | None = None
 
+        self.status = tk.StringVar(value="Starting Lians")
+        self.memory_status = tk.StringVar(value="0 saved memories")
+        self.token_value = tk.StringVar(value="0")
+        self.event_value = tk.StringVar(value="0")
+        self.reuse_value = tk.StringVar(value="0")
+        self.reduction_status = tk.StringVar(value="Waiting for your first context handoff")
+        self.notice = tk.StringVar(
+            value="Token savings are estimates from encrypted local context receipts."
+        )
+
         self.root.title("Lians")
-        self.root.geometry("920x760")
-        self.root.minsize(820, 700)
-        self.root.configure(background=BACKGROUND)
-        self.root.option_add("*Font", ("Segoe UI", 10))
+        self.root.geometry(self._normal_geometry)
+        self.root.minsize(920, 760)
         self.root.protocol("WM_DELETE_WINDOW", self._minimize)
         if sys.platform == "win32":
+            self.root.overrideredirect(True)
             try:
                 self.root.iconbitmap(default=sys.executable)
             except tk.TclError:
                 pass
 
-        self.shell = tk.Frame(root, background=BACKGROUND, padx=34, pady=24)
-        self.shell.pack(fill="both", expand=True)
+        self._load_brand_images()
         self._build()
+        if sys.platform == "win32":
+            self.root.after(50, self._apply_windows_taskbar_style)
         if start_bridge:
             self._start_bridge()
-        self.root.after(200, self._refresh)
+        self._refresh_job = self.root.after(200, self._refresh)
+
+    def _font(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
+        return (self.font_family, size, weight)
 
     def _label(self, parent: tk.Widget, text: str = "", **kwargs: Any) -> tk.Label:
-        return tk.Label(parent, text=text, background=kwargs.pop("background", BACKGROUND), **kwargs)
+        return tk.Label(
+            parent,
+            text=text,
+            background=kwargs.pop("background", self.colors["background"]),
+            **kwargs,
+        )
 
-    def _build(self) -> None:
-        top = tk.Frame(self.shell, background=BACKGROUND)
-        top.pack(fill="x")
+    def _load_brand_images(self) -> None:
         try:
             logo_path = files("lians_easy").joinpath("app", "logo-blue.png")
             self.logo = tk.PhotoImage(file=str(logo_path))
-            width = self.logo.width()
-            if width > 142:
-                factor = max(1, round(width / 142))
+            if self.logo.width() > 150:
+                factor = max(1, round(self.logo.width() / 150))
                 self.logo = self.logo.subsample(factor, factor)
-            tk.Label(top, image=self.logo, background=BACKGROUND).pack(side="left")
         except (OSError, tk.TclError):
+            self.logo = None
+        try:
+            lotus_path = files("lians_easy").joinpath("desktop", "lotus.png")
+            self.lotus = tk.PhotoImage(file=str(lotus_path))
+            if self.lotus.width() > 32:
+                factor = max(1, round(self.lotus.width() / 32))
+                self.lotus = self.lotus.subsample(factor, factor)
+        except (OSError, tk.TclError):
+            self.lotus = None
+
+    def _build(self) -> None:
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.colors = COMPANION_THEMES[self.theme_name]
+        self.target_labels = {}
+        self.target_details = {}
+        self._activity_state = None
+        self.root.configure(background=self.colors["background"])
+        self.root.option_add("*Font", self._font(11))
+        self._build_titlebar()
+
+        body = tk.Frame(self.root, background=self.colors["background"])
+        body.pack(fill="both", expand=True)
+        self.body_canvas = tk.Canvas(
+            body,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        scrollbar = tk.Scrollbar(
+            body,
+            orient="vertical",
+            command=self.body_canvas.yview,
+            background=self.colors["surface_soft"],
+            activebackground=self.colors["blue"],
+            troughcolor=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+            relief="flat",
+            width=10,
+        )
+        self.body_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        self.body_canvas.pack(side="left", fill="both", expand=True)
+        self.shell = tk.Frame(
+            self.body_canvas,
+            background=self.colors["background"],
+            padx=44,
+            pady=20,
+        )
+        canvas_window = self.body_canvas.create_window(
+            (0, 0), window=self.shell, anchor="nw"
+        )
+        self.shell.bind(
+            "<Configure>",
+            lambda _event: self.body_canvas.configure(scrollregion=self.body_canvas.bbox("all")),
+        )
+        self.body_canvas.bind(
+            "<Configure>",
+            lambda event: self.body_canvas.itemconfigure(canvas_window, width=event.width),
+        )
+        self.root.bind("<MouseWheel>", self._scroll_body)
+
+        top = tk.Frame(self.shell, background=self.colors["background"])
+        top.pack(fill="x")
+        if self.logo is not None:
+            tk.Label(top, image=self.logo, background=self.colors["background"]).pack(
+                side="left"
+            )
+        else:
             self._label(
-                top, "lians", foreground=BLUE, font=("Segoe UI", 24, "bold")
+                top,
+                "lians",
+                foreground=self.colors["blue"],
+                font=self._font(30, "bold"),
             ).pack(side="left")
 
         status_card = tk.Frame(
             top,
-            background=PANEL,
-            highlightbackground=LINE,
+            background=self.colors["surface"],
+            highlightbackground=self.colors["border"],
             highlightthickness=1,
-            padx=12,
-            pady=7,
+            padx=15,
+            pady=9,
         )
         status_card.pack(side="right")
         self.status_dot = self._label(
-            status_card, "●", background=PANEL, foreground=BLUE, font=("Segoe UI", 11, "bold")
+            status_card,
+            "●",
+            background=self.colors["surface"],
+            foreground=self.colors["blue"],
+            font=self._font(12, "bold"),
         )
-        self.status_dot.pack(side="left", padx=(0, 7))
-        self.status = tk.StringVar(value="Starting the encrypted local memory bridge")
+        self.status_dot.pack(side="left", padx=(0, 8))
         self._label(
             status_card,
             textvariable=self.status,
-            background=PANEL,
-            foreground=TEXT,
-            font=("Segoe UI", 9, "bold"),
+            background=self.colors["surface"],
+            foreground=self.colors["text"],
+            font=self._font(11, "bold"),
         ).pack(side="left")
 
         self._label(
             self.shell,
             "Your agent lifeline.",
-            foreground=TEXT,
-            font=("Segoe UI", 26, "bold"),
+            foreground=self.colors["text"],
+            font=self._font(32, "bold"),
             anchor="w",
-        ).pack(fill="x", pady=(24, 4))
+        ).pack(fill="x", pady=(13, 2))
         self._label(
             self.shell,
-            "See how Lians supports Claude, Codex, and Cursor while everything stays local.",
-            foreground=MUTED,
-            font=("Segoe UI", 11),
+            "A clear view of what Lians carries forward across Claude, Codex, and Cursor.",
+            foreground=self.colors["muted"],
+            font=self._font(12),
             anchor="w",
-        ).pack(fill="x", pady=(0, 16))
+            wraplength=900,
+        ).pack(fill="x", pady=(0, 13))
 
-        self.token_value = tk.StringVar(value="0")
-        self.event_value = tk.StringVar(value="0")
-        self.reuse_value = tk.StringVar(value="0")
-        metrics = tk.Frame(self.shell, background=BACKGROUND)
+        metrics = tk.Frame(self.shell, background=self.colors["background"])
         metrics.pack(fill="x")
         metric_data = (
-            ("Estimated tokens saved", self.token_value, "Repeated context Lians left out"),
-            ("Context handoffs", self.event_value, "Times an agent asked Lians for context"),
-            ("Memories reused", self.reuse_value, "Useful details carried into new work"),
+            ("Estimated tokens saved", self.token_value, "Repeated context left out"),
+            ("Context handoffs", self.event_value, "Useful context delivered"),
+            ("Memories reused", self.reuse_value, "Details carried into new work"),
         )
-        for index, (title, value, detail) in enumerate(metric_data):
-            card = tk.Frame(
-                metrics,
-                background=PANEL,
-                highlightbackground=LINE,
-                highlightthickness=1,
-                padx=16,
-                pady=12,
-            )
-            card.pack(
-                side="left",
-                fill="both",
-                expand=True,
-                padx=(0 if index == 0 else 6, 0 if index == 2 else 6),
-            )
-            self._label(
-                card,
-                title,
-                background=PANEL,
-                foreground=MUTED,
-                font=("Segoe UI", 9),
-                anchor="w",
-            ).pack(fill="x")
-            self._label(
-                card,
-                textvariable=value,
-                background=PANEL,
-                foreground=TEXT,
-                font=("Segoe UI", 22, "bold"),
-                anchor="w",
-            ).pack(fill="x", pady=(2, 1))
-            self._label(
-                card,
-                detail,
-                background=PANEL,
-                foreground=MUTED,
-                font=("Segoe UI", 8),
-                anchor="w",
-            ).pack(fill="x")
+        for index, data in enumerate(metric_data):
+            self._metric_card(metrics, *data, index=index)
 
-        activity_heading = tk.Frame(self.shell, background=BACKGROUND)
-        activity_heading.pack(fill="x", pady=(18, 8))
+        activity_heading = tk.Frame(self.shell, background=self.colors["background"])
+        activity_heading.pack(fill="x", pady=(17, 8))
         self._label(
             activity_heading,
             "Recent agent activity",
-            foreground=TEXT,
-            font=("Segoe UI", 13, "bold"),
+            foreground=self.colors["text"],
+            font=self._font(15, "bold"),
         ).pack(side="left")
-        self.reduction_status = tk.StringVar(value="Waiting for the first context handoff")
         self._label(
             activity_heading,
             textvariable=self.reduction_status,
-            foreground=MUTED,
-            font=("Segoe UI", 9),
+            foreground=self.colors["muted"],
+            font=self._font(10),
         ).pack(side="right")
 
         self.activity_frame = tk.Frame(
             self.shell,
-            background=PANEL,
-            highlightbackground=LINE,
+            background=self.colors["surface"],
+            highlightbackground=self.colors["border"],
             highlightthickness=1,
-            padx=14,
-            pady=8,
+            padx=18,
+            pady=10,
         )
         self.activity_frame.pack(fill="both", expand=True)
         self._show_activity([])
 
-        integrations = tk.Frame(self.shell, background=BACKGROUND)
-        integrations.pack(fill="x", pady=(12, 12))
+        connections_heading = tk.Frame(self.shell, background=self.colors["background"])
+        connections_heading.pack(fill="x", pady=(14, 8))
         self._label(
-            integrations, "Connections", foreground=MUTED, font=("Segoe UI", 9, "bold")
-        ).pack(side="left", padx=(0, 12))
-        targets = client_targets()
-        for key in ("claude", "codex", "cursor"):
-            target = targets[key]
-            label = "Claude" if key == "claude" else target.label
-            state = self._label(
-                integrations,
-                f"●  {label}",
-                foreground=GREEN if target.configured else MUTED,
-                font=("Segoe UI", 9, "bold"),
-            )
-            state.pack(side="left", padx=(0, 16))
-            self.target_labels[key] = state
-        self.memory_status = tk.StringVar(value="0 saved memories")
+            connections_heading,
+            "Connections",
+            foreground=self.colors["text"],
+            font=self._font(14, "bold"),
+        ).pack(side="left")
         self._label(
-            integrations,
+            connections_heading,
             textvariable=self.memory_status,
-            foreground=MUTED,
-            font=("Segoe UI", 9),
+            foreground=self.colors["muted"],
+            font=self._font(10),
         ).pack(side="right")
 
-        actions = tk.Frame(self.shell, background=BACKGROUND)
-        actions.pack(fill="x")
+        integrations = tk.Frame(self.shell, background=self.colors["background"])
+        integrations.pack(fill="x")
+        targets = client_targets()
+        for index, key in enumerate(("claude", "codex", "cursor")):
+            self._connection_card(integrations, key, targets[key], index)
+
+        actions = tk.Frame(self.shell, background=self.colors["background"])
+        actions.pack(fill="x", pady=(15, 0))
         self.open_button = tk.Button(
             actions,
             text="Open detailed dashboard",
             command=self._open_dashboard,
             state="disabled",
-            background=BLUE,
-            foreground="white",
-            activebackground="#2e67de",
-            activeforeground="white",
-            disabledforeground="#8390a4",
+            background=self.colors["blue"],
+            foreground="#FFFFFF",
+            activebackground=self.colors["blue_hover"],
+            activeforeground="#FFFFFF",
+            disabledforeground="#8290A4",
             relief="flat",
             borderwidth=0,
             cursor="hand2",
-            font=("Segoe UI", 10, "bold"),
-            padx=20,
+            font=self._font(11, "bold"),
+            padx=22,
             pady=9,
         )
         self.open_button.pack(side="left")
@@ -820,43 +959,217 @@ class CompanionApp:
             actions,
             text="Minimize and use my AI",
             command=self._minimize,
-            background=PANEL_SOFT,
-            foreground=TEXT,
-            activebackground=PANEL,
-            activeforeground=TEXT,
+            background=self.colors["surface_soft"],
+            foreground=self.colors["text"],
+            activebackground=self.colors["surface"],
+            activeforeground=self.colors["text"],
             relief="flat",
             borderwidth=0,
             cursor="hand2",
-            padx=18,
+            font=self._font(11, "bold"),
+            padx=20,
             pady=9,
         ).pack(side="left", padx=(10, 0))
         tk.Button(
             actions,
             text="Stop Lians",
             command=self._stop,
-            background=BACKGROUND,
-            foreground=MUTED,
-            activebackground=BACKGROUND,
-            activeforeground=TEXT,
+            background=self.colors["background"],
+            foreground=self.colors["muted"],
+            activebackground=self.colors["surface_soft"],
+            activeforeground=self.colors["text"],
             relief="flat",
             borderwidth=0,
             cursor="hand2",
-            padx=12,
+            font=self._font(10, "bold"),
+            padx=14,
             pady=9,
         ).pack(side="right")
-
-        self.notice = tk.StringVar(
-            value="Closing this window minimizes Lians. Token savings are estimates from local context receipts."
-        )
         self._label(
             self.shell,
             textvariable=self.notice,
-            foreground=MUTED,
+            foreground=self.colors["muted"],
             justify="left",
-            wraplength=840,
+            wraplength=960,
             anchor="w",
-            font=("Segoe UI", 8),
+            font=self._font(9),
         ).pack(fill="x", pady=(9, 0))
+
+    def _scroll_body(self, event: tk.Event) -> str:
+        delta = int(-event.delta / 120) if event.delta else 0
+        if delta:
+            self.body_canvas.yview_scroll(delta, "units")
+        return "break"
+
+    def _build_titlebar(self) -> None:
+        bar = tk.Frame(
+            self.root,
+            background=self.colors["background"],
+            height=48,
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+        )
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        brand = tk.Frame(bar, background=self.colors["background"])
+        brand.pack(side="left", fill="y", padx=(14, 0))
+        if self.lotus is not None:
+            tk.Label(brand, image=self.lotus, background=self.colors["background"]).pack(
+                side="left", padx=(0, 7)
+            )
+        self._label(
+            brand,
+            "Lians",
+            foreground=self.colors["text"],
+            font=self._font(11, "bold"),
+        ).pack(side="left")
+        mode_label = "Light mode" if self.theme_name == "dark" else "Dark mode"
+        mode = tk.Button(
+            bar,
+            text=mode_label,
+            command=self._toggle_theme,
+            background=self.colors["background"],
+            foreground=self.colors["muted"],
+            activebackground=self.colors["surface_soft"],
+            activeforeground=self.colors["text"],
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=self._font(9, "bold"),
+            padx=14,
+        )
+        self.theme_button = mode
+        for text, command in (
+            ("×", self._minimize),
+            ("□", self._toggle_maximize),
+            ("−", self._minimize),
+        ):
+            button = tk.Button(
+                bar,
+                text=text,
+                command=command,
+                background=self.colors["background"],
+                foreground=self.colors["muted"],
+                activebackground=self.colors["surface_soft"],
+                activeforeground=self.colors["text"],
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                font=self._font(12),
+                width=4,
+            )
+            button.pack(side="right", fill="y")
+        mode.pack(side="right", fill="y", padx=(0, 8))
+        for widget in (bar, brand, *brand.winfo_children()):
+            widget.bind("<ButtonPress-1>", self._begin_drag)
+            widget.bind("<B1-Motion>", self._drag_window)
+            widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
+
+    def _metric_card(
+        self,
+        parent: tk.Widget,
+        title: str,
+        value: tk.StringVar,
+        detail: str,
+        *,
+        index: int,
+    ) -> None:
+        card = tk.Frame(
+            parent,
+            background=self.colors["surface"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            padx=16,
+            pady=10,
+        )
+        card.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(0 if index == 0 else 6, 0 if index == 2 else 6),
+        )
+        self._label(
+            card,
+            title,
+            background=self.colors["surface"],
+            foreground=self.colors["muted"],
+            font=self._font(10),
+            anchor="w",
+            wraplength=250,
+        ).pack(fill="x")
+        self._label(
+            card,
+            textvariable=value,
+            background=self.colors["surface"],
+            foreground=self.colors["text"],
+            font=self._font(25, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(2, 1))
+        self._label(
+            card,
+            detail,
+            background=self.colors["surface"],
+            foreground=self.colors["muted"],
+            font=self._font(9),
+            anchor="w",
+            wraplength=250,
+        ).pack(fill="x")
+
+    def _connection_presentation(self, target: ClientTarget) -> tuple[str, str, str]:
+        if target.configured:
+            return "Connected", "Lians is available in this app", self.colors["green"]
+        if target.detected:
+            return "Ready to connect", "App found, Lians is not configured", self.colors["amber"]
+        return "Not found", "Install the app to connect Lians", self.colors["muted"]
+
+    def _connection_card(
+        self, parent: tk.Widget, key: str, target: ClientTarget, index: int
+    ) -> None:
+        card = tk.Frame(
+            parent,
+            background=self.colors["surface_soft"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            padx=14,
+            pady=7,
+        )
+        card.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=(0 if index == 0 else 5, 0 if index == 2 else 5),
+        )
+        name = "Claude" if key == "claude" else target.label
+        self._label(
+            card,
+            name,
+            background=self.colors["surface_soft"],
+            foreground=self.colors["text"],
+            font=self._font(11, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        status, detail, color = self._connection_presentation(target)
+        state = self._label(
+            card,
+            f"●  {status}",
+            background=self.colors["surface_soft"],
+            foreground=color,
+            font=self._font(9, "bold"),
+            anchor="w",
+        )
+        state.pack(fill="x", pady=(3, 0))
+        detail_label = self._label(
+            card,
+            detail,
+            background=self.colors["surface_soft"],
+            foreground=self.colors["muted"],
+            font=self._font(8),
+            anchor="w",
+            wraplength=250,
+        )
+        detail_label.pack(fill="x", pady=(2, 0))
+        self.target_labels[key] = state
+        self.target_details[key] = detail_label
 
     def _show_activity(self, activity: list[dict[str, Any]]) -> None:
         state = tuple((item["title"], item["time"], item["detail"]) for item in activity)
@@ -870,45 +1183,47 @@ class CompanionApp:
             empty = self._label(
                 self.activity_frame,
                 "No activity yet. Use a connected AI app and your lifeline will appear here.",
-                background=PANEL,
-                foreground=MUTED,
-                font=("Segoe UI", 10),
+                background=self.colors["surface"],
+                foreground=self.colors["muted"],
+                font=self._font(11),
                 anchor="w",
             )
-            empty.pack(fill="both", expand=True, pady=16)
+            empty.pack(fill="both", expand=True, pady=22)
             self.activity_labels.append(empty)
             return
         for index, item in enumerate(activity):
-            row = tk.Frame(self.activity_frame, background=PANEL, pady=5)
+            row = tk.Frame(self.activity_frame, background=self.colors["surface"], pady=6)
             row.pack(fill="x")
             heading = self._label(
                 row,
                 item["title"],
-                background=PANEL,
-                foreground=TEXT,
-                font=("Segoe UI", 9, "bold"),
+                background=self.colors["surface"],
+                foreground=self.colors["text"],
+                font=self._font(11, "bold"),
                 anchor="w",
             )
             heading.pack(side="left")
             self._label(
                 row,
                 item["time"],
-                background=PANEL,
-                foreground=MUTED,
-                font=("Segoe UI", 8),
+                background=self.colors["surface"],
+                foreground=self.colors["muted"],
+                font=self._font(9),
             ).pack(side="right")
             detail = self._label(
                 self.activity_frame,
                 item["detail"],
-                background=PANEL,
-                foreground=MUTED,
-                font=("Segoe UI", 8),
+                background=self.colors["surface"],
+                foreground=self.colors["muted"],
+                font=self._font(9),
                 anchor="w",
             )
-            detail.pack(fill="x", pady=(0, 4))
+            detail.pack(fill="x", pady=(0, 5))
             self.activity_labels.extend((heading, detail))
             if index < len(activity) - 1:
-                tk.Frame(self.activity_frame, background=LINE, height=1).pack(fill="x")
+                tk.Frame(
+                    self.activity_frame, background=self.colors["border"], height=1
+                ).pack(fill="x")
 
     def _start_bridge(self) -> None:
         def serve() -> None:
@@ -925,12 +1240,12 @@ class CompanionApp:
             return
         if self._bridge_error:
             self.status.set("Lians could not start")
-            self.status_dot.configure(foreground=RED)
+            self.status_dot.configure(foreground=self.colors["red"])
             self.notice.set(self._bridge_error)
             self.open_button.configure(state="disabled")
         elif self.bridge.running:
-            self.status.set("Lians is running in the background")
-            self.status_dot.configure(foreground=GREEN)
+            self.status.set("Lians is running")
+            self.status_dot.configure(foreground=self.colors["green"])
             self.open_button.configure(state="normal")
             try:
                 snapshot = lifeline_snapshot(self.bridge.store, limit=3)
@@ -949,19 +1264,88 @@ class CompanionApp:
                         f"About {snapshot['reduction_percent_estimate']}% less repeated context"
                     )
                 else:
-                    self.reduction_status.set("Waiting for the first context handoff")
+                    self.reduction_status.set("Waiting for your first context handoff")
                 self._show_activity(snapshot["activity"])
             except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
                 self.memory_status.set("Encrypted memory ready")
+        targets = client_targets()
         for key, label in self.target_labels.items():
-            target = client_targets()[key]
-            configured = target.configured
-            name = "Claude" if key == "claude" else target.label
+            status, detail, color = self._connection_presentation(targets[key])
             label.configure(
-                text=f"●  {name}",
-                foreground=GREEN if configured else MUTED,
+                text=f"●  {status}",
+                foreground=color,
             )
-        self.root.after(2000, self._refresh)
+            self.target_details[key].configure(text=detail)
+        self._refresh_job = self.root.after(2000, self._refresh)
+
+    def _toggle_theme(self) -> None:
+        if self._refresh_job is not None:
+            try:
+                self.root.after_cancel(self._refresh_job)
+            except tk.TclError:
+                pass
+            self._refresh_job = None
+        self.theme_name = "light" if self.theme_name == "dark" else "dark"
+        _save_companion_theme(self.theme_name)
+        self._build()
+        if sys.platform == "win32":
+            self.root.after(20, self._apply_windows_taskbar_style)
+        self._refresh()
+
+    def _apply_windows_taskbar_style(self) -> None:
+        if sys.platform != "win32":
+            return
+        try:
+            self.root.update_idletasks()
+            user32 = ctypes.windll.user32
+            handle = user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            style = user32.GetWindowLongW(handle, -20)
+            style = (style & ~0x00000080) | 0x00040000
+            user32.SetWindowLongW(handle, -20, style)
+            user32.SetWindowPos(handle, 0, 0, 0, 0, 0x0027)
+            self._window_handle = handle
+        except (AttributeError, OSError, tk.TclError):
+            self._window_handle = None
+
+    def _begin_drag(self, event: tk.Event) -> None:
+        if self._maximized:
+            return
+        self._drag_origin = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
+
+    def _drag_window(self, event: tk.Event) -> None:
+        if self._drag_origin is None or self._maximized:
+            return
+        start_x, start_y, window_x, window_y = self._drag_origin
+        self.root.geometry(f"+{window_x + event.x_root - start_x}+{window_y + event.y_root - start_y}")
+
+    def _toggle_maximize(self) -> None:
+        if self._maximized:
+            self.root.geometry(self._normal_geometry)
+            self._maximized = False
+            return
+        self._normal_geometry = self.root.geometry()
+        if sys.platform == "win32":
+            try:
+                class WorkArea(ctypes.Structure):
+                    _fields_ = [
+                        ("left", ctypes.c_long),
+                        ("top", ctypes.c_long),
+                        ("right", ctypes.c_long),
+                        ("bottom", ctypes.c_long),
+                    ]
+
+                area = WorkArea()
+                ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0)
+                self.root.geometry(
+                    f"{area.right - area.left}x{area.bottom - area.top}+{area.left}+{area.top}"
+                )
+            except (AttributeError, OSError, tk.TclError):
+                self.root.geometry(
+                    f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0"
+                )
+        else:
+            self.root.state("zoomed")
+        self._maximized = True
 
     def _open_dashboard(self) -> None:
         if self.bridge.running:
@@ -969,6 +1353,14 @@ class CompanionApp:
 
     def _minimize(self) -> None:
         self.notice.set("Lians is still running. Open it from the Windows taskbar when needed.")
+        if sys.platform == "win32" and self._window_handle is not None:
+            try:
+                ctypes.windll.user32.ShowWindow(self._window_handle, 6)
+                return
+            except (AttributeError, OSError):
+                pass
+        if sys.platform == "win32":
+            self.root.overrideredirect(False)
         self.root.iconify()
 
     def _stop(self) -> None:
@@ -977,6 +1369,12 @@ class CompanionApp:
         self._stopping = True
         self.status.set("Stopping Lians")
         self.open_button.configure(state="disabled")
+        if self._refresh_job is not None:
+            try:
+                self.root.after_cancel(self._refresh_job)
+            except tk.TclError:
+                pass
+            self._refresh_job = None
 
         def stop() -> None:
             self.bridge.shutdown()

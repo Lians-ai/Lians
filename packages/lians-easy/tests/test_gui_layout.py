@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -42,10 +43,25 @@ def test_primary_setup_action_fits_at_125_percent_scaling() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows desktop layout check")
-def test_resident_companion_is_clear_and_fits_at_125_percent_scaling() -> None:
+def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch) -> None:
     import tkinter as tk
 
     from lians_easy.gui import CompanionApp
+    from lians_easy.installer import ClientTarget
+
+    targets = {
+        "claude": ClientTarget(
+            "claude", "Claude Desktop", Path("claude.json"), detected=True, configured=True
+        ),
+        "codex": ClientTarget(
+            "codex", "Codex", Path("config.toml"), detected=True, configured=False
+        ),
+        "cursor": ClientTarget(
+            "cursor", "Cursor", Path("cursor.json"), detected=False, configured=False
+        ),
+    }
+    monkeypatch.setattr("lians_easy.gui.client_targets", lambda: targets)
+    monkeypatch.setattr("lians_easy.gui._save_companion_theme", lambda _theme: None)
 
     class FakeStore:
         def stats(self):
@@ -87,22 +103,37 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling() -> None:
     root = tk.Tk()
     try:
         root.tk.call("tk", "scaling", 1.75)
-        app = CompanionApp(root, FakeBridge(), start_bridge=False)
+        app = CompanionApp(root, FakeBridge(), start_bridge=False, theme="dark")
         root.update_idletasks()
         root.update()
         app._refresh()
         root.update_idletasks()
 
-        assert app.shell.winfo_reqwidth() <= root.winfo_width()
-        assert app.shell.winfo_reqheight() <= root.winfo_height()
+        assert app.shell.winfo_reqwidth() <= app.body_canvas.winfo_width()
+        assert app.body_canvas.winfo_height() <= root.winfo_height()
+        assert app.body_canvas.bbox("all")[3] >= app.body_canvas.winfo_height()
+        app.body_canvas.yview_moveto(1.0)
+        root.update_idletasks()
         assert app.open_button.winfo_ismapped()
+        assert app.open_button.winfo_rooty() < root.winfo_rooty() + root.winfo_height()
         assert str(app.open_button["state"]) == "normal"
-        assert app.status.get() == "Lians is running in the background"
+        assert app.status.get() == "Lians is running"
         assert app.memory_status.get() == "3 saved memories"
         assert app.token_value.get() == "~3,000"
         assert app.event_value.get() == "7"
         assert app.reuse_value.get() == "12"
         assert app.reduction_status.get() == "About 75% less repeated context"
         assert any(label["text"] == "Codex · Lians" for label in app.activity_labels)
+        assert app.font_family == "Sora"
+        assert bool(root.overrideredirect())
+        assert app.target_labels["claude"]["text"] == "●  Connected"
+        assert app.target_labels["codex"]["text"] == "●  Ready to connect"
+        assert app.target_labels["cursor"]["text"] == "●  Not found"
+
+        app._toggle_theme()
+        root.update_idletasks()
+        assert app.theme_name == "light"
+        assert app.theme_button["text"] == "Dark mode"
+        assert app.shell["background"] == "#F5F7FB"
     finally:
         root.destroy()

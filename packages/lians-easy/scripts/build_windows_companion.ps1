@@ -47,6 +47,7 @@ python -m PyInstaller `
     --name LiansMemory `
     --paths $packageRoot `
     --add-data "$(Join-Path $packageRoot 'lians_easy/app');lians_easy/app" `
+    --add-data "$(Join-Path $packageRoot 'lians_easy/desktop');lians_easy/desktop" `
     --icon (Join-Path $packageRoot "windows-lians.ico") `
     --version-file (Join-Path $packageRoot "windows-version-info.txt") `
     --workpath $workRoot `
