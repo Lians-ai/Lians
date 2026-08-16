@@ -45,7 +45,7 @@ class SetupApp:
         self.other_visible = False
         self.open_requested = False
 
-        self.root.title("Lians — AI Efficiency")
+        self.root.title("Lians AI Efficiency")
         self.root.geometry("780x720")
         self.root.minsize(680, 620)
         self.root.configure(background=BACKGROUND)
