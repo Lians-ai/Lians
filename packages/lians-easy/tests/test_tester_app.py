@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 import pytest
-from lians_easy.claude_experiment import ClaudeExperimentError
+from lians_easy.agent_experiment import AgentExperimentError
 from lians_easy.tester_app import TesterApplication as LocalTesterApplication
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +21,10 @@ def fake_report() -> dict[str, object]:
 
     return {
         "status": "completed",
+        "provider": "claude",
+        "measurement": {
+            "label": "Claude CLI reported input tokens",
+        },
         "fixture": {"name": "synthetic-test"},
         "auth": {
             "logged_in": True,
@@ -46,7 +50,8 @@ def fake_report() -> dict[str, object]:
 
 @pytest.fixture
 def running_app() -> Iterator[tuple[LocalTesterApplication, str]]:
-    def preflight() -> dict[str, object]:
+    def preflight(provider: str) -> dict[str, object]:
+        assert provider == "claude"
         return {
             "logged_in": True,
             "auth_method": "claude.ai",
@@ -56,7 +61,11 @@ def running_app() -> Iterator[tuple[LocalTesterApplication, str]]:
         }
 
     def runner(**kwargs: object) -> dict[str, object]:
-        assert kwargs == {"scenario": "market-research", "repetitions": 2}
+        assert kwargs == {
+            "provider": "claude",
+            "scenario": "market-research",
+            "repetitions": 2,
+        }
         return fake_report()
 
     app = LocalTesterApplication(
@@ -79,10 +88,16 @@ def read(url: str) -> tuple[int, dict[str, str], bytes]:
         return response.status, dict(response.headers), response.read()
 
 
-def post(base_url: str, route: str, *, origin: str | None = None) -> dict[str, object]:
+def post(
+    base_url: str,
+    route: str,
+    *,
+    payload: dict[str, object] | None = None,
+    origin: str | None = None,
+) -> dict[str, object]:
     request = Request(
         base_url + route,
-        data=b"{}",
+        data=json.dumps(payload or {}).encode("utf-8"),
         method="POST",
         headers={
             "Content-Type": "application/json",
@@ -112,7 +127,7 @@ def test_tester_uses_the_product_theme_and_plain_large_copy() -> None:
     assert 'font-family: "Sora"' in guide
     assert "clamp(48px, 8vw, 88px)" in css
     assert "<h1>See how much context Lians can cut</h1>" in combined
-    assert "<h1>Test Lians with Claude Pro</h1>" in combined
+    assert "<h1>Test Lians with your AI account</h1>" in combined
     assert "eyebrow" not in combined.lower()
     assert "\N{EM DASH}" not in combined
 
@@ -135,13 +150,14 @@ def test_assets_and_status_are_local_and_do_not_leak_private_auth_fields(
         assert headers["Cache-Control"] == "no-store"
         assert "default-src 'self'" in headers["Content-Security-Policy"]
 
-    _, _, payload = read(base_url + "api/status")
+    _, _, payload = read(base_url + "api/status?provider=claude")
     status_payload = json.loads(payload)
     assert status_payload == {
         "ready": True,
         "auth_method": "claude.ai",
         "provider": "firstParty",
-        "message": "Claude subscription is ready",
+        "provider_name": "Claude",
+        "message": "Claude account is ready",
     }
     assert b"private@example.com" not in payload
     assert b"claude.exe" not in payload
@@ -160,9 +176,12 @@ def test_run_returns_a_small_summary_and_downloads_the_full_report(
     running_app: tuple[LocalTesterApplication, str],
 ) -> None:
     _, base_url = running_app
-    result = post(base_url, "api/run")
+    result = post(base_url, "api/run", payload={"provider": "claude"})
 
     assert result == {
+        "provider": "claude",
+        "provider_name": "Claude",
+        "measurement_label": "Claude CLI reported input tokens",
         "reduction_percent": 75.0,
         "full_input_tokens": 12000.0,
         "lians_input_tokens": 3000.0,
@@ -193,8 +212,9 @@ def test_wrong_session_path_and_cross_origin_posts_are_refused(
 def test_preflight_failure_returns_a_safe_readiness_result() -> None:
     secret = "never-return-this-secret"
 
-    def preflight() -> dict[str, object]:
-        raise ClaudeExperimentError("Claude Code is not signed in")
+    def preflight(provider: str) -> dict[str, object]:
+        assert provider == "claude"
+        raise AgentExperimentError("Claude Code is not signed in")
 
     app = LocalTesterApplication(
         token="failure-test-token-1234",
@@ -204,11 +224,12 @@ def test_preflight_failure_returns_a_safe_readiness_result() -> None:
     thread = threading.Thread(target=app.serve_forever, daemon=True)
     thread.start()
     try:
-        _, _, payload = read(app.base_url + "api/status")
+        _, _, payload = read(app.base_url + "api/status?provider=claude")
         assert json.loads(payload) == {
             "ready": False,
             "auth_method": None,
             "provider": None,
+            "provider_name": "Claude",
             "message": "Claude Code is not signed in",
         }
         assert secret.encode() not in payload

@@ -13,27 +13,29 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
-from lians_easy.claude_experiment import (
-    ClaudeExperimentError,
-    claude_preflight,
-    run_claude_experiment,
+from lians_easy.agent_experiment import (
+    PROVIDERS,
+    PROVIDER_NAMES,
+    AgentExperimentError,
+    provider_preflight,
+    run_provider_experiment,
 )
 
-Preflight = Callable[[], Mapping[str, Any]]
+Preflight = Callable[[str], Mapping[str, Any]]
 ExperimentRunner = Callable[..., dict[str, Any]]
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 _MAX_REQUEST_BODY = 1024
 _AUTO_CLOSE_SECONDS = 60 * 60
 
 
-def _default_preflight() -> Mapping[str, Any]:
-    return claude_preflight()
+def _default_preflight(provider: str) -> Mapping[str, Any]:
+    return provider_preflight(provider)
 
 
 def _default_runner(**kwargs: Any) -> dict[str, Any]:
-    return run_claude_experiment(**kwargs)
+    return run_provider_experiment(**kwargs)
 
 
 def _asset_bytes(name: str) -> bytes:
@@ -62,7 +64,17 @@ def _summary(report: Mapping[str, Any]) -> dict[str, Any]:
     lians_tokens = float(bounded["average_provider_reported_total_input_tokens"])
     all_runs = [*full["runs"], *bounded["runs"]]
     exact_answers = sum(bool(run["quality"]["passed"]) for run in all_runs)
+    provider = str(report.get("provider", "claude"))
+    measurement = report.get("measurement")
+    measurement_label = (
+        str(measurement.get("label"))
+        if isinstance(measurement, Mapping) and measurement.get("label")
+        else f"{PROVIDER_NAMES.get(provider, provider.title())} CLI reported input tokens"
+    )
     return {
+        "provider": provider,
+        "provider_name": PROVIDER_NAMES.get(provider, provider.title()),
+        "measurement_label": measurement_label,
         "reduction_percent": comparison["provider_reported_input_token_reduction_percent"],
         "full_input_tokens": full_tokens,
         "lians_input_tokens": lians_tokens,
@@ -94,6 +106,7 @@ class TesterApplication:
         self.experiment_runner = experiment_runner
         self.auto_close_seconds = auto_close_seconds
         self.report: dict[str, Any] | None = None
+        self.report_provider: str | None = None
         self.running = False
         self._state_lock = threading.Lock()
         self._server_lock = threading.Lock()
@@ -174,7 +187,7 @@ class TesterApplication:
                     self._asset(route)
                     return
                 if route == "api/status":
-                    self._status()
+                    self._status(self._query_provider())
                     return
                 if route == "api/report":
                     self._report()
@@ -209,12 +222,25 @@ class TesterApplication:
                 except json.JSONDecodeError:
                     self._json_error(HTTPStatus.BAD_REQUEST, "JSON is not valid")
                     return
-                if not isinstance(payload, dict) or payload:
-                    self._json_error(HTTPStatus.BAD_REQUEST, "Request must be an empty object")
-                    return
                 if route == "api/run":
-                    self._run()
+                    if not isinstance(payload, dict) or set(payload) != {"provider"}:
+                        self._json_error(
+                            HTTPStatus.BAD_REQUEST,
+                            "Request must contain one provider",
+                        )
+                        return
+                    provider = payload.get("provider")
+                    if not isinstance(provider, str) or provider not in PROVIDERS:
+                        self._json_error(HTTPStatus.BAD_REQUEST, "Provider is not supported")
+                        return
+                    self._run(provider)
                 else:
+                    if not isinstance(payload, dict) or payload:
+                        self._json_error(
+                            HTTPStatus.BAD_REQUEST,
+                            "Request must be an empty object",
+                        )
+                        return
                     self._send_json({"closed": True})
                     threading.Thread(target=application.shutdown, daemon=True).start()
 
@@ -231,15 +257,30 @@ class TesterApplication:
             def _valid_origin(self) -> bool:
                 return self.headers.get("Origin") == application.base_url.rstrip("/")
 
-            def _status(self) -> None:
+            def _query_provider(self) -> str | None:
                 try:
-                    auth = application.preflight()
-                except ClaudeExperimentError as error:
+                    query = parse_qs(urlsplit(self.path).query, strict_parsing=True)
+                except ValueError:
+                    return None
+                values = query.get("provider")
+                if set(query) != {"provider"} or not values or len(values) != 1:
+                    return None
+                provider = values[0]
+                return provider if provider in PROVIDERS else None
+
+            def _status(self, provider: str | None) -> None:
+                if provider is None:
+                    self._json_error(HTTPStatus.BAD_REQUEST, "Provider is not supported")
+                    return
+                try:
+                    auth = application.preflight(provider)
+                except AgentExperimentError as error:
                     self._send_json(
                         {
                             "ready": False,
                             "auth_method": None,
                             "provider": None,
+                            "provider_name": PROVIDER_NAMES[provider],
                             "message": str(error),
                         }
                     )
@@ -251,7 +292,8 @@ class TesterApplication:
                             "ready": False,
                             "auth_method": None,
                             "provider": None,
-                            "message": "Claude readiness could not be checked",
+                            "provider_name": PROVIDER_NAMES[provider],
+                            "message": f"{PROVIDER_NAMES[provider]} readiness could not be checked",
                         }
                     )
                     return
@@ -260,11 +302,12 @@ class TesterApplication:
                         "ready": True,
                         "auth_method": auth.get("auth_method"),
                         "provider": auth.get("provider"),
-                        "message": "Claude subscription is ready",
+                        "provider_name": PROVIDER_NAMES[provider],
+                        "message": f"{PROVIDER_NAMES[provider]} account is ready",
                     }
                 )
 
-            def _run(self) -> None:
+            def _run(self, provider: str) -> None:
                 with application._state_lock:
                     if application.running:
                         self._json_error(HTTPStatus.CONFLICT, "A test is already running")
@@ -272,19 +315,21 @@ class TesterApplication:
                     application.running = True
                 try:
                     report = application.experiment_runner(
+                        provider=provider,
                         scenario="market-research",
                         repetitions=2,
                     )
                     result = _summary(report)
                     application.report = report
-                except (ClaudeExperimentError, KeyError, TypeError, ValueError) as error:
+                    application.report_provider = provider
+                except (AgentExperimentError, KeyError, TypeError, ValueError) as error:
                     self._json_error(HTTPStatus.BAD_REQUEST, str(error))
                     return
                 except Exception:  # noqa: BLE001
                     # Provider and process errors are intentionally replaced with safe copy.
                     self._json_error(
                         HTTPStatus.INTERNAL_SERVER_ERROR,
-                        "The research test could not finish",
+                        f"The {PROVIDER_NAMES[provider]} test could not finish",
                     )
                     return
                 finally:
@@ -301,7 +346,10 @@ class TesterApplication:
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header(
                     "Content-Disposition",
-                    'attachment; filename="lians-claude-research-report.json"',
+                    (
+                        'attachment; filename="lians-'
+                        f'{application.report_provider or "ai"}-research-report.json"'
+                    ),
                 )
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
@@ -341,7 +389,7 @@ class TesterApplication:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the local Lians Claude research test")
+    parser = argparse.ArgumentParser(description="Run the local Lians AI context test")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--token")
     parser.add_argument("--no-browser", action="store_true")

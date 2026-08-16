@@ -109,6 +109,45 @@ h2 {
   line-height: 1.65;
 }
 
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 30px 0 22px;
+}
+
+.provider-option {
+  min-height: 132px;
+  align-items: flex-start;
+  flex-direction: column;
+  padding: 24px;
+  border-color: #253247;
+  background: #0b1019;
+  text-align: left;
+}
+
+.provider-option:hover:not(:disabled) {
+  border-color: #5f8eff;
+  background: #111827;
+}
+
+.provider-option.selected {
+  border-color: #3777ff;
+  background: rgba(55, 119, 255, 0.16);
+  box-shadow: inset 0 0 0 1px #3777ff;
+}
+
+.provider-option strong {
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.provider-option span {
+  color: #9eacc0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
 .status-row {
   display: flex;
   align-items: center;
@@ -310,6 +349,15 @@ footer {
 
   .metrics {
     grid-template-columns: 1fr;
+  }
+
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-option {
+    width: 100%;
+    min-height: 104px;
   }
 
   button,

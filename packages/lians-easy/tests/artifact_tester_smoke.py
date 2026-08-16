@@ -61,7 +61,7 @@ def main() -> int:
         assert hashlib.sha256(assets["favicon.png"]).hexdigest() == (
             "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
         )
-        with urlopen(base_url + "api/status", timeout=10) as response:
+        with urlopen(base_url + "api/status?provider=cursor", timeout=10) as response:
             status = json.loads(response.read())
         assert isinstance(status["ready"], bool)
 

@@ -14,12 +14,12 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [StringStruct(u'CompanyName', u'Lians'),
-        StringStruct(u'FileDescription', u'Lians Claude research test'),
+        StringStruct(u'FileDescription', u'Lians AI context test'),
         StringStruct(u'FileVersion', u'0.5.0'),
-        StringStruct(u'InternalName', u'LiansResearchTest'),
+        StringStruct(u'InternalName', u'LiansContextTest'),
         StringStruct(u'LegalCopyright', u'Copyright Lians'),
-        StringStruct(u'OriginalFilename', u'LiansResearchTest.exe'),
-        StringStruct(u'ProductName', u'Lians Research Test'),
+        StringStruct(u'OriginalFilename', u'LiansContextTest.exe'),
+        StringStruct(u'ProductName', u'Lians AI Context Test'),
         StringStruct(u'ProductVersion', u'0.5.0')])
     ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
