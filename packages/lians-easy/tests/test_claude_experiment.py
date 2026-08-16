@@ -79,8 +79,27 @@ def test_preflight_rejects_non_anthropic_provider_route() -> None:
         )
 
 
-def test_live_comparison_uses_isolated_bare_calls_and_scores_exact_answers() -> None:
-    calls: list[tuple[list[str], str | None]] = []
+def test_preflight_accepts_current_claude_ai_subscription_label() -> None:
+    payload = json.dumps(
+        {
+            "loggedIn": True,
+            "authMethod": "claude.ai",
+            "apiProvider": "firstParty",
+        }
+    )
+
+    result = claude_experiment.claude_preflight(
+        environment={},
+        executable="claude",
+        run_command=lambda *args, **kwargs: completed(payload),
+    )
+
+    assert result["auth_method"] == "claude.ai"
+    assert result["provider"] == "firstParty"
+
+
+def test_live_comparison_uses_isolated_subscription_calls_and_scores_exact_answers() -> None:
+    calls: list[tuple[list[str], str | None, str | None]] = []
     answer = json.dumps(
         {
             "campaign_codename": "Lotus Lantern",
@@ -91,7 +110,7 @@ def test_live_comparison_uses_isolated_bare_calls_and_scores_exact_answers() -> 
     )
 
     def runner(command, **kwargs):  # type: ignore[no-untyped-def]
-        calls.append((command, kwargs.get("input")))
+        calls.append((command, kwargs.get("input"), kwargs.get("cwd")))
         if command[1:3] == ["auth", "status"]:
             return completed(
                 json.dumps(
@@ -130,11 +149,14 @@ def test_live_comparison_uses_isolated_bare_calls_and_scores_exact_answers() -> 
     assert result["comparison"]["both_variants_answered_correctly"] is True
     assert result["comparison"]["provider_reported_input_token_reduction_percent"] > 70
     assert len(calls) == 3
-    for command, prompt in calls[1:]:
+    for command, prompt, working_directory in calls[1:]:
         assert prompt
-        assert "--bare" in command
+        assert working_directory
+        assert "--bare" not in command
         assert command[command.index("--tools") + 1] == ""
         assert "--strict-mcp-config" in command
+        assert command[command.index("--setting-sources") + 1] == ""
+        assert "--disable-slash-commands" in command
         assert "--no-session-persistence" in command
         assert command[command.index("--max-turns") + 1] == "1"
 

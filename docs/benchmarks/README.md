@@ -35,7 +35,9 @@ are not directly comparable to LLM-judged answer-accuracy leaderboards.
 
 - [Claude Code bounded-context baseline](claude-code-baseline.md) defines an
   offline-first paired test of full replay and Lians-selected context, with a
-  fail-closed subscription-auth preflight before any live call.
+  fail-closed subscription-auth preflight before any live call. Its first
+  [sanitized smoke report](claude-code-baseline-2026-08-15.json) preserved both
+  exact answers while reporting 15.9% fewer input tokens in one synthetic run.
 - [Cross-agent memory evidence, August 14, 2026](cross-agent-memory-2026-08-14.md)
   records a live Cursor-to-Claude handoff, confirmed deletion, a balanced Cursor
   native-rule comparison, and the exact platform blockers observed during the

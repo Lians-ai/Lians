@@ -148,6 +148,14 @@ def build_experiment_plan(*, max_context_tokens: int = 256) -> ExperimentPlan:
         "status": "planned",
         "experiment": "claude-full-replay-vs-lians-bounded-context",
         "lane": "claude-code-print-mode",
+        "execution_isolation": {
+            "temporary_working_directory": True,
+            "setting_sources": [],
+            "tools_enabled": False,
+            "skills_enabled": False,
+            "mcp_mode": "strict-empty",
+            "session_persistence": False,
+        },
         "fixture": {
             "name": "synthetic-market-research-project-v1",
             "synthetic": True,
@@ -248,7 +256,12 @@ def claude_preflight(
             "Live test stopped: Claude Code is authenticated by API key, not subscription. "
             "Switch Claude Code to the intended subscription before running the comparison."
         )
-    if "oauth" not in method_key and "subscription" not in method_key:
+    subscription_method = (
+        "oauth" in method_key
+        or "subscription" in method_key
+        or method_key == "claude.ai"
+    )
+    if not subscription_method:
         raise ClaudeExperimentError(
             "Live test stopped: Claude Code authentication could not be verified as a "
             "subscription session. Check `claude auth status` before retrying."
@@ -303,6 +316,7 @@ def _run_prompt(
     *,
     model: str,
     executable: str,
+    working_directory: str,
     run_command: CommandRunner,
 ) -> dict[str, Any]:
     command = [
@@ -310,10 +324,12 @@ def _run_prompt(
         "-p",
         "--output-format",
         "json",
-        "--bare",
         "--tools",
         "",
         "--strict-mcp-config",
+        "--setting-sources",
+        "",
+        "--disable-slash-commands",
         "--no-session-persistence",
         "--max-turns",
         "1",
@@ -330,6 +346,7 @@ def _run_prompt(
         errors="replace",
         timeout=180,
         check=False,
+        cwd=working_directory,
     )
     duration = round(time.perf_counter() - started, 3)
     if completed.returncode != 0:
@@ -385,21 +402,23 @@ def run_claude_experiment(
     plan = build_experiment_plan(max_context_tokens=max_context_tokens)
     prompts = {"full_replay": plan.full_prompt, "lians_bounded": plan.lians_prompt}
     results: dict[str, list[dict[str, Any]]] = {"full_replay": [], "lians_bounded": []}
-    for repetition in range(repetitions):
-        order = (
-            ("full_replay", "lians_bounded")
-            if repetition % 2 == 0
-            else ("lians_bounded", "full_replay")
-        )
-        for variant in order:
-            run = _run_prompt(
-                prompts[variant],
-                model=model,
-                executable=str(auth["executable"]),
-                run_command=run_command,
+    with TemporaryDirectory(prefix="lians-claude-calls-") as working_directory:
+        for repetition in range(repetitions):
+            order = (
+                ("full_replay", "lians_bounded")
+                if repetition % 2 == 0
+                else ("lians_bounded", "full_replay")
             )
-            run["repetition"] = repetition + 1
-            results[variant].append(run)
+            for variant in order:
+                run = _run_prompt(
+                    prompts[variant],
+                    model=model,
+                    executable=str(auth["executable"]),
+                    working_directory=working_directory,
+                    run_command=run_command,
+                )
+                run["repetition"] = repetition + 1
+                results[variant].append(run)
 
     full = _aggregate(results["full_replay"])
     bounded = _aggregate(results["lians_bounded"])
