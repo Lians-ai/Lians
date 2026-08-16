@@ -39,33 +39,33 @@ RED = "#ff6d83"
 
 COMPANION_THEMES = {
     "dark": {
-        "background": "#05070A",
-        "surface": "#0A1019",
-        "surface_soft": "#101824",
-        "border": "#1F2A3A",
-        "grid": "#111A28",
-        "grid_strong": "#22314A",
-        "text": "#F7F9FC",
-        "muted": "#A4AFBF",
-        "blue": "#3777FF",
-        "blue_hover": "#2D68E5",
-        "blue_soft": "#10224A",
-        "green": "#50E3A4",
+        "background": "#030405",
+        "surface": "#080A0D",
+        "surface_soft": "#0D1014",
+        "border": "#1A1E25",
+        "grid": "#10141B",
+        "grid_strong": "#222B3A",
+        "text": "#EEF1F5",
+        "muted": "#828B98",
+        "blue": "#315FE9",
+        "blue_hover": "#294FC2",
+        "blue_soft": "#0C1633",
+        "green": "#4BC99B",
         "amber": "#F2BE5C",
         "red": "#FF7087",
     },
     "light": {
-        "background": "#F5F7FB",
-        "surface": "#FFFFFF",
-        "surface_soft": "#EAF0F8",
-        "border": "#D6DFEA",
-        "grid": "#E4E9F1",
-        "grid_strong": "#C8D2E0",
-        "text": "#07111F",
-        "muted": "#566477",
-        "blue": "#245FF5",
-        "blue_hover": "#1B50D5",
-        "blue_soft": "#E5EDFF",
+        "background": "#F1F0EC",
+        "surface": "#FAFAF8",
+        "surface_soft": "#EAE9E4",
+        "border": "#D7D5CF",
+        "grid": "#E4E2DC",
+        "grid_strong": "#C8CDD8",
+        "text": "#15171A",
+        "muted": "#626A74",
+        "blue": "#3159C8",
+        "blue_hover": "#284BAA",
+        "blue_soft": "#E2E8F8",
         "green": "#087F58",
         "amber": "#9A6500",
         "red": "#C93651",
@@ -128,6 +128,24 @@ def _register_sora(root: tk.Tk) -> str:
     except tk.TclError:
         pass
     return "Segoe UI"
+
+
+def _display_font(root: tk.Tk, fallback: str) -> str:
+    """Use a quieter Japanese UI face for display copy when Windows has it."""
+    try:
+        families = set(tkfont.families(root))
+    except tk.TclError:
+        return fallback
+    for candidate in (
+        "Yu Mincho",
+        "Yu Gothic UI",
+        "Yu Gothic",
+        fallback,
+        "Segoe UI",
+    ):
+        if candidate in families:
+            return candidate
+    return fallback
 
 
 def _saved_companion_theme() -> str:
@@ -763,6 +781,7 @@ class CompanionApp:
         self.theme_name = theme if theme in COMPANION_THEMES else _saved_companion_theme()
         self.colors = COMPANION_THEMES[self.theme_name]
         self.font_family = _register_sora(root)
+        self.display_font_family = _display_font(root, self.font_family)
         self.target_labels: dict[str, tk.Label] = {}
         self.target_details: dict[str, tk.Label] = {}
         self.activity_labels: list[tk.Label] = []
@@ -774,10 +793,8 @@ class CompanionApp:
         self.token_value = tk.StringVar(value="0")
         self.event_value = tk.StringVar(value="0")
         self.reuse_value = tk.StringVar(value="0")
-        self.reduction_status = tk.StringVar(value="Waiting for your first context handoff")
-        self.notice = tk.StringVar(
-            value="Token savings are estimates from encrypted local context receipts."
-        )
+        self.reduction_status = tk.StringVar(value="Waiting for the first handoff")
+        self.notice = tk.StringVar(value="Estimates from encrypted local receipts.")
 
         self.root.title("Lians")
         self.root.geometry(self._normal_geometry)
@@ -803,6 +820,9 @@ class CompanionApp:
 
     def _font(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
         return (self.font_family, size, weight)
+
+    def _display(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
+        return (self.display_font_family, size, weight)
 
     def _label(self, parent: tk.Widget, text: str = "", **kwargs: Any) -> tk.Label:
         return tk.Label(
@@ -831,12 +851,33 @@ class CompanionApp:
             self.lotus_mark = None
 
     @staticmethod
-    def _ease_out_cubic(value: float) -> float:
+    def _ease_out_expo(value: float) -> float:
         bounded = min(1.0, max(0.0, value))
-        return 1 - (1 - bounded) ** 3
+        return 1.0 if bounded == 1.0 else 1 - 2 ** (-10 * bounded)
+
+    @staticmethod
+    def _lotus_petals(center_x: float, center_y: float, scale: float) -> list[list[float]]:
+        """Return seven smooth Lotus petals in back-to-front drawing order."""
+        petals = (
+            ((-4, 26), (-84, 6), (-112, -22), (-58, -18)),
+            ((4, 26), (84, 6), (112, -22), (58, -18)),
+            ((-2, 28), (-68, -16), (-82, -54), (-31, -34)),
+            ((2, 28), (68, -16), (82, -54), (31, -34)),
+            ((0, 30), (-38, -42), (-37, -82), (-7, -48)),
+            ((0, 30), (38, -42), (37, -82), (7, -48)),
+            ((0, 28), (-22, -28), (0, -92), (22, -28)),
+        )
+        return [
+            [
+                coordinate
+                for x, y in petal
+                for coordinate in (center_x + x * scale, center_y + y * scale)
+            ]
+            for petal in petals
+        ]
 
     def _build_intro(self) -> None:
-        """Play a brief native boot sequence while the local bridge starts."""
+        """Contract a single wordless Lotus while the local bridge starts."""
         for child in self.root.winfo_children():
             child.destroy()
         self.root.configure(background="#020407")
@@ -849,7 +890,7 @@ class CompanionApp:
         self.intro_canvas.pack(fill="both", expand=True)
         self._intro_started = time.monotonic()
         self._animate_intro()
-        self._intro_job = self.root.after(1350, self._finish_intro)
+        self._intro_job = self.root.after(760, self._finish_intro)
 
     def _animate_intro(self) -> None:
         if self._stopping or not self.intro_canvas.winfo_exists():
@@ -858,118 +899,35 @@ class CompanionApp:
         width = max(1, canvas.winfo_width())
         height = max(1, canvas.winfo_height())
         elapsed = time.monotonic() - self._intro_started
-        progress = min(1.0, elapsed / 1.25)
-        eased = self._ease_out_cubic(progress)
+        progress = min(1.0, elapsed / 0.68)
+        eased = self._ease_out_expo(progress)
         center_x = width / 2
-        center_y = height / 2 - 34
+        center_y = height / 2 + 18
         canvas.delete("intro-motion")
-
-        spacing = 74
-        grid_reveal = min(1.0, progress * 2.4)
-        grid_color = "#0B1422" if grid_reveal > 0.35 else "#07101B"
-        for x in range(0, width + spacing, spacing):
-            canvas.create_line(
-                x,
-                0,
-                x,
-                height,
-                fill=grid_color,
-                width=1,
+        start_scale = max(width / 180, height / 76) * 1.18
+        end_scale = 0.72
+        scale = end_scale + (start_scale - end_scale) * (1 - eased)
+        colors = (
+            "#142A68",
+            "#142A68",
+            "#1B3B91",
+            "#1B3B91",
+            "#244DBA",
+            "#244DBA",
+            "#315FE9",
+        )
+        for points, color in zip(
+            self._lotus_petals(center_x, center_y, scale), colors
+        ):
+            canvas.create_polygon(
+                points,
+                fill=color,
+                outline="",
+                smooth=True,
+                splinesteps=22,
                 tags="intro-motion",
             )
-        for y in range(0, height + spacing, spacing):
-            canvas.create_line(
-                0,
-                y,
-                width,
-                y,
-                fill=grid_color,
-                width=1,
-                tags="intro-motion",
-            )
-
-        radius = 90 + 20 * math.sin(elapsed * 3.2)
-        for ring, color in ((0, "#173B82"), (18, "#0C2454"), (36, "#08172E")):
-            extent = max(1, 360 * min(1.0, progress * 1.8 - ring / 220))
-            canvas.create_arc(
-                center_x - radius - ring,
-                center_y - radius - ring,
-                center_x + radius + ring,
-                center_y + radius + ring,
-                start=90,
-                extent=-extent,
-                style="arc",
-                outline=color,
-                width=2 if ring == 0 else 1,
-                tags="intro-motion",
-            )
-
-        field_width = min(620, width * 0.64)
-        for index in range(42):
-            x = center_x - field_width / 2 + field_width * index / 41
-            amplitude = 22 + 34 * math.exp(-((index - 20.5) / 10) ** 2)
-            y = center_y + math.sin(index * 0.72 + elapsed * 5) * amplitude
-            if abs(x - center_x) > 82:
-                canvas.create_oval(
-                    x - 2,
-                    y - 2,
-                    x + 2,
-                    y + 2,
-                    fill="#2259C7" if index % 3 else "#3777FF",
-                    outline="",
-                    tags="intro-motion",
-                )
-
-        if self.lotus_mark is not None and progress > 0.12:
-            canvas.create_image(
-                center_x,
-                center_y,
-                image=self.lotus_mark,
-                tags="intro-motion",
-            )
-        canvas.create_text(
-            center_x,
-            center_y + 112,
-            text="Lians",
-            fill="#F7F9FC",
-            font=self._font(28, "bold"),
-            tags="intro-motion",
-        )
-        status = (
-            "Starting your agent lifeline"
-            if progress < 0.58
-            else "Connecting Claude, Codex, and Cursor"
-            if progress < 0.88
-            else "Ready"
-        )
-        canvas.create_text(
-            center_x,
-            center_y + 154,
-            text=status,
-            fill="#93A4BC",
-            font=self._font(10),
-            tags="intro-motion",
-        )
-        bar_width = min(360, width * 0.42)
-        canvas.create_rectangle(
-            center_x - bar_width / 2,
-            center_y + 184,
-            center_x + bar_width / 2,
-            center_y + 187,
-            fill="#111B2B",
-            outline="",
-            tags="intro-motion",
-        )
-        canvas.create_rectangle(
-            center_x - bar_width / 2,
-            center_y + 184,
-            center_x - bar_width / 2 + bar_width * eased,
-            center_y + 187,
-            fill="#3777FF",
-            outline="",
-            tags="intro-motion",
-        )
-        self._intro_frame_job = self.root.after(33, self._animate_intro)
+        self._intro_frame_job = self.root.after(42, self._animate_intro)
 
     def _finish_intro(self) -> None:
         self._intro_job = None
@@ -1040,93 +998,52 @@ class CompanionApp:
         )
         self.root.bind("<MouseWheel>", self._scroll_body)
 
-        top = tk.Frame(self.shell, background=self.colors["background"])
-        top.pack(fill="x")
-        if self.logo is not None:
-            tk.Label(top, image=self.logo, background=self.colors["background"]).pack(
-                side="left"
-            )
-        else:
-            self._label(
-                top,
-                "lians",
-                foreground=self.colors["blue"],
-                font=self._font(30, "bold"),
-            ).pack(side="left")
-
-        status_card = tk.Frame(
-            top,
-            background=self.colors["surface"],
-            highlightbackground=self.colors["border"],
-            highlightthickness=1,
-            padx=15,
-            pady=9,
-        )
-        status_card.pack(side="right")
-        self.status_dot = self._label(
-            status_card,
-            "●",
-            background=self.colors["surface"],
-            foreground=self.colors["blue"],
-            font=self._font(12, "bold"),
-        )
-        self.status_dot.pack(side="left", padx=(0, 8))
-        self._label(
-            status_card,
-            textvariable=self.status,
-            background=self.colors["surface"],
-            foreground=self.colors["text"],
-            font=self._font(11, "bold"),
-        ).pack(side="left")
-
         hero = tk.Frame(
             self.shell,
             background=self.colors["surface"],
             highlightbackground=self.colors["border"],
             highlightthickness=1,
-            padx=26,
-            pady=20,
+            padx=28,
+            pady=24,
         )
-        hero.pack(fill="x", pady=(15, 14))
+        hero.pack(fill="x", pady=(0, 14))
         hero_left = tk.Frame(hero, background=self.colors["surface"])
         hero_left.pack(side="left", fill="both", expand=True, padx=(0, 24))
+        state = tk.Frame(hero_left, background=self.colors["surface"])
+        state.pack(fill="x", pady=(0, 15))
+        self.status_dot = self._label(
+            state,
+            "●",
+            background=self.colors["surface"],
+            foreground=self.colors["blue"],
+            font=self._font(9, "bold"),
+        )
+        self.status_dot.pack(side="left", padx=(0, 7))
+        self._label(
+            state,
+            textvariable=self.status,
+            background=self.colors["surface"],
+            foreground=self.colors["muted"],
+            font=self._font(10, "bold"),
+        ).pack(side="left")
         self._label(
             hero_left,
-            "Your agent lifeline.",
+            "Agent lifeline",
             background=self.colors["surface"],
             foreground=self.colors["text"],
-            font=self._font(34, "bold"),
+            font=self._display(34, "bold"),
             anchor="w",
         ).pack(fill="x")
         self._label(
             hero_left,
-            "See the context Lians carries forward and the repeated tokens it keeps out.",
+            "Less repeated context across Claude, Codex, and Cursor.",
             background=self.colors["surface"],
             foreground=self.colors["muted"],
-            font=self._font(12),
+            font=self._font(11),
             anchor="w",
             justify="left",
             wraplength=560,
-        ).pack(fill="x", pady=(6, 15))
-        qualities = tk.Frame(hero_left, background=self.colors["surface"])
-        qualities.pack(fill="x")
-        for index, text in enumerate(("Local", "Private", "Always on")):
-            chip = tk.Frame(
-                qualities,
-                background=self.colors["surface_soft"],
-                highlightbackground=self.colors["border"],
-                highlightthickness=1,
-                padx=11,
-                pady=5,
-            )
-            chip.pack(side="left", padx=(0 if index == 0 else 7, 0))
-            self._label(
-                chip,
-                f"●  {text}",
-                background=self.colors["surface_soft"],
-                foreground=self.colors["green"] if index == 2 else self.colors["muted"],
-                font=self._font(9, "bold"),
-            ).pack()
+        ).pack(fill="x", pady=(7, 0))
         self.lifeline_canvas = tk.Canvas(
             hero,
             width=350,
@@ -1137,14 +1054,14 @@ class CompanionApp:
         )
         self.lifeline_canvas.pack(side="right", fill="both")
         self._motion_started = time.monotonic()
-        self._motion_job = self.root.after(40, self._animate_lifeline)
+        self._motion_job = self.root.after(80, self._animate_lifeline)
 
         metrics = tk.Frame(self.shell, background=self.colors["background"])
         metrics.pack(fill="x")
         metric_data = (
-            ("Estimated tokens saved", self.token_value, "Repeated context left out"),
-            ("Context handoffs", self.event_value, "Useful context delivered"),
-            ("Memories reused", self.reuse_value, "Details carried into new work"),
+            ("Tokens saved", self.token_value, "Repeated context removed"),
+            ("Handoffs", self.event_value, "Context carried forward"),
+            ("Memories reused", self.reuse_value, "Useful details returned"),
         )
         for index, data in enumerate(metric_data):
             self._metric_card(metrics, *data, index=index)
@@ -1153,7 +1070,7 @@ class CompanionApp:
         activity_heading.pack(fill="x", pady=(17, 8))
         self._label(
             activity_heading,
-            "Recent agent activity",
+            "Activity",
             foreground=self.colors["text"],
             font=self._font(15, "bold"),
         ).pack(side="left")
@@ -1200,7 +1117,7 @@ class CompanionApp:
         actions.pack(fill="x", pady=(15, 0))
         self.open_button = tk.Button(
             actions,
-            text="Refresh lifeline",
+            text="Refresh",
             command=self._refresh_now,
             state="disabled",
             background=self.colors["blue"],
@@ -1218,7 +1135,7 @@ class CompanionApp:
         self.open_button.pack(side="left")
         tk.Button(
             actions,
-            text="Minimize and use my AI",
+            text="Minimize",
             command=self._minimize,
             background=self.colors["surface_soft"],
             foreground=self.colors["text"],
@@ -1316,7 +1233,7 @@ class CompanionApp:
             foreground=self.colors["text"],
             font=self._font(11, "bold"),
         ).pack(side="left")
-        mode_label = "Light mode" if self.theme_name == "dark" else "Dark mode"
+        mode_label = "☾" if self.theme_name == "dark" else "☀"
         mode = tk.Button(
             bar,
             text=mode_label,
@@ -1328,8 +1245,8 @@ class CompanionApp:
             relief="flat",
             borderwidth=0,
             cursor="hand2",
-            font=self._font(9, "bold"),
-            padx=14,
+            font=("Segoe UI Symbol", 15, "normal"),
+            padx=12,
         )
         self.theme_button = mode
         for text, command in (
@@ -1360,7 +1277,7 @@ class CompanionApp:
             widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
 
     def _animate_lifeline(self) -> None:
-        """Render a low-cost living context field using native canvas primitives."""
+        """Render one quiet, low-frame-rate context pulse."""
         if self._stopping:
             return
         try:
@@ -1372,66 +1289,34 @@ class CompanionApp:
             elapsed = time.monotonic() - self._motion_started
             canvas.delete("motion")
 
-            grid_step = 34
-            for x in range(0, width + grid_step, grid_step):
-                canvas.create_line(
-                    x,
-                    0,
-                    x,
-                    height,
-                    fill=self.colors["grid"],
-                    tags="motion",
-                )
-            for y in range(0, height + grid_step, grid_step):
-                canvas.create_line(
-                    0,
-                    y,
-                    width,
-                    y,
-                    fill=self.colors["grid"],
-                    tags="motion",
-                )
-
             center_y = height / 2
-            for lane in range(3):
-                points: list[float] = []
-                amplitude = 7 + lane * 3
-                for step in range(25):
-                    x = 16 + (width - 32) * step / 24
-                    envelope = math.sin(math.pi * step / 24) ** 2
-                    y = (
-                        center_y
-                        + (lane - 1) * 22
-                        + math.sin(step * 0.72 - elapsed * (2.2 + lane * 0.3))
-                        * amplitude
-                        * envelope
-                    )
-                    points.extend((x, y))
-                canvas.create_line(
-                    *points,
-                    fill=self.colors["grid_strong"] if lane != 1 else self.colors["blue"],
-                    width=2 if lane == 1 else 1,
-                    smooth=True,
-                    splinesteps=16,
-                    tags="motion",
-                )
-                travel = (elapsed * (0.18 + lane * 0.025) + lane * 0.27) % 1
-                dot_x = 16 + (width - 32) * travel
-                dot_y = center_y + (lane - 1) * 22 + math.sin(
-                    travel * math.tau * 3 - elapsed * (2.2 + lane * 0.3)
-                ) * amplitude
-                radius = 4 if lane == 1 else 3
-                canvas.create_oval(
-                    dot_x - radius,
-                    dot_y - radius,
-                    dot_x + radius,
-                    dot_y + radius,
-                    fill=self.colors["blue"] if lane == 1 else self.colors["muted"],
-                    outline="",
-                    tags="motion",
-                )
-
-            pulse = 20 + 4 * math.sin(elapsed * 3.2)
+            points: list[float] = []
+            for step in range(18):
+                x = 16 + (width - 32) * step / 17
+                envelope = math.sin(math.pi * step / 17) ** 2
+                y = center_y + math.sin(step * 0.72 - elapsed * 1.25) * 10 * envelope
+                points.extend((x, y))
+            canvas.create_line(
+                *points,
+                fill=self.colors["grid_strong"],
+                width=2,
+                smooth=True,
+                splinesteps=12,
+                tags="motion",
+            )
+            travel = (elapsed * 0.10) % 1
+            dot_x = 16 + (width - 32) * travel
+            dot_y = center_y + math.sin(travel * math.tau * 2 - elapsed * 1.25) * 8
+            canvas.create_oval(
+                dot_x - 3,
+                dot_y - 3,
+                dot_x + 3,
+                dot_y + 3,
+                fill=self.colors["blue"],
+                outline="",
+                tags="motion",
+            )
+            pulse = 20 + 2 * math.sin(elapsed * 1.6)
             center_x = width / 2
             canvas.create_oval(
                 center_x - pulse,
@@ -1439,15 +1324,6 @@ class CompanionApp:
                 center_x + pulse,
                 center_y + pulse,
                 outline=self.colors["blue"],
-                width=2,
-                tags="motion",
-            )
-            canvas.create_oval(
-                center_x - pulse - 9,
-                center_y - pulse - 9,
-                center_x + pulse + 9,
-                center_y + pulse + 9,
-                outline=self.colors["grid_strong"],
                 width=1,
                 tags="motion",
             )
@@ -1458,16 +1334,7 @@ class CompanionApp:
                     image=self.lotus,
                     tags="motion",
                 )
-            canvas.create_text(
-                width - 8,
-                height - 8,
-                text="Live context flow",
-                fill=self.colors["muted"],
-                font=self._font(8, "bold"),
-                anchor="se",
-                tags="motion",
-            )
-            self._motion_job = self.root.after(66, self._animate_lifeline)
+            self._motion_job = self.root.after(125, self._animate_lifeline)
         except tk.TclError:
             self._motion_job = None
 
@@ -1494,7 +1361,6 @@ class CompanionApp:
             expand=True,
             padx=(0 if index == 0 else 6, 0 if index == 2 else 6),
         )
-        tk.Frame(card, background=self.colors["blue"], height=2).pack(fill="x", pady=(0, 9))
         heading = tk.Frame(card, background=self.colors["surface"])
         heading.pack(fill="x")
         self._label(
@@ -1507,18 +1373,11 @@ class CompanionApp:
             wraplength=250,
         ).pack(side="left")
         self._label(
-            heading,
-            f"0{index + 1}",
-            background=self.colors["surface"],
-            foreground=self.colors["grid_strong"],
-            font=self._font(9, "bold"),
-        ).pack(side="right")
-        self._label(
             card,
             textvariable=value,
             background=self.colors["surface"],
             foreground=self.colors["blue"],
-            font=self._font(27, "bold"),
+            font=self._display(27, "bold"),
             anchor="w",
         ).pack(fill="x", pady=(2, 1))
         self._label(
@@ -1533,10 +1392,10 @@ class CompanionApp:
 
     def _connection_presentation(self, target: ClientTarget) -> tuple[str, str, str]:
         if target.configured:
-            return "Connected", "Lians is available in this app", self.colors["green"]
+            return "Connected", "Lians is ready", self.colors["green"]
         if target.detected:
-            return "Ready to connect", "App found, Lians is not configured", self.colors["amber"]
-        return "Not found", "Install the app to connect Lians", self.colors["muted"]
+            return "Ready to connect", "App found", self.colors["amber"]
+        return "Not found", "Install the app first", self.colors["muted"]
 
     def _connection_card(
         self, parent: tk.Widget, key: str, target: ClientTarget, index: int
@@ -1598,7 +1457,7 @@ class CompanionApp:
         if not activity:
             empty = self._label(
                 self.activity_frame,
-                "No activity yet. Use a connected AI app and your lifeline will appear here.",
+                "Waiting for the first handoff.",
                 background=self.colors["surface"],
                 foreground=self.colors["muted"],
                 font=self._font(11),
@@ -1680,7 +1539,7 @@ class CompanionApp:
                         f"About {snapshot['reduction_percent_estimate']}% less repeated context"
                     )
                 else:
-                    self.reduction_status.set("Waiting for your first context handoff")
+                    self.reduction_status.set("Waiting for the first handoff")
                 self._show_activity(snapshot["activity"])
             except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
                 self.memory_status.set("Encrypted memory ready")

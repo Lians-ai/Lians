@@ -124,7 +124,7 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.open_button.winfo_ismapped()
         assert app.open_button.winfo_rooty() < root.winfo_rooty() + root.winfo_height()
         assert str(app.open_button["state"]) == "normal"
-        assert app.open_button["text"] == "Refresh lifeline"
+        assert app.open_button["text"] == "Refresh"
         assert app.status.get() == "Lians is running"
         assert app.memory_status.get() == "3 saved memories"
         assert app.token_value.get() == "~3,000"
@@ -133,18 +133,21 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.reduction_status.get() == "About 75% less repeated context"
         assert any(label["text"] == "Codex · Lians" for label in app.activity_labels)
         assert app.font_family == "Sora"
+        assert app.display_font_family in {"Yu Mincho", "Yu Gothic UI", "Yu Gothic", "Sora"}
         assert bool(root.overrideredirect())
         assert app.target_labels["claude"]["text"] == "●  Connected"
         assert app.target_labels["codex"]["text"] == "●  Ready to connect"
         assert app.target_labels["cursor"]["text"] == "●  Not found"
         app._animate_lifeline()
-        assert len(app.lifeline_canvas.find_all()) > 20
+        canvas_items = app.lifeline_canvas.find_all()
+        assert 3 <= len(canvas_items) <= 5
+        assert all(app.lifeline_canvas.type(item) != "text" for item in canvas_items)
 
         app._toggle_theme()
         root.update_idletasks()
         assert app.theme_name == "light"
-        assert app.theme_button["text"] == "Dark mode"
-        assert app.shell["background"] == "#F5F7FB"
+        assert app.theme_button["text"] == "☀"
+        assert app.shell["background"] == "#F1F0EC"
 
         app._work_area = lambda: (0, 0, 1200, 800)
         top_drag = type("DragEvent", (), {"x_root": 600, "y_root": 200})()
