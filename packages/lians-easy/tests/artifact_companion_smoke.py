@@ -1,0 +1,125 @@
+"""Prove the frozen no-argument executable stays alive as the Windows companion."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import socket
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
+
+ORIGIN = "http://127.0.0.1:7317"
+
+
+def _port_is_free() -> bool:
+    with socket.socket() as candidate:
+        try:
+            candidate.bind(("127.0.0.1", 7317))
+        except OSError:
+            return False
+    return True
+
+
+def _stop_process_tree(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    taskkill = Path(os.environ.get("SYSTEMROOT", r"C:\Windows")) / "System32" / "taskkill.exe"
+    subprocess.run(
+        [str(taskkill), "/PID", str(process.pid), "/T", "/F"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=10,
+    )
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--binary", required=True, type=Path)
+    args = parser.parse_args()
+    binary = args.binary.resolve()
+    if not binary.is_file():
+        raise SystemExit(f"Frozen companion was not found: {binary}")
+    if os.name != "nt":
+        raise SystemExit("The resident companion smoke test requires Windows")
+    if not _port_is_free():
+        raise SystemExit("Port 7317 is already in use; stop the existing Lians companion first")
+
+    with tempfile.TemporaryDirectory(prefix="lians-companion-smoke-") as directory:
+        fixture = Path(directory)
+        home = fixture / "home"
+        roaming = fixture / "roaming"
+        local = fixture / "local"
+        config = roaming / "Claude" / "claude_desktop_config.json"
+        config.parent.mkdir(parents=True)
+        original = json.dumps(
+            {
+                "theme": "dark",
+                "mcpServers": {
+                    "lians": {"command": "fixture-lians", "args": ["mcp"]}
+                },
+            },
+            separators=(",", ":"),
+        ).encode()
+        config.write_bytes(original)
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "USERPROFILE": str(home),
+                "HOME": str(home),
+                "APPDATA": str(roaming),
+                "LOCALAPPDATA": str(local),
+                "LIANS_EASY_HOME": str(local / "Lians"),
+            }
+        )
+        process = subprocess.Popen(
+            [str(binary)],
+            env=environment,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            deadline = time.monotonic() + 25
+            while True:
+                if process.poll() is not None:
+                    raise RuntimeError(f"Frozen companion exited with {process.returncode}")
+                try:
+                    with urlopen(ORIGIN, timeout=1) as response:
+                        page = response.read()
+                        server = response.headers.get("Server", "")
+                    break
+                except URLError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("Frozen companion did not start its local bridge")
+                    time.sleep(0.15)
+            assert server.startswith("LiansBridge/")
+            assert b"<title>Lians Memory</title>" in page
+            assert process.poll() is None
+            assert config.read_bytes() == original
+            print(
+                json.dumps(
+                    {
+                        "companion_started": True,
+                        "bridge_running": True,
+                        "process_stayed_alive": True,
+                        "existing_agent_settings_unchanged": True,
+                    },
+                    sort_keys=True,
+                )
+            )
+        finally:
+            _stop_process_tree(process)
+
+
+if __name__ == "__main__":
+    main()
