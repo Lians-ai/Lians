@@ -103,7 +103,13 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
     root = tk.Tk()
     try:
         root.tk.call("tk", "scaling", 1.75)
-        app = CompanionApp(root, FakeBridge(), start_bridge=False, theme="dark")
+        app = CompanionApp(
+            root,
+            FakeBridge(),
+            start_bridge=False,
+            animate_intro=False,
+            theme="dark",
+        )
         root.update_idletasks()
         root.update()
         app._refresh()
@@ -112,6 +118,7 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.shell.winfo_reqwidth() <= app.body_canvas.winfo_width()
         assert app.body_canvas.winfo_height() <= root.winfo_height()
         assert app.body_canvas.bbox("all")[3] >= app.body_canvas.winfo_height()
+        assert app.scrollbar.winfo_class() == "Canvas"
         app.body_canvas.yview_moveto(1.0)
         root.update_idletasks()
         assert app.open_button.winfo_ismapped()
@@ -130,6 +137,8 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.target_labels["claude"]["text"] == "●  Connected"
         assert app.target_labels["codex"]["text"] == "●  Ready to connect"
         assert app.target_labels["cursor"]["text"] == "●  Not found"
+        app._animate_lifeline()
+        assert len(app.lifeline_canvas.find_all()) > 20
 
         app._toggle_theme()
         root.update_idletasks()

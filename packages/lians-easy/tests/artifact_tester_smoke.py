@@ -59,7 +59,7 @@ def main() -> int:
             "51495b5fc3e9dd339e5d2a5d4f4ae4c82f703c7d2ded21254d087c36b836cd4d"
         )
         assert hashlib.sha256(assets["favicon.png"]).hexdigest() == (
-            "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
+            "b8a1345dd76e5fc907ceeba05317a1d67420290d5c85b597ef39b59ed0fdbe59"
         )
         with urlopen(base_url + "api/status?provider=cursor", timeout=10) as response:
             status = json.loads(response.read())

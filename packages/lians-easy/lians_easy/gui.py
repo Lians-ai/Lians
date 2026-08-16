@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ctypes
 import json
+import math
 import sys
 import threading
+import time
 import tkinter as tk
 import tkinter.font as tkfont
 from importlib.resources import files
@@ -41,6 +43,8 @@ COMPANION_THEMES = {
         "surface": "#0A1019",
         "surface_soft": "#101824",
         "border": "#1F2A3A",
+        "grid": "#111A28",
+        "grid_strong": "#22314A",
         "text": "#F7F9FC",
         "muted": "#A4AFBF",
         "blue": "#3777FF",
@@ -55,6 +59,8 @@ COMPANION_THEMES = {
         "surface": "#FFFFFF",
         "surface_soft": "#EAF0F8",
         "border": "#D6DFEA",
+        "grid": "#E4E9F1",
+        "grid_strong": "#C8D2E0",
         "text": "#07111F",
         "muted": "#566477",
         "blue": "#245FF5",
@@ -65,6 +71,42 @@ COMPANION_THEMES = {
         "red": "#C93651",
     },
 }
+
+_WINDOWS_DPI_AWARE = False
+
+
+def _enable_windows_dpi_awareness() -> None:
+    """Keep Tk geometry and the Windows work area in the same pixel space."""
+    global _WINDOWS_DPI_AWARE
+    if sys.platform != "win32" or _WINDOWS_DPI_AWARE:
+        return
+    try:
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            _WINDOWS_DPI_AWARE = True
+            return
+    except (AttributeError, OSError):
+        pass
+    try:
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+            _WINDOWS_DPI_AWARE = True
+            return
+    except (AttributeError, OSError):
+        pass
+    try:
+        _WINDOWS_DPI_AWARE = bool(ctypes.windll.user32.SetProcessDPIAware())
+    except (AttributeError, OSError):
+        pass
+
+
+def _windows_display_scale() -> float:
+    if sys.platform != "win32":
+        return 1.0
+    if _WINDOWS_DPI_AWARE:
+        return 1.0
+    try:
+        return max(1.0, ctypes.windll.user32.GetDpiForSystem() / 96)
+    except (AttributeError, OSError):
+        return 1.0
 
 
 def _register_sora(root: tk.Tk) -> str:
@@ -688,6 +730,7 @@ class CompanionApp:
         *,
         start_bridge: bool = True,
         owns_bridge: bool | None = None,
+        animate_intro: bool = True,
         theme: str | None = None,
     ) -> None:
         self.root = root
@@ -697,13 +740,24 @@ class CompanionApp:
         self._bridge_error: str | None = None
         self._bridge_thread: threading.Thread | None = None
         self._refresh_job: str | None = None
+        self._intro_job: str | None = None
+        self._intro_frame_job: str | None = None
+        self._motion_job: str | None = None
+        self._motion_started = time.monotonic()
         self._window_handle: int | None = None
         self._drag_origin: tuple[int, int, int, int] | None = None
+        self._display_scale = _windows_display_scale()
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        window_width = min(1180, max(920, screen_width - 80))
-        window_height = min(900, max(720, screen_height - 80))
-        self._normal_geometry = f"{window_width}x{window_height}"
+        usable_width = round((screen_width - 80) / self._display_scale)
+        usable_height = round((screen_height - 70) / self._display_scale)
+        window_width = min(1120, max(880, usable_width))
+        window_height = min(820, max(620, usable_height))
+        offset_x = max(0, round((screen_width / self._display_scale - window_width) / 2))
+        offset_y = max(0, round((screen_height / self._display_scale - window_height) / 2))
+        self._normal_geometry = (
+            f"{window_width}x{window_height}+{offset_x}+{offset_y}"
+        )
         self._maximized = False
         self._snap_state: str | None = None
         self.theme_name = theme if theme in COMPANION_THEMES else _saved_companion_theme()
@@ -713,6 +767,7 @@ class CompanionApp:
         self.target_details: dict[str, tk.Label] = {}
         self.activity_labels: list[tk.Label] = []
         self._activity_state: tuple[tuple[str, str, str], ...] | None = None
+        self.animate_intro = animate_intro
 
         self.status = tk.StringVar(value="Starting Lians")
         self.memory_status = tk.StringVar(value="0 saved memories")
@@ -726,7 +781,7 @@ class CompanionApp:
 
         self.root.title("Lians")
         self.root.geometry(self._normal_geometry)
-        self.root.minsize(920, 760)
+        self.root.minsize(880, 620)
         self.root.protocol("WM_DELETE_WINDOW", self._minimize)
         if sys.platform == "win32":
             self.root.overrideredirect(True)
@@ -736,12 +791,15 @@ class CompanionApp:
                 pass
 
         self._load_brand_images()
-        self._build()
         if sys.platform == "win32":
             self.root.after(50, self._apply_windows_taskbar_style)
         if start_bridge:
             self._start_bridge()
-        self._refresh_job = self.root.after(200, self._refresh)
+        if self.animate_intro:
+            self._build_intro()
+        else:
+            self._build()
+            self._refresh_job = self.root.after(200, self._refresh)
 
     def _font(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
         return (self.font_family, size, weight)
@@ -765,14 +823,174 @@ class CompanionApp:
             self.logo = None
         try:
             lotus_path = files("lians_easy").joinpath("desktop", "lotus.png")
-            self.lotus = tk.PhotoImage(file=str(lotus_path))
-            if self.lotus.width() > 32:
-                factor = max(1, round(self.lotus.width() / 32))
-                self.lotus = self.lotus.subsample(factor, factor)
+            self.lotus_mark = tk.PhotoImage(file=str(lotus_path))
+            factor = max(1, round(self.lotus_mark.width() / 32))
+            self.lotus = self.lotus_mark.subsample(factor, factor)
         except (OSError, tk.TclError):
             self.lotus = None
+            self.lotus_mark = None
+
+    @staticmethod
+    def _ease_out_cubic(value: float) -> float:
+        bounded = min(1.0, max(0.0, value))
+        return 1 - (1 - bounded) ** 3
+
+    def _build_intro(self) -> None:
+        """Play a brief native boot sequence while the local bridge starts."""
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.root.configure(background="#020407")
+        self.intro_canvas = tk.Canvas(
+            self.root,
+            background="#020407",
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self.intro_canvas.pack(fill="both", expand=True)
+        self._intro_started = time.monotonic()
+        self._animate_intro()
+        self._intro_job = self.root.after(1350, self._finish_intro)
+
+    def _animate_intro(self) -> None:
+        if self._stopping or not self.intro_canvas.winfo_exists():
+            return
+        canvas = self.intro_canvas
+        width = max(1, canvas.winfo_width())
+        height = max(1, canvas.winfo_height())
+        elapsed = time.monotonic() - self._intro_started
+        progress = min(1.0, elapsed / 1.25)
+        eased = self._ease_out_cubic(progress)
+        center_x = width / 2
+        center_y = height / 2 - 34
+        canvas.delete("intro-motion")
+
+        spacing = 74
+        grid_reveal = min(1.0, progress * 2.4)
+        grid_color = "#0B1422" if grid_reveal > 0.35 else "#07101B"
+        for x in range(0, width + spacing, spacing):
+            canvas.create_line(
+                x,
+                0,
+                x,
+                height,
+                fill=grid_color,
+                width=1,
+                tags="intro-motion",
+            )
+        for y in range(0, height + spacing, spacing):
+            canvas.create_line(
+                0,
+                y,
+                width,
+                y,
+                fill=grid_color,
+                width=1,
+                tags="intro-motion",
+            )
+
+        radius = 90 + 20 * math.sin(elapsed * 3.2)
+        for ring, color in ((0, "#173B82"), (18, "#0C2454"), (36, "#08172E")):
+            extent = max(1, 360 * min(1.0, progress * 1.8 - ring / 220))
+            canvas.create_arc(
+                center_x - radius - ring,
+                center_y - radius - ring,
+                center_x + radius + ring,
+                center_y + radius + ring,
+                start=90,
+                extent=-extent,
+                style="arc",
+                outline=color,
+                width=2 if ring == 0 else 1,
+                tags="intro-motion",
+            )
+
+        field_width = min(620, width * 0.64)
+        for index in range(42):
+            x = center_x - field_width / 2 + field_width * index / 41
+            amplitude = 22 + 34 * math.exp(-((index - 20.5) / 10) ** 2)
+            y = center_y + math.sin(index * 0.72 + elapsed * 5) * amplitude
+            if abs(x - center_x) > 82:
+                canvas.create_oval(
+                    x - 2,
+                    y - 2,
+                    x + 2,
+                    y + 2,
+                    fill="#2259C7" if index % 3 else "#3777FF",
+                    outline="",
+                    tags="intro-motion",
+                )
+
+        if self.lotus_mark is not None and progress > 0.12:
+            canvas.create_image(
+                center_x,
+                center_y,
+                image=self.lotus_mark,
+                tags="intro-motion",
+            )
+        canvas.create_text(
+            center_x,
+            center_y + 112,
+            text="Lians",
+            fill="#F7F9FC",
+            font=self._font(28, "bold"),
+            tags="intro-motion",
+        )
+        status = (
+            "Starting your agent lifeline"
+            if progress < 0.58
+            else "Connecting Claude, Codex, and Cursor"
+            if progress < 0.88
+            else "Ready"
+        )
+        canvas.create_text(
+            center_x,
+            center_y + 154,
+            text=status,
+            fill="#93A4BC",
+            font=self._font(10),
+            tags="intro-motion",
+        )
+        bar_width = min(360, width * 0.42)
+        canvas.create_rectangle(
+            center_x - bar_width / 2,
+            center_y + 184,
+            center_x + bar_width / 2,
+            center_y + 187,
+            fill="#111B2B",
+            outline="",
+            tags="intro-motion",
+        )
+        canvas.create_rectangle(
+            center_x - bar_width / 2,
+            center_y + 184,
+            center_x - bar_width / 2 + bar_width * eased,
+            center_y + 187,
+            fill="#3777FF",
+            outline="",
+            tags="intro-motion",
+        )
+        self._intro_frame_job = self.root.after(33, self._animate_intro)
+
+    def _finish_intro(self) -> None:
+        self._intro_job = None
+        if self._stopping:
+            return
+        if self._intro_frame_job is not None:
+            try:
+                self.root.after_cancel(self._intro_frame_job)
+            except tk.TclError:
+                pass
+            self._intro_frame_job = None
+        self._build()
+        self._refresh_job = self.root.after(80, self._refresh)
 
     def _build(self) -> None:
+        if self._motion_job is not None:
+            try:
+                self.root.after_cancel(self._motion_job)
+            except tk.TclError:
+                pass
+            self._motion_job = None
         for child in self.root.winfo_children():
             child.destroy()
         self.colors = COMPANION_THEMES[self.theme_name]
@@ -791,20 +1009,17 @@ class CompanionApp:
             borderwidth=0,
             highlightthickness=0,
         )
-        scrollbar = tk.Scrollbar(
+        self.scrollbar = tk.Canvas(
             body,
-            orient="vertical",
-            command=self.body_canvas.yview,
-            background=self.colors["surface_soft"],
-            activebackground=self.colors["blue"],
-            troughcolor=self.colors["background"],
+            width=7,
+            background=self.colors["background"],
             borderwidth=0,
             highlightthickness=0,
-            relief="flat",
-            width=10,
         )
-        self.body_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
+        self.scrollbar.bind("<Button-1>", self._scroll_from_indicator)
+        self.scrollbar.bind("<B1-Motion>", self._scroll_from_indicator)
+        self.body_canvas.configure(yscrollcommand=self._update_scroll_indicator)
+        self.scrollbar.pack(side="right", fill="y")
         self.body_canvas.pack(side="left", fill="both", expand=True)
         self.shell = tk.Frame(
             self.body_canvas,
@@ -864,21 +1079,65 @@ class CompanionApp:
             font=self._font(11, "bold"),
         ).pack(side="left")
 
-        self._label(
+        hero = tk.Frame(
             self.shell,
+            background=self.colors["surface"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            padx=26,
+            pady=20,
+        )
+        hero.pack(fill="x", pady=(15, 14))
+        hero_left = tk.Frame(hero, background=self.colors["surface"])
+        hero_left.pack(side="left", fill="both", expand=True, padx=(0, 24))
+        self._label(
+            hero_left,
             "Your agent lifeline.",
+            background=self.colors["surface"],
             foreground=self.colors["text"],
-            font=self._font(32, "bold"),
+            font=self._font(34, "bold"),
             anchor="w",
-        ).pack(fill="x", pady=(13, 2))
+        ).pack(fill="x")
         self._label(
-            self.shell,
-            "A clear view of what Lians carries forward across Claude, Codex, and Cursor.",
+            hero_left,
+            "See the context Lians carries forward and the repeated tokens it keeps out.",
+            background=self.colors["surface"],
             foreground=self.colors["muted"],
             font=self._font(12),
             anchor="w",
-            wraplength=900,
-        ).pack(fill="x", pady=(0, 13))
+            justify="left",
+            wraplength=560,
+        ).pack(fill="x", pady=(6, 15))
+        qualities = tk.Frame(hero_left, background=self.colors["surface"])
+        qualities.pack(fill="x")
+        for index, text in enumerate(("Local", "Private", "Always on")):
+            chip = tk.Frame(
+                qualities,
+                background=self.colors["surface_soft"],
+                highlightbackground=self.colors["border"],
+                highlightthickness=1,
+                padx=11,
+                pady=5,
+            )
+            chip.pack(side="left", padx=(0 if index == 0 else 7, 0))
+            self._label(
+                chip,
+                f"●  {text}",
+                background=self.colors["surface_soft"],
+                foreground=self.colors["green"] if index == 2 else self.colors["muted"],
+                font=self._font(9, "bold"),
+            ).pack()
+        self.lifeline_canvas = tk.Canvas(
+            hero,
+            width=350,
+            height=148,
+            background=self.colors["surface"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self.lifeline_canvas.pack(side="right", fill="both")
+        self._motion_started = time.monotonic()
+        self._motion_job = self.root.after(40, self._animate_lifeline)
 
         metrics = tk.Frame(self.shell, background=self.colors["background"])
         metrics.pack(fill="x")
@@ -1004,6 +1263,37 @@ class CompanionApp:
             self.body_canvas.yview_scroll(delta, "units")
         return "break"
 
+    def _update_scroll_indicator(self, first: str, last: str) -> None:
+        try:
+            start = float(first)
+            end = float(last)
+            height = max(1, self.scrollbar.winfo_height())
+            self.scrollbar.delete("thumb")
+            if end - start >= 0.999:
+                return
+            thumb_start = round(start * height)
+            thumb_end = max(thumb_start + 34, round(end * height))
+            thumb_end = min(height, thumb_end)
+            self.scrollbar.create_rectangle(
+                2,
+                thumb_start,
+                6,
+                thumb_end,
+                fill=self.colors["blue"],
+                outline="",
+                tags="thumb",
+            )
+        except (tk.TclError, TypeError, ValueError):
+            return
+
+    def _scroll_from_indicator(self, event: tk.Event) -> str:
+        height = max(1, self.scrollbar.winfo_height())
+        visible = self.body_canvas.yview()
+        visible_fraction = visible[1] - visible[0]
+        target = event.y / height - visible_fraction / 2
+        self.body_canvas.yview_moveto(min(1.0 - visible_fraction, max(0.0, target)))
+        return "break"
+
     def _build_titlebar(self) -> None:
         bar = tk.Frame(
             self.root,
@@ -1069,6 +1359,118 @@ class CompanionApp:
             widget.bind("<ButtonRelease-1>", self._finish_drag)
             widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
 
+    def _animate_lifeline(self) -> None:
+        """Render a low-cost living context field using native canvas primitives."""
+        if self._stopping:
+            return
+        try:
+            if not self.lifeline_canvas.winfo_exists():
+                return
+            canvas = self.lifeline_canvas
+            width = max(280, canvas.winfo_width())
+            height = max(130, canvas.winfo_height())
+            elapsed = time.monotonic() - self._motion_started
+            canvas.delete("motion")
+
+            grid_step = 34
+            for x in range(0, width + grid_step, grid_step):
+                canvas.create_line(
+                    x,
+                    0,
+                    x,
+                    height,
+                    fill=self.colors["grid"],
+                    tags="motion",
+                )
+            for y in range(0, height + grid_step, grid_step):
+                canvas.create_line(
+                    0,
+                    y,
+                    width,
+                    y,
+                    fill=self.colors["grid"],
+                    tags="motion",
+                )
+
+            center_y = height / 2
+            for lane in range(3):
+                points: list[float] = []
+                amplitude = 7 + lane * 3
+                for step in range(25):
+                    x = 16 + (width - 32) * step / 24
+                    envelope = math.sin(math.pi * step / 24) ** 2
+                    y = (
+                        center_y
+                        + (lane - 1) * 22
+                        + math.sin(step * 0.72 - elapsed * (2.2 + lane * 0.3))
+                        * amplitude
+                        * envelope
+                    )
+                    points.extend((x, y))
+                canvas.create_line(
+                    *points,
+                    fill=self.colors["grid_strong"] if lane != 1 else self.colors["blue"],
+                    width=2 if lane == 1 else 1,
+                    smooth=True,
+                    splinesteps=16,
+                    tags="motion",
+                )
+                travel = (elapsed * (0.18 + lane * 0.025) + lane * 0.27) % 1
+                dot_x = 16 + (width - 32) * travel
+                dot_y = center_y + (lane - 1) * 22 + math.sin(
+                    travel * math.tau * 3 - elapsed * (2.2 + lane * 0.3)
+                ) * amplitude
+                radius = 4 if lane == 1 else 3
+                canvas.create_oval(
+                    dot_x - radius,
+                    dot_y - radius,
+                    dot_x + radius,
+                    dot_y + radius,
+                    fill=self.colors["blue"] if lane == 1 else self.colors["muted"],
+                    outline="",
+                    tags="motion",
+                )
+
+            pulse = 20 + 4 * math.sin(elapsed * 3.2)
+            center_x = width / 2
+            canvas.create_oval(
+                center_x - pulse,
+                center_y - pulse,
+                center_x + pulse,
+                center_y + pulse,
+                outline=self.colors["blue"],
+                width=2,
+                tags="motion",
+            )
+            canvas.create_oval(
+                center_x - pulse - 9,
+                center_y - pulse - 9,
+                center_x + pulse + 9,
+                center_y + pulse + 9,
+                outline=self.colors["grid_strong"],
+                width=1,
+                tags="motion",
+            )
+            if self.lotus is not None:
+                canvas.create_image(
+                    center_x,
+                    center_y,
+                    image=self.lotus,
+                    tags="motion",
+                )
+            canvas.create_text(
+                width - 8,
+                height - 8,
+                text="Live context flow",
+                fill=self.colors["muted"],
+                font=self._font(8, "bold"),
+                anchor="se",
+                tags="motion",
+            )
+            self._motion_job = self.root.after(66, self._animate_lifeline)
+        except tk.TclError:
+            self._motion_job = None
+
     def _metric_card(
         self,
         parent: tk.Widget,
@@ -1092,21 +1494,31 @@ class CompanionApp:
             expand=True,
             padx=(0 if index == 0 else 6, 0 if index == 2 else 6),
         )
+        tk.Frame(card, background=self.colors["blue"], height=2).pack(fill="x", pady=(0, 9))
+        heading = tk.Frame(card, background=self.colors["surface"])
+        heading.pack(fill="x")
         self._label(
-            card,
+            heading,
             title,
             background=self.colors["surface"],
             foreground=self.colors["muted"],
             font=self._font(10),
             anchor="w",
             wraplength=250,
-        ).pack(fill="x")
+        ).pack(side="left")
+        self._label(
+            heading,
+            f"0{index + 1}",
+            background=self.colors["surface"],
+            foreground=self.colors["grid_strong"],
+            font=self._font(9, "bold"),
+        ).pack(side="right")
         self._label(
             card,
             textvariable=value,
             background=self.colors["surface"],
-            foreground=self.colors["text"],
-            font=self._font(25, "bold"),
+            foreground=self.colors["blue"],
+            font=self._font(27, "bold"),
             anchor="w",
         ).pack(fill="x", pady=(2, 1))
         self._label(
@@ -1348,7 +1760,10 @@ class CompanionApp:
 
                 area = WorkArea()
                 ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0)
-                return area.left, area.top, area.right, area.bottom
+                return tuple(
+                    round(value / self._display_scale)
+                    for value in (area.left, area.top, area.right, area.bottom)
+                )
             except (AttributeError, OSError):
                 pass
         return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
@@ -1410,6 +1825,14 @@ class CompanionApp:
             except tk.TclError:
                 pass
             self._refresh_job = None
+        for attribute in ("_intro_job", "_intro_frame_job", "_motion_job"):
+            job = getattr(self, attribute)
+            if job is not None:
+                try:
+                    self.root.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, attribute, None)
 
         if not self.owns_bridge:
             self.root.destroy()
@@ -1450,6 +1873,9 @@ def _focus_existing_companion() -> bool:
             return False
         user32.ShowWindowAsync(handle, 9)
         user32.BringWindowToTop(handle)
+        flags = 0x0001 | 0x0002 | 0x0040
+        user32.SetWindowPos(handle, -1, 0, 0, 0, 0, flags)
+        user32.SetWindowPos(handle, -2, 0, 0, 0, 0, flags)
         user32.SetForegroundWindow(handle)
         return True
     except (AttributeError, OSError):
@@ -1496,6 +1922,7 @@ def _launch_companion() -> None:
 
 
 def launch() -> None:
+    _enable_windows_dpi_awareness()
     if any(target.configured for target in client_targets().values()):
         _launch_companion()
         return
