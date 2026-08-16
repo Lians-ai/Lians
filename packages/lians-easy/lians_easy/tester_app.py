@@ -15,17 +15,25 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from lians_easy.agent_experiment import (
-    PROVIDERS,
     PROVIDER_NAMES,
+    PROVIDERS,
     AgentExperimentError,
     provider_preflight,
     run_provider_experiment,
 )
+from lians_easy.task_runner import run_bounded_task
+from lians_easy.work_brief import (
+    MAX_INPUT_BYTES,
+    WorkBriefError,
+    compile_work_brief,
+    parse_work_records,
+)
 
 Preflight = Callable[[str], Mapping[str, Any]]
 ExperimentRunner = Callable[..., dict[str, Any]]
+TaskRunner = Callable[..., dict[str, Any]]
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
-_MAX_REQUEST_BODY = 1024
+_MAX_REQUEST_BODY = MAX_INPUT_BYTES + (1024 * 1024)
 _AUTO_CLOSE_SECONDS = 60 * 60
 
 
@@ -35,6 +43,10 @@ def _default_preflight(provider: str) -> Mapping[str, Any]:
 
 def _default_runner(**kwargs: Any) -> dict[str, Any]:
     return run_provider_experiment(**kwargs)
+
+
+def _default_task_runner(**kwargs: Any) -> dict[str, Any]:
+    return run_bounded_task(**kwargs)
 
 
 def _asset_bytes(name: str) -> bytes:
@@ -93,6 +105,7 @@ class TesterApplication:
         token: str | None = None,
         preflight: Preflight = _default_preflight,
         experiment_runner: ExperimentRunner = _default_runner,
+        task_runner: TaskRunner = _default_task_runner,
         auto_close_seconds: float = _AUTO_CLOSE_SECONDS,
     ) -> None:
         session_token = token or secrets.token_urlsafe(24)
@@ -103,9 +116,12 @@ class TesterApplication:
         self.token = session_token
         self.preflight = preflight
         self.experiment_runner = experiment_runner
+        self.task_runner = task_runner
         self.auto_close_seconds = auto_close_seconds
         self.report: dict[str, Any] | None = None
         self.report_provider: str | None = None
+        self.brief: dict[str, Any] | None = None
+        self.task_report: dict[str, Any] | None = None
         self.running = False
         self._state_lock = threading.Lock()
         self._server_lock = threading.Lock()
@@ -160,6 +176,12 @@ class TesterApplication:
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Referrer-Policy", "no-referrer")
                 self.send_header("X-Frame-Options", "DENY")
+                self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+                self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+                self.send_header(
+                    "Permissions-Policy",
+                    "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+                )
                 self.send_header(
                     "Content-Security-Policy",
                     "default-src 'self'; connect-src 'self'; img-src 'self'; "
@@ -191,11 +213,25 @@ class TesterApplication:
                 if route == "api/report":
                     self._report()
                     return
+                if route == "api/brief":
+                    self._download(
+                        application.brief,
+                        filename="lians-context-brief.json",
+                        missing="No context brief is ready",
+                    )
+                    return
+                if route == "api/task-report":
+                    self._download(
+                        application.task_report,
+                        filename="lians-task-receipt.json",
+                        missing="No task receipt is ready",
+                    )
+                    return
                 self._json_error(HTTPStatus.NOT_FOUND, "Not found")
 
             def do_POST(self) -> None:
                 route = self._route()
-                if route not in {"api/run", "api/close"}:
+                if route not in {"api/compile", "api/ask", "api/run", "api/close"}:
                     self._json_error(HTTPStatus.NOT_FOUND, "Not found")
                     return
                 if not self._valid_origin():
@@ -221,7 +257,11 @@ class TesterApplication:
                 except json.JSONDecodeError:
                     self._json_error(HTTPStatus.BAD_REQUEST, "JSON is not valid")
                     return
-                if route == "api/run":
+                if route == "api/compile":
+                    self._compile(payload)
+                elif route == "api/ask":
+                    self._ask(payload)
+                elif route == "api/run":
                     if not isinstance(payload, dict) or set(payload) != {"provider"}:
                         self._json_error(
                             HTTPStatus.BAD_REQUEST,
@@ -254,7 +294,9 @@ class TesterApplication:
                 return route
 
             def _valid_origin(self) -> bool:
-                return self.headers.get("Origin") == application.base_url.rstrip("/")
+                local = urlsplit(application.base_url)
+                expected = f"{local.scheme}://{local.netloc}"
+                return self.headers.get("Origin") == expected
 
             def _query_provider(self) -> str | None:
                 try:
@@ -306,6 +348,109 @@ class TesterApplication:
                     }
                 )
 
+            def _compile(self, payload: Any) -> None:
+                if not isinstance(payload, dict) or set(payload) != {
+                    "kind",
+                    "input",
+                    "evidence_limit",
+                }:
+                    self._json_error(
+                        HTTPStatus.BAD_REQUEST,
+                        "Request must contain kind, input, and evidence_limit",
+                    )
+                    return
+                kind = payload.get("kind")
+                raw = payload.get("input")
+                evidence_limit = payload.get("evidence_limit")
+                if kind not in {"research", "browser"} or not isinstance(raw, str):
+                    self._json_error(HTTPStatus.BAD_REQUEST, "Work export is not valid")
+                    return
+                if not isinstance(evidence_limit, int) or isinstance(evidence_limit, bool):
+                    self._json_error(HTTPStatus.BAD_REQUEST, "Evidence limit is not valid")
+                    return
+                with application._state_lock:
+                    if application.running:
+                        self._json_error(HTTPStatus.CONFLICT, "Another task is already running")
+                        return
+                    application.running = True
+                try:
+                    records = parse_work_records(raw)
+                    brief = compile_work_brief(
+                        kind,
+                        records,
+                        evidence_limit=evidence_limit,
+                    )
+                except (WorkBriefError, UnicodeError, ValueError, RecursionError) as error:
+                    self._json_error(HTTPStatus.BAD_REQUEST, str(error))
+                    return
+                finally:
+                    with application._state_lock:
+                        application.running = False
+                application.brief = brief
+                application.task_report = None
+                receipt = brief["receipt"]
+                raw_tokens = int(receipt["raw_token_estimate"])
+                brief_tokens = int(receipt["brief_token_estimate"])
+                reduction = round(max(0.0, 1.0 - (brief_tokens / raw_tokens)) * 100.0, 1)
+                self._send_json(
+                    {
+                        "kind": kind,
+                        "summary": brief["summary"],
+                        "raw_records": receipt["raw_record_count"],
+                        "raw_token_estimate": raw_tokens,
+                        "brief_token_estimate": brief_tokens,
+                        "estimated_reduction_percent": reduction,
+                        "evidence_items": len(brief["representative_evidence"]),
+                    }
+                )
+
+            def _ask(self, payload: Any) -> None:
+                if not isinstance(payload, dict) or set(payload) != {"provider", "task"}:
+                    self._json_error(
+                        HTTPStatus.BAD_REQUEST,
+                        "Request must contain one provider and one task",
+                    )
+                    return
+                provider = payload.get("provider")
+                task = payload.get("task")
+                if not isinstance(provider, str) or provider not in PROVIDERS:
+                    self._json_error(HTTPStatus.BAD_REQUEST, "Provider is not supported")
+                    return
+                if not isinstance(task, str):
+                    self._json_error(HTTPStatus.BAD_REQUEST, "Task must be text")
+                    return
+                if application.brief is None:
+                    self._json_error(
+                        HTTPStatus.CONFLICT,
+                        "Add work and create a context brief first",
+                    )
+                    return
+                with application._state_lock:
+                    if application.running:
+                        self._json_error(HTTPStatus.CONFLICT, "Another task is already running")
+                        return
+                    application.running = True
+                try:
+                    result = application.task_runner(
+                        provider=provider,
+                        brief=application.brief,
+                        task=task,
+                    )
+                    application.task_report = result
+                except (AgentExperimentError, KeyError, TypeError, ValueError) as error:
+                    self._json_error(HTTPStatus.BAD_REQUEST, str(error))
+                    return
+                except Exception:  # noqa: BLE001
+                    self._json_error(
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        f"The {PROVIDER_NAMES[provider]} task could not finish",
+                    )
+                    return
+                finally:
+                    with application._state_lock:
+                        application.running = False
+                self._send_json(result)
+
             def _run(self, provider: str) -> None:
                 with application._state_lock:
                     if application.running:
@@ -337,18 +482,31 @@ class TesterApplication:
                 self._send_json(result)
 
             def _report(self) -> None:
-                if application.report is None:
-                    self._json_error(HTTPStatus.NOT_FOUND, "No test report is ready")
+                self._download(
+                    application.report,
+                    filename=(
+                        "lians-"
+                        f'{application.report_provider or "ai"}-research-report.json'
+                    ),
+                    missing="No test report is ready",
+                )
+
+            def _download(
+                self,
+                value: Mapping[str, Any] | None,
+                *,
+                filename: str,
+                missing: str,
+            ) -> None:
+                if value is None:
+                    self._json_error(HTTPStatus.NOT_FOUND, missing)
                     return
-                payload = json.dumps(application.report, indent=2).encode("utf-8")
+                payload = json.dumps(value, indent=2).encode("utf-8")
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header(
                     "Content-Disposition",
-                    (
-                        'attachment; filename="lians-'
-                        f'{application.report_provider or "ai"}-research-report.json"'
-                    ),
+                    f'attachment; filename="{filename}"',
                 )
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
@@ -398,7 +556,7 @@ class TesterApplication:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the local Lians AI context test")
+    parser = argparse.ArgumentParser(description="Run the local Lians preview")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--token")
     parser.add_argument("--no-browser", action="store_true")

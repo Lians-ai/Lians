@@ -46,7 +46,7 @@ def main() -> int:
     )
     try:
         page = wait_for_page(base_url)
-        assert b"See how much context Lians can cut" in page
+        assert b"Use less context. Get more AI." in page
         assert b"eyebrow" not in page.lower()
         assert "\N{EM DASH}".encode("utf-8") not in page
         assets: dict[str, bytes] = {}
@@ -71,7 +71,7 @@ def main() -> int:
             method="POST",
             headers={
                 "Content-Type": "application/json",
-                "Origin": base_url.rstrip("/"),
+                "Origin": f"http://127.0.0.1:{port}",
             },
         )
         with urlopen(close, timeout=3) as response:

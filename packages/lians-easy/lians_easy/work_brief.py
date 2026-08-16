@@ -303,7 +303,15 @@ def load_work_records(path: str | Path) -> list[dict[str, Any]]:
         raise WorkBriefError(f"Input file does not exist: {source}")
     if source.stat().st_size > MAX_INPUT_BYTES:
         raise WorkBriefError("Input file exceeds the 64 MiB local compiler limit")
-    raw = source.read_text(encoding="utf-8-sig")
+    return parse_work_records(source.read_text(encoding="utf-8-sig"))
+
+
+def parse_work_records(raw: str) -> list[dict[str, Any]]:
+    """Parse a JSON or JSON Lines work export without writing it to disk."""
+    if not isinstance(raw, str):
+        raise WorkBriefError("Input must be JSON text")
+    if len(raw.encode("utf-8")) > MAX_INPUT_BYTES:
+        raise WorkBriefError("Input file exceeds the 64 MiB local compiler limit")
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
