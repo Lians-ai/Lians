@@ -136,19 +136,27 @@ def test_assets_and_status_are_local_and_do_not_leak_private_auth_fields(
     running_app: tuple[LocalTesterApplication, str],
 ) -> None:
     _, base_url = running_app
-    for route in (
-        "",
-        "style.css",
-        "app.js",
-        "wordmark.png",
-        "favicon.png",
-        "sora.woff2",
-    ):
+    expected_content_types = {
+        "": "text/html; charset=utf-8",
+        "style.css": "text/css; charset=utf-8",
+        "app.js": "text/javascript; charset=utf-8",
+        "wordmark.png": "image/png",
+        "favicon.png": "image/png",
+        "sora.woff2": "font/woff2",
+    }
+    for route, expected_content_type in expected_content_types.items():
         status, headers, payload = read(base_url + route)
         assert status == 200
         assert payload
+        assert headers["Content-Type"] == expected_content_type
+        assert "\r" not in headers["Content-Type"]
+        assert "\n" not in headers["Content-Type"]
         assert headers["Cache-Control"] == "no-store"
         assert "default-src 'self'" in headers["Content-Security-Policy"]
+
+    with pytest.raises(HTTPError) as injected:
+        read(base_url + "favicon.png%0d%0aX-Injected:%20true")
+    assert injected.value.code == 404
 
     _, _, payload = read(base_url + "api/status?provider=claude")
     status_payload = json.loads(payload)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import mimetypes
 import re
 import secrets
 import threading
@@ -361,9 +360,19 @@ class TesterApplication:
                 except (FileNotFoundError, KeyError):
                     self._json_error(HTTPStatus.NOT_FOUND, "Asset not found")
                     return
-                content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
-                if name == "sora.woff2":
+                if name == "index.html":
+                    content_type = "text/html; charset=utf-8"
+                elif name == "style.css":
+                    content_type = "text/css; charset=utf-8"
+                elif name == "app.js":
+                    content_type = "text/javascript; charset=utf-8"
+                elif name in {"wordmark.png", "favicon.png"}:
+                    content_type = "image/png"
+                elif name == "sora.woff2":
                     content_type = "font/woff2"
+                else:
+                    self._json_error(HTTPStatus.NOT_FOUND, "Asset not found")
+                    return
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(payload)))
