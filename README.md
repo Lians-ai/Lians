@@ -1,6 +1,12 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/logo-blue.png" width="420" alt="Lians lotus logo">
+    <img src="docs/images/favicon.png" width="96" alt="Lians Lotus">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Lians-ai/Lians">
+    <img src="docs/images/logo.png" width="360" alt="Lians">
   </a>
 </p>
 
@@ -21,12 +27,16 @@
 
 # Use less context. Get more AI.
 
-Lians helps Claude, Cursor, Codex, and other AI tools stop rereading the same
-project context.
+Lians gives Claude, Cursor, Codex, and other AI tools a small useful brief
+instead of making them reread everything.
 
-Save a useful preference, fact, constraint, or decision once. In a later task,
-Lians reuses only a small relevant slice and leaves the rest out. You keep your
-model, editor, and normal workflow.
+Keep your AI account, editor, and normal workflow. Lians works locally between
+your history and your AI:
+
+- **Across chats:** save a preference, fact, constraint, or decision once and
+  reuse only the relevant slice later.
+- **Across large workloads:** turn thousands of research posts or browser events
+  into one bounded, verifiable work brief.
 
 - **Local by default:** encrypted saved context stays on your device.
 - **No AI credentials:** Lians does not ask for your Claude, Cursor, or Codex
@@ -35,11 +45,16 @@ model, editor, and normal workflow.
   the estimated repeated memory context avoided.
 - **Portable:** one local store can support multiple compatible AI tools.
 
+In four bounded synthetic tests on signed-in Claude Code and Codex accounts,
+Lians preserved the exact answer while delivering **4.96x to 30.21x more work
+per provider-reported input token**. This measures those workflows, not a change
+to provider quotas. [Read the method and reports](docs/benchmarks/work-per-token-2026-08-16.md).
+
 <p align="center">
   <img src="docs/assets/cross-tool-memory-flow.svg" width="100%" alt="A saved project preference is reused as bounded context in a later Cursor, Codex, or Claude task.">
 </p>
 
-## Try Lians in two chats
+## Try Lians in 60 seconds
 
 Choose the AI tool you already use:
 
@@ -67,6 +82,21 @@ Lians can reuse the saved detail without replaying the whole previous chat.
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second remember, reuse, and delete proof</strong></a>
 </p>
+
+## Compress a large workday
+
+Already have a post export or a browser-work log? Compile it locally before
+giving it to Claude or Codex:
+
+```bash
+lians brief research posts.jsonl --output research-brief.json
+lians brief browser browser-events.jsonl --output browser-brief.json
+```
+
+The command accepts JSON or JSON Lines, removes repeated research text or old
+browser states, keeps representative evidence, and writes a hash receipt. Raw
+records are not sent to an AI provider, and credential-like records are
+refused.
 
 ## The product
 
@@ -104,6 +134,7 @@ Apple Developer ID signing/notarization. See the
 | Capability | Status |
 |---|---|
 | Free local memory through MCP and Python | Available |
+| Local research and browser brief compiler | Available from source |
 | Cursor, Claude Code, Codex, Gemini, Antigravity, Windsurf, Cline, and OpenCode setup paths | Available |
 | Guided desktop installer and local control center | Release candidate; source/CI evaluation only until signing |
 | Bounded context and signed selection receipts | Available |
