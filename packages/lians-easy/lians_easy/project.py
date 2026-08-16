@@ -32,17 +32,18 @@ class Project:
         return asdict(self)
 
 
-def _validated_project_path(value: str | Path) -> Path:
+def _validate_workspace_hint(value: str | Path, *, root: Path) -> None:
     raw = os.fspath(value)
     if not raw or len(raw) > _MAX_PATH_CHARS or _CONTROL.search(raw):
         raise ValueError("project path must be a bounded local path")
     try:
-        resolved = Path(raw).expanduser().resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise ValueError("project path must exist and be accessible") from exc
-    if not (resolved.is_dir() or resolved.is_file()):
-        raise ValueError("project path must identify a file or directory")
-    return resolved
+        requested = os.path.normcase(os.path.abspath(os.path.expanduser(raw)))
+        boundary = os.path.normcase(str(root))
+        inside = os.path.commonpath([requested, boundary]) == boundary
+    except (OSError, ValueError):
+        inside = False
+    if not inside:
+        raise ValueError("project path must stay inside the launched workspace")
 
 
 def _repository_root(start: Path) -> Path:
@@ -171,7 +172,13 @@ def _origin(root: Path) -> str | None:
 
 
 def detect_project(cwd: str | Path | None = None) -> Project:
-    root = _repository_root(_validated_project_path(cwd or Path.cwd()))
+    try:
+        current = Path.cwd().resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("launched workspace must exist and be accessible") from exc
+    root = _repository_root(current)
+    if cwd is not None:
+        _validate_workspace_hint(cwd, root=root)
     origin = _origin(root)
     identity = origin or os.path.normcase(str(root))
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]

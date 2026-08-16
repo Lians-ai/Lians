@@ -271,13 +271,14 @@ def test_short_code_add_device_flow_needs_no_workspace_id_or_key_copy(tmp_path):
     assert "FastAPI" not in json.dumps(cloud.log._workspaces)
 
 
-def test_cursor_memory_reaches_codex_and_claude_with_correction_and_forgetting(tmp_path):
+def test_cursor_memory_reaches_codex_and_claude_with_correction_and_forgetting(tmp_path, monkeypatch):
     """Prove the launch-critical cross-tool sequence across two local devices."""
 
     auth = FakeAuth()
     cloud = HTTPShapeCloud()
     cursor_project = tmp_path / "desktop-project"
     (cursor_project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(cursor_project)
     cursor_store = MemoryStore(tmp_path / "desktop" / "memory.sqlite3")
     cursor_state_path = tmp_path / "desktop" / "sync-state.json"
     cursor_sync = _service(cursor_store, auth, cloud, cursor_state_path, "Main PC")
@@ -543,7 +544,7 @@ def test_backup_recovery_requires_confirmation_and_preserves_unreadable_state(
     assert state_path.read_text(encoding="utf-8") == "existing state"
 
 
-def test_cloud_failure_never_blocks_or_leaks_from_a_local_remember(tmp_path):
+def test_cloud_failure_never_blocks_or_leaks_from_a_local_remember(tmp_path, monkeypatch):
     class FailingCloud:
         def client_factory(self, _base_url, *, bearer_token_provider):
             assert bearer_token_provider() == "short-lived-access-token"
@@ -559,6 +560,7 @@ def test_cloud_failure_never_blocks_or_leaks_from_a_local_remember(tmp_path):
     sync = _service(store, FakeAuth(), cloud, tmp_path / "sync-state.json", "Laptop")
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
 
     result = call_tool(
         store,

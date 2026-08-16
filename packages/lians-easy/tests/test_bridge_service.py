@@ -41,9 +41,10 @@ def _json_request(url, *, cookie, data=None, origin=None):
         return response.status, json.loads(response.read())
 
 
-def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path):
+def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     remembered = call_tool(
         store,
@@ -134,9 +135,10 @@ def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path):
     assert context_for_event(event, client="claude", store=store)["context"] == ""
 
 
-def test_cursor_remember_creates_the_first_project_rule(tmp_path):
+def test_cursor_remember_creates_the_first_project_rule(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
 
     call_tool(
@@ -156,7 +158,8 @@ def test_cursor_remember_creates_the_first_project_rule(tmp_path):
     assert "Never use em dashes." in rule.read_text(encoding="utf-8")
 
 
-def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path):
+def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
 
     class PullingCloud:
@@ -191,6 +194,7 @@ def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path):
 def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     detected = call_tool(
@@ -222,6 +226,7 @@ def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
 def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     call_tool(
@@ -255,6 +260,7 @@ def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch)
 def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     call_tool(
@@ -296,6 +302,7 @@ def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
 def test_antigravity_empty_workspace_injects_global_memory_only(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     call_tool(
@@ -334,7 +341,8 @@ def test_antigravity_empty_workspace_injects_global_memory_only(tmp_path, monkey
     assert pack["receipt"]["excluded"]["scope"] == 1
 
 
-def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_path):
+def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     app = BridgeApplication(store, port=0)
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
@@ -638,7 +646,8 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
         thread.join(timeout=5)
 
 
-def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
+def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     calls = []
 
     class FakeCloudAuth:
