@@ -27,6 +27,8 @@ from .lifecycle import listen_for_windows_installer_shutdown
 from .mcp import default_data_path, run
 from .portability import export_backup, import_backup, verify_backup
 from .store import MemoryStore
+from .stretch_experiment import build_stretch_plan, run_stretch_experiment
+from .work_brief import WorkBriefError, compile_work_brief_file
 
 
 def _keys(raw: str) -> list[str]:
@@ -175,6 +177,16 @@ def parser() -> argparse.ArgumentParser:
     diagnostic = commands.add_parser("doctor", help="Show runtime and client detection")
     diagnostic.add_argument("--json", action="store_true")
 
+    brief = commands.add_parser(
+        "brief", help="Turn a large local work export into a small AI-ready brief"
+    )
+    brief.add_argument("kind", choices=("research", "browser"))
+    brief.add_argument("input", type=Path)
+    brief.add_argument("--evidence", type=int, default=12)
+    brief.add_argument("--output", type=Path)
+    brief.add_argument("--overwrite", action="store_true")
+    brief.add_argument("--json", action="store_true")
+
     experiment = commands.add_parser(
         "experiment", help="Measure a bounded-context product hypothesis"
     )
@@ -198,6 +210,28 @@ def parser() -> argparse.ArgumentParser:
     claude_experiment.add_argument("--output", type=Path)
     claude_experiment.add_argument("--overwrite", action="store_true")
     claude_experiment.add_argument("--json", action="store_true")
+
+    stretch_experiment = experiments.add_parser(
+        "stretch", help="Measure large research or browser workloads with local compilation"
+    )
+    stretch_experiment.add_argument(
+        "--workload",
+        choices=("social-research", "browser-marketing"),
+        required=True,
+    )
+    stretch_experiment.add_argument("--records", type=int)
+    stretch_experiment.add_argument("--run", action="store_true")
+    stretch_experiment.add_argument("--provider", choices=("claude", "codex"))
+    stretch_experiment.add_argument(
+        "--paired",
+        action="store_true",
+        help="Also send raw replay when it stays below the safety cap",
+    )
+    stretch_experiment.add_argument("--model", default="sonnet")
+    stretch_experiment.add_argument("--repetitions", type=int, default=1)
+    stretch_experiment.add_argument("--output", type=Path)
+    stretch_experiment.add_argument("--overwrite", action="store_true")
+    stretch_experiment.add_argument("--json", action="store_true")
 
     backup = commands.add_parser("backup", help="Move encrypted memory safely between devices")
     backup_commands = backup.add_subparsers(dest="backup_action", required=True)
@@ -296,23 +330,71 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "doctor":
         _show(doctor(), as_json=args.json)
         return
+    if args.command == "brief":
+        if args.output is not None and args.output.exists() and not args.overwrite:
+            raise SystemExit("Output already exists; use --overwrite to replace it")
+        try:
+            result = compile_work_brief_file(
+                args.kind,
+                args.input,
+                evidence_limit=args.evidence,
+            )
+        except (OSError, UnicodeError, WorkBriefError) as error:
+            raise SystemExit(str(error)) from error
+        rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+        if args.output is not None:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered, encoding="utf-8")
+        if args.json or args.output is None:
+            print(rendered, end="")
+        else:
+            receipt = result["receipt"]
+            print(f"Lians compiled {receipt['raw_record_count']} local records.")
+            print(f"- AI-ready brief: {args.output}")
+            print(
+                "- Estimated work per input token: "
+                f"{receipt['estimated_work_per_input_token_multiplier']}x"
+            )
+            print("Raw records were not sent to an AI provider.")
+        return
     if args.command == "experiment":
         if args.output is not None and args.output.exists() and not args.overwrite:
             raise SystemExit("Output already exists; use --overwrite to replace it")
         try:
-            result = (
-                run_claude_experiment(
-                    model=args.model,
-                    repetitions=args.repetitions,
-                    max_context_tokens=args.max_context_tokens,
-                    scenario=args.scenario,
+            if args.experiment_name == "stretch":
+                if args.paired and not args.run:
+                    raise ValueError("--paired requires --run")
+                if args.run and args.provider is None:
+                    raise ValueError("--provider is required with --run")
+                result = (
+                    run_stretch_experiment(
+                        args.provider,
+                        workload=args.workload,
+                        records=args.records,
+                        repetitions=args.repetitions,
+                        paired=args.paired,
+                        model=args.model,
+                    )
+                    if args.run
+                    else build_stretch_plan(
+                        workload=args.workload,
+                        records=args.records,
+                    ).report
                 )
-                if args.run
-                else build_experiment_plan(
-                    max_context_tokens=args.max_context_tokens,
-                    scenario=args.scenario,
-                ).report
-            )
+            else:
+                result = (
+                    run_claude_experiment(
+                        model=args.model,
+                        repetitions=args.repetitions,
+                        max_context_tokens=args.max_context_tokens,
+                        scenario=args.scenario,
+                    )
+                    if args.run
+                    else build_experiment_plan(
+                        max_context_tokens=args.max_context_tokens,
+                        scenario=args.scenario,
+                    ).report
+                )
         except (ClaudeExperimentError, ValueError) as error:
             raise SystemExit(str(error)) from error
         if args.output is not None:
@@ -323,7 +405,7 @@ def main(argv: list[str] | None = None) -> None:
             )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
-        elif result["status"] == "planned":
+        elif result["status"] == "planned" and args.experiment_name == "claude":
             full = result["variants"]["full_replay"]
             bounded = result["variants"]["lians_bounded"]
             print("Claude comparison is ready; no Claude request was sent.")
@@ -331,7 +413,19 @@ def main(argv: list[str] | None = None) -> None:
             print(f"- Lians context: ~{bounded['prompt_token_estimate']} prompt tokens")
             print(f"- Planned reduction: {result['planned_prompt_reduction_percent']}%")
             print(result["next_step"])
-        else:
+        elif result["status"] == "planned":
+            full = result["variants"]["full_replay"]
+            compiled = result["variants"]["lians_compiled"]
+            projection = result["projection"]
+            print("Lians stretch comparison is ready; no AI request was sent.")
+            print(f"- Raw replay: ~{full['prompt_token_estimate']} prompt tokens")
+            print(f"- Lians compiled: ~{compiled['prompt_token_estimate']} prompt tokens")
+            print(
+                "- Estimated work per input token: "
+                f"{projection['estimated_work_per_input_token_multiplier']}x"
+            )
+            print(result["next_step"])
+        elif args.experiment_name == "claude":
             comparison = result["comparison"]
             print("Claude comparison complete.")
             print(
@@ -343,6 +437,31 @@ def main(argv: list[str] | None = None) -> None:
                 f"{comparison['provider_reported_input_token_reduction_percent']}%"
             )
             print(f"- 50% evidence gate: {'passed' if result['evidence_gate']['met'] else 'not met'}")
+            if args.output is not None:
+                print(f"- Report: {args.output}")
+            print(result["next_step"])
+        else:
+            comparison = result["comparison"]
+            print(f"Lians {result['provider']} stretch comparison complete.")
+            print(
+                "- Compiled answer exact: "
+                f"{'yes' if comparison['compiled_answer_exact'] else 'no'}"
+            )
+            if comparison["mode"] == "paired":
+                print(
+                    "- Provider-reported work per input token: "
+                    f"{comparison['provider_reported_work_per_token_multiplier']}x"
+                )
+                print(
+                    "- Provider-reported input-token reduction: "
+                    f"{comparison['provider_reported_input_token_reduction_percent']}%"
+                )
+            else:
+                print("- Provider comparison: compiled-only; no raw replay was sent")
+            print(
+                "- Evidence gate: "
+                f"{'passed' if result['evidence_gate']['live_met'] else 'not met'}"
+            )
             if args.output is not None:
                 print(f"- Report: {args.output}")
             print(result["next_step"])

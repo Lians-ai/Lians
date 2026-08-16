@@ -1,0 +1,99 @@
+{
+  "schema": "https://lians.ai/schemas/work-per-token-experiment/v0.1",
+  "status": "completed",
+  "workload": "social-research",
+  "fixture": {
+    "name": "synthetic-social-research-10000-v1",
+    "synthetic": true,
+    "raw_record_count": 10000,
+    "expected_answer": {
+      "records_received": 10000,
+      "unique_posts": 9000,
+      "duplicate_posts": 1000,
+      "negative_posts": 7200,
+      "top_topic": "context continuity",
+      "top_topic_posts": 3600,
+      "top_requested_integration": "Claude Code",
+      "top_requested_integration_posts": 3600
+    }
+  },
+  "variants": {
+    "full_replay": {
+      "prompt_token_estimate": 641551,
+      "prompt_sha256": "f5eea4d10145850e62178c712b1a46f1c7094861aaa3502222fdffabaed5e49c"
+    },
+    "lians_compiled": {
+      "prompt_token_estimate": 725,
+      "prompt_sha256": "6c6497faf6ea6f8298a1241b0453e67555aed775e65c818efc4a9bcaca06c713",
+      "compiler_receipt": {
+        "records_received": 10000,
+        "unique_records": 9000,
+        "duplicates_removed": 1000,
+        "representative_evidence_count": 8,
+        "raw_records_sha256": "a4586a0eea329be2485f51203f0cade5b2ee19224376e484a483bb5ef406c08c",
+        "summary_sha256": "adcea53823cf526c64b29ec7adf2b0e954d441239fa41c6eccebae534a9873db"
+      }
+    }
+  },
+  "projection": {
+    "estimated_work_per_input_token_multiplier": 884.9,
+    "estimated_usage_extension_percent": 88390.0,
+    "target_multiplier": 3.0,
+    "target_extension_percent": 200.0
+  },
+  "evidence_gate": {
+    "requires_exact_compiler_output": true,
+    "requires_live_answer_quality_when_run": true,
+    "minimum_work_per_input_token_multiplier": 3.0,
+    "offline_met": true,
+    "live_met": true
+  },
+  "claim_boundary": "This benchmark measures estimated raw prompt size, provider-reported input usage for calls that actually run, and exact answer quality on deterministic synthetic workloads. It does not prove that Lians changes a provider context window, subscription quota, rate limit, price, or every real workload. Social labels in this fixture are structured inputs; production classification cost is outside this benchmark.",
+  "next_step": "The compiled prompt answered exactly. A paired run is still required before making a provider-reported 3x claim.",
+  "provider": "claude",
+  "model": "sonnet",
+  "auth": {
+    "logged_in": true,
+    "auth_method": "claude.ai",
+    "provider": "firstParty"
+  },
+  "results": {
+    "lians_compiled": {
+      "runs": [
+        {
+          "answer": "{\"records_received\":10000,\"unique_posts\":9000,\"duplicate_posts\":1000,\"negative_posts\":7200,\"top_topic\":\"context continuity\",\"top_topic_posts\":3600,\"top_requested_integration\":\"Claude Code\",\"top_requested_integration_posts\":3600}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "records_received": 10000,
+              "unique_posts": 9000,
+              "duplicate_posts": 1000,
+              "negative_posts": 7200,
+              "top_topic": "context continuity",
+              "top_topic_posts": 3600,
+              "top_requested_integration": "Claude Code",
+              "top_requested_integration_posts": 3600
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 3492,
+            "cache_read_input_tokens": 0,
+            "provider_reported_total_input_tokens": 3494,
+            "output_tokens": 237
+          },
+          "duration_seconds": 5.296,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 3494
+    }
+  },
+  "comparison": {
+    "mode": "compiled-only",
+    "compiled_answer_exact": true,
+    "provider_reported_input_token_reduction_percent": null,
+    "provider_reported_work_per_token_multiplier": null
+  }
+}

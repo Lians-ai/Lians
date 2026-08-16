@@ -125,6 +125,15 @@ answers; bounded context averaged **77.2% fewer provider-reported input tokens**
 quota or savings claim. Read the
 [method and sanitized report](docs/benchmarks/claude-code-baseline.md).
 
+In a separate large-workload gate, four bounded paired runs across Claude Code
+and Codex preserved the exact expected answer while using **79.9% to 96.7%
+fewer provider-reported input tokens** after local compilation. That equals
+**4.96x to 30.21x work per input token** on the two synthetic social-research
+and browser-history fixtures. Separate compiled-only checks reached 10,000
+posts and 2,400 browser events. This clears a 3x synthetic product gate, not a
+claim that Lians changes provider quotas. Read the
+[method and machine-readable evidence](docs/benchmarks/work-per-token-2026-08-16.md).
+
 A separate live test stored one synthetic project fact through Cursor, recalled
 it in a new Cursor chat and a fresh Claude Code session, then confirmed that it
 was gone after deletion. Read the
