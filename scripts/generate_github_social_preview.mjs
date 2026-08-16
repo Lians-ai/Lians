@@ -1,12 +1,13 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
-const root = resolve(import.meta.dirname, "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const output = resolve(root, "docs/assets/github-social-preview.png");
 const logo = (await readFile(resolve(root, "docs/images/logo.png"))).toString("base64");
 const lotus = (await readFile(resolve(root, "integrations/cursor/assets/logo.svg"))).toString("base64");
