@@ -5,9 +5,13 @@ from __future__ import annotations
 import sys
 import threading
 import tkinter as tk
+import webbrowser
+from importlib.resources import files
 from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from .installer import (
     ClientTarget,
@@ -601,13 +605,303 @@ class SetupApp:
         self.root.destroy()
 
 
+class CompanionApp:
+    """Resident local control window shown while AI clients use Lians."""
+
+    def __init__(self, root: tk.Tk, bridge: Any, *, start_bridge: bool = True) -> None:
+        self.root = root
+        self.bridge = bridge
+        self._stopping = False
+        self._bridge_error: str | None = None
+        self._bridge_thread: threading.Thread | None = None
+        self.target_labels: dict[str, tk.Label] = {}
+
+        self.root.title("Lians")
+        self.root.geometry("720x680")
+        self.root.minsize(640, 620)
+        self.root.configure(background=BACKGROUND)
+        self.root.option_add("*Font", ("Segoe UI", 10))
+        self.root.protocol("WM_DELETE_WINDOW", self._minimize)
+        if sys.platform == "win32":
+            try:
+                self.root.iconbitmap(default=sys.executable)
+            except tk.TclError:
+                pass
+
+        self.shell = tk.Frame(root, background=BACKGROUND, padx=34, pady=26)
+        self.shell.pack(fill="both", expand=True)
+        self._build()
+        if start_bridge:
+            self._start_bridge()
+        self.root.after(200, self._refresh)
+
+    def _label(self, parent: tk.Widget, text: str = "", **kwargs: Any) -> tk.Label:
+        return tk.Label(parent, text=text, background=kwargs.pop("background", BACKGROUND), **kwargs)
+
+    def _build(self) -> None:
+        top = tk.Frame(self.shell, background=BACKGROUND)
+        top.pack(fill="x")
+        try:
+            logo_path = files("lians_easy").joinpath("app", "logo-blue.png")
+            self.logo = tk.PhotoImage(file=str(logo_path))
+            width = self.logo.width()
+            if width > 154:
+                factor = max(1, round(width / 154))
+                self.logo = self.logo.subsample(factor, factor)
+            tk.Label(top, image=self.logo, background=BACKGROUND).pack(side="left")
+        except (OSError, tk.TclError):
+            self._label(
+                top,
+                "lians",
+                foreground=BLUE,
+                font=("Segoe UI", 24, "bold"),
+            ).pack(side="left")
+
+        self._label(
+            self.shell,
+            "Lians is starting.",
+            foreground=TEXT,
+            font=("Segoe UI", 26, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(44, 8))
+        self._label(
+            self.shell,
+            (
+                "Keep Lians open or minimized, then use Claude, Codex, and Cursor normally. "
+                "The local memory layer stays on this device."
+            ),
+            foreground=MUTED,
+            font=("Segoe UI", 11),
+            justify="left",
+            wraplength=640,
+            anchor="w",
+        ).pack(fill="x", pady=(0, 22))
+
+        status_card = tk.Frame(
+            self.shell,
+            background=PANEL,
+            highlightbackground=LINE,
+            highlightthickness=1,
+            padx=18,
+            pady=14,
+        )
+        status_card.pack(fill="x")
+        self.status_dot = self._label(
+            status_card,
+            "●",
+            background=PANEL,
+            foreground=BLUE,
+            font=("Segoe UI", 14, "bold"),
+        )
+        self.status_dot.pack(side="left", padx=(0, 10))
+        self.status = tk.StringVar(value="Starting the encrypted local memory bridge")
+        self._label(
+            status_card,
+            textvariable=self.status,
+            background=PANEL,
+            foreground=TEXT,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(side="left")
+        self.memory_status = tk.StringVar(value="0 saved memories")
+        self._label(
+            status_card,
+            textvariable=self.memory_status,
+            background=PANEL,
+            foreground=MUTED,
+        ).pack(side="right")
+
+        integrations = tk.Frame(self.shell, background=BACKGROUND)
+        integrations.pack(fill="x", pady=(18, 18))
+        targets = client_targets()
+        for index, key in enumerate(("claude", "codex", "cursor")):
+            target = targets[key]
+            card = tk.Frame(
+                integrations,
+                background=PANEL,
+                highlightbackground=LINE,
+                highlightthickness=1,
+                padx=14,
+                pady=14,
+            )
+            card.pack(
+                side="left",
+                fill="both",
+                expand=True,
+                padx=(0 if index == 0 else 6, 0 if index == 2 else 6),
+            )
+            self._label(
+                card,
+                "Claude" if key == "claude" else target.label,
+                background=PANEL,
+                foreground=TEXT,
+                font=("Segoe UI", 10, "bold"),
+            ).pack(anchor="w")
+            state = self._label(
+                card,
+                "Connected" if target.configured else "Not connected",
+                background=PANEL,
+                foreground=GREEN if target.configured else MUTED,
+                font=("Segoe UI", 9),
+            )
+            state.pack(anchor="w", pady=(5, 0))
+            self.target_labels[key] = state
+
+        actions = tk.Frame(self.shell, background=BACKGROUND)
+        actions.pack(fill="x", pady=(4, 0))
+        self.open_button = tk.Button(
+            actions,
+            text="Open Lians dashboard",
+            command=self._open_dashboard,
+            state="disabled",
+            background=BLUE,
+            foreground="white",
+            activebackground="#2e67de",
+            activeforeground="white",
+            disabledforeground="#8390a4",
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=("Segoe UI", 10, "bold"),
+            padx=20,
+            pady=10,
+        )
+        self.open_button.pack(side="left")
+        tk.Button(
+            actions,
+            text="Minimize and use my AI",
+            command=self._minimize,
+            background=PANEL_SOFT,
+            foreground=TEXT,
+            activebackground=PANEL,
+            activeforeground=TEXT,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=18,
+            pady=10,
+        ).pack(side="left", padx=(10, 0))
+        tk.Button(
+            actions,
+            text="Stop Lians",
+            command=self._stop,
+            background=BACKGROUND,
+            foreground=MUTED,
+            activebackground=BACKGROUND,
+            activeforeground=TEXT,
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            padx=12,
+            pady=10,
+        ).pack(side="right")
+
+        self.notice = tk.StringVar(
+            value=(
+                "Closing this window minimizes Lians. Use Stop Lians when you want the local "
+                "companion to exit. Your configured agent connections remain installed."
+            )
+        )
+        self._label(
+            self.shell,
+            textvariable=self.notice,
+            foreground=MUTED,
+            justify="left",
+            wraplength=640,
+            anchor="w",
+        ).pack(fill="x", pady=(22, 0))
+
+    def _start_bridge(self) -> None:
+        def serve() -> None:
+            try:
+                self.bridge.serve()
+            except (OSError, RuntimeError) as error:
+                self._bridge_error = str(error)
+
+        self._bridge_thread = threading.Thread(target=serve, daemon=True)
+        self._bridge_thread.start()
+
+    def _refresh(self) -> None:
+        if self._stopping:
+            return
+        if self._bridge_error:
+            self.status.set("Lians could not start")
+            self.status_dot.configure(foreground=RED)
+            self.notice.set(self._bridge_error)
+            self.open_button.configure(state="disabled")
+        elif self.bridge.running:
+            self.status.set("Lians is running in the background")
+            self.status_dot.configure(foreground=GREEN)
+            self.open_button.configure(state="normal")
+            try:
+                stats = self.bridge.store.stats()
+                count = int(stats.get("current", 0))
+                self.memory_status.set(
+                    f"{count} saved memor{'y' if count == 1 else 'ies'}"
+                )
+            except (OSError, RuntimeError, ValueError):
+                self.memory_status.set("Encrypted memory ready")
+        for key, label in self.target_labels.items():
+            configured = client_targets()[key].configured
+            label.configure(
+                text="Connected" if configured else "Not connected",
+                foreground=GREEN if configured else MUTED,
+            )
+        self.root.after(2000, self._refresh)
+
+    def _open_dashboard(self) -> None:
+        if self.bridge.running:
+            webbrowser.open(self.bridge.origin)
+
+    def _minimize(self) -> None:
+        self.notice.set("Lians is still running. Open it from the Windows taskbar when needed.")
+        self.root.iconify()
+
+    def _stop(self) -> None:
+        if self._stopping:
+            return
+        self._stopping = True
+        self.status.set("Stopping Lians")
+        self.open_button.configure(state="disabled")
+
+        def stop() -> None:
+            self.bridge.shutdown()
+            try:
+                self.root.after(0, self.root.destroy)
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=stop, daemon=False).start()
+
+
+def _running_bridge_origin() -> str | None:
+    from .bridge import DEFAULT_HOST, DEFAULT_PORT
+
+    origin = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
+    try:
+        with urlopen(origin, timeout=0.6) as response:
+            server = response.headers.get("Server", "")
+    except (OSError, URLError):
+        return None
+    return origin if server.startswith("LiansBridge/") else None
+
+
+def _launch_companion() -> None:
+    from .bridge import BridgeApplication
+    from .mcp import default_data_path
+    from .store import MemoryStore
+
+    existing = _running_bridge_origin()
+    if existing is not None:
+        webbrowser.open(existing)
+        return
+    root = tk.Tk()
+    CompanionApp(root, BridgeApplication(MemoryStore(default_data_path())))
+    root.mainloop()
+
+
 def launch() -> None:
     if any(target.configured for target in client_targets().values()):
-        from .bridge import BridgeApplication
-        from .mcp import default_data_path
-        from .store import MemoryStore
-
-        BridgeApplication(MemoryStore(default_data_path())).serve(open_browser=True)
+        _launch_companion()
         return
     root = tk.Tk()
     if sys.platform == "win32":
@@ -621,8 +915,4 @@ def launch() -> None:
     app = SetupApp(root)
     root.mainloop()
     if app.open_requested:
-        from .bridge import BridgeApplication
-        from .mcp import default_data_path
-        from .store import MemoryStore
-
-        BridgeApplication(MemoryStore(default_data_path())).serve(open_browser=True)
+        _launch_companion()

@@ -177,10 +177,23 @@ class BridgeApplication:
         self.update_lock = threading.Lock()
         self.cloud_auth = cloud_auth or NativeCloudAuth.for_store(store)
         self.cloud_sync = cloud_sync or CloudSyncService(store, self.cloud_auth)
+        self._server_lock = threading.Lock()
+        self._server: ThreadingHTTPServer | None = None
 
     @property
     def origin(self) -> str:
         return f"http://{self.host}:{self.port}"
+
+    @property
+    def running(self) -> bool:
+        with self._server_lock:
+            return self._server is not None
+
+    def shutdown(self) -> None:
+        with self._server_lock:
+            server = self._server
+        if server is not None:
+            server.shutdown()
 
     def handler(self) -> type[BaseHTTPRequestHandler]:
         application = self
@@ -824,6 +837,11 @@ class BridgeApplication:
     def serve(self, *, open_browser: bool = False) -> None:
         server = ThreadingHTTPServer((self.host, self.port), self.handler())
         self.port = server.server_port
+        with self._server_lock:
+            if self._server is not None:
+                server.server_close()
+                raise RuntimeError("Lians Bridge is already running in this process")
+            self._server = server
         if open_browser:
             opener = threading.Timer(0.15, lambda: webbrowser.open(self.origin))
             opener.daemon = True
@@ -832,6 +850,9 @@ class BridgeApplication:
             server.serve_forever()
         finally:
             server.server_close()
+            with self._server_lock:
+                if self._server is server:
+                    self._server = None
 
 
 def re_match_memory_action(path: str) -> tuple[str, str] | None:

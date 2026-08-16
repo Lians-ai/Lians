@@ -5,6 +5,7 @@ import json
 import re
 import sys
 import threading
+import time
 from http.server import ThreadingHTTPServer
 from io import StringIO
 from urllib.error import HTTPError
@@ -404,6 +405,23 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_bridge_application_can_be_started_and_stopped_as_a_resident_service(tmp_path):
+    app = BridgeApplication(MemoryStore(tmp_path / "resident.sqlite3"), port=0)
+    thread = threading.Thread(target=app.serve, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 5
+    while not app.running and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert app.running is True
+    assert app.port > 0
+    with urlopen(app.origin, timeout=2) as response:
+        assert response.headers["Server"].startswith("LiansBridge/")
+    app.shutdown()
+    thread.join(timeout=5)
+    assert thread.is_alive() is False
+    assert app.running is False
 
 
 def test_loopback_cloud_auth_exposes_status_and_confirmed_actions_without_tokens(tmp_path):
