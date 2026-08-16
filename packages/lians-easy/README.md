@@ -46,6 +46,14 @@ usage for full replay versus bounded Lians context. It does not claim to extend
 the ordinary interactive Claude Pro allowance. See the
 [method and claim boundary](../../docs/benchmarks/claude-code-baseline.md).
 
+The larger research-history gate is available explicitly:
+
+```bash
+python -m lians_easy experiment claude --scenario market-research \
+  --max-context-tokens 2048 --repetitions 2 --run \
+  --output claude-market-research-report.json
+```
+
 ## Developer package
 
 The public Python distribution is named `lians-bridge`. It is built as a

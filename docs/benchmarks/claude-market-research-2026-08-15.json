@@ -1,0 +1,288 @@
+{
+  "schema": "https://lians.ai/schemas/claude-context-experiment/v0.1",
+  "status": "completed",
+  "experiment": "claude-market-research-full-replay-vs-lians-bounded-context",
+  "lane": "claude-code-print-mode",
+  "execution_isolation": {
+    "temporary_working_directory": true,
+    "setting_sources": [],
+    "tools_enabled": false,
+    "skills_enabled": false,
+    "mcp_mode": "strict-empty",
+    "session_persistence": false
+  },
+  "fixture": {
+    "name": "synthetic-multi-session-market-research-v1",
+    "scenario": "market-research",
+    "synthetic": true,
+    "research_session_count": 48,
+    "saved_memory_count": 54,
+    "expected_answer": {
+      "cohort_designation": "independent student researchers",
+      "friction_phrase": "rebuilding context between research sessions",
+      "connector_target": "Claude Code",
+      "monthly_price_ceiling_usd": 9,
+      "privacy_stance": "local-only by default",
+      "activation_threshold": "three recalled decisions in seven days"
+    }
+  },
+  "variants": {
+    "full_replay": {
+      "memory_count": 54,
+      "prompt_token_estimate": 8407,
+      "prompt_sha256": "986b9252e44f99fbeb62d7c7ab080f1d261bdd30b3da3fd4d14dab74676ba7b2"
+    },
+    "lians_bounded": {
+      "memory_count": 6,
+      "prompt_token_estimate": 346,
+      "prompt_sha256": "6a054087d02ceb38ed1c07f91983b179fc69c77294e64218396d83a22f18878b",
+      "selection_receipt": {
+        "schema": "https://lians.ai/schemas/context-receipt/v0.1",
+        "id": "d6dd85e3-e0bd-46eb-be2d-da76d920ef79",
+        "created_at": "2026-08-16T03:37:21.167679+00:00",
+        "client": "claude-experiment",
+        "project": {
+          "id": "claude-market-research",
+          "name": "Market research synthesis",
+          "origin": "synthetic/local"
+        },
+        "query_sha256": "16df3d4f75f0898b5fcc2d897284e7b4e1f6a9510f1bf5fc4522458caa53ff16",
+        "context_sha256": "1e92659de9c9d35815632260192112aa0205716dce51149c2e06645c7a53baea",
+        "memory_count": 6,
+        "token_estimate": 527,
+        "limits": {
+          "max_memories": 6,
+          "max_tokens": 2048
+        },
+        "efficiency": {
+          "basis": "active in-scope memory content compared with full replay",
+          "available_memory_count": 54,
+          "available_memory_token_estimate": 8117,
+          "selected_memory_count": 6,
+          "selected_memory_token_estimate": 219,
+          "repeated_memory_tokens_avoided_estimate": 7898,
+          "reduction_percent_estimate": 97.3
+        },
+        "memories": [
+          {
+            "id": "0e86cede-98f6-49ef-b6e3-4a0b3737ea5e",
+            "kind": "handoff",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:37:21.149628+00:00",
+            "score": 19.0,
+            "reason": "Latest handoff for the active project",
+            "content_sha256": "99a89f16d681c3c3648d1134c4be43ca068b88cdeb6b97b4276f5e54f397c21d",
+            "token_estimate": 30
+          },
+          {
+            "id": "ec6102d0-2ed5-4d23-9733-df2c9b720c6c",
+            "kind": "handoff",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:37:21.144625+00:00",
+            "score": 19.0,
+            "reason": "Latest handoff for the active project",
+            "content_sha256": "e8dc5fdcc97d732b9627a92d6aab3fc342a2078273a3078cf0451830f56a1034",
+            "token_estimate": 34
+          },
+          {
+            "id": "05f1950a-0720-40eb-a9a0-a916f21c95b9",
+            "kind": "handoff",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:37:21.154990+00:00",
+            "score": 17.0,
+            "reason": "Latest handoff for the active project",
+            "content_sha256": "bb7678183b353e005e15a00dee5b395fd652c7b5174b697dda24b48673487372",
+            "token_estimate": 37
+          },
+          {
+            "id": "d7f331e0-8fad-46c7-82e0-03227499a8cf",
+            "kind": "handoff",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:37:21.118627+00:00",
+            "score": 17.0,
+            "reason": "Latest handoff for the active project",
+            "content_sha256": "440081c47c234d0e1055b3cbfa18b7a393e8a9912994cc6440f9611711322470",
+            "token_estimate": 43
+          },
+          {
+            "id": "d21f7cff-a5f8-4c90-b7ce-af92d77331e5",
+            "kind": "handoff",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:37:21.125628+00:00",
+            "score": 16.0,
+            "reason": "Latest handoff for the active project",
+            "content_sha256": "497a35f6d69438daa09ed5372b1453a87cc6fc6a3ea2a135aa62bf383e90c6fb",
+            "token_estimate": 36
+          },
+          {
+            "id": "769b3f54-5526-4627-a998-32009a072c98",
+            "kind": "handoff",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:37:21.114626+00:00",
+            "score": 16.0,
+            "reason": "Latest handoff for the active project",
+            "content_sha256": "ad9790ffc668e29fcfe95c22475b7fe0c91ffbbe46276203a42b5af1fbc5decb",
+            "token_estimate": 39
+          }
+        ],
+        "excluded": {
+          "scope": 0,
+          "paused": 0,
+          "irrelevant": 0,
+          "budget": 48
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "public_key": "NlET+E19uEm2ueiAUCRRe62YfJM4zrKFTcstgBRsaUo=",
+          "value": "fmoxuz8PtRKqU7zi+0rZjjjgmKMb45wHRfIYEzQP5ZMbjLMAR13WipiHTccQVmQmb2dH9lYbbYRJmA3k/5oJDQ=="
+        }
+      }
+    }
+  },
+  "planned_prompt_reduction_percent": 95.9,
+  "evidence_gate": {
+    "requires_all_answers_correct": true,
+    "minimum_provider_reported_input_token_reduction_percent": 50.0,
+    "met": true
+  },
+  "claim_boundary": "This compares provider-reported usage for isolated Claude Code print-mode calls on a synthetic workload. It does not prove that Lians enlarges a context window, extends an interactive Claude plan quota, or produces the same savings on every task.",
+  "next_step": "The 50% synthetic evidence gate passed. Validate with consenting real users before making a broader product claim.",
+  "model": "sonnet",
+  "repetitions": 2,
+  "auth": {
+    "logged_in": true,
+    "auth_method": "claude.ai",
+    "provider": "firstParty"
+  },
+  "results": {
+    "full_replay": {
+      "runs": [
+        {
+          "answer": "{\"cohort_designation\":\"independent student researchers\",\"friction_phrase\":\"rebuilding context between research sessions\",\"connector_target\":\"Claude Code\",\"monthly_price_ceiling_usd\":9,\"privacy_stance\":\"local-only by default\",\"activation_threshold\":\"three recalled decisions in seven days\"}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "cohort_designation": "independent student researchers",
+              "friction_phrase": "rebuilding context between research sessions",
+              "connector_target": "Claude Code",
+              "monthly_price_ceiling_usd": 9,
+              "privacy_stance": "local-only by default",
+              "activation_threshold": "three recalled decisions in seven days"
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 12535,
+            "cache_read_input_tokens": 0,
+            "provider_reported_total_input_tokens": 12537,
+            "output_tokens": 103
+          },
+          "duration_seconds": 3.711,
+          "repetition": 1
+        },
+        {
+          "answer": "{\"cohort_designation\":\"independent student researchers\",\"friction_phrase\":\"rebuilding context between research sessions\",\"connector_target\":\"Claude Code\",\"monthly_price_ceiling_usd\":9,\"privacy_stance\":\"local-only by default\",\"activation_threshold\":\"three recalled decisions in seven days\"}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "cohort_designation": "independent student researchers",
+              "friction_phrase": "rebuilding context between research sessions",
+              "connector_target": "Claude Code",
+              "monthly_price_ceiling_usd": 9,
+              "privacy_stance": "local-only by default",
+              "activation_threshold": "three recalled decisions in seven days"
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 12535,
+            "provider_reported_total_input_tokens": 12537,
+            "output_tokens": 103
+          },
+          "duration_seconds": 4.112,
+          "repetition": 2
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 12537,
+      "average_output_tokens": 103
+    },
+    "lians_bounded": {
+      "runs": [
+        {
+          "answer": "{\"cohort_designation\":\"independent student researchers\",\"friction_phrase\":\"rebuilding context between research sessions\",\"connector_target\":\"Claude Code\",\"monthly_price_ceiling_usd\":9,\"privacy_stance\":\"local-only by default\",\"activation_threshold\":\"three recalled decisions in seven days\"}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "cohort_designation": "independent student researchers",
+              "friction_phrase": "rebuilding context between research sessions",
+              "connector_target": "Claude Code",
+              "monthly_price_ceiling_usd": 9,
+              "privacy_stance": "local-only by default",
+              "activation_threshold": "three recalled decisions in seven days"
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 573,
+            "cache_read_input_tokens": 2278,
+            "provider_reported_total_input_tokens": 2853,
+            "output_tokens": 103
+          },
+          "duration_seconds": 3.521,
+          "repetition": 1
+        },
+        {
+          "answer": "{\"cohort_designation\":\"independent student researchers\",\"friction_phrase\":\"rebuilding context between research sessions\",\"connector_target\":\"Claude Code\",\"monthly_price_ceiling_usd\":9,\"privacy_stance\":\"local-only by default\",\"activation_threshold\":\"three recalled decisions in seven days\"}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "cohort_designation": "independent student researchers",
+              "friction_phrase": "rebuilding context between research sessions",
+              "connector_target": "Claude Code",
+              "monthly_price_ceiling_usd": 9,
+              "privacy_stance": "local-only by default",
+              "activation_threshold": "three recalled decisions in seven days"
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 2851,
+            "provider_reported_total_input_tokens": 2853,
+            "output_tokens": 103
+          },
+          "duration_seconds": 4.109,
+          "repetition": 2
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 2853,
+      "average_output_tokens": 103
+    }
+  },
+  "comparison": {
+    "both_variants_answered_correctly": true,
+    "average_provider_reported_input_token_delta": 9684.0,
+    "provider_reported_input_token_reduction_percent": 77.2
+  }
+}

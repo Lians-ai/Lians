@@ -46,6 +46,23 @@ used because the current CLI disables OAuth and keychain reads in that mode,
 which would force API-key authentication instead of the subscription route this
 test is designed to verify.
 
+For the larger multi-session workflow used by the 50% evidence gate:
+
+```bash
+lians experiment claude \
+  --scenario market-research \
+  --max-context-tokens 2048 \
+  --repetitions 2 \
+  --run \
+  --output claude-market-research-report.json
+```
+
+This fixture contains 48 synthetic interview/session records followed by six
+explicit launch-decision handoffs. Full replay receives all 54 records. The
+bounded variant receives the six handoffs selected by the same local
+`MemoryStore.context_pack` path used by the product. Two repetitions alternate
+variant order, producing four isolated Claude calls.
+
 ## Claim boundary
 
 This is a synthetic baseline, not a promise of universal savings. A successful
@@ -74,6 +91,27 @@ This is a successful smoke test, not a stable benchmark. It has one repetition,
 uses synthetic facts, and includes Claude Code's fixed agent overhead. Do not
 promote 15.9% as a general product claim. The sanitized machine-readable report
 is [`claude-code-baseline-2026-08-15.json`](claude-code-baseline-2026-08-15.json).
+
+## Multi-session market-research result
+
+The two-repetition market-research run passed the predefined 50% evidence gate:
+
+| Variant | Run 1 input | Run 2 input | Average | Exact answers |
+|---|---:|---:|---:|---:|
+| Full replay | 12,537 | 12,537 | 12,537 | 2/2 |
+| Lians bounded | 2,853 | 2,853 | 2,853 | 2/2 |
+
+Claude reported 9,684 fewer average input tokens for the bounded variant, a
+77.2% reduction. Results were identical when full replay ran first and when the
+bounded variant ran first. The output token count was 103 in every call, and
+all four responses exactly matched the six locked launch decisions.
+
+This crosses the synthetic evidence gate; it is still not a universal savings
+claim. The workload is deterministic and larger than the first smoke test, but
+it is not a natural history donated by a real user. The next evidence level
+requires consenting users and representative histories. See the sanitized
+[`claude-market-research-2026-08-15.json`](claude-market-research-2026-08-15.json)
+report for prompt hashes, selection receipt, per-run usage, and exact scoring.
 
 - [Claude Code print mode and usage metadata](https://code.claude.com/docs/en/headless)
 - [Claude Code CLI reference](https://code.claude.com/docs/en/cli-usage)

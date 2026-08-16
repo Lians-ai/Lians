@@ -76,6 +76,24 @@ def test_claude_experiment_defaults_to_an_offline_plan() -> None:
     assert parsed.run is False
     assert parsed.model == "sonnet"
     assert parsed.repetitions == 1
+    assert parsed.scenario == "baseline"
+    assert parsed.max_context_tokens is None
+
+
+def test_claude_experiment_accepts_market_research_scenario() -> None:
+    parsed = cli.parser().parse_args(
+        [
+            "experiment",
+            "claude",
+            "--scenario",
+            "market-research",
+            "--repetitions",
+            "2",
+        ]
+    )
+
+    assert parsed.scenario == "market-research"
+    assert parsed.repetitions == 2
 
 
 def test_claude_experiment_plan_does_not_call_claude(monkeypatch, capsys) -> None:

@@ -27,6 +27,26 @@ def test_plan_uses_a_smaller_bounded_prompt_with_the_exact_required_facts() -> N
     assert "does not prove" in plan.report["claim_boundary"]
 
 
+def test_market_research_plan_models_many_sessions_and_six_locked_decisions() -> None:
+    plan = claude_experiment.build_experiment_plan(scenario="market-research")
+
+    full = plan.report["variants"]["full_replay"]
+    bounded = plan.report["variants"]["lians_bounded"]
+    assert plan.report["fixture"]["research_session_count"] == 48
+    assert full["memory_count"] == 54
+    assert bounded["memory_count"] == 6
+    assert full["prompt_token_estimate"] > 8_000
+    assert plan.report["planned_prompt_reduction_percent"] > 80
+    assert "independent student researchers" in plan.lians_prompt
+    assert "rebuilding context between research sessions" in plan.lians_prompt
+    assert "Claude Code" in plan.lians_prompt
+    assert "monthly price ceiling USD: 9" in plan.lians_prompt
+    assert "local-only by default" in plan.lians_prompt
+    assert "three recalled decisions in seven days" in plan.lians_prompt
+    assert "Research session 01" not in plan.lians_prompt
+    assert plan.report["evidence_gate"]["met"] is None
+
+
 def test_preflight_fails_closed_before_auth_check_when_api_key_is_present() -> None:
     called = False
 
@@ -148,6 +168,7 @@ def test_live_comparison_uses_isolated_subscription_calls_and_scores_exact_answe
     }
     assert result["comparison"]["both_variants_answered_correctly"] is True
     assert result["comparison"]["provider_reported_input_token_reduction_percent"] > 70
+    assert result["evidence_gate"]["met"] is True
     assert len(calls) == 3
     for command, prompt, working_directory in calls[1:]:
         assert prompt

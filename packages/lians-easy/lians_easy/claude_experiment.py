@@ -69,6 +69,120 @@ _MEMORIES = (
     "The archive folder is read-only after final approval.",
 )
 
+
+def _market_research_memories() -> tuple[str, ...]:
+    """Create a deterministic, realistically sized multi-session research history."""
+    segments = (
+        "undergraduate researcher",
+        "graduate researcher",
+        "freelance strategist",
+        "junior product marketer",
+        "student club organizer",
+        "independent UX researcher",
+    )
+    tool_stacks = (
+        "Claude, Google Docs, and a citation manager",
+        "Cursor, spreadsheets, and interview transcripts",
+        "Claude Code, Markdown notes, and GitHub",
+        "Notion, survey exports, and slide decks",
+        "shared documents, chat threads, and calendar notes",
+        "a coding agent, local files, and qualitative-analysis software",
+    )
+    observations = (
+        "They copied a prior brief into a new chat before asking for a synthesis.",
+        "They searched three old documents to recover a decision made earlier in the week.",
+        "They shortened source notes manually because the assistant lost the useful thread.",
+        "They kept a separate decision log so a new session would not contradict earlier work.",
+        "They pasted the same audience description into multiple tools during one project.",
+        "They abandoned one analysis after the chat became too long to navigate confidently.",
+        "They compared an AI summary against raw notes because provenance was unclear.",
+        "They moved between an editor and a chat tool while preserving a manual checklist.",
+    )
+    concerns = (
+        "The participant would not upload confidential interview recordings to a new cloud service.",
+        "They wanted a visible explanation of which prior notes influenced an answer.",
+        "They were comfortable with setup only if their existing AI workflow stayed unchanged.",
+        "They cared more about dependable continuity than another general note-taking interface.",
+        "They expected deletion and correction controls before using the workflow for client work.",
+        "They wanted a small trial before asking a department or employer to approve software.",
+    )
+    probes = (
+        "The moderator asked them to resume a paused competitor review from the previous week.",
+        "The moderator asked for a recommendation grounded in several earlier interviews.",
+        "The moderator introduced a corrected requirement and checked for stale recommendations.",
+        "The moderator switched AI tools midway through a research synthesis task.",
+        "The moderator asked where one remembered preference originally came from.",
+        "The moderator removed one note and checked that it did not return later.",
+    )
+    sessions: list[str] = []
+    for index in range(48):
+        sessions.append(
+            " ".join(
+                (
+                    f"Research session {index + 1:02d} of 48.",
+                    f"Participant profile: {segments[index % len(segments)]}.",
+                    f"Current working stack: {tool_stacks[index % len(tool_stacks)]}.",
+                    observations[index % len(observations)],
+                    probes[index % len(probes)],
+                    concerns[index % len(concerns)],
+                    (
+                        "The session lasted forty-five minutes and included a think-aloud task, "
+                        "a short follow-up interview, and a confidence rating."
+                    ),
+                    (
+                        "This record is raw exploratory evidence; it does not by itself set a "
+                        "launch decision, price, integration, privacy promise, or success metric."
+                    ),
+                )
+            )
+        )
+
+    decisions = (
+        (
+            "Locked cohort designation: independent student researchers. The synthesis team chose "
+            "this initial cohort after reviewing the completed research sessions."
+        ),
+        (
+            "Locked workflow friction phrase: rebuilding context between research sessions. Use "
+            "this exact phrase in the final synthesis rather than a broader memory-management "
+            "label."
+        ),
+        (
+            "Locked connector target: Claude Code. It is the first workflow used for the launch "
+            "experiment; other editors remain later compatibility work."
+        ),
+        (
+            "Locked monthly price ceiling USD: 9. The research test must not infer a different "
+            "price from exploratory willingness-to-pay comments."
+        ),
+        (
+            "Locked privacy stance: local-only by default. This is the exact approved wording for "
+            "the research launch recommendation."
+        ),
+        (
+            "Locked activation threshold: three recalled decisions in seven days. This exact "
+            "threshold is the early success criterion for the cohort experiment."
+        ),
+    )
+    return tuple(sessions) + decisions
+
+
+_MARKET_RESEARCH_EXPECTED = {
+    "cohort_designation": "independent student researchers",
+    "friction_phrase": "rebuilding context between research sessions",
+    "connector_target": "Claude Code",
+    "monthly_price_ceiling_usd": 9,
+    "privacy_stance": "local-only by default",
+    "activation_threshold": "three recalled decisions in seven days",
+}
+_MARKET_RESEARCH_QUESTION = (
+    "Using only the saved research context, resolve the six locked launch decisions. Return "
+    'exactly one minified JSON object with the keys "cohort_designation", "friction_phrase", '
+    '"connector_target", "monthly_price_ceiling_usd", "privacy_stance", and '
+    '"activation_threshold". Preserve the approved values exactly. Do not add markdown or '
+    "commentary."
+)
+
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -83,6 +197,50 @@ class ExperimentPlan:
     full_prompt: str
     lians_prompt: str
     report: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ExperimentScenario:
+    """Deterministic workload used by both sides of a paired comparison."""
+
+    key: str
+    fixture_name: str
+    project_name: str
+    memories: tuple[str, ...]
+    question: str
+    expected: dict[str, Any]
+    memory_limit: int
+    default_context_tokens: int
+    research_session_count: int
+    handoff_start_index: int | None
+
+
+_SCENARIOS = {
+    "baseline": ExperimentScenario(
+        key="baseline",
+        fixture_name="synthetic-market-research-project-v1",
+        project_name="Claude baseline",
+        memories=_MEMORIES,
+        question=_QUESTION,
+        expected=_EXPECTED,
+        memory_limit=3,
+        default_context_tokens=256,
+        research_session_count=0,
+        handoff_start_index=None,
+    ),
+    "market-research": ExperimentScenario(
+        key="market-research",
+        fixture_name="synthetic-multi-session-market-research-v1",
+        project_name="Market research synthesis",
+        memories=_market_research_memories(),
+        question=_MARKET_RESEARCH_QUESTION,
+        expected=_MARKET_RESEARCH_EXPECTED,
+        memory_limit=6,
+        default_context_tokens=2048,
+        research_session_count=48,
+        handoff_start_index=48,
+    ),
+}
 
 
 def _estimate_tokens(value: str) -> int:
@@ -100,53 +258,68 @@ def _render_context(memories: Sequence[str]) -> str:
     return "\n".join(lines)
 
 
-def _prompt(context: str) -> str:
-    return f"{context}\n\nTask:\n{_QUESTION}"
+def _prompt(context: str, question: str) -> str:
+    return f"{context}\n\nTask:\n{question}"
 
 
-def build_experiment_plan(*, max_context_tokens: int = 256) -> ExperimentPlan:
+def build_experiment_plan(
+    *, max_context_tokens: int | None = None, scenario: str = "baseline"
+) -> ExperimentPlan:
     """Build the paired prompts in an isolated store without touching user memory."""
-    if not 64 <= max_context_tokens <= 2048:
+    try:
+        selected_scenario = _SCENARIOS[scenario]
+    except KeyError as error:
+        raise ValueError("scenario must be baseline or market-research") from error
+    context_budget = (
+        selected_scenario.default_context_tokens
+        if max_context_tokens is None
+        else max_context_tokens
+    )
+    if not 64 <= context_budget <= 2048:
         raise ValueError("max_context_tokens must be between 64 and 2048")
 
     with TemporaryDirectory(prefix="lians-claude-experiment-") as directory:
         root = Path(directory)
         project = Project(
-            id="claude-baseline",
-            name="Claude baseline",
+            id=f"claude-{selected_scenario.key}",
+            name=selected_scenario.project_name,
             root=str(root),
             origin="synthetic/local",
         )
         store = MemoryStore(root / "memory.sqlite3")
-        for content in _MEMORIES:
+        for index, content in enumerate(selected_scenario.memories):
+            is_handoff = (
+                selected_scenario.handoff_start_index is not None
+                and index >= selected_scenario.handoff_start_index
+            )
             store.remember(
                 content,
-                kind="project",
+                kind="handoff" if is_handoff else "project",
                 scope="project",
                 project_id=project.id,
                 source="synthetic experiment fixture",
                 source_client="claude",
             )
         pack = store.context_pack(
-            _QUESTION,
+            selected_scenario.question,
             project=project,
             client="claude-experiment",
-            limit=3,
-            max_tokens=max_context_tokens,
+            limit=selected_scenario.memory_limit,
+            max_tokens=context_budget,
         )
         selected = [str(item["content"]) for item in pack["memories"]]
 
-    full_context = _render_context(_MEMORIES)
+    full_context = _render_context(selected_scenario.memories)
     lians_context = _render_context(selected)
-    full_prompt = _prompt(full_context)
-    lians_prompt = _prompt(lians_context)
+    full_prompt = _prompt(full_context, selected_scenario.question)
+    lians_prompt = _prompt(lians_context, selected_scenario.question)
     full_estimate = _estimate_tokens(full_prompt)
     lians_estimate = _estimate_tokens(lians_prompt)
     reduction = round((1 - lians_estimate / full_estimate) * 100, 1)
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "status": "planned",
-        "experiment": "claude-full-replay-vs-lians-bounded-context",
+        "experiment": f"claude-{selected_scenario.key}-full-replay-vs-lians-bounded-context",
         "lane": "claude-code-print-mode",
         "execution_isolation": {
             "temporary_working_directory": True,
@@ -157,14 +330,16 @@ def build_experiment_plan(*, max_context_tokens: int = 256) -> ExperimentPlan:
             "session_persistence": False,
         },
         "fixture": {
-            "name": "synthetic-market-research-project-v1",
+            "name": selected_scenario.fixture_name,
+            "scenario": selected_scenario.key,
             "synthetic": True,
-            "saved_memory_count": len(_MEMORIES),
-            "expected_answer": _EXPECTED,
+            "research_session_count": selected_scenario.research_session_count,
+            "saved_memory_count": len(selected_scenario.memories),
+            "expected_answer": selected_scenario.expected,
         },
         "variants": {
             "full_replay": {
-                "memory_count": len(_MEMORIES),
+                "memory_count": len(selected_scenario.memories),
                 "prompt_token_estimate": full_estimate,
                 "prompt_sha256": hashlib.sha256(full_prompt.encode("utf-8")).hexdigest(),
             },
@@ -176,6 +351,11 @@ def build_experiment_plan(*, max_context_tokens: int = 256) -> ExperimentPlan:
             },
         },
         "planned_prompt_reduction_percent": reduction,
+        "evidence_gate": {
+            "requires_all_answers_correct": True,
+            "minimum_provider_reported_input_token_reduction_percent": 50.0,
+            "met": None,
+        },
         "claim_boundary": CLAIM_BOUNDARY,
         "next_step": (
             "Confirm Claude Code uses subscription sign-in with no Anthropic API key in the "
@@ -303,12 +483,12 @@ def _usage(payload: Mapping[str, Any]) -> dict[str, int]:
     }
 
 
-def _score(answer: str) -> dict[str, Any]:
+def _score(answer: str, *, expected: Mapping[str, Any]) -> dict[str, Any]:
     try:
         parsed = _json_object(answer)
     except ClaudeExperimentError:
         return {"passed": False, "parsed_answer": None}
-    return {"passed": parsed == _EXPECTED, "parsed_answer": parsed}
+    return {"passed": parsed == expected, "parsed_answer": parsed}
 
 
 def _run_prompt(
@@ -317,6 +497,7 @@ def _run_prompt(
     model: str,
     executable: str,
     working_directory: str,
+    expected: Mapping[str, Any],
     run_command: CommandRunner,
 ) -> dict[str, Any]:
     command = [
@@ -362,7 +543,7 @@ def _run_prompt(
         raise ClaudeExperimentError("Claude result JSON did not contain input-token usage")
     return {
         "answer": answer,
-        "quality": _score(answer),
+        "quality": _score(answer, expected=expected),
         "usage": usage,
         "duration_seconds": duration,
     }
@@ -386,7 +567,8 @@ def run_claude_experiment(
     *,
     model: str = "sonnet",
     repetitions: int = 1,
-    max_context_tokens: int = 256,
+    max_context_tokens: int | None = None,
+    scenario: str = "baseline",
     environment: Mapping[str, str] | None = None,
     executable: str | None = None,
     run_command: CommandRunner = subprocess.run,
@@ -399,7 +581,11 @@ def run_claude_experiment(
         executable=executable,
         run_command=run_command,
     )
-    plan = build_experiment_plan(max_context_tokens=max_context_tokens)
+    plan = build_experiment_plan(
+        max_context_tokens=max_context_tokens,
+        scenario=scenario,
+    )
+    expected = plan.report["fixture"]["expected_answer"]
     prompts = {"full_replay": plan.full_prompt, "lians_bounded": plan.lians_prompt}
     results: dict[str, list[dict[str, Any]]] = {"full_replay": [], "lians_bounded": []}
     with TemporaryDirectory(prefix="lians-claude-calls-") as working_directory:
@@ -415,6 +601,7 @@ def run_claude_experiment(
                     model=model,
                     executable=str(auth["executable"]),
                     working_directory=working_directory,
+                    expected=expected,
                     run_command=run_command,
                 )
                 run["repetition"] = repetition + 1
@@ -426,6 +613,8 @@ def run_claude_experiment(
     bounded_tokens = float(bounded["average_provider_reported_total_input_tokens"])
     delta = full_tokens - bounded_tokens
     reduction = round((delta / full_tokens) * 100, 1) if full_tokens else None
+    both_correct = full["all_answers_correct"] and bounded["all_answers_correct"]
+    gate_met = bool(both_correct and reduction is not None and reduction >= 50.0)
     return {
         **plan.report,
         "status": "completed",
@@ -438,13 +627,19 @@ def run_claude_experiment(
         },
         "results": {"full_replay": full, "lians_bounded": bounded},
         "comparison": {
-            "both_variants_answered_correctly": (
-                full["all_answers_correct"] and bounded["all_answers_correct"]
-            ),
+            "both_variants_answered_correctly": both_correct,
             "average_provider_reported_input_token_delta": round(delta, 1),
             "provider_reported_input_token_reduction_percent": reduction,
         },
+        "evidence_gate": {
+            **plan.report["evidence_gate"],
+            "met": gate_met,
+        },
         "next_step": (
-            "Repeat with a representative real workflow before making a product or quota claim."
+            "The 50% synthetic evidence gate passed. Validate with consenting real users before "
+            "making a broader product claim."
+            if gate_met
+            else "The 50% evidence gate did not pass; inspect quality and provider usage before "
+            "changing the product claim."
         ),
     }

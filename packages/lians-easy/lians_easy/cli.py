@@ -189,7 +189,12 @@ def parser() -> argparse.ArgumentParser:
     )
     claude_experiment.add_argument("--model", default="sonnet")
     claude_experiment.add_argument("--repetitions", type=int, default=1)
-    claude_experiment.add_argument("--max-context-tokens", type=int, default=256)
+    claude_experiment.add_argument(
+        "--scenario",
+        choices=("baseline", "market-research"),
+        default="baseline",
+    )
+    claude_experiment.add_argument("--max-context-tokens", type=int)
     claude_experiment.add_argument("--output", type=Path)
     claude_experiment.add_argument("--overwrite", action="store_true")
     claude_experiment.add_argument("--json", action="store_true")
@@ -300,10 +305,12 @@ def main(argv: list[str] | None = None) -> None:
                     model=args.model,
                     repetitions=args.repetitions,
                     max_context_tokens=args.max_context_tokens,
+                    scenario=args.scenario,
                 )
                 if args.run
                 else build_experiment_plan(
-                    max_context_tokens=args.max_context_tokens
+                    max_context_tokens=args.max_context_tokens,
+                    scenario=args.scenario,
                 ).report
             )
         except (ClaudeExperimentError, ValueError) as error:
@@ -335,6 +342,7 @@ def main(argv: list[str] | None = None) -> None:
                 "- Provider-reported input-token reduction: "
                 f"{comparison['provider_reported_input_token_reduction_percent']}%"
             )
+            print(f"- 50% evidence gate: {'passed' if result['evidence_gate']['met'] else 'not met'}")
             if args.output is not None:
                 print(f"- Report: {args.output}")
             print(result["next_step"])
