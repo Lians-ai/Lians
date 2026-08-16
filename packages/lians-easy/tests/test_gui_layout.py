@@ -49,7 +49,29 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling() -> None:
 
     class FakeStore:
         def stats(self):
-            return {"current": 3}
+            return {
+                "current": 3,
+                "efficiency": {
+                    "context_events": 7,
+                    "memories_reused": 12,
+                    "available_memory_tokens_estimate": 4000,
+                    "repeated_memory_tokens_avoided_estimate": 3000,
+                },
+            }
+
+        def receipts(self, *, limit):
+            return [
+                {
+                    "created_at": "2026-08-16T14:30:00+00:00",
+                    "client": "codex",
+                    "project": {"name": "Lians"},
+                    "memory_count": 3,
+                    "token_estimate": 200,
+                    "efficiency": {
+                        "repeated_memory_tokens_avoided_estimate": 800,
+                    },
+                }
+            ]
 
     class FakeBridge:
         running = True
@@ -77,5 +99,10 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling() -> None:
         assert str(app.open_button["state"]) == "normal"
         assert app.status.get() == "Lians is running in the background"
         assert app.memory_status.get() == "3 saved memories"
+        assert app.token_value.get() == "~3,000"
+        assert app.event_value.get() == "7"
+        assert app.reuse_value.get() == "12"
+        assert app.reduction_status.get() == "About 75% less repeated context"
+        assert any(label["text"] == "Codex · Lians" for label in app.activity_labels)
     finally:
         root.destroy()

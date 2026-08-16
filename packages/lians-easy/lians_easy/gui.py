@@ -20,6 +20,7 @@ from .installer import (
     user_data_dir,
     write_support_report,
 )
+from .lifeline import format_count, lifeline_snapshot
 
 BACKGROUND = "#05070b"
 PANEL = "#0b1019"
@@ -606,7 +607,7 @@ class SetupApp:
 
 
 class CompanionApp:
-    """Resident local control window shown while AI clients use Lians."""
+    """Resident local dashboard shown while AI clients use Lians."""
 
     def __init__(self, root: tk.Tk, bridge: Any, *, start_bridge: bool = True) -> None:
         self.root = root
@@ -615,10 +616,12 @@ class CompanionApp:
         self._bridge_error: str | None = None
         self._bridge_thread: threading.Thread | None = None
         self.target_labels: dict[str, tk.Label] = {}
+        self.activity_labels: list[tk.Label] = []
+        self._activity_state: tuple[tuple[str, str, str], ...] | None = None
 
         self.root.title("Lians")
-        self.root.geometry("720x680")
-        self.root.minsize(640, 620)
+        self.root.geometry("920x760")
+        self.root.minsize(820, 700)
         self.root.configure(background=BACKGROUND)
         self.root.option_add("*Font", ("Segoe UI", 10))
         self.root.protocol("WM_DELETE_WINDOW", self._minimize)
@@ -628,7 +631,7 @@ class CompanionApp:
             except tk.TclError:
                 pass
 
-        self.shell = tk.Frame(root, background=BACKGROUND, padx=34, pady=26)
+        self.shell = tk.Frame(root, background=BACKGROUND, padx=34, pady=24)
         self.shell.pack(fill="both", expand=True)
         self._build()
         if start_bridge:
@@ -645,83 +648,70 @@ class CompanionApp:
             logo_path = files("lians_easy").joinpath("app", "logo-blue.png")
             self.logo = tk.PhotoImage(file=str(logo_path))
             width = self.logo.width()
-            if width > 154:
-                factor = max(1, round(width / 154))
+            if width > 142:
+                factor = max(1, round(width / 142))
                 self.logo = self.logo.subsample(factor, factor)
             tk.Label(top, image=self.logo, background=BACKGROUND).pack(side="left")
         except (OSError, tk.TclError):
             self._label(
-                top,
-                "lians",
-                foreground=BLUE,
-                font=("Segoe UI", 24, "bold"),
+                top, "lians", foreground=BLUE, font=("Segoe UI", 24, "bold")
             ).pack(side="left")
 
-        self._label(
-            self.shell,
-            "Lians is starting.",
-            foreground=TEXT,
-            font=("Segoe UI", 26, "bold"),
-            anchor="w",
-        ).pack(fill="x", pady=(44, 8))
-        self._label(
-            self.shell,
-            (
-                "Keep Lians open or minimized, then use Claude, Codex, and Cursor normally. "
-                "The local memory layer stays on this device."
-            ),
-            foreground=MUTED,
-            font=("Segoe UI", 11),
-            justify="left",
-            wraplength=640,
-            anchor="w",
-        ).pack(fill="x", pady=(0, 22))
-
         status_card = tk.Frame(
-            self.shell,
+            top,
             background=PANEL,
             highlightbackground=LINE,
             highlightthickness=1,
-            padx=18,
-            pady=14,
+            padx=12,
+            pady=7,
         )
-        status_card.pack(fill="x")
+        status_card.pack(side="right")
         self.status_dot = self._label(
-            status_card,
-            "●",
-            background=PANEL,
-            foreground=BLUE,
-            font=("Segoe UI", 14, "bold"),
+            status_card, "●", background=PANEL, foreground=BLUE, font=("Segoe UI", 11, "bold")
         )
-        self.status_dot.pack(side="left", padx=(0, 10))
+        self.status_dot.pack(side="left", padx=(0, 7))
         self.status = tk.StringVar(value="Starting the encrypted local memory bridge")
         self._label(
             status_card,
             textvariable=self.status,
             background=PANEL,
             foreground=TEXT,
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 9, "bold"),
         ).pack(side="left")
-        self.memory_status = tk.StringVar(value="0 saved memories")
-        self._label(
-            status_card,
-            textvariable=self.memory_status,
-            background=PANEL,
-            foreground=MUTED,
-        ).pack(side="right")
 
-        integrations = tk.Frame(self.shell, background=BACKGROUND)
-        integrations.pack(fill="x", pady=(18, 18))
-        targets = client_targets()
-        for index, key in enumerate(("claude", "codex", "cursor")):
-            target = targets[key]
+        self._label(
+            self.shell,
+            "Your agent lifeline.",
+            foreground=TEXT,
+            font=("Segoe UI", 26, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(24, 4))
+        self._label(
+            self.shell,
+            "See how Lians supports Claude, Codex, and Cursor while everything stays local.",
+            foreground=MUTED,
+            font=("Segoe UI", 11),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 16))
+
+        self.token_value = tk.StringVar(value="0")
+        self.event_value = tk.StringVar(value="0")
+        self.reuse_value = tk.StringVar(value="0")
+        metrics = tk.Frame(self.shell, background=BACKGROUND)
+        metrics.pack(fill="x")
+        metric_data = (
+            ("Estimated tokens saved", self.token_value, "Repeated context Lians left out"),
+            ("Context handoffs", self.event_value, "Times an agent asked Lians for context"),
+            ("Memories reused", self.reuse_value, "Useful details carried into new work"),
+        )
+        for index, (title, value, detail) in enumerate(metric_data):
             card = tk.Frame(
-                integrations,
+                metrics,
                 background=PANEL,
                 highlightbackground=LINE,
                 highlightthickness=1,
-                padx=14,
-                pady=14,
+                padx=16,
+                pady=12,
             )
             card.pack(
                 side="left",
@@ -731,26 +721,86 @@ class CompanionApp:
             )
             self._label(
                 card,
-                "Claude" if key == "claude" else target.label,
+                title,
+                background=PANEL,
+                foreground=MUTED,
+                font=("Segoe UI", 9),
+                anchor="w",
+            ).pack(fill="x")
+            self._label(
+                card,
+                textvariable=value,
                 background=PANEL,
                 foreground=TEXT,
-                font=("Segoe UI", 10, "bold"),
-            ).pack(anchor="w")
-            state = self._label(
+                font=("Segoe UI", 22, "bold"),
+                anchor="w",
+            ).pack(fill="x", pady=(2, 1))
+            self._label(
                 card,
-                "Connected" if target.configured else "Not connected",
+                detail,
                 background=PANEL,
+                foreground=MUTED,
+                font=("Segoe UI", 8),
+                anchor="w",
+            ).pack(fill="x")
+
+        activity_heading = tk.Frame(self.shell, background=BACKGROUND)
+        activity_heading.pack(fill="x", pady=(18, 8))
+        self._label(
+            activity_heading,
+            "Recent agent activity",
+            foreground=TEXT,
+            font=("Segoe UI", 13, "bold"),
+        ).pack(side="left")
+        self.reduction_status = tk.StringVar(value="Waiting for the first context handoff")
+        self._label(
+            activity_heading,
+            textvariable=self.reduction_status,
+            foreground=MUTED,
+            font=("Segoe UI", 9),
+        ).pack(side="right")
+
+        self.activity_frame = tk.Frame(
+            self.shell,
+            background=PANEL,
+            highlightbackground=LINE,
+            highlightthickness=1,
+            padx=14,
+            pady=8,
+        )
+        self.activity_frame.pack(fill="both", expand=True)
+        self._show_activity([])
+
+        integrations = tk.Frame(self.shell, background=BACKGROUND)
+        integrations.pack(fill="x", pady=(12, 12))
+        self._label(
+            integrations, "Connections", foreground=MUTED, font=("Segoe UI", 9, "bold")
+        ).pack(side="left", padx=(0, 12))
+        targets = client_targets()
+        for key in ("claude", "codex", "cursor"):
+            target = targets[key]
+            label = "Claude" if key == "claude" else target.label
+            state = self._label(
+                integrations,
+                f"●  {label}",
                 foreground=GREEN if target.configured else MUTED,
-                font=("Segoe UI", 9),
+                font=("Segoe UI", 9, "bold"),
             )
-            state.pack(anchor="w", pady=(5, 0))
+            state.pack(side="left", padx=(0, 16))
             self.target_labels[key] = state
+        self.memory_status = tk.StringVar(value="0 saved memories")
+        self._label(
+            integrations,
+            textvariable=self.memory_status,
+            foreground=MUTED,
+            font=("Segoe UI", 9),
+        ).pack(side="right")
 
         actions = tk.Frame(self.shell, background=BACKGROUND)
-        actions.pack(fill="x", pady=(4, 0))
+        actions.pack(fill="x")
         self.open_button = tk.Button(
             actions,
-            text="Open Lians dashboard",
+            text="Open detailed dashboard",
             command=self._open_dashboard,
             state="disabled",
             background=BLUE,
@@ -763,7 +813,7 @@ class CompanionApp:
             cursor="hand2",
             font=("Segoe UI", 10, "bold"),
             padx=20,
-            pady=10,
+            pady=9,
         )
         self.open_button.pack(side="left")
         tk.Button(
@@ -778,7 +828,7 @@ class CompanionApp:
             borderwidth=0,
             cursor="hand2",
             padx=18,
-            pady=10,
+            pady=9,
         ).pack(side="left", padx=(10, 0))
         tk.Button(
             actions,
@@ -792,23 +842,73 @@ class CompanionApp:
             borderwidth=0,
             cursor="hand2",
             padx=12,
-            pady=10,
+            pady=9,
         ).pack(side="right")
 
         self.notice = tk.StringVar(
-            value=(
-                "Closing this window minimizes Lians. Use Stop Lians when you want the local "
-                "companion to exit. Your configured agent connections remain installed."
-            )
+            value="Closing this window minimizes Lians. Token savings are estimates from local context receipts."
         )
         self._label(
             self.shell,
             textvariable=self.notice,
             foreground=MUTED,
             justify="left",
-            wraplength=640,
+            wraplength=840,
             anchor="w",
-        ).pack(fill="x", pady=(22, 0))
+            font=("Segoe UI", 8),
+        ).pack(fill="x", pady=(9, 0))
+
+    def _show_activity(self, activity: list[dict[str, Any]]) -> None:
+        state = tuple((item["title"], item["time"], item["detail"]) for item in activity)
+        if state == self._activity_state:
+            return
+        self._activity_state = state
+        for child in self.activity_frame.winfo_children():
+            child.destroy()
+        self.activity_labels = []
+        if not activity:
+            empty = self._label(
+                self.activity_frame,
+                "No activity yet. Use a connected AI app and your lifeline will appear here.",
+                background=PANEL,
+                foreground=MUTED,
+                font=("Segoe UI", 10),
+                anchor="w",
+            )
+            empty.pack(fill="both", expand=True, pady=16)
+            self.activity_labels.append(empty)
+            return
+        for index, item in enumerate(activity):
+            row = tk.Frame(self.activity_frame, background=PANEL, pady=5)
+            row.pack(fill="x")
+            heading = self._label(
+                row,
+                item["title"],
+                background=PANEL,
+                foreground=TEXT,
+                font=("Segoe UI", 9, "bold"),
+                anchor="w",
+            )
+            heading.pack(side="left")
+            self._label(
+                row,
+                item["time"],
+                background=PANEL,
+                foreground=MUTED,
+                font=("Segoe UI", 8),
+            ).pack(side="right")
+            detail = self._label(
+                self.activity_frame,
+                item["detail"],
+                background=PANEL,
+                foreground=MUTED,
+                font=("Segoe UI", 8),
+                anchor="w",
+            )
+            detail.pack(fill="x", pady=(0, 4))
+            self.activity_labels.extend((heading, detail))
+            if index < len(activity) - 1:
+                tk.Frame(self.activity_frame, background=LINE, height=1).pack(fill="x")
 
     def _start_bridge(self) -> None:
         def serve() -> None:
@@ -833,17 +933,32 @@ class CompanionApp:
             self.status_dot.configure(foreground=GREEN)
             self.open_button.configure(state="normal")
             try:
-                stats = self.bridge.store.stats()
-                count = int(stats.get("current", 0))
+                snapshot = lifeline_snapshot(self.bridge.store, limit=3)
+                count = snapshot["saved_memories"]
                 self.memory_status.set(
                     f"{count} saved memor{'y' if count == 1 else 'ies'}"
                 )
-            except (OSError, RuntimeError, ValueError):
+                self.token_value.set(
+                    f"~{format_count(snapshot['repeated_tokens_avoided_estimate'])}"
+                )
+                self.event_value.set(format_count(snapshot["context_events"]))
+                self.reuse_value.set(format_count(snapshot["memories_reused"]))
+                events = snapshot["context_events"]
+                if events:
+                    self.reduction_status.set(
+                        f"About {snapshot['reduction_percent_estimate']}% less repeated context"
+                    )
+                else:
+                    self.reduction_status.set("Waiting for the first context handoff")
+                self._show_activity(snapshot["activity"])
+            except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
                 self.memory_status.set("Encrypted memory ready")
         for key, label in self.target_labels.items():
-            configured = client_targets()[key].configured
+            target = client_targets()[key]
+            configured = target.configured
+            name = "Claude" if key == "claude" else target.label
             label.configure(
-                text="Connected" if configured else "Not connected",
+                text=f"●  {name}",
                 foreground=GREEN if configured else MUTED,
             )
         self.root.after(2000, self._refresh)
