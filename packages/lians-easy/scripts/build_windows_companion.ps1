@@ -45,6 +45,7 @@ python -m PyInstaller `
     --clean `
     --onefile `
     --name LiansMemory `
+    --exclude-module numpy `
     --paths $packageRoot `
     --add-data "$(Join-Path $packageRoot 'lians_easy/app');lians_easy/app" `
     --add-data "$(Join-Path $packageRoot 'lians_easy/desktop');lians_easy/desktop" `

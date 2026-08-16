@@ -10,7 +10,6 @@ from pathlib import Path
 from PIL import Image
 
 WINDOWS_SIZES = (16, 24, 32, 48, 64, 128, 256)
-INTRO_SIZES = (1400, 1024, 760, 560, 400, 288, 208, 160, 128)
 
 
 def remove_black_matte(image: Image.Image) -> Image.Image:
@@ -60,7 +59,7 @@ def main() -> None:
 
     package_root = Path(__file__).resolve().parents[1]
     repository_root = package_root.parents[1]
-    source = args.source or package_root / "lians_easy" / "desktop" / "lotus.png"
+    source = args.source or package_root / "lians_easy" / "desktop" / "favicon.png"
     if not source.is_file():
         raise SystemExit(f"Lotus source was not found: {source}")
 
@@ -76,12 +75,9 @@ def main() -> None:
     mcpb_png = package_root / "mcpb-icon.png"
     tester_base64 = package_root / "lians_easy" / "tester" / "favicon.png.b64"
     windows_icon = package_root / "windows-lians.ico"
-    intro_directory = package_root / "lians_easy" / "desktop" / "intro"
 
     for destination in (desktop_png, docs_png, mcpb_png):
         save_png(lotus, destination)
-    for size in INTRO_SIZES:
-        save_png(lotus, intro_directory / f"lotus-{size}.png", size=size)
 
     buffer = BytesIO()
     lotus.resize((128, 128), Image.Resampling.LANCZOS).save(

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import sys
+import time
 
 import pytest
 
@@ -45,7 +47,9 @@ def test_primary_setup_action_fits_at_125_percent_scaling() -> None:
 def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch) -> None:
     import tkinter as tk
 
-    from lians_easy.gui import CompanionApp
+    from importlib.resources import files
+
+    from lians_easy.gui import CompanionApp, _anime_in_out_sine
     active_client: dict[str, str | None] = {"key": "codex"}
     monkeypatch.setattr(
         "lians_easy.gui._active_ai_client",
@@ -124,8 +128,15 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert any(label["text"] == "Codex · Lians" for label in app.activity_labels)
         assert app.font_family == "Sora"
         assert app.display_font_family == "Sora"
-        assert app.intro_lotus_frames[0].width() == 1400
-        assert app.intro_lotus_frames[-1].width() == 128
+        assert _anime_in_out_sine(0.0) == 0.0
+        assert _anime_in_out_sine(0.5) == pytest.approx(0.5)
+        assert _anime_in_out_sine(1.0) == 1.0
+        assert app.intro_favicon.width() == 128
+        assert app.intro_favicon.height() == 128
+        favicon_bytes = files("lians_easy").joinpath("desktop", "favicon.png").read_bytes()
+        assert hashlib.sha256(favicon_bytes).hexdigest() == (
+            "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
+        )
         assert bool(root.overrideredirect())
         assert app.connection_status.get() == "Codex active"
         assert app.connection_dot["foreground"] == app.colors["green"]
@@ -139,6 +150,9 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert all(app.lifeline_canvas.type(item) != "text" for item in canvas_items)
         assert app.close_button["text"] == "×"
         assert app.stop_button["text"] == "Close"
+        assert app.theme_toggle_icon == "sun"
+        assert len(app.theme_button.find_withtag("theme-toggle-ring")) == 1
+        assert len(app.theme_button.find_withtag("theme-toggle-icon")) == 9
 
         active_client["key"] = None
         app._refresh()
@@ -148,7 +162,9 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         app._toggle_theme()
         root.update_idletasks()
         assert app.theme_name == "light"
-        assert app.theme_button["text"] == "☀"
+        assert app.theme_toggle_icon == "moon"
+        assert len(app.theme_button.find_withtag("theme-toggle-ring")) == 1
+        assert len(app.theme_button.find_withtag("theme-toggle-icon")) == 2
         assert app.shell["background"] == "#F1F0EC"
 
         app._work_area = lambda: (0, 0, 1200, 800)
@@ -165,5 +181,24 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         root.update_idletasks()
         assert not app._maximized
         assert app._snap_state is None
+
+        if app._refresh_job is not None:
+            root.after_cancel(app._refresh_job)
+            app._refresh_job = None
+        app._build_intro()
+        root.update_idletasks()
+        root.update()
+        app._intro_started = time.monotonic()
+        app._animate_intro()
+        intro_items = app.intro_canvas.find_withtag("intro-motion")
+        assert len(intro_items) == 1
+        assert app.intro_canvas.type(intro_items[0]) == "image"
+        assert app._intro_lotus_size > 1000
+        app._intro_started = time.monotonic() - 0.98
+        app._animate_intro()
+        assert app._intro_lotus_size == 128.0
+        final_intro_items = app.intro_canvas.find_withtag("intro-motion")
+        assert len(final_intro_items) == 1
+        assert app.intro_canvas.type(final_intro_items[0]) == "image"
     finally:
         root.destroy()

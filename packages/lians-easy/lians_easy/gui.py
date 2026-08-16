@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import math
 import sys
 import threading
 import time
@@ -16,6 +17,8 @@ from tkinter import filedialog, ttk
 from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
+
+from PIL import Image, ImageTk
 
 from .installer import (
     ClientTarget,
@@ -40,13 +43,13 @@ RED = "#ff6d83"
 COMPANION_THEMES = {
     "dark": {
         "background": "#030405",
-        "surface": "#090B0E",
-        "surface_soft": "#0D1015",
+        "surface": "#080A0D",
+        "surface_soft": "#0D1014",
         "border": "#171B22",
         "grid": "#10141B",
         "grid_strong": "#202836",
-        "text": "#F1F3F6",
-        "muted": "#8C96A4",
+        "text": "#EEF1F5",
+        "muted": "#828B98",
         "blue": "#315FE9",
         "blue_hover": "#294FC2",
         "blue_soft": "#0C1633",
@@ -78,7 +81,11 @@ _AI_PROCESS_NAMES = {
     "cursor": {"cursor.exe"},
 }
 _AI_LABELS = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor"}
-_INTRO_LOTUS_SIZES = (1400, 1024, 760, 560, 400, 288, 208, 160, 128)
+def _anime_in_out_sine(progress: float) -> float:
+    """Mirror Anime.js's built-in inOutSine ease for native Tk animation."""
+
+    progress = min(1.0, max(0.0, progress))
+    return -(math.cos(math.pi * progress) - 1.0) / 2.0
 
 
 def _windows_process_snapshot() -> dict[int, str]:
@@ -915,7 +922,9 @@ class CompanionApp:
         self._refresh_job: str | None = None
         self._intro_job: str | None = None
         self._intro_frame_job: str | None = None
+        self._intro_lotus_size = 0.0
         self._intro_lotus_item: int | None = None
+        self._intro_frame_image: ImageTk.PhotoImage | None = None
         self._lifeline_lotus_item: int | None = None
         self._active_client_key = _active_ai_client()
         self._window_handle: int | None = None
@@ -1065,37 +1074,35 @@ class CompanionApp:
             self.lotus_mark = tk.PhotoImage(file=str(lotus_path))
             factor = max(1, round(self.lotus_mark.width() / 32))
             self.lotus = self.lotus_mark.subsample(factor, factor)
-            self.intro_lotus_frames = [
-                tk.PhotoImage(
-                    file=str(
-                        files("lians_easy").joinpath(
-                            "desktop", "intro", f"lotus-{size}.png"
-                        )
-                    )
-                )
-                for size in _INTRO_LOTUS_SIZES
-            ]
         except (OSError, tk.TclError):
             self.lotus = None
             self.lotus_mark = None
-            self.intro_lotus_frames = []
+        try:
+            favicon_path = files("lians_easy").joinpath("desktop", "favicon.png")
+            self.intro_favicon = tk.PhotoImage(file=str(favicon_path))
+            with Image.open(str(favicon_path)) as favicon:
+                self.intro_source_image = favicon.convert("RGBA")
+        except (OSError, tk.TclError):
+            self.intro_favicon = None
+            self.intro_source_image = None
 
     def _build_intro(self) -> None:
         """Contract a single wordless Lotus while the local bridge starts."""
         for child in self.root.winfo_children():
             child.destroy()
-        self.root.configure(background="#020407")
+        self.root.configure(background="#000000")
         self.intro_canvas = tk.Canvas(
             self.root,
-            background="#020407",
+            background="#000000",
             borderwidth=0,
             highlightthickness=0,
         )
         self.intro_canvas.pack(fill="both", expand=True)
         self._intro_lotus_item = None
+        self._intro_frame_image = None
         self._intro_started = time.monotonic()
-        self._animate_intro()
-        self._intro_job = self.root.after(760, self._finish_intro)
+        self._intro_frame_job = self.root.after_idle(self._animate_intro)
+        self._intro_job = self.root.after(1100, self._finish_intro)
 
     def _animate_intro(self) -> None:
         if self._stopping or not self.intro_canvas.winfo_exists():
@@ -1104,16 +1111,35 @@ class CompanionApp:
         width = max(1, canvas.winfo_width())
         height = max(1, canvas.winfo_height())
         elapsed = time.monotonic() - self._intro_started
-        progress = min(1.0, elapsed / 0.70)
-        eased = progress * progress * (3 - 2 * progress)
+        hold_seconds = 0.06
+        progress = min(1.0, max(0.0, (elapsed - hold_seconds) / 0.92))
+        eased = _anime_in_out_sine(progress)
         center_x = width / 2
         center_y = height / 2
-        if self.intro_lotus_frames:
-            frame_index = min(
-                len(self.intro_lotus_frames) - 1,
-                round(eased * (len(self.intro_lotus_frames) - 1)),
+        start_size = max(width, height) * 1.38
+        end_size = 128.0
+        self._intro_lotus_size = start_size + (end_size - start_size) * eased
+        frame: tk.PhotoImage | ImageTk.PhotoImage | None
+        if self._intro_lotus_size <= 130 and self.intro_favicon is not None:
+            frame = self.intro_favicon
+            self._intro_frame_image = None
+        elif self.intro_source_image is not None:
+            size = max(1, round(self._intro_lotus_size))
+            resized = self.intro_source_image.resize(
+                (size, size),
+                Image.Resampling.BILINEAR,
             )
-            frame = self.intro_lotus_frames[frame_index]
+            opacity = 0.28 + 0.72 * eased
+            softened = Image.blend(
+                Image.new("RGBA", resized.size, (0, 0, 0, 255)),
+                resized,
+                opacity,
+            )
+            self._intro_frame_image = ImageTk.PhotoImage(softened, master=self.root)
+            frame = self._intro_frame_image
+        else:
+            frame = self.lotus_mark
+        if frame is not None:
             if self._intro_lotus_item is None:
                 self._intro_lotus_item = canvas.create_image(
                     center_x,
@@ -1124,7 +1150,12 @@ class CompanionApp:
             else:
                 canvas.coords(self._intro_lotus_item, center_x, center_y)
                 canvas.itemconfigure(self._intro_lotus_item, image=frame)
-        self._intro_frame_job = self.root.after(40, self._animate_intro)
+
+        rendered_elapsed = time.monotonic() - self._intro_started
+        frame_interval = 1.0 / 45.0
+        next_frame = (math.floor(rendered_elapsed / frame_interval) + 1) * frame_interval
+        delay_ms = max(1, round((next_frame - rendered_elapsed) * 1000))
+        self._intro_frame_job = self.root.after(delay_ms, self._animate_intro)
 
     def _finish_intro(self) -> None:
         self._intro_job = None
@@ -1136,6 +1167,7 @@ class CompanionApp:
             except tk.TclError:
                 pass
             self._intro_frame_job = None
+        self._intro_frame_image = None
         self._build()
         self._refresh_job = self.root.after(80, self._refresh)
 
@@ -1440,22 +1472,21 @@ class CompanionApp:
             foreground=self.colors["text"],
             font=self._font(11, "bold"),
         ).pack(side="left")
-        mode_label = "☾" if self.theme_name == "dark" else "☀"
-        mode = tk.Button(
+        mode = tk.Canvas(
             bar,
-            text=mode_label,
-            command=self._toggle_theme,
+            width=34,
+            height=34,
             background=self.colors["background"],
-            foreground=self.colors["muted"],
-            activebackground=self.colors["surface_soft"],
-            activeforeground=self.colors["text"],
-            relief="flat",
             borderwidth=0,
+            highlightthickness=0,
             cursor="hand2",
-            font=("Segoe UI Symbol", 15, "normal"),
-            padx=12,
         )
         self.theme_button = mode
+        self._theme_toggle_hover = False
+        self._draw_theme_toggle()
+        mode.bind("<Button-1>", lambda _event: self._toggle_theme())
+        mode.bind("<Enter>", lambda _event: self._set_theme_toggle_hover(True))
+        mode.bind("<Leave>", lambda _event: self._set_theme_toggle_hover(False))
         for text, command in (
             ("×", self._stop),
             ("□", self._toggle_maximize),
@@ -1478,12 +1509,88 @@ class CompanionApp:
             button.pack(side="right", fill="y")
             if text == "×":
                 self.close_button = button
-        mode.pack(side="right", fill="y", padx=(0, 8))
+        mode.pack(side="right", padx=(0, 8), pady=7)
         for widget in (bar, brand, *brand.winfo_children()):
             widget.bind("<ButtonPress-1>", self._begin_drag)
             widget.bind("<B1-Motion>", self._drag_window)
             widget.bind("<ButtonRelease-1>", self._finish_drag)
             widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
+
+    def _set_theme_toggle_hover(self, active: bool) -> None:
+        self._theme_toggle_hover = active
+        self._draw_theme_toggle()
+
+    def _draw_theme_toggle(self) -> None:
+        """Match the website's compact circular sun and moon theme control."""
+
+        canvas = self.theme_button
+        canvas.delete("all")
+        fill = (
+            self.colors["surface_soft"]
+            if self._theme_toggle_hover
+            else self.colors["surface"]
+        )
+        border = (
+            self.colors["grid_strong"]
+            if self._theme_toggle_hover
+            else self.colors["border"]
+        )
+        canvas.create_oval(
+            1,
+            1,
+            33,
+            33,
+            fill=fill,
+            outline=border,
+            width=1,
+            tags="theme-toggle-ring",
+        )
+        color = self.colors["text"]
+        if self.theme_name == "dark":
+            self.theme_toggle_icon = "sun"
+            canvas.create_oval(
+                13,
+                13,
+                21,
+                21,
+                outline=color,
+                width=1,
+                tags="theme-toggle-icon",
+            )
+            for degrees in range(0, 360, 45):
+                radians = math.radians(degrees)
+                canvas.create_line(
+                    17 + math.cos(radians) * 7,
+                    17 + math.sin(radians) * 7,
+                    17 + math.cos(radians) * 10,
+                    17 + math.sin(radians) * 10,
+                    fill=color,
+                    width=1,
+                    capstyle="round",
+                    tags="theme-toggle-icon",
+                )
+        else:
+            self.theme_toggle_icon = "moon"
+            canvas.create_oval(
+                10,
+                9,
+                25,
+                24,
+                fill=color,
+                outline=color,
+                width=1,
+                tags="theme-toggle-icon",
+            )
+            canvas.create_oval(
+                15,
+                6,
+                28,
+                20,
+                fill=fill,
+                outline=fill,
+                width=1,
+                tags="theme-toggle-icon",
+            )
 
     def _render_lifeline(self, _event: tk.Event | None = None) -> None:
         """Render the exact branded PNG once with no dashboard animation."""
