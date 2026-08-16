@@ -32,6 +32,28 @@ python -m lians_easy doctor --json
 python -m lians_easy app
 ```
 
+To test the product hypothesis before changing the desktop experience, build
+the offline Claude comparison plan. A live run is a separate, explicit action
+and refuses API-key or cloud-provider authentication:
+
+```bash
+python -m lians_easy experiment claude
+python -m lians_easy experiment claude --run --output claude-context-report.json
+```
+
+The paired synthetic test checks exact answer quality and Claude-reported input
+usage for full replay versus bounded Lians context. It does not claim to extend
+the ordinary interactive Claude Pro allowance. See the
+[method and claim boundary](../../docs/benchmarks/claude-code-baseline.md).
+
+The larger research-history gate is available explicitly:
+
+```bash
+python -m lians_easy experiment claude --scenario market-research \
+  --max-context-tokens 2048 --repetitions 2 --run \
+  --output claude-market-research-report.json
+```
+
 ## Developer package
 
 The public Python distribution is named `lians-bridge`. It is built as a

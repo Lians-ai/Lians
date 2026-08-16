@@ -117,10 +117,24 @@ In a balanced Cursor CLI stress test, bounded Lians-style context used
 rule while preserving all four exact answers. This is one synthetic workload,
 not a promise of universal token savings.
 
+In a two-repetition Claude Code test modeled on long-running market research,
+full replay sent 48 synthetic session records plus six locked decisions while
+Lians selected the six decisions. Both run orders preserved all four exact
+answers; bounded context averaged **77.2% fewer provider-reported input tokens**
+(12,537 versus 2,853). This passes a synthetic evidence gate, not a universal
+quota or savings claim. Read the
+[method and sanitized report](docs/benchmarks/claude-code-baseline.md).
+
 A separate live test stored one synthetic project fact through Cursor, recalled
 it in a new Cursor chat and a fresh Claude Code session, then confirmed that it
 was gone after deletion. Read the
 [methodology and raw aggregate evidence](docs/benchmarks/cross-agent-memory-2026-08-14.md).
+
+The desktop runtime also includes an offline-first
+[Claude Code comparison](docs/benchmarks/claude-code-baseline.md) that tests the
+same exact question with full context replay and bounded Lians context. It
+refuses API-key authentication before a live run and keeps answer correctness
+separate from provider-reported usage.
 
 Lians does not enlarge a provider context window or guarantee that every plan,
 quota, or bill lasts longer. It measures the narrower claim it controls: how

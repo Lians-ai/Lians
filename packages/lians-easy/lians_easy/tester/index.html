@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#05070b">
+    <title>Lians AI Context Test</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="stylesheet" href="style.css">
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <img src="wordmark.png" alt="Lians">
+      </header>
+
+      <section class="hero">
+        <h1>See how much context Lians can cut</h1>
+        <p class="lead">
+          Choose the AI tool you already use. Lians runs the same research task
+          with full history and with only the decisions that matter.
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="test-title">
+        <h2 id="test-title">Choose your AI tool</h2>
+        <p class="body-copy">
+          The test uses synthetic research notes. It runs two matched pairs and
+          checks every answer against the same six decisions.
+        </p>
+
+        <div class="provider-grid" role="radiogroup" aria-label="AI tool">
+          <button class="provider-option selected" type="button" data-provider="claude" aria-pressed="true">
+            <strong>Claude</strong>
+            <span>Pro or Max</span>
+          </button>
+          <button class="provider-option" type="button" data-provider="codex" aria-pressed="false">
+            <strong>Codex</strong>
+            <span>ChatGPT account</span>
+          </button>
+          <button class="provider-option" type="button" data-provider="cursor" aria-pressed="false">
+            <strong>Cursor</strong>
+            <span>Signed-in account</span>
+          </button>
+        </div>
+
+        <div class="status-row" role="status" aria-live="polite">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Checking Claude</span>
+        </div>
+
+        <button id="run-button" type="button" disabled>Run the research test</button>
+        <p class="helper" id="run-helper">
+          The selected CLI must be installed and signed in with your account.
+        </p>
+      </section>
+
+      <section class="card progress-card" id="progress-card" hidden aria-live="polite">
+        <h2>Running four matched <span id="progress-provider">Claude</span> calls</h2>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-fill"></div>
+        </div>
+        <p class="body-copy">Keep this window open. Most tests finish in a few minutes.</p>
+      </section>
+
+      <section class="card results-card" id="results-card" hidden aria-labelledby="results-title">
+        <h2 id="results-title">Your result</h2>
+        <div class="result-number"><span id="reduction">0</span>%</div>
+        <p class="result-copy" id="result-copy">fewer CLI reported input tokens</p>
+
+        <div class="metrics">
+          <div class="metric">
+            <span id="full-tokens">0</span>
+            <p>Full history input</p>
+          </div>
+          <div class="metric">
+            <span id="lians-tokens">0</span>
+            <p>Lians context input</p>
+          </div>
+          <div class="metric">
+            <span id="answers">0/4</span>
+            <p>Exact answers</p>
+          </div>
+        </div>
+
+        <p class="gate" id="gate-result"></p>
+        <div class="result-actions">
+          <a class="button-link" id="download-link" href="api/report">Download test report</a>
+          <button class="secondary" id="close-button" type="button">Close the test</button>
+        </div>
+      </section>
+
+      <section class="plain-section" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">What stays private</h2>
+        <p>
+          The research history is synthetic. Lians does not ask for a password or
+          API key. The local test page is available only on this device and the
+          result stays here until you download it.
+        </p>
+      </section>
+
+      <footer>
+        This test measures one controlled workflow. It does not guarantee the same
+        reduction on every task or extend an interactive subscription quota.
+      </footer>
+    </main>
+  </body>
+</html>

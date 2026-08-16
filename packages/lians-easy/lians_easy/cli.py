@@ -17,6 +17,11 @@ from .bridge import (
     run_hook,
     write_cursor_rule,
 )
+from .claude_experiment import (
+    ClaudeExperimentError,
+    build_experiment_plan,
+    run_claude_experiment,
+)
 from .installer import client_targets, doctor, install, plan, uninstall
 from .lifecycle import listen_for_windows_installer_shutdown
 from .mcp import default_data_path, run
@@ -170,6 +175,30 @@ def parser() -> argparse.ArgumentParser:
     diagnostic = commands.add_parser("doctor", help="Show runtime and client detection")
     diagnostic.add_argument("--json", action="store_true")
 
+    experiment = commands.add_parser(
+        "experiment", help="Measure a bounded-context product hypothesis"
+    )
+    experiments = experiment.add_subparsers(dest="experiment_name", required=True)
+    claude_experiment = experiments.add_parser(
+        "claude", help="Compare full replay with Lians context in Claude Code"
+    )
+    claude_experiment.add_argument(
+        "--run",
+        action="store_true",
+        help="Send the two isolated prompts after subscription-auth checks pass",
+    )
+    claude_experiment.add_argument("--model", default="sonnet")
+    claude_experiment.add_argument("--repetitions", type=int, default=1)
+    claude_experiment.add_argument(
+        "--scenario",
+        choices=("baseline", "market-research"),
+        default="baseline",
+    )
+    claude_experiment.add_argument("--max-context-tokens", type=int)
+    claude_experiment.add_argument("--output", type=Path)
+    claude_experiment.add_argument("--overwrite", action="store_true")
+    claude_experiment.add_argument("--json", action="store_true")
+
     backup = commands.add_parser("backup", help="Move encrypted memory safely between devices")
     backup_commands = backup.add_subparsers(dest="backup_action", required=True)
     backup_export = backup_commands.add_parser(
@@ -266,6 +295,57 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "doctor":
         _show(doctor(), as_json=args.json)
+        return
+    if args.command == "experiment":
+        if args.output is not None and args.output.exists() and not args.overwrite:
+            raise SystemExit("Output already exists; use --overwrite to replace it")
+        try:
+            result = (
+                run_claude_experiment(
+                    model=args.model,
+                    repetitions=args.repetitions,
+                    max_context_tokens=args.max_context_tokens,
+                    scenario=args.scenario,
+                )
+                if args.run
+                else build_experiment_plan(
+                    max_context_tokens=args.max_context_tokens,
+                    scenario=args.scenario,
+                ).report
+            )
+        except (ClaudeExperimentError, ValueError) as error:
+            raise SystemExit(str(error)) from error
+        if args.output is not None:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif result["status"] == "planned":
+            full = result["variants"]["full_replay"]
+            bounded = result["variants"]["lians_bounded"]
+            print("Claude comparison is ready; no Claude request was sent.")
+            print(f"- Full replay: ~{full['prompt_token_estimate']} prompt tokens")
+            print(f"- Lians context: ~{bounded['prompt_token_estimate']} prompt tokens")
+            print(f"- Planned reduction: {result['planned_prompt_reduction_percent']}%")
+            print(result["next_step"])
+        else:
+            comparison = result["comparison"]
+            print("Claude comparison complete.")
+            print(
+                "- Both answers correct: "
+                f"{'yes' if comparison['both_variants_answered_correctly'] else 'no'}"
+            )
+            print(
+                "- Provider-reported input-token reduction: "
+                f"{comparison['provider_reported_input_token_reduction_percent']}%"
+            )
+            print(f"- 50% evidence gate: {'passed' if result['evidence_gate']['met'] else 'not met'}")
+            if args.output is not None:
+                print(f"- Report: {args.output}")
+            print(result["next_step"])
         return
     if args.command == "backup":
         if args.backup_action == "export":

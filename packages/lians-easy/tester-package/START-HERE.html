@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#05070b">
+    <title>Start the Lians AI context test</title>
+    <link rel="icon" href="assets/favicon.png" type="image/png">
+    <style>
+      @font-face {
+        font-family: "Sora";
+        src: url("assets/sora-latin.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 100 800;
+        font-display: swap;
+      }
+      :root { color-scheme: dark; font-family: "Sora", sans-serif; color: #ffffff; background: #05070b; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 85% 0%, rgba(55, 119, 255, 0.2), transparent 34rem), #05070b; }
+      main { width: min(980px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 80px; }
+      .brand { display: flex; align-items: center; }
+      .brand img { width: 152px; height: auto; object-fit: contain; }
+      h1 { max-width: 900px; margin: 84px 0 28px; font-size: clamp(50px, 8vw, 88px); line-height: 0.98; letter-spacing: -0.055em; }
+      .lead { max-width: 760px; margin: 0 0 64px; color: #c8d2e2; font-size: clamp(20px, 3vw, 27px); line-height: 1.55; }
+      section { margin-top: 24px; padding: clamp(28px, 5vw, 52px); border: 1px solid #253247; border-radius: 30px; background: #080d15; }
+      h2 { margin: 0 0 30px; font-size: clamp(30px, 4vw, 46px); line-height: 1.12; letter-spacing: -0.035em; }
+      h3 { margin: 28px 0 12px; color: #ffffff; font-size: 23px; }
+      ol { margin: 0; padding-left: 1.3em; }
+      li { margin: 0 0 24px; padding-left: 12px; color: #ffffff; font-size: clamp(19px, 2.5vw, 24px); line-height: 1.55; }
+      code { color: #ffffff; background: #111b2a; border: 1px solid #253247; border-radius: 8px; padding: 3px 8px; font: inherit; font-size: 0.84em; }
+      p { color: #c8d2e2; font-size: 19px; line-height: 1.65; }
+      .important { border-color: #3777ff; }
+      .important strong { color: #ffffff; }
+      a { color: #75a0ff; }
+      @media (max-width: 640px) { main { width: min(100% - 28px, 980px); padding-top: 26px; } h1 { margin-top: 58px; } section { border-radius: 22px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand"><img src="assets/logo-blue.png" alt="Lians"></div>
+      <h1>Test Lians with your AI account</h1>
+      <p class="lead">
+        Choose Claude, Codex, or Cursor. The local test compares full research
+        history with the smaller set of decisions Lians selects.
+      </p>
+
+      <section>
+        <h2>Run the test</h2>
+        <ol>
+          <li>Install and sign in to at least one supported CLI using the commands below.</li>
+          <li>Close terminals that have provider API keys set. The test refuses API key billing.</li>
+          <li>Double click <code>LiansContextTest.exe</code>.</li>
+          <li>Choose Claude, Codex, or Cursor, then select <strong>Run the research test</strong>.</li>
+          <li>Download the report when the test finishes.</li>
+        </ol>
+        <h3>Claude</h3>
+        <p>Run <code>claude auth login</code> and use a Claude Pro or Max subscription.</p>
+        <h3>Codex</h3>
+        <p>Run <code>codex login</code> and choose ChatGPT sign-in. API-key login is refused.</p>
+        <h3>Cursor</h3>
+        <p>Run <code>cursor-agent login</code> and finish browser sign-in.</p>
+      </section>
+
+      <section>
+        <h2>What the test does</h2>
+        <p>
+          It runs four isolated calls using synthetic research notes. Two use full
+          history and two use Lians context. It checks the same six decisions in
+          every answer and reports the input usage returned by the selected CLI.
+          It does not read your projects, ask for your password, or store account details.
+        </p>
+        <p>
+          Codex runs with user config and rules ignored in a read-only sandbox.
+          Cursor runs in read-only ask mode inside a fresh temporary workspace.
+        </p>
+      </section>
+
+      <section class="important">
+        <h2>Windows may ask if you trust it</h2>
+        <p>
+          This is an unsigned technical preview. Run it only if this ZIP came directly
+          from Lians and the SHA256 value in <code>SHA256.txt</code> matches the app.
+          The app does not need administrator access.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
