@@ -105,6 +105,7 @@ def main() -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        second_process: subprocess.Popen[bytes] | None = None
         try:
             deadline = time.monotonic() + 25
             while True:
@@ -123,11 +124,29 @@ def main() -> None:
             assert b"<title>Lians Memory</title>" in page
             assert process.poll() is None
             assert config.read_bytes() == original
+
+            second_process = subprocess.Popen(
+                [str(binary)],
+                env=environment,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            try:
+                second_process.wait(timeout=10)
+            except subprocess.TimeoutExpired as error:
+                raise RuntimeError(
+                    "A second launch created another resident process instead of "
+                    "restoring the native Lians window"
+                ) from error
+            assert second_process.returncode == 0
+            assert process.poll() is None
+            assert config.read_bytes() == original
             print(
                 json.dumps(
                     {
                         "companion_started": True,
                         "bridge_running": True,
+                        "second_launch_restored_native_window": True,
                         "process_stayed_alive": True,
                         "existing_agent_settings_unchanged": True,
                     },
@@ -135,6 +154,8 @@ def main() -> None:
                 )
             )
         finally:
+            if second_process is not None:
+                _stop_process_tree(second_process)
             _stop_process_tree(process)
 
 

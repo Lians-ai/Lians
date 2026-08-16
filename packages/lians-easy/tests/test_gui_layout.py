@@ -117,6 +117,7 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.open_button.winfo_ismapped()
         assert app.open_button.winfo_rooty() < root.winfo_rooty() + root.winfo_height()
         assert str(app.open_button["state"]) == "normal"
+        assert app.open_button["text"] == "Refresh lifeline"
         assert app.status.get() == "Lians is running"
         assert app.memory_status.get() == "3 saved memories"
         assert app.token_value.get() == "~3,000"

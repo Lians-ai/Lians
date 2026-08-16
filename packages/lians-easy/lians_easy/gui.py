@@ -8,7 +8,6 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
-import webbrowser
 from importlib.resources import files
 from pathlib import Path
 from tkinter import filedialog, ttk
@@ -688,10 +687,12 @@ class CompanionApp:
         bridge: Any,
         *,
         start_bridge: bool = True,
+        owns_bridge: bool | None = None,
         theme: str | None = None,
     ) -> None:
         self.root = root
         self.bridge = bridge
+        self.owns_bridge = start_bridge if owns_bridge is None else owns_bridge
         self._stopping = False
         self._bridge_error: str | None = None
         self._bridge_thread: threading.Thread | None = None
@@ -940,8 +941,8 @@ class CompanionApp:
         actions.pack(fill="x", pady=(15, 0))
         self.open_button = tk.Button(
             actions,
-            text="Open detailed dashboard",
-            command=self._open_dashboard,
+            text="Refresh lifeline",
+            command=self._refresh_now,
             state="disabled",
             background=self.colors["blue"],
             foreground="#FFFFFF",
@@ -971,9 +972,9 @@ class CompanionApp:
             padx=20,
             pady=9,
         ).pack(side="left", padx=(10, 0))
-        tk.Button(
+        self.stop_button = tk.Button(
             actions,
-            text="Stop Lians",
+            text="Stop Lians" if self.owns_bridge else "Close window",
             command=self._stop,
             background=self.colors["background"],
             foreground=self.colors["muted"],
@@ -985,7 +986,8 @@ class CompanionApp:
             font=self._font(10, "bold"),
             padx=14,
             pady=9,
-        ).pack(side="right")
+        )
+        self.stop_button.pack(side="right")
         self._label(
             self.shell,
             textvariable=self.notice,
@@ -1376,9 +1378,14 @@ class CompanionApp:
             return
         self._maximize_to_work_area()
 
-    def _open_dashboard(self) -> None:
-        if self.bridge.running:
-            webbrowser.open(self.bridge.origin)
+    def _refresh_now(self) -> None:
+        if self._refresh_job is not None:
+            try:
+                self.root.after_cancel(self._refresh_job)
+            except tk.TclError:
+                pass
+            self._refresh_job = None
+        self._refresh()
 
     def _minimize(self) -> None:
         self.notice.set("Lians is still running. Open it from the Windows taskbar when needed.")
@@ -1396,7 +1403,6 @@ class CompanionApp:
         if self._stopping:
             return
         self._stopping = True
-        self.status.set("Stopping Lians")
         self.open_button.configure(state="disabled")
         if self._refresh_job is not None:
             try:
@@ -1404,6 +1410,12 @@ class CompanionApp:
             except tk.TclError:
                 pass
             self._refresh_job = None
+
+        if not self.owns_bridge:
+            self.root.destroy()
+            return
+
+        self.status.set("Stopping Lians")
 
         def stop() -> None:
             self.bridge.shutdown()
@@ -1427,17 +1439,59 @@ def _running_bridge_origin() -> str | None:
     return origin if server.startswith("LiansBridge/") else None
 
 
+def _focus_existing_companion() -> bool:
+    """Restore the existing Windows dashboard instead of opening a browser."""
+    if sys.platform != "win32":
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        handle = user32.FindWindowW(None, "Lians")
+        if not handle:
+            return False
+        user32.ShowWindowAsync(handle, 9)
+        user32.BringWindowToTop(handle)
+        user32.SetForegroundWindow(handle)
+        return True
+    except (AttributeError, OSError):
+        return False
+
+
+class _AttachedBridge:
+    """Read-only connection metadata for a bridge owned by another process."""
+
+    def __init__(self, origin: str, store: Any) -> None:
+        self.origin = origin
+        self.store = store
+
+    @property
+    def running(self) -> bool:
+        return _running_bridge_origin() == self.origin
+
+    def shutdown(self) -> None:
+        return None
+
+
 def _launch_companion() -> None:
     from .bridge import BridgeApplication
     from .mcp import default_data_path
     from .store import MemoryStore
 
+    data_path = default_data_path()
     existing = _running_bridge_origin()
     if existing is not None:
-        webbrowser.open(existing)
+        if _focus_existing_companion():
+            return
+        root = tk.Tk()
+        CompanionApp(
+            root,
+            _AttachedBridge(existing, MemoryStore(data_path)),
+            start_bridge=False,
+            owns_bridge=False,
+        )
+        root.mainloop()
         return
     root = tk.Tk()
-    CompanionApp(root, BridgeApplication(MemoryStore(default_data_path())))
+    CompanionApp(root, BridgeApplication(MemoryStore(data_path)))
     root.mainloop()
 
 
