@@ -49,15 +49,12 @@ a {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
   min-height: 58px;
-  font-size: 24px;
-  font-weight: 700;
 }
 
 .brand img {
-  width: 52px;
-  height: 52px;
+  width: 152px;
+  height: auto;
   object-fit: contain;
 }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import mimetypes
 import re
@@ -42,9 +43,13 @@ def _asset_bytes(name: str) -> bytes:
         "index.html": tester_root.joinpath("index.html"),
         "style.css": tester_root.joinpath("style.css"),
         "app.js": tester_root.joinpath("app.js"),
-        "lotus.svg": tester_root.joinpath("lotus.svg"),
+        "wordmark.png": app_root.joinpath("logo-blue.png"),
+        "favicon.png": tester_root.joinpath("favicon.png.b64"),
         "sora.woff2": app_root.joinpath("fonts", "sora-latin.woff2"),
     }
+    if name == "favicon.png":
+        value = assets[name].read_text(encoding="ascii").strip()
+        return base64.b64decode(value, validate=True)
     return assets[name].read_bytes()
 
 
@@ -159,7 +164,13 @@ class TesterApplication:
                 if route in {"", "index.html"}:
                     self._asset("index.html")
                     return
-                if route in {"style.css", "app.js", "lotus.svg", "sora.woff2"}:
+                if route in {
+                    "style.css",
+                    "app.js",
+                    "wordmark.png",
+                    "favicon.png",
+                    "sora.woff2",
+                }:
                     self._asset(route)
                     return
                 if route == "api/status":

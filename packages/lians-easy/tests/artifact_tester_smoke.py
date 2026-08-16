@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import socket
 import subprocess
@@ -48,10 +49,18 @@ def main() -> int:
         assert b"See how much context Lians can cut" in page
         assert b"eyebrow" not in page.lower()
         assert "\N{EM DASH}".encode("utf-8") not in page
-        for asset in ("style.css", "app.js", "lotus.svg", "sora.woff2"):
+        assets: dict[str, bytes] = {}
+        for asset in ("style.css", "app.js", "wordmark.png", "favicon.png", "sora.woff2"):
             with urlopen(base_url + asset, timeout=3) as response:
                 assert response.status == 200
-                assert response.read()
+                assets[asset] = response.read()
+                assert assets[asset]
+        assert hashlib.sha256(assets["wordmark.png"]).hexdigest() == (
+            "51495b5fc3e9dd339e5d2a5d4f4ae4c82f703c7d2ded21254d087c36b836cd4d"
+        )
+        assert hashlib.sha256(assets["favicon.png"]).hexdigest() == (
+            "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
+        )
         with urlopen(base_url + "api/status", timeout=10) as response:
             status = json.loads(response.read())
         assert isinstance(status["ready"], bool)

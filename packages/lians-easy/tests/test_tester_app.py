@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 from collections.abc import Iterator
@@ -120,7 +121,14 @@ def test_assets_and_status_are_local_and_do_not_leak_private_auth_fields(
     running_app: tuple[LocalTesterApplication, str],
 ) -> None:
     _, base_url = running_app
-    for route in ("", "style.css", "app.js", "lotus.svg", "sora.woff2"):
+    for route in (
+        "",
+        "style.css",
+        "app.js",
+        "wordmark.png",
+        "favicon.png",
+        "sora.woff2",
+    ):
         status, headers, payload = read(base_url + route)
         assert status == 200
         assert payload
@@ -137,6 +145,15 @@ def test_assets_and_status_are_local_and_do_not_leak_private_auth_fields(
     }
     assert b"private@example.com" not in payload
     assert b"claude.exe" not in payload
+
+    _, _, wordmark = read(base_url + "wordmark.png")
+    _, _, favicon = read(base_url + "favicon.png")
+    assert hashlib.sha256(wordmark).hexdigest() == (
+        "51495b5fc3e9dd339e5d2a5d4f4ae4c82f703c7d2ded21254d087c36b836cd4d"
+    )
+    assert hashlib.sha256(favicon).hexdigest() == (
+        "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
+    )
 
 
 def test_run_returns_a_small_summary_and_downloads_the_full_report(

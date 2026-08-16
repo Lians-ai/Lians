@@ -34,6 +34,15 @@ if (Test-Path -LiteralPath $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
 
+$brandingRoot = Join-Path $buildRoot "canonical-branding"
+New-Item -ItemType Directory -Force -Path $brandingRoot | Out-Null
+$faviconPath = Join-Path $brandingRoot "favicon.png"
+$faviconBase64 = Get-Content -LiteralPath (Join-Path $repoRoot "packages/lians-easy/lians_easy/tester/favicon.png.b64") -Raw
+[System.IO.File]::WriteAllBytes(
+    $faviconPath,
+    [Convert]::FromBase64String($faviconBase64.Trim())
+)
+
 python -m PyInstaller --version | Out-Null
 python -m PyInstaller `
     --noconfirm `
@@ -44,7 +53,7 @@ python -m PyInstaller `
     --paths (Join-Path $repoRoot "packages/lians-easy") `
     --add-data "$(Join-Path $repoRoot 'packages/lians-easy/lians_easy/app');lians_easy/app" `
     --add-data "$(Join-Path $repoRoot 'packages/lians-easy/lians_easy/tester');lians_easy/tester" `
-    --icon (Join-Path $repoRoot "packages/lians-easy/windows-lians.ico") `
+    --icon $faviconPath `
     --version-file (Join-Path $repoRoot "packages/lians-easy/windows-tester-version-info.txt") `
     --workpath $buildRoot `
     --distpath $binaryRoot `
@@ -58,7 +67,8 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stageRoot "assets") | Out-
 Copy-Item -LiteralPath (Join-Path $binaryRoot "LiansResearchTest.exe") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot "packages/lians-easy/tester-package/START-HERE.html") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot "packages/lians-easy/lians_easy/app/fonts/sora-latin.woff2") -Destination (Join-Path $stageRoot "assets")
-Copy-Item -LiteralPath (Join-Path $repoRoot "packages/lians-easy/lians_easy/tester/lotus.svg") -Destination (Join-Path $stageRoot "assets")
+Copy-Item -LiteralPath (Join-Path $repoRoot "packages/lians-easy/lians_easy/app/logo-blue.png") -Destination (Join-Path $stageRoot "assets")
+Copy-Item -LiteralPath $faviconPath -Destination (Join-Path $stageRoot "assets")
 
 $exePath = Join-Path $stageRoot "LiansResearchTest.exe"
 $exeHash = (Get-FileHash -LiteralPath $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
