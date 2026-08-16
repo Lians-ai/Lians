@@ -1,8 +1,8 @@
-# Lians Memory for Cursor
+# Lians for Cursor
 
-Give Cursor a durable local memory without changing your model or editor. The
-starter profile remembers important project facts and recalls a small relevant
-slice in a later chat.
+Help Cursor avoid rereading the same project context without changing your
+model or editor. Save a useful detail once; Lians reuses a small relevant slice
+in a later chat and leaves the rest out.
 
 ## Install for one project
 

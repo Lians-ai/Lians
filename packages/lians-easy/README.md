@@ -1,11 +1,23 @@
-# Lians Bridge (technical preview)
+# Lians desktop runtime (technical preview)
 
-Lians Bridge is the local service behind the guided Lians installer. It keeps
-one encrypted memory store for supported AI clients and exposes a small MCP
-surface, automatic bounded recall, project handoffs, and signed context
-receipts. The same package now carries the React Lians App for Memory, Activity,
-Review, Integrations, and Settings; normal users do not install or locate a
-separate web bundle.
+**Use less context. Get more AI.**
+
+This is the local runtime behind the guided Lians installer. It detects the AI
+apps already on a device, connects the selected apps, and gives later tasks a
+small set of relevant saved context instead of replaying the full history. The
+same package carries the encrypted local control center; users do not install a
+separate dashboard or hand Lians their Claude, Cursor, or Codex credentials.
+
+The product surface is intentionally small:
+
+1. Open Lians and choose the AI apps to optimize.
+2. Keep using those apps normally. Say `Remember that...` when a detail should
+   survive the current chat.
+3. Run `lians status` to see connected apps and the estimated repeated memory
+   context left out of later tasks.
+
+Memory controls, receipts, backup, cloud-sync preview, and deployment options
+remain available as progressive technical disclosure.
 
 The current desktop artifacts are development builds and are not yet published
 with trusted operating-system signatures. Context receipts are Ed25519-signed,
@@ -14,7 +26,8 @@ notarization. Until a signed release is published, developers and IT teams
 should evaluate the Bridge from source:
 
 ```bash
-python -m lians_easy install --clients antigravity,claude,cursor,gemini,codex,cline,opencode --yes
+python -m lians_easy optimize --clients antigravity,claude,cursor,gemini,codex,cline,opencode --yes
+python -m lians_easy status
 python -m lians_easy doctor --json
 python -m lians_easy app
 ```
@@ -32,8 +45,9 @@ pipx install lians-bridge
 
 lians doctor --json
 lians --version
-lians install --clients detected --plan --json
-lians install --clients detected --yes --json
+lians optimize --clients detected --plan --json
+lians optimize --clients detected --yes --json
+lians status --json
 lians app
 ```
 

@@ -36,19 +36,72 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
     if as_json:
         print(json.dumps(result, indent=2))
         return
-    print(result.get("status", "Lians Memory"))
+    print(result.get("headline") or result.get("status", "Lians"))
     for item in result.get("clients", []):
         if isinstance(item, dict):
             print(
                 f"- {item.get('label') or item.get('key') or item.get('client')}: "
                 f"{item.get('status') or item.get('config_path')}"
             )
+    efficiency = result.get("efficiency")
+    if isinstance(efficiency, dict):
+        avoided = int(efficiency.get("repeated_memory_tokens_avoided_estimate") or 0)
+        events = int(efficiency.get("context_events") or 0)
+        print(f"- Repeated memory context left out: ~{avoided} tokens across {events} tasks")
     if result.get("next_step"):
         print(result["next_step"])
 
 
+def product_status(
+    *, data_path: str | Path | None = None, home: Path | None = None
+) -> dict[str, Any]:
+    """Return the small ordinary-user view of Lians configuration and impact."""
+    targets = client_targets(home)
+    configured = [target for target in targets.values() if target.configured]
+    detected = [target for target in targets.values() if target.detected]
+    memory = MemoryStore(data_path or default_data_path()).stats()
+    return {
+        "status": "optimized" if configured else "not_configured",
+        "headline": (
+            f"Lians is active in {len(configured)} AI app"
+            f"{'s' if len(configured) != 1 else ''}."
+            if configured
+            else "Lians is ready to optimize your AI apps."
+        ),
+        "clients": [
+            {
+                **target.public(),
+                "status": (
+                    "connected"
+                    if target.configured
+                    else "found"
+                    if target.detected
+                    else "not found"
+                ),
+            }
+            for target in targets.values()
+            if target.detected or target.configured
+        ],
+        "configured_clients": len(configured),
+        "detected_clients": len(detected),
+        "efficiency": memory["efficiency"],
+        "privacy": {
+            "local": True,
+            "encrypted": memory["encrypted"],
+            "ai_account_credentials_required": False,
+        },
+        "next_step": (
+            "Keep using your connected apps normally. Lians adds only relevant saved context."
+            if configured
+            else "Open Lians for guided setup, or run `lians optimize --clients detected --yes`."
+        ),
+    }
+
+
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(prog="lians", description="Local memory for your AI")
+    result = argparse.ArgumentParser(
+        prog="lians", description="Use less repeated context in the AI tools you already use"
+    )
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = result.add_subparsers(dest="command")
     mcp = commands.add_parser("mcp", help="Run the local MCP memory server")
@@ -65,6 +118,10 @@ def parser() -> argparse.ArgumentParser:
     app.add_argument("--data", type=Path)
     app.add_argument("--host", default="127.0.0.1")
     app.add_argument("--port", type=int, default=7317)
+
+    status = commands.add_parser("status", help="Show connected apps and measured context reuse")
+    status.add_argument("--data", type=Path)
+    status.add_argument("--json", action="store_true")
 
     hook = commands.add_parser("hook", help="Inject bounded memory into an AI prompt")
     hook.add_argument(
@@ -88,8 +145,13 @@ def parser() -> argparse.ArgumentParser:
     cursor_rule.add_argument("--data", type=Path)
     cursor_rule.add_argument("--json", action="store_true")
 
-    for name in ("install", "uninstall"):
-        command = commands.add_parser(name, help=f"{name.title()} supported AI client settings")
+    for name in ("optimize", "install", "uninstall"):
+        help_text = (
+            "Connect supported AI apps to Lians"
+            if name == "optimize"
+            else f"{name.title()} supported AI client settings"
+        )
+        command = commands.add_parser(name, help=help_text)
         command.add_argument(
             "--clients",
             default="detected",
@@ -180,6 +242,9 @@ def main(argv: list[str] | None = None) -> None:
             port=args.port,
         ).serve(open_browser=True)
         return
+    if args.command == "status":
+        _show(product_status(data_path=args.data), as_json=args.json)
+        return
     if args.command == "hook":
         raise SystemExit(run_hook(client=args.client, data_path=args.data))
     if args.command == "context":
@@ -236,16 +301,17 @@ def main(argv: list[str] | None = None) -> None:
             )
         _show(result, as_json=args.json)
         return
-    if args.command in {"install", "uninstall"}:
+    if args.command in {"optimize", "install", "uninstall"}:
         keys = _keys(args.clients)
         if not keys:
             raise SystemExit("No supported AI clients were detected. Use --clients to choose one.")
         if args.plan:
-            _show(plan(keys, action=args.command), as_json=args.json)
+            action = "install" if args.command == "optimize" else args.command
+            _show(plan(keys, action=action), as_json=args.json)
             return
         if not args.yes:
             raise SystemExit("Review the selected clients, then rerun with --yes (or use the GUI).")
-        operation = install if args.command == "install" else uninstall
+        operation = install if args.command in {"optimize", "install"} else uninstall
         _show(operation(keys), as_json=args.json)
         return
     if sys.platform == "win32":

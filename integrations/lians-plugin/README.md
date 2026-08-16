@@ -1,6 +1,8 @@
-# Lians plugin for Claude Code
+# Lians for Claude Code
 
-This plugin gives Claude Code commands and an agent for working with Lians memory.
+This plugin helps Claude Code reuse useful project context without asking you to
+repeat it. It adds simple remember and recall commands while keeping the
+advanced memory and evidence tools available when a project needs them.
 
 ## Install from GitHub
 

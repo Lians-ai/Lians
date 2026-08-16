@@ -1,13 +1,15 @@
-# Lians Bridge desktop preview
+# Lians desktop preview
 
 The intended generally available package and nontechnical first-run contract
 are defined in [the consumer installer contract](consumer-installer.md). The
 current preview exercises the same Bridge and client configuration engine but
 does not yet satisfy its signing and release gates.
 
-Lians Bridge is a technical preview for carrying private, local memory across
-supported AI clients. It is deliberately smaller than the full Lians engine.
-There is no account, API key, database server, or embedding-model download.
+Lians is a technical preview for reducing repeated saved context across
+supported AI clients. The local Bridge is the memory engine underneath that
+experience; users keep their existing AI tools and models. There is no Lians
+account, provider password, API key, database server, or embedding-model
+download.
 
 There are currently no Authenticode-signed Windows, notarized macOS, or Linux
 `LiansMemory` assets in [GitHub Releases](https://github.com/Lians-ai/Lians/releases).
@@ -64,8 +66,9 @@ pipx install lians-bridge
 # or: uv tool install lians-bridge
 
 lians doctor --json
-lians install --clients detected --plan --json
-lians install --clients detected --yes --json
+lians optimize --clients detected --plan --json
+lians optimize --clients detected --yes --json
+lians status --json
 lians app
 ```
 
@@ -75,10 +78,10 @@ Python wheel removes the repository checkout for developers; it does not
 replace Authenticode, Developer ID, notarization, or clean-device testing for
 the consumer desktop packages.
 
-Choose the clients to configure, select **Install Lians**, restart those
-clients, then ask Cursor to remember a useful project rule. Start a new Codex
-or Claude task in the same repository and inspect the receipt attached to the
-recalled context.
+Choose the clients to configure, select **Optimize my AI apps**, restart those
+clients, then ask any connected app to remember a useful project rule. Start a
+new task in the same or another connected app and inspect how much saved context
+was reused and left out.
 
 For Gemini CLI, an install can succeed while `lians` remains disabled or
 disconnected in an untrusted folder. Review the folder and run `gemini trust`

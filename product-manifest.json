@@ -7,36 +7,41 @@
   },
   "product": {
     "name": "Lians",
-    "category": "Memory for any AI agent",
-    "summary": "Lians gives AI agents durable memory across chats, sessions, tools, and models. It runs locally by default, connects through MCP or SDKs, and lets an agent remember useful facts and recall relevant current context without locking that memory to one model provider.",
+    "category": "AI efficiency for the tools you already use",
+    "summary": "Lians helps Claude, Cursor, Codex, and other AI tools avoid rereading the same project context. Connect an existing app, keep working normally, and Lians reuses a small amount of relevant saved context while leaving the rest out. Local mode is free, encrypted on the device, and does not require an AI account password or provider API key.",
     "workflow": [
       {
-        "label": "Remember",
-        "detail": "Store one useful fact, preference, constraint, or decision that should survive the current chat."
+        "label": "Optimize",
+        "detail": "Lians detects supported AI apps and adds its local context connection without replacing the user's model, editor, or workflow."
       },
       {
-        "label": "Recall",
-        "detail": "Retrieve a small, relevant set of current memories when a later task needs them."
+        "label": "Work normally",
+        "detail": "The user saves a useful preference, fact, constraint, or decision once and continues working in the AI tools they already use."
       },
       {
-        "label": "Continue",
-        "detail": "Point another compatible agent or model at the same memory store and continue with the same context."
+        "label": "Reuse less",
+        "detail": "For a later task, Lians selects a bounded set of relevant current context instead of replaying the full saved history."
       },
       {
-        "label": "Control",
-        "detail": "Supersede stale facts, inspect where a memory came from, and use confirmed erasure where the integration exposes it."
+        "label": "See the proof",
+        "detail": "Status and signed receipts show what context was reused, what was left out, and the estimated repeated memory tokens avoided."
       }
     ],
     "surfaces": [
       {
-        "label": "Lians Easy desktop installer",
+        "label": "Lians desktop app",
         "status": "Release candidate",
-        "detail": "Guided, dependency-free local setup for Claude Desktop, Cursor, Windsurf, Gemini CLI, Codex, Cline CLI, and OpenCode, with cross-client memory and managed deployment flags."
+        "detail": "Guided local setup detects supported AI apps, lets the user optimize them from one screen, and opens the encrypted local control center. Consumer publication remains gated on trusted Windows and Apple signing."
       },
       {
-        "label": "MCP memory server",
+        "label": "Bounded context engine",
         "status": "Available",
-        "detail": "Local memory for MCP-compatible agents with remember, recall, inspect, correct, and confirmed forget."
+        "detail": "Stores useful context once, selects a small current subset for each task, and measures the estimated repeated memory context left out."
+      },
+      {
+        "label": "Claude, Cursor, and Codex connections",
+        "status": "Available",
+        "detail": "Connects through supported plugins, hooks, rules, and MCP settings without asking for the user's AI account password or changing the underlying model."
       },
       {
         "label": "Python local library",
@@ -44,19 +49,9 @@
         "detail": "SQLite-backed memory inside Python applications with no server, Docker container, or API key."
       },
       {
-        "label": "Pydantic AI integration",
+        "label": "Developer and framework integrations",
         "status": "Available",
-        "detail": "A tested local example that exposes current and point-in-time Lians recall as ordinary Pydantic AI function tools."
-      },
-      {
-        "label": "LangGraph integration",
-        "status": "Available",
-        "detail": "A tested credential-free graph that remembers a fact locally and recalls it in a later invocation."
-      },
-      {
-        "label": "Language SDKs",
-        "status": "Available",
-        "detail": "Python, TypeScript, Go, Java, and C clients for connecting applications to a Lians service."
+        "detail": "MCP, Python, TypeScript, Go, Java, C, Pydantic AI, LangGraph, and other integration paths remain available behind the simple end-user product."
       },
       {
         "label": "Self-hosted service",

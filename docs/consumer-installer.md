@@ -1,9 +1,29 @@
-# Lians consumer installer contract
+# Lians consumer product and installer contract
 
 The consumer package is one Lians installer per operating system, not a separate
 installer for every AI client. The installer places one local Lians Bridge on
 the device, detects compatible AI apps, and lets the user connect any of them
 from one screen.
+
+The consumer promise is **Use less context. Get more AI.** Memory is the local
+engine that makes this possible, not the job the user should have to manage.
+The default experience should help someone optimize the AI tools they already
+use, keep working normally, and see evidence that irrelevant saved context was
+left out. Memory directories, lineage, receipts, backup, and deployment remain
+available as controls and technical detail.
+
+Product language must stay within the measured boundary:
+
+- Say that Lians reduces repeated saved context and measures an estimate of what
+  it leaves out.
+- Say that this can help users get more useful work from the AI tools they
+  already pay for.
+- Do not promise that Lians extends every provider's plan, message cap, or
+  billing quota. That requires provider-reported measurement in the installed
+  product.
+- Never ask for a Claude, Cursor, Codex, or other AI account password. Connect
+  supported local clients through their documented plugin, hook, rule, or MCP
+  configuration surfaces.
 
 The reference implementation in
 [`codefl0w/mtkclient-windows-installer`](https://github.com/codefl0w/mtkclient-windows-installer)
@@ -86,27 +106,27 @@ successfully.
 
 The setup sequence has four moments:
 
-1. **Promise and trust.** Explain that Lians carries preferences and useful
-   project context across the user's existing AI apps. State that memory is
-   encrypted locally, existing settings are backed up, and no provider API key
-   is required.
+1. **Promise and trust.** Lead with **Use less context. Get more AI.** Explain
+   that Lians gives later tasks only useful saved context. State that saved
+   context is encrypted locally, existing settings are backed up, and no AI
+   account password or provider API key is required.
 2. **Choose apps.** Detect installed clients, select them by default, and keep
-   unsupported or absent clients behind **Add another AI app**. Encourage two
-   connections because the cross-app handoff is the activation event.
+   unsupported or absent clients behind **Add another AI app**. One connected
+   app provides value; a second also demonstrates portability.
 3. **Set up.** Show one progress bar and three plain-language states:
-   **Protect your existing settings**, **Connect your AI apps**, and **Check
-   that memory is ready**.
+   **Protect your existing settings**, **Optimize your AI apps**, and **Check
+   that Lians is ready**.
 4. **Prove value.** Copy a ready-made `remember` prompt, tell the user to open a
-   new task in another app, and show the expected context receipt. Do not end on
-   a generic "installation complete" message.
+   new task in the same or another app, and show the estimated context reused
+   and left out. Do not end on a generic "installation complete" message.
 
 The user should see the outcome, not the implementation:
 
 | Internal operation | Consumer copy |
 |---|---|
 | Back up and atomically update client configuration | Protect your existing settings |
-| Register MCP server, hook, plugin, or project rule | Connect Cursor / Claude / Codex |
-| Start Bridge and validate the client contract | Check that memory is ready |
+| Register MCP server, hook, plugin, or project rule | Optimize Cursor / Claude / Codex |
+| Start Bridge and validate the client contract | Check that Lians is ready |
 | Display configuration paths, commands, and exceptions | Technical details |
 | Create diagnostic archive | Save support report |
 

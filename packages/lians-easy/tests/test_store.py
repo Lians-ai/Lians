@@ -116,6 +116,33 @@ def test_every_operation_closes_its_sqlite_connection(tmp_path, monkeypatch):
     assert all(connection.closed for connection in connections)
 
 
+def test_existing_receipt_table_is_upgraded_for_efficiency_measurement(tmp_path):
+    data = tmp_path / "memory.sqlite3"
+    with sqlite3.connect(data) as db:
+        db.execute(
+            """CREATE TABLE context_receipts (
+               id TEXT PRIMARY KEY,
+               profile TEXT NOT NULL,
+               project_id TEXT,
+               client TEXT NOT NULL,
+               token_estimate INTEGER NOT NULL,
+               memory_count INTEGER NOT NULL,
+               receipt_json TEXT NOT NULL,
+               created_at TEXT NOT NULL
+            )"""
+        )
+
+    store = MemoryStore(data)
+    memory = store.remember("Use Python 3.12.", kind="preference")
+    pack = store.context_pack("Which Python version?", project=None, client="codex")
+
+    assert pack["memories"][0]["id"] == memory["id"]
+    with sqlite3.connect(data) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(context_receipts)")}
+    assert "available_memory_token_estimate" in columns
+    assert "avoided_memory_token_estimate" in columns
+
+
 def test_confirmed_profile_erasure_clears_history_and_keeps_store_usable(tmp_path):
     data = tmp_path / "memory.sqlite3"
     store = MemoryStore(data)
