@@ -143,6 +143,45 @@ def test_existing_receipt_table_is_upgraded_for_efficiency_measurement(tmp_path)
     assert "avoided_memory_token_estimate" in columns
 
 
+def test_legacy_memory_table_is_upgraded_before_modern_indexes_are_created(tmp_path):
+    data = tmp_path / "memory.sqlite3"
+    with sqlite3.connect(data) as db:
+        db.execute(
+            """CREATE TABLE memories (
+               id TEXT PRIMARY KEY,
+               profile TEXT NOT NULL,
+               content TEXT,
+               source TEXT NOT NULL,
+               topic TEXT,
+               metadata_json TEXT NOT NULL DEFAULT '{}',
+               created_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL,
+               supersedes_id TEXT,
+               superseded_by_id TEXT,
+               forgotten_at TEXT
+            )"""
+        )
+        db.execute(
+            """INSERT INTO memories
+               (id, profile, content, source, created_at, updated_at)
+               VALUES ('legacy-memory', 'personal', 'Use FastAPI.', 'user',
+                       '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"""
+        )
+
+    store = MemoryStore(data)
+
+    assert store.recall("Use FastAPI")[0]["content"] == "Use FastAPI."
+    with sqlite3.connect(data) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(memories)")}
+        indexes = {row[1] for row in db.execute("PRAGMA index_list(memories)")}
+        plaintext = db.execute(
+            "SELECT content FROM memories WHERE id = 'legacy-memory'"
+        ).fetchone()[0]
+    assert {"project_id", "scope", "paused_at", "content_cipher"} <= columns
+    assert {"idx_memories_profile_state", "idx_memories_project"} <= indexes
+    assert plaintext is None
+
+
 def test_confirmed_profile_erasure_clears_history_and_keeps_store_usable(tmp_path):
     data = tmp_path / "memory.sqlite3"
     store = MemoryStore(data)

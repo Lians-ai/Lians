@@ -111,10 +111,6 @@ class MemoryStore:
                     paused_at TEXT,
                     forgotten_at TEXT
                 );
-                CREATE INDEX IF NOT EXISTS idx_memories_profile_state
-                    ON memories(profile, forgotten_at, superseded_by_id, created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_memories_project
-                    ON memories(profile, project_id, scope, forgotten_at, superseded_by_id);
                 CREATE TABLE IF NOT EXISTS bridge_activity (
                     id TEXT PRIMARY KEY,
                     profile TEXT NOT NULL,
@@ -155,11 +151,22 @@ class MemoryStore:
             for name, declaration in additions.items():
                 if name not in existing:
                     db.execute(f"ALTER TABLE memories ADD COLUMN {name} {declaration}")
+            # Legacy databases must receive their missing columns before an
+            # index is allowed to reference those columns.
+            db.executescript(
+                """
+                CREATE INDEX IF NOT EXISTS idx_memories_profile_state
+                    ON memories(profile, forgotten_at, superseded_by_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_memories_project
+                    ON memories(profile, project_id, scope, forgotten_at, superseded_by_id);
+                """
+            )
 
             existing_receipt_columns = {
                 row[1] for row in db.execute("PRAGMA table_info(context_receipts)")
             }
             receipt_additions = {
+                "project_id": "TEXT",
                 "available_memory_token_estimate": "INTEGER NOT NULL DEFAULT 0",
                 "avoided_memory_token_estimate": "INTEGER NOT NULL DEFAULT 0",
             }
