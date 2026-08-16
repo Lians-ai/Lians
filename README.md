@@ -122,6 +122,12 @@ it in a new Cursor chat and a fresh Claude Code session, then confirmed that it
 was gone after deletion. Read the
 [methodology and raw aggregate evidence](docs/benchmarks/cross-agent-memory-2026-08-14.md).
 
+The desktop runtime also includes an offline-first
+[Claude Code comparison](docs/benchmarks/claude-code-baseline.md) that tests the
+same exact question with full context replay and bounded Lians context. It
+refuses API-key authentication before a live run and keeps answer correctness
+separate from provider-reported usage.
+
 Lians does not enlarge a provider context window or guarantee that every plan,
 quota, or bill lasts longer. It measures the narrower claim it controls: how
 much active saved memory could have been replayed, how much was selected, and

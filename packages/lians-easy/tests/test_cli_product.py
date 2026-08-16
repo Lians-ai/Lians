@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from lians_easy import cli
 from lians_easy.installer import ClientTarget
 from lians_easy.store import MemoryStore
@@ -65,3 +66,54 @@ def test_optimize_is_the_plain_language_install_path() -> None:
     assert parsed.command == "optimize"
     assert parsed.clients == "claude,cursor"
     assert parsed.plan is True
+
+
+def test_claude_experiment_defaults_to_an_offline_plan() -> None:
+    parsed = cli.parser().parse_args(["experiment", "claude", "--json"])
+
+    assert parsed.command == "experiment"
+    assert parsed.experiment_name == "claude"
+    assert parsed.run is False
+    assert parsed.model == "sonnet"
+    assert parsed.repetitions == 1
+
+
+def test_claude_experiment_plan_does_not_call_claude(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "listen_for_windows_installer_shutdown", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "run_claude_experiment",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("live call attempted")),
+    )
+
+    cli.main(["experiment", "claude", "--json"])
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "planned"
+    assert result["fixture"]["synthetic"] is True
+
+
+def test_claude_experiment_refuses_existing_report_before_live_call(
+    tmp_path, monkeypatch
+) -> None:
+    output = tmp_path / "existing.json"
+    output.write_text("keep me", encoding="utf-8")
+    monkeypatch.setattr(cli, "listen_for_windows_installer_shutdown", lambda: None)
+    monkeypatch.setattr(
+        cli,
+        "run_claude_experiment",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("live call attempted")),
+    )
+
+    with pytest.raises(SystemExit, match="Output already exists"):
+        cli.main(
+            [
+                "experiment",
+                "claude",
+                "--run",
+                "--output",
+                str(output),
+            ]
+        )
+
+    assert output.read_text(encoding="utf-8") == "keep me"
