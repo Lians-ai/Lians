@@ -133,15 +133,21 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.reduction_status.get() == "About 75% less repeated context"
         assert any(label["text"] == "Codex · Lians" for label in app.activity_labels)
         assert app.font_family == "Sora"
-        assert app.display_font_family in {"Yu Mincho", "Yu Gothic UI", "Yu Gothic", "Sora"}
+        assert app.display_font_family == "Sora"
         assert bool(root.overrideredirect())
         assert app.target_labels["claude"]["text"] == "●  Connected"
         assert app.target_labels["codex"]["text"] == "●  Ready to connect"
         assert app.target_labels["cursor"]["text"] == "●  Not found"
         app._animate_lifeline()
         canvas_items = app.lifeline_canvas.find_all()
-        assert 3 <= len(canvas_items) <= 5
+        assert len(canvas_items) == 1
+        assert app.lifeline_canvas.type(canvas_items[0]) == "image"
+        assert app.lifeline_canvas.itemcget(canvas_items[0], "image") == str(
+            app.lotus_mark
+        )
         assert all(app.lifeline_canvas.type(item) != "text" for item in canvas_items)
+        assert app.close_button["text"] == "×"
+        assert app.stop_button["text"] == "Close"
 
         app._toggle_theme()
         root.update_idletasks()

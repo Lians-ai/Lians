@@ -40,13 +40,13 @@ RED = "#ff6d83"
 COMPANION_THEMES = {
     "dark": {
         "background": "#030405",
-        "surface": "#080A0D",
-        "surface_soft": "#0D1014",
-        "border": "#1A1E25",
+        "surface": "#090B0E",
+        "surface_soft": "#0D1015",
+        "border": "#171B22",
         "grid": "#10141B",
-        "grid_strong": "#222B3A",
-        "text": "#EEF1F5",
-        "muted": "#828B98",
+        "grid_strong": "#202836",
+        "text": "#F1F3F6",
+        "muted": "#8C96A4",
         "blue": "#315FE9",
         "blue_hover": "#294FC2",
         "blue_soft": "#0C1633",
@@ -71,6 +71,55 @@ COMPANION_THEMES = {
         "red": "#C93651",
     },
 }
+
+def _draw_round_rectangle(
+    canvas: tk.Canvas,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    radius: float,
+    *,
+    fill: str,
+    tags: str,
+) -> int:
+    """Draw one compact smooth rounded rectangle without platform chrome."""
+
+    radius = min(radius, (x2 - x1) / 2, (y2 - y1) / 2)
+    points = (
+        x1 + radius,
+        y1,
+        x2 - radius,
+        y1,
+        x2,
+        y1,
+        x2,
+        y1 + radius,
+        x2,
+        y2 - radius,
+        x2,
+        y2,
+        x2 - radius,
+        y2,
+        x1 + radius,
+        y2,
+        x1,
+        y2,
+        x1,
+        y2 - radius,
+        x1,
+        y1 + radius,
+        x1,
+        y1,
+    )
+    return canvas.create_polygon(
+        points,
+        smooth=True,
+        splinesteps=24,
+        fill=fill,
+        outline="",
+        tags=tags,
+    )
 
 _WINDOWS_DPI_AWARE = False
 
@@ -761,7 +810,11 @@ class CompanionApp:
         self._intro_job: str | None = None
         self._intro_frame_job: str | None = None
         self._motion_job: str | None = None
+        self._intro_lotus_item: int | None = None
+        self._lifeline_lotus_item: int | None = None
         self._motion_started = time.monotonic()
+        self._last_target_scan = 0.0
+        self._targets_cache = client_targets()
         self._window_handle: int | None = None
         self._drag_origin: tuple[int, int, int, int] | None = None
         self._display_scale = _windows_display_scale()
@@ -781,7 +834,9 @@ class CompanionApp:
         self.theme_name = theme if theme in COMPANION_THEMES else _saved_companion_theme()
         self.colors = COMPANION_THEMES[self.theme_name]
         self.font_family = _register_sora(root)
-        self.display_font_family = _display_font(root, self.font_family)
+        # One type family renders more cleanly than mixing Windows' Japanese
+        # display fonts with Sora at different ClearType hinting boundaries.
+        self.display_font_family = self.font_family
         self.target_labels: dict[str, tk.Label] = {}
         self.target_details: dict[str, tk.Label] = {}
         self.activity_labels: list[tk.Label] = []
@@ -799,7 +854,7 @@ class CompanionApp:
         self.root.title("Lians")
         self.root.geometry(self._normal_geometry)
         self.root.minsize(880, 620)
-        self.root.protocol("WM_DELETE_WINDOW", self._minimize)
+        self.root.protocol("WM_DELETE_WINDOW", self._stop)
         if sys.platform == "win32":
             self.root.overrideredirect(True)
             try:
@@ -832,6 +887,62 @@ class CompanionApp:
             **kwargs,
         )
 
+    def _rounded_panel(
+        self,
+        parent: tk.Widget,
+        *,
+        height: int,
+        fill_key: str = "surface",
+        radius: int = 24,
+        padding: int = 20,
+    ) -> tuple[tk.Canvas, tk.Frame]:
+        """Create a responsive rounded surface with a normal Tk content frame."""
+
+        background = self.colors[fill_key]
+        canvas = tk.Canvas(
+            parent,
+            height=height,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        inner = tk.Frame(canvas, background=background)
+        inner.place(
+            x=padding,
+            y=padding,
+            relwidth=1,
+            width=-(padding * 2),
+            relheight=1,
+            height=-(padding * 2),
+        )
+
+        def redraw(event: tk.Event) -> None:
+            canvas.delete("panel-shape")
+            _draw_round_rectangle(
+                canvas,
+                1,
+                1,
+                max(2, event.width - 1),
+                max(2, event.height - 1),
+                radius,
+                fill=self.colors["border"],
+                tags="panel-shape",
+            )
+            _draw_round_rectangle(
+                canvas,
+                2,
+                2,
+                max(3, event.width - 2),
+                max(3, event.height - 2),
+                max(1, radius - 1),
+                fill=background,
+                tags="panel-shape",
+            )
+            canvas.tag_lower("panel-shape")
+
+        canvas.bind("<Configure>", redraw)
+        return canvas, inner
+
     def _load_brand_images(self) -> None:
         try:
             logo_path = files("lians_easy").joinpath("app", "logo-blue.png")
@@ -855,27 +966,6 @@ class CompanionApp:
         bounded = min(1.0, max(0.0, value))
         return 1.0 if bounded == 1.0 else 1 - 2 ** (-10 * bounded)
 
-    @staticmethod
-    def _lotus_petals(center_x: float, center_y: float, scale: float) -> list[list[float]]:
-        """Return seven smooth Lotus petals in back-to-front drawing order."""
-        petals = (
-            ((-4, 26), (-84, 6), (-112, -22), (-58, -18)),
-            ((4, 26), (84, 6), (112, -22), (58, -18)),
-            ((-2, 28), (-68, -16), (-82, -54), (-31, -34)),
-            ((2, 28), (68, -16), (82, -54), (31, -34)),
-            ((0, 30), (-38, -42), (-37, -82), (-7, -48)),
-            ((0, 30), (38, -42), (37, -82), (7, -48)),
-            ((0, 28), (-22, -28), (0, -92), (22, -28)),
-        )
-        return [
-            [
-                coordinate
-                for x, y in petal
-                for coordinate in (center_x + x * scale, center_y + y * scale)
-            ]
-            for petal in petals
-        ]
-
     def _build_intro(self) -> None:
         """Contract a single wordless Lotus while the local bridge starts."""
         for child in self.root.winfo_children():
@@ -888,9 +978,10 @@ class CompanionApp:
             highlightthickness=0,
         )
         self.intro_canvas.pack(fill="both", expand=True)
+        self._intro_lotus_item = None
         self._intro_started = time.monotonic()
         self._animate_intro()
-        self._intro_job = self.root.after(760, self._finish_intro)
+        self._intro_job = self.root.after(650, self._finish_intro)
 
     def _animate_intro(self) -> None:
         if self._stopping or not self.intro_canvas.winfo_exists():
@@ -899,35 +990,21 @@ class CompanionApp:
         width = max(1, canvas.winfo_width())
         height = max(1, canvas.winfo_height())
         elapsed = time.monotonic() - self._intro_started
-        progress = min(1.0, elapsed / 0.68)
+        progress = min(1.0, elapsed / 0.58)
         eased = self._ease_out_expo(progress)
         center_x = width / 2
-        center_y = height / 2 + 18
-        canvas.delete("intro-motion")
-        start_scale = max(width / 180, height / 76) * 1.18
-        end_scale = 0.72
-        scale = end_scale + (start_scale - end_scale) * (1 - eased)
-        colors = (
-            "#142A68",
-            "#142A68",
-            "#1B3B91",
-            "#1B3B91",
-            "#244DBA",
-            "#244DBA",
-            "#315FE9",
-        )
-        for points, color in zip(
-            self._lotus_petals(center_x, center_y, scale), colors
-        ):
-            canvas.create_polygon(
-                points,
-                fill=color,
-                outline="",
-                smooth=True,
-                splinesteps=22,
-                tags="intro-motion",
-            )
-        self._intro_frame_job = self.root.after(42, self._animate_intro)
+        center_y = height / 2 + 14 * (1 - eased)
+        if self.lotus_mark is not None:
+            if self._intro_lotus_item is None:
+                self._intro_lotus_item = canvas.create_image(
+                    center_x,
+                    center_y,
+                    image=self.lotus_mark,
+                    tags="intro-motion",
+                )
+            else:
+                canvas.coords(self._intro_lotus_item, center_x, center_y)
+        self._intro_frame_job = self.root.after(33, self._animate_intro)
 
     def _finish_intro(self) -> None:
         self._intro_job = None
@@ -982,8 +1059,8 @@ class CompanionApp:
         self.shell = tk.Frame(
             self.body_canvas,
             background=self.colors["background"],
-            padx=44,
-            pady=20,
+            padx=54,
+            pady=26,
         )
         canvas_window = self.body_canvas.create_window(
             (0, 0), window=self.shell, anchor="nw"
@@ -998,23 +1075,16 @@ class CompanionApp:
         )
         self.root.bind("<MouseWheel>", self._scroll_body)
 
-        hero = tk.Frame(
-            self.shell,
-            background=self.colors["surface"],
-            highlightbackground=self.colors["border"],
-            highlightthickness=1,
-            padx=28,
-            pady=24,
-        )
-        hero.pack(fill="x", pady=(0, 14))
-        hero_left = tk.Frame(hero, background=self.colors["surface"])
-        hero_left.pack(side="left", fill="both", expand=True, padx=(0, 24))
-        state = tk.Frame(hero_left, background=self.colors["surface"])
-        state.pack(fill="x", pady=(0, 15))
+        hero = tk.Frame(self.shell, background=self.colors["background"])
+        hero.pack(fill="x", pady=(6, 22))
+        hero_left = tk.Frame(hero, background=self.colors["background"])
+        hero_left.pack(side="left", fill="both", expand=True, padx=(22, 32), pady=18)
+        state = tk.Frame(hero_left, background=self.colors["background"])
+        state.pack(fill="x", pady=(0, 16))
         self.status_dot = self._label(
             state,
             "●",
-            background=self.colors["surface"],
+            background=self.colors["background"],
             foreground=self.colors["blue"],
             font=self._font(9, "bold"),
         )
@@ -1022,22 +1092,22 @@ class CompanionApp:
         self._label(
             state,
             textvariable=self.status,
-            background=self.colors["surface"],
+            background=self.colors["background"],
             foreground=self.colors["muted"],
             font=self._font(10, "bold"),
         ).pack(side="left")
         self._label(
             hero_left,
             "Agent lifeline",
-            background=self.colors["surface"],
+            background=self.colors["background"],
             foreground=self.colors["text"],
-            font=self._display(34, "bold"),
+            font=self._display(32, "bold"),
             anchor="w",
         ).pack(fill="x")
         self._label(
             hero_left,
             "Less repeated context across Claude, Codex, and Cursor.",
-            background=self.colors["surface"],
+            background=self.colors["background"],
             foreground=self.colors["muted"],
             font=self._font(11),
             anchor="w",
@@ -1046,18 +1116,25 @@ class CompanionApp:
         ).pack(fill="x", pady=(7, 0))
         self.lifeline_canvas = tk.Canvas(
             hero,
-            width=350,
-            height=148,
-            background=self.colors["surface"],
+            width=310,
+            height=170,
+            background=self.colors["background"],
             borderwidth=0,
             highlightthickness=0,
         )
-        self.lifeline_canvas.pack(side="right", fill="both")
+        self.lifeline_canvas.pack(side="right", fill="y", padx=(0, 28))
+        self._lifeline_lotus_item = None
         self._motion_started = time.monotonic()
         self._motion_job = self.root.after(80, self._animate_lifeline)
 
-        metrics = tk.Frame(self.shell, background=self.colors["background"])
-        metrics.pack(fill="x")
+        self.metrics_panel, metrics = self._rounded_panel(
+            self.shell,
+            height=166,
+            fill_key="surface",
+            radius=24,
+            padding=18,
+        )
+        self.metrics_panel.pack(fill="x")
         metric_data = (
             ("Tokens saved", self.token_value, "Repeated context removed"),
             ("Handoffs", self.event_value, "Context carried forward"),
@@ -1067,7 +1144,7 @@ class CompanionApp:
             self._metric_card(metrics, *data, index=index)
 
         activity_heading = tk.Frame(self.shell, background=self.colors["background"])
-        activity_heading.pack(fill="x", pady=(17, 8))
+        activity_heading.pack(fill="x", pady=(20, 9), padx=4)
         self._label(
             activity_heading,
             "Activity",
@@ -1081,19 +1158,18 @@ class CompanionApp:
             font=self._font(10),
         ).pack(side="right")
 
-        self.activity_frame = tk.Frame(
+        activity_panel, self.activity_frame = self._rounded_panel(
             self.shell,
-            background=self.colors["surface"],
-            highlightbackground=self.colors["border"],
-            highlightthickness=1,
-            padx=18,
-            pady=10,
+            height=144,
+            fill_key="surface",
+            radius=24,
+            padding=20,
         )
-        self.activity_frame.pack(fill="both", expand=True)
+        activity_panel.pack(fill="x")
         self._show_activity([])
 
         connections_heading = tk.Frame(self.shell, background=self.colors["background"])
-        connections_heading.pack(fill="x", pady=(14, 8))
+        connections_heading.pack(fill="x", pady=(18, 9), padx=4)
         self._label(
             connections_heading,
             "Connections",
@@ -1107,14 +1183,20 @@ class CompanionApp:
             font=self._font(10),
         ).pack(side="right")
 
-        integrations = tk.Frame(self.shell, background=self.colors["background"])
-        integrations.pack(fill="x")
-        targets = client_targets()
+        integrations_panel, integrations = self._rounded_panel(
+            self.shell,
+            height=108,
+            fill_key="surface_soft",
+            radius=24,
+            padding=17,
+        )
+        integrations_panel.pack(fill="x")
+        targets = self._targets_cache
         for index, key in enumerate(("claude", "codex", "cursor")):
             self._connection_card(integrations, key, targets[key], index)
 
         actions = tk.Frame(self.shell, background=self.colors["background"])
-        actions.pack(fill="x", pady=(15, 0))
+        actions.pack(fill="x", pady=(18, 0), padx=4)
         self.open_button = tk.Button(
             actions,
             text="Refresh",
@@ -1150,7 +1232,7 @@ class CompanionApp:
         ).pack(side="left", padx=(10, 0))
         self.stop_button = tk.Button(
             actions,
-            text="Stop Lians" if self.owns_bridge else "Close window",
+            text="Quit Lians" if self.owns_bridge else "Close",
             command=self._stop,
             background=self.colors["background"],
             foreground=self.colors["muted"],
@@ -1172,7 +1254,7 @@ class CompanionApp:
             wraplength=960,
             anchor="w",
             font=self._font(9),
-        ).pack(fill="x", pady=(9, 0))
+        ).pack(fill="x", pady=(9, 4), padx=4)
 
     def _scroll_body(self, event: tk.Event) -> str:
         delta = int(-event.delta / 120) if event.delta else 0
@@ -1250,7 +1332,7 @@ class CompanionApp:
         )
         self.theme_button = mode
         for text, command in (
-            ("×", self._minimize),
+            ("×", self._stop),
             ("□", self._toggle_maximize),
             ("−", self._minimize),
         ):
@@ -1269,6 +1351,8 @@ class CompanionApp:
                 width=4,
             )
             button.pack(side="right", fill="y")
+            if text == "×":
+                self.close_button = button
         mode.pack(side="right", fill="y", padx=(0, 8))
         for widget in (bar, brand, *brand.winfo_children()):
             widget.bind("<ButtonPress-1>", self._begin_drag)
@@ -1277,64 +1361,33 @@ class CompanionApp:
             widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
 
     def _animate_lifeline(self) -> None:
-        """Render one quiet, low-frame-rate context pulse."""
+        """Render the exact branded PNG with one quiet floating motion."""
         if self._stopping:
             return
         try:
             if not self.lifeline_canvas.winfo_exists():
                 return
             canvas = self.lifeline_canvas
-            width = max(280, canvas.winfo_width())
-            height = max(130, canvas.winfo_height())
+            if not canvas.winfo_viewable():
+                self._motion_job = self.root.after(750, self._animate_lifeline)
+                return
+            width = max(240, canvas.winfo_width())
+            height = max(140, canvas.winfo_height())
             elapsed = time.monotonic() - self._motion_started
-            canvas.delete("motion")
-
-            center_y = height / 2
-            points: list[float] = []
-            for step in range(18):
-                x = 16 + (width - 32) * step / 17
-                envelope = math.sin(math.pi * step / 17) ** 2
-                y = center_y + math.sin(step * 0.72 - elapsed * 1.25) * 10 * envelope
-                points.extend((x, y))
-            canvas.create_line(
-                *points,
-                fill=self.colors["grid_strong"],
-                width=2,
-                smooth=True,
-                splinesteps=12,
-                tags="motion",
-            )
-            travel = (elapsed * 0.10) % 1
-            dot_x = 16 + (width - 32) * travel
-            dot_y = center_y + math.sin(travel * math.tau * 2 - elapsed * 1.25) * 8
-            canvas.create_oval(
-                dot_x - 3,
-                dot_y - 3,
-                dot_x + 3,
-                dot_y + 3,
-                fill=self.colors["blue"],
-                outline="",
-                tags="motion",
-            )
-            pulse = 20 + 2 * math.sin(elapsed * 1.6)
             center_x = width / 2
-            canvas.create_oval(
-                center_x - pulse,
-                center_y - pulse,
-                center_x + pulse,
-                center_y + pulse,
-                outline=self.colors["blue"],
-                width=1,
-                tags="motion",
-            )
-            if self.lotus is not None:
-                canvas.create_image(
-                    center_x,
-                    center_y,
-                    image=self.lotus,
-                    tags="motion",
-                )
-            self._motion_job = self.root.after(125, self._animate_lifeline)
+            center_y = height / 2
+            center_y += 1.5 * math.sin(elapsed * 1.2)
+            if self.lotus_mark is not None:
+                if self._lifeline_lotus_item is None:
+                    self._lifeline_lotus_item = canvas.create_image(
+                        center_x,
+                        center_y,
+                        image=self.lotus_mark,
+                        tags="motion",
+                    )
+                else:
+                    canvas.coords(self._lifeline_lotus_item, center_x, center_y)
+            self._motion_job = self.root.after(250, self._animate_lifeline)
         except tk.TclError:
             self._motion_job = None
 
@@ -1347,20 +1400,17 @@ class CompanionApp:
         *,
         index: int,
     ) -> None:
+        if index:
+            tk.Frame(parent, background=self.colors["border"], width=1).pack(
+                side="left", fill="y", padx=8
+            )
         card = tk.Frame(
             parent,
             background=self.colors["surface"],
-            highlightbackground=self.colors["border"],
-            highlightthickness=1,
-            padx=16,
-            pady=10,
+            padx=14,
+            pady=2,
         )
-        card.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=(0 if index == 0 else 6, 0 if index == 2 else 6),
-        )
+        card.pack(side="left", fill="both", expand=True)
         heading = tk.Frame(card, background=self.colors["surface"])
         heading.pack(fill="x")
         self._label(
@@ -1377,7 +1427,7 @@ class CompanionApp:
             textvariable=value,
             background=self.colors["surface"],
             foreground=self.colors["blue"],
-            font=self._display(27, "bold"),
+            font=self._display(25, "bold"),
             anchor="w",
         ).pack(fill="x", pady=(2, 1))
         self._label(
@@ -1400,20 +1450,17 @@ class CompanionApp:
     def _connection_card(
         self, parent: tk.Widget, key: str, target: ClientTarget, index: int
     ) -> None:
+        if index:
+            tk.Frame(parent, background=self.colors["border"], width=1).pack(
+                side="left", fill="y", padx=8
+            )
         card = tk.Frame(
             parent,
             background=self.colors["surface_soft"],
-            highlightbackground=self.colors["border"],
-            highlightthickness=1,
-            padx=14,
-            pady=7,
+            padx=10,
+            pady=0,
         )
-        card.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=(0 if index == 0 else 5, 0 if index == 2 else 5),
-        )
+        card.pack(side="left", fill="both", expand=True)
         name = "Claude" if key == "claude" else target.label
         self._label(
             card,
@@ -1543,7 +1590,11 @@ class CompanionApp:
                 self._show_activity(snapshot["activity"])
             except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
                 self.memory_status.set("Encrypted memory ready")
-        targets = client_targets()
+        now = time.monotonic()
+        if now - self._last_target_scan >= 10:
+            self._targets_cache = client_targets()
+            self._last_target_scan = now
+        targets = self._targets_cache
         for key, label in self.target_labels.items():
             status, detail, color = self._connection_presentation(targets[key])
             label.configure(
@@ -1551,7 +1602,7 @@ class CompanionApp:
                 foreground=color,
             )
             self.target_details[key].configure(text=detail)
-        self._refresh_job = self.root.after(2000, self._refresh)
+        self._refresh_job = self.root.after(5000, self._refresh)
 
     def _toggle_theme(self) -> None:
         if self._refresh_job is not None:
@@ -1659,6 +1710,7 @@ class CompanionApp:
             except tk.TclError:
                 pass
             self._refresh_job = None
+        self._last_target_scan = 0.0
         self._refresh()
 
     def _minimize(self) -> None:
@@ -1677,7 +1729,8 @@ class CompanionApp:
         if self._stopping:
             return
         self._stopping = True
-        self.open_button.configure(state="disabled")
+        if hasattr(self, "open_button"):
+            self.open_button.configure(state="disabled")
         if self._refresh_job is not None:
             try:
                 self.root.after_cancel(self._refresh_job)
