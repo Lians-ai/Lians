@@ -16,7 +16,7 @@ def _canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
 
-def test_project_identity_follows_repository_origin_across_nested_paths(tmp_path):
+def test_project_identity_follows_repository_origin_across_nested_paths(tmp_path, monkeypatch):
     root = tmp_path / "checkout-one"
     nested = root / "src" / "api"
     nested.mkdir(parents=True)
@@ -26,6 +26,7 @@ def test_project_identity_follows_repository_origin_across_nested_paths(tmp_path
         encoding="utf-8",
     )
 
+    monkeypatch.chdir(nested)
     project = detect_project(nested)
 
     assert project.name == "fastapi-app"

@@ -62,7 +62,7 @@ def _service(store, cloud_url, state_path, device_name):
 
 @pytest.mark.asyncio
 async def test_two_clean_stores_enroll_and_share_corrected_memory_through_real_api(
-    db, tmp_path
+    db, tmp_path, monkeypatch
 ):
     db.add(
         ApiKey(
@@ -101,6 +101,7 @@ async def test_two_clean_stores_enroll_and_share_corrected_memory_through_real_a
         )
         project = tmp_path / "project"
         (project / ".git").mkdir(parents=True)
+        monkeypatch.chdir(project)
         remembered = await asyncio.to_thread(
             call_tool,
             first_store,
