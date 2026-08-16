@@ -135,5 +135,20 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.theme_name == "light"
         assert app.theme_button["text"] == "Dark mode"
         assert app.shell["background"] == "#F5F7FB"
+
+        app._work_area = lambda: (0, 0, 1200, 800)
+        top_drag = type("DragEvent", (), {"x_root": 600, "y_root": 200})()
+        top_release = type("DragEvent", (), {"x_root": 600, "y_root": 0})()
+        app._begin_drag(top_drag)
+        app._finish_drag(top_release)
+        root.update_idletasks()
+        assert app._maximized
+        assert app._snap_state == "maximized"
+        assert root.geometry().startswith("1200x800")
+
+        app._toggle_maximize()
+        root.update_idletasks()
+        assert not app._maximized
+        assert app._snap_state is None
     finally:
         root.destroy()

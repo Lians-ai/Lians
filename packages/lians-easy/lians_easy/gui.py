@@ -704,6 +704,7 @@ class CompanionApp:
         window_height = min(900, max(720, screen_height - 80))
         self._normal_geometry = f"{window_width}x{window_height}"
         self._maximized = False
+        self._snap_state: str | None = None
         self.theme_name = theme if theme in COMPANION_THEMES else _saved_companion_theme()
         self.colors = COMPANION_THEMES[self.theme_name]
         self.font_family = _register_sora(root)
@@ -1063,6 +1064,7 @@ class CompanionApp:
         for widget in (bar, brand, *brand.winfo_children()):
             widget.bind("<ButtonPress-1>", self._begin_drag)
             widget.bind("<B1-Motion>", self._drag_window)
+            widget.bind("<ButtonRelease-1>", self._finish_drag)
             widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
 
     def _metric_card(
@@ -1308,8 +1310,21 @@ class CompanionApp:
             self._window_handle = None
 
     def _begin_drag(self, event: tk.Event) -> None:
-        if self._maximized:
-            return
+        if self._maximized or self._snap_state is not None:
+            current_width = max(1, self.root.winfo_width())
+            pointer_ratio = (event.x_root - self.root.winfo_x()) / current_width
+            saved_size = self._normal_geometry.split("+")[0]
+            width_text, height_text = saved_size.split("x", maxsplit=1)
+            restored_width = max(self.root.minsize()[0], int(width_text))
+            restored_height = max(self.root.minsize()[1], int(height_text))
+            restored_x = round(event.x_root - restored_width * pointer_ratio)
+            restored_y = max(0, event.y_root - 24)
+            self.root.geometry(
+                f"{restored_width}x{restored_height}+{restored_x}+{restored_y}"
+            )
+            self.root.update_idletasks()
+            self._maximized = False
+            self._snap_state = None
         self._drag_origin = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
 
     def _drag_window(self, event: tk.Event) -> None:
@@ -1318,12 +1333,7 @@ class CompanionApp:
         start_x, start_y, window_x, window_y = self._drag_origin
         self.root.geometry(f"+{window_x + event.x_root - start_x}+{window_y + event.y_root - start_y}")
 
-    def _toggle_maximize(self) -> None:
-        if self._maximized:
-            self.root.geometry(self._normal_geometry)
-            self._maximized = False
-            return
-        self._normal_geometry = self.root.geometry()
+    def _work_area(self) -> tuple[int, int, int, int]:
         if sys.platform == "win32":
             try:
                 class WorkArea(ctypes.Structure):
@@ -1336,16 +1346,35 @@ class CompanionApp:
 
                 area = WorkArea()
                 ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0)
-                self.root.geometry(
-                    f"{area.right - area.left}x{area.bottom - area.top}+{area.left}+{area.top}"
-                )
-            except (AttributeError, OSError, tk.TclError):
-                self.root.geometry(
-                    f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0"
-                )
-        else:
-            self.root.state("zoomed")
+                return area.left, area.top, area.right, area.bottom
+            except (AttributeError, OSError):
+                pass
+        return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+
+    def _finish_drag(self, event: tk.Event) -> None:
+        if self._drag_origin is None:
+            return
+        self._drag_origin = None
+        _left, top, _right, _bottom = self._work_area()
+        snap_margin = 12
+        if event.y_root <= top + snap_margin:
+            self._maximize_to_work_area()
+
+    def _maximize_to_work_area(self) -> None:
+        if not self._maximized and self._snap_state is None:
+            self._normal_geometry = self.root.geometry()
+        left, top, right, bottom = self._work_area()
+        self.root.geometry(f"{right - left}x{bottom - top}+{left}+{top}")
         self._maximized = True
+        self._snap_state = "maximized"
+
+    def _toggle_maximize(self) -> None:
+        if self._maximized or self._snap_state is not None:
+            self.root.geometry(self._normal_geometry)
+            self._maximized = False
+            self._snap_state = None
+            return
+        self._maximize_to_work_area()
 
     def _open_dashboard(self) -> None:
         if self.bridge.running:
