@@ -43,7 +43,7 @@ Lians does not ask for your Claude, Cursor, or Codex password or provider API
 key. It does not enlarge a provider context window or change a subscription
 quota.
 
-## Try Lians in 60 seconds
+## Try Lians in two chats
 
 Choose the AI tool you already use:
 
