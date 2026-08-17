@@ -446,6 +446,12 @@ def _install_runtime() -> Path | None:
     target_dir.mkdir(parents=True, exist_ok=True)
     destination = target_dir / ("LiansMemory.exe" if sys.platform == "win32" else "lians-memory")
     source = Path(sys.executable).resolve()
+    bundled_runtime = source.with_name("LiansMemory.exe")
+    if sys.platform == "win32" and bundled_runtime.is_file():
+        # The desktop app is a windowed executable. Its sibling remains a
+        # console-subsystem binary so MCP keeps real stdin/stdout pipes without
+        # ever exposing a console during a human app launch.
+        source = bundled_runtime
     if source != destination.resolve():
         _write_bytes(
             destination,

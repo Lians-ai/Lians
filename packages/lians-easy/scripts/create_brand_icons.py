@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import shutil
 from io import BytesIO
 from pathlib import Path
 
@@ -75,9 +76,26 @@ def main() -> None:
     mcpb_png = package_root / "mcpb-icon.png"
     tester_base64 = package_root / "lians_easy" / "tester" / "favicon.png.b64"
     windows_icon = package_root / "windows-lians.ico"
+    desktop_web = package_root / "lians_easy" / "desktop" / "web"
 
     for destination in (desktop_png, docs_png, mcpb_png):
         save_png(lotus, destination)
+
+    # The desktop header must use the user's approved favicon byte-for-byte.
+    # The intro uses the exact same mark at a larger raster size so Chromium can
+    # composite the full-screen zoom without scaling a 128 px source every frame.
+    desktop_web.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, desktop_web / "favicon.png")
+    save_png(lotus, desktop_web / "lotus-intro.png", size=2048)
+    for name in ("claude", "codex", "cursor"):
+        agent_source = package_root / "lians_easy" / "desktop" / "agents" / f"{name}.png"
+        agent_destination = desktop_web / "agents" / f"{name}.png"
+        agent_destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(agent_source, agent_destination)
+    font_source = package_root / "lians_easy" / "desktop" / "fonts" / "Sora-Variable.ttf"
+    font_destination = desktop_web / "fonts" / "Sora-Variable.ttf"
+    font_destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(font_source, font_destination)
 
     buffer = BytesIO()
     lotus.resize((128, 128), Image.Resampling.LANCZOS).save(

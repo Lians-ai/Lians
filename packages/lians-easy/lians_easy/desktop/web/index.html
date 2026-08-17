@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Lians</title>
+    <link rel="icon" href="favicon.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="intro" class="intro" aria-hidden="true">
+      <span class="intro-ring"></span>
+      <img id="intro-lotus" src="lotus-intro.png" alt="" />
+    </div>
+
+    <div id="content" class="app-shell">
+      <header id="titlebar" class="topbar reveal">
+        <div class="brand" aria-label="Lians">
+          <img src="favicon.png" width="40" height="40" alt="" />
+          <strong>Lians</strong>
+        </div>
+        <div class="window-actions">
+          <button id="theme-toggle" class="theme-toggle control" type="button" data-icon="sun">
+            <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.6"></circle>
+              <path d="M12 2.4v2.1M12 19.5v2.1M2.4 12h2.1M19.5 12h2.1M5.2 5.2l1.5 1.5M17.3 17.3l1.5 1.5M18.8 5.2l-1.5 1.5M6.7 17.3l-1.5 1.5"></path>
+            </svg>
+            <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.7 15.4A8.2 8.2 0 0 1 8.6 4.3 8.3 8.3 0 1 0 19.7 15.4Z"></path>
+            </svg>
+          </button>
+          <span class="action-divider" aria-hidden="true"></span>
+          <button id="window-minimize" class="window-control" type="button" aria-label="Minimize">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5h10"></path></svg>
+          </button>
+          <button id="window-maximize" class="window-control" type="button" aria-label="Maximize or restore">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1"></rect></svg>
+          </button>
+          <button id="window-close" class="window-control close-control" type="button" aria-label="Close">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero reveal">
+          <div>
+            <h1>Agent lifeline</h1>
+            <p>Extended usage. Better memory.</p>
+          </div>
+          <div id="connection" class="connection" data-state="offline">
+            <img id="connection-icon" width="34" height="34" alt="" hidden />
+            <span id="connection-text">No connection detected</span>
+          </div>
+        </section>
+
+        <section class="metric-rail reveal" aria-label="Lians totals">
+          <article class="metric">
+            <p>Tokens saved</p>
+            <strong id="tokens-value">~0</strong>
+            <span>Repeated context removed</span>
+          </article>
+          <article class="metric">
+            <p>Handoffs</p>
+            <strong id="handoffs-value">0</strong>
+            <span>Context carried forward</span>
+          </article>
+          <article class="metric">
+            <p>Memories reused</p>
+            <strong id="memory-value">0</strong>
+            <span>Useful details returned</span>
+          </article>
+        </section>
+
+        <section class="activity reveal">
+          <div class="section-heading">
+            <h2>Activity</h2>
+            <span id="saved-memory-count">0 saved memories</span>
+          </div>
+          <div id="activity-list" class="activity-list">
+            <div class="empty-state">
+              <span class="waterline" aria-hidden="true"></span>
+              <p>Waiting for the first handoff.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer reveal">
+        <div class="footer-actions">
+          <button id="refresh" class="control primary" type="button">Refresh</button>
+        </div>
+        <span class="local-note">Local. Encrypted.</span>
+      </footer>
+
+      <button id="lotus-pet" class="lotus-pet" type="button" aria-label="Lotus">
+        <img src="favicon.png" width="58" height="58" alt="" />
+      </button>
+
+      <span class="resize-handle resize-top" data-edge="12"></span>
+      <span class="resize-handle resize-right" data-edge="11"></span>
+      <span class="resize-handle resize-bottom" data-edge="15"></span>
+      <span class="resize-handle resize-left" data-edge="10"></span>
+      <span class="resize-handle resize-top-left" data-edge="13"></span>
+      <span class="resize-handle resize-top-right" data-edge="14"></span>
+      <span class="resize-handle resize-bottom-left" data-edge="16"></span>
+      <span class="resize-handle resize-bottom-right" data-edge="17"></span>
+    </div>
+    <script src="app.js" defer></script>
+  </body>
+</html>

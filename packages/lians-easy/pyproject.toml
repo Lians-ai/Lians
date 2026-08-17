@@ -24,7 +24,10 @@ classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
-dependencies = ["cryptography>=48.0.1"]
+dependencies = [
+  "cryptography>=48.0.1",
+  "pywebview==6.2.1; sys_platform == 'win32'",
+]
 
 [project.urls]
 Homepage = "https://www.lians.ai"

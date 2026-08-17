@@ -1,0 +1,30 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 5, 0, 0),
+    prodvers=(0, 5, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '040904B0',
+        [
+          StringStruct('CompanyName', 'Lians'),
+          StringStruct('FileDescription', 'Lians agent lifeline'),
+          StringStruct('FileVersion', '0.5.0'),
+          StringStruct('InternalName', 'Lians'),
+          StringStruct('LegalCopyright', 'Copyright 2026 Lians'),
+          StringStruct('OriginalFilename', 'Lians.exe'),
+          StringStruct('ProductName', 'Lians'),
+          StringStruct('ProductVersion', '0.5.0')
+        ]
+      )
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
