@@ -136,7 +136,7 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
             "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
         )
         assert bool(root.overrideredirect())
-        assert app.connection_status.get() == "Codex"
+        assert app.connection_status.get() == "Codex connected"
         assert app.connection_icon_label["image"] == str(app.agent_icons["codex"])
         assert app.connection_icon_label.winfo_manager() == "pack"
 
@@ -162,9 +162,14 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert all(app.lifeline_canvas.type(item) != "text" for item in canvas_items)
         assert app.close_button["text"] == "×"
         assert app.stop_button["text"] == "Close"
-        assert app.theme_toggle_icon == "☼"
+        assert app.theme_toggle_icon == "sun"
         assert len(app.theme_button.find_withtag("theme-toggle-ring")) == 1
         assert len(app.theme_button.find_withtag("theme-toggle-icon")) == 1
+        theme_item = app.theme_button.find_withtag("theme-toggle-icon")[0]
+        assert app.theme_button.type(theme_item) == "image"
+        assert app.theme_button.itemcget(theme_item, "image") == str(
+            app.theme_icons["sun"]
+        )
 
         active_client["key"] = None
         app._refresh()
@@ -174,9 +179,14 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         app._toggle_theme()
         root.update_idletasks()
         assert app.theme_name == "light"
-        assert app.theme_toggle_icon == "◐"
+        assert app.theme_toggle_icon == "moon"
         assert len(app.theme_button.find_withtag("theme-toggle-ring")) == 1
         assert len(app.theme_button.find_withtag("theme-toggle-icon")) == 1
+        theme_item = app.theme_button.find_withtag("theme-toggle-icon")[0]
+        assert app.theme_button.type(theme_item) == "image"
+        assert app.theme_button.itemcget(theme_item, "image") == str(
+            app.theme_icons["moon"]
+        )
         assert app.shell["background"] == "#F1F0EC"
 
         app._work_area = lambda: (0, 0, 1200, 800)

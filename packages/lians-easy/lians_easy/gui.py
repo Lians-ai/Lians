@@ -927,6 +927,8 @@ class CompanionApp:
         self._lifeline_lotus_item: int | None = None
         self._pet_job: str | None = None
         self._pet_reaction_started: float | None = None
+        self._shell_min_height = 0
+        self._shell_layout_size: tuple[int, int, int] | None = None
         self._active_client_key = _active_ai_client()
         self._window_handle: int | None = None
         self._drag_origin: tuple[int, int, int, int] | None = None
@@ -1037,14 +1039,23 @@ class CompanionApp:
             height=-(padding * 2),
         )
 
-        def redraw(event: tk.Event) -> None:
+        redraw_job: list[str | None] = [None]
+        pending_size = [0, 0]
+        rendered_size = [-1, -1]
+
+        def render() -> None:
+            redraw_job[0] = None
+            width, canvas_height = pending_size
+            if [width, canvas_height] == rendered_size or not canvas.winfo_exists():
+                return
+            rendered_size[:] = [width, canvas_height]
             canvas.delete("panel-shape")
             _draw_round_rectangle(
                 canvas,
                 1,
                 1,
-                max(2, event.width - 1),
-                max(2, event.height - 1),
+                max(2, width - 1),
+                max(2, canvas_height - 1),
                 radius,
                 fill=self.colors["border"],
                 tags="panel-shape",
@@ -1053,13 +1064,18 @@ class CompanionApp:
                 canvas,
                 2,
                 2,
-                max(3, event.width - 2),
-                max(3, event.height - 2),
+                max(3, width - 2),
+                max(3, canvas_height - 2),
                 max(1, radius - 1),
                 fill=background,
                 tags="panel-shape",
             )
             canvas.tag_lower("panel-shape")
+
+        def redraw(event: tk.Event) -> None:
+            pending_size[:] = [event.width, event.height]
+            if redraw_job[0] is None:
+                redraw_job[0] = canvas.after_idle(render)
 
         canvas.bind("<Configure>", redraw)
         return canvas, inner
@@ -1093,6 +1109,15 @@ class CompanionApp:
                     "desktop", "agents", f"{key}.png"
                 )
                 self.agent_icons[key] = tk.PhotoImage(file=str(icon_path))
+            except (OSError, tk.TclError):
+                continue
+        self.theme_icons: dict[str, tk.PhotoImage] = {}
+        for key in ("sun", "moon"):
+            try:
+                icon_path = files("lians_easy").joinpath(
+                    "desktop", "ui", f"theme-{key}.png"
+                )
+                self.theme_icons[key] = tk.PhotoImage(file=str(icon_path))
             except (OSError, tk.TclError):
                 continue
 
@@ -1158,6 +1183,8 @@ class CompanionApp:
             child.destroy()
         self.colors = COMPANION_THEMES[self.theme_name]
         self._activity_state = None
+        self._shell_min_height = 0
+        self._shell_layout_size = None
         self.root.configure(background=self.colors["background"])
         self.root.option_add("*Font", self._font(11))
         self._build_titlebar()
@@ -1367,9 +1394,16 @@ class CompanionApp:
         """Fill tall windows while keeping short windows scrollable."""
 
         width = min(event.width, 1320)
-        height = max(event.height, self.shell.winfo_reqheight())
+        if not self._shell_min_height:
+            self._shell_min_height = self.shell.winfo_reqheight()
+        height = max(event.height, self._shell_min_height)
+        offset_x = round(max(0, (event.width - width) / 2))
+        layout = (width, height, offset_x)
+        if layout == self._shell_layout_size:
+            return
+        self._shell_layout_size = layout
         self.body_canvas.itemconfigure(canvas_window, width=width, height=height)
-        self.body_canvas.coords(canvas_window, max(0, (event.width - width) / 2), 0)
+        self.body_canvas.coords(canvas_window, offset_x, 0)
 
     def _scroll_body(self, event: tk.Event) -> str:
         delta = int(-event.delta / 120) if event.delta else 0
@@ -1479,20 +1513,18 @@ class CompanionApp:
         self._draw_theme_toggle()
 
     def _draw_theme_toggle(self) -> None:
-        """Match the website's antialiased 36px glyph-based theme control."""
+        """Render a neutral circle around a pre-antialiased sun or moon."""
 
         canvas = self.theme_button
         canvas.delete("all")
         if self.theme_name == "dark":
             fill = self.colors["surface_soft"] if self._theme_toggle_hover else "#0B1019"
-            border = "#76A1FF"
-            color = "#76A1FF"
-            self.theme_toggle_icon = "☼"
+            border = "#273247" if self._theme_toggle_hover else "#202836"
+            self.theme_toggle_icon = "sun"
         else:
             fill = self.colors["surface_soft"] if self._theme_toggle_hover else "#FFFFFF"
-            border = "#C7CDD5"
-            color = "#152530"
-            self.theme_toggle_icon = "◐"
+            border = "#B9BEC6" if self._theme_toggle_hover else "#C7CDD5"
+            self.theme_toggle_icon = "moon"
         canvas.create_oval(
             1,
             1,
@@ -1503,12 +1535,21 @@ class CompanionApp:
             width=1,
             tags="theme-toggle-ring",
         )
+        icon = self.theme_icons.get(self.theme_toggle_icon)
+        if icon is not None:
+            canvas.create_image(
+                18,
+                18,
+                image=icon,
+                tags="theme-toggle-icon",
+            )
+            return
         canvas.create_text(
             18,
             18,
-            text=self.theme_toggle_icon,
-            fill=color,
-            font=("Segoe UI Symbol", 16),
+            text="○",
+            fill=self.colors["text"],
+            font=self._font(14),
             tags="theme-toggle-icon",
         )
 
@@ -1523,7 +1564,7 @@ class CompanionApp:
             self.connection_icon_label.pack_forget()
             self.connection_label.configure(foreground=self.colors["muted"])
             return
-        self.connection_status.set(_AI_LABELS[key])
+        self.connection_status.set(f"{_AI_LABELS[key]} connected")
         self.connection_icon_label.configure(image=icon or "")
         if icon is not None and not self.connection_icon_label.winfo_manager():
             self.connection_icon_label.pack(
