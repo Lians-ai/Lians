@@ -110,6 +110,9 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'id="titlebar" class="topbar reveal"' in html
     assert 'id="intro-particles"' in html
     assert 'id="ambient-canvas"' in html
+    assert 'id="neural-field"' in html
+    assert 'id="brain-orbit"' in html
+    assert 'id="brain-status"' in html
     assert 'src="lotus.png"' in html
     assert "Extended usage. Better memory." in html
     assert 'id="titlebar"' in html
@@ -117,6 +120,13 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert "resize-handle" in html
     assert "intro-ring" not in html
     assert "radial-gradient" not in css
+    assert '"IvyPresto Text"' in css
+    assert '"IvyPresto Display"' in css
+    assert "brain-drift" in css
+    assert "prefers-reduced-motion" in css
+    assert 'content.addEventListener("contextmenu", toggleBrain)' in source
+    assert 'localStorage.setItem("lians-brain-state", next)' in source
+    assert "motionAnimate(" in source
     assert "start_drag" in source
     assert "https://" not in html
     assert "overflow: hidden" in css
