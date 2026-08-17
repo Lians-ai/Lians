@@ -8,11 +8,12 @@ import argparse
 def main() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--background", action="store_true")
+    parser.add_argument("--intro-complete", action="store_true")
     args, _unknown = parser.parse_known_args()
 
     from lians_easy.web_gui import launch
 
-    launch(background_start=args.background)
+    launch(background_start=args.background, intro_complete=args.intro_complete)
 
 
 if __name__ == "__main__":

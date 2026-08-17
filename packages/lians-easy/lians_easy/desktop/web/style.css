@@ -16,7 +16,6 @@
   --muted: #8c96a6;
   --blue: #315fe9;
   --blue-clear: #6d91ff;
-  --blue-wash: rgba(49, 95, 233, 0.12);
 }
 
 :root[data-theme="light"] {
@@ -30,7 +29,6 @@
   --muted: #626a75;
   --blue: #3159c8;
   --blue-clear: #244db9;
-  --blue-wash: rgba(49, 89, 200, 0.1);
 }
 
 * {
@@ -74,27 +72,12 @@ button {
   display: none;
 }
 
-#intro-lotus {
-  position: relative;
-  z-index: 2;
-  width: min(180vmin, 1800px);
-  height: min(180vmin, 1800px);
-  object-fit: contain;
-  transform: scale(1.08);
-  will-change: transform;
-  user-select: none;
-  pointer-events: none;
-}
-
-.intro-ring {
+#intro-particles {
   position: absolute;
-  z-index: 1;
-  width: min(52vmin, 620px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(70, 116, 244, 0.45);
-  border-radius: 50%;
-  opacity: 0;
-  will-change: transform, opacity;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .app-shell {
@@ -105,23 +88,22 @@ button {
   height: 100%;
   min-width: 900px;
   min-height: 640px;
-  background:
-    radial-gradient(circle at 88% 16%, var(--blue-wash), transparent 27%),
-    var(--background);
+  background: var(--background);
   transition: background-color 120ms ease-out;
 }
 
 .app-shell::after {
-  content: "";
+  content: none;
+}
+
+.ambient-canvas {
   position: absolute;
   z-index: 0;
-  top: 7%;
-  right: -7vmin;
-  width: 34vmin;
-  aspect-ratio: 1;
-  border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
-  border-radius: 50%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+  opacity: 0.72;
 }
 
 .topbar,
@@ -135,8 +117,9 @@ main,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 clamp(28px, 3.4vw, 64px);
+  padding: 0 clamp(36px, 4vw, 76px);
   border-bottom: 1px solid var(--line);
+  cursor: default;
   user-select: none;
 }
 
@@ -230,9 +213,9 @@ main,
 main {
   display: grid;
   grid-template-rows: auto auto minmax(140px, 1fr);
-  gap: clamp(18px, 2.5vh, 30px);
+  gap: clamp(24px, 3vh, 38px);
   min-height: 0;
-  padding: clamp(24px, 3.3vh, 42px) clamp(28px, 3.4vw, 64px) 16px;
+  padding: clamp(30px, 3.8vh, 48px) clamp(36px, 4vw, 76px) 18px;
 }
 
 .hero {
@@ -295,7 +278,7 @@ main {
 .metric {
   position: relative;
   min-width: 0;
-  padding: clamp(20px, 2.3vw, 36px);
+  padding: clamp(24px, 2.6vw, 42px);
   will-change: transform;
 }
 
@@ -426,7 +409,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px clamp(28px, 3.4vw, 64px) 18px;
+  padding: 8px clamp(36px, 4vw, 76px) 20px;
 }
 
 .footer-actions {
@@ -474,10 +457,10 @@ main {
   width: 66px;
   height: 66px;
   place-items: center;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: #020304;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
   will-change: transform;
 }
@@ -538,7 +521,7 @@ main {
   opacity: 1;
 }
 
-@media (max-height: 960px) {
+@media (max-height: 760px) {
   .app-shell {
     grid-template-rows: 62px minmax(0, 1fr) 54px;
   }

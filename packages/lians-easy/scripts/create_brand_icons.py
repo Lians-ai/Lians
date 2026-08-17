@@ -86,7 +86,12 @@ def main() -> None:
     # composite the full-screen zoom without scaling a 128 px source every frame.
     desktop_web.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, desktop_web / "favicon.png")
+    save_png(lotus, desktop_web / "lotus.png")
     save_png(lotus, desktop_web / "lotus-intro.png", size=2048)
+    shutil.copyfile(
+        package_root / "lians_easy" / "app" / "logo-blue.png",
+        desktop_web / "lians-wordmark.png",
+    )
     for name in ("claude", "codex", "cursor"):
         agent_source = package_root / "lians_easy" / "desktop" / "agents" / f"{name}.png"
         agent_destination = desktop_web / "agents" / f"{name}.png"

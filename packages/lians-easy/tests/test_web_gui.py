@@ -45,6 +45,9 @@ def test_desktop_header_uses_the_approved_favicon_byte_for_byte() -> None:
     assert hashlib.sha256(web).hexdigest() == (
         "8c01e301e8c9a775f2bece5027cffcbb043d94c286bb10b2a6986ef9e4edb4f6"
     )
+    wordmark_source = files("lians_easy").joinpath("app", "logo-blue.png").read_bytes()
+    wordmark_web = desktop.joinpath("web", "lians-wordmark.png").read_bytes()
+    assert wordmark_web == wordmark_source
 
 
 def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> None:
@@ -60,12 +63,19 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'from "animejs"' in source
     assert 'from "motion"' in source
     assert "createTimeline" in source
-    assert "animeSpring" in source
     assert all(name in source for name in ("hover", "press", "resize", "frame"))
+    assert "wordmarkTargetPoints" in source
+    assert 'loadImage("lians-wordmark.png")' in source
+    assert "drawAmbient" in source
     assert '<img src="favicon.png" width="40" height="40"' in html
+    assert 'id="intro-particles"' in html
+    assert 'id="ambient-canvas"' in html
+    assert 'src="lotus.png"' in html
     assert "Extended usage. Better memory." in html
     assert 'id="titlebar"' in html
     assert "resize-handle" in html
+    assert "intro-ring" not in html
+    assert "radial-gradient" not in css
     assert "drag_window" in source
     assert "https://" not in html
     assert "overflow: hidden" in css
@@ -82,3 +92,22 @@ def test_companion_build_separates_windowed_app_from_console_runtime() -> None:
     assert "companion_entrypoint.py" in script
     assert "LiansMemory.exe" in script
     assert "windows-launcher.cs" in script
+
+
+def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> None:
+    package_root = Path(__file__).resolve().parents[1]
+    launcher = (package_root / "windows-launcher.cs").read_text(encoding="utf-8")
+    entrypoint = (package_root / "companion_entrypoint.py").read_text(encoding="utf-8")
+
+    assert "BuildParticles" in launcher
+    assert '"lians-wordmark.png"' in launcher
+    assert "ParticleWordmarkSurface" in launcher
+    assert "requestedCount = 4200" in launcher
+    assert "start.UseShellExecute = false" in launcher
+    assert "start.CreateNoWindow = true" in launcher
+    assert "start.WindowStyle = ProcessWindowStyle.Hidden" in launcher
+    assert "SendMessageW(handle, 0x00A1, 2, 0)" in (
+        package_root / "lians_easy" / "web_gui.py"
+    ).read_text(encoding="utf-8")
+    assert 'WithArgument(args, "--intro-complete")' in launcher
+    assert 'parser.add_argument("--intro-complete"' in entrypoint

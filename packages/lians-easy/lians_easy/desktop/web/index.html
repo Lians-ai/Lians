@@ -14,11 +14,11 @@
   </head>
   <body>
     <div id="intro" class="intro" aria-hidden="true">
-      <span class="intro-ring"></span>
-      <img id="intro-lotus" src="lotus-intro.png" alt="" />
+      <canvas id="intro-particles"></canvas>
     </div>
 
     <div id="content" class="app-shell">
+      <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
       <header id="titlebar" class="topbar reveal">
         <div class="brand" aria-label="Lians">
           <img src="favicon.png" width="40" height="40" alt="" />
@@ -99,7 +99,7 @@
       </footer>
 
       <button id="lotus-pet" class="lotus-pet" type="button" aria-label="Lotus">
-        <img src="favicon.png" width="58" height="58" alt="" />
+        <img src="lotus.png" width="58" height="58" alt="" />
       </button>
 
       <span class="resize-handle resize-top" data-edge="12"></span>

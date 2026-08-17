@@ -270,7 +270,7 @@ def _prepare_window(window: Any, background_start: bool) -> None:
         window.maximize()
 
 
-def launch(*, background_start: bool = False) -> None:
+def launch(*, background_start: bool = False, intro_complete: bool = False) -> None:
     """Open the native WebView companion without a browser or console window."""
 
     if sys.platform != "win32":
@@ -298,9 +298,12 @@ def launch(*, background_start: bool = False) -> None:
     bridge = _start_bridge(store)
     api = DesktopApi(store, bridge)
     page = files("lians_easy").joinpath("desktop", "web", "index.html")
+    page_url = Path(str(page)).resolve().as_uri()
+    if intro_complete:
+        page_url += "#intro-complete"
     window = webview.create_window(
         "Lians",
-        str(page),
+        page_url,
         js_api=api,
         width=1440,
         height=900,

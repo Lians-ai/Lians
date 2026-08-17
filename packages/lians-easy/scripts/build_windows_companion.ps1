@@ -111,7 +111,17 @@ if ($LASTEXITCODE -ne 0) {
     throw "Launcher build failed with exit code $LASTEXITCODE"
 }
 
-$hash = (Get-FileHash -LiteralPath $companionPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$stream = [System.IO.File]::OpenRead($companionPath)
+try {
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $sha256.Dispose()
+    }
+} finally {
+    $stream.Dispose()
+}
 Set-Content -LiteralPath "$companionPath.sha256" -Encoding utf8 -Value "$hash  Lians.exe"
 
 Write-Output $companionPath
