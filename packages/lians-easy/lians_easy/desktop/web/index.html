@@ -18,7 +18,46 @@
     </div>
 
     <div id="content" class="app-shell">
+      <div id="neural-field" class="neural-field" data-state="compressed" aria-hidden="true">
+        <div class="brain-stage">
+          <div class="brain-parallax">
+            <div id="brain-orbit" class="brain-orbit">
+              <svg class="ambient-brain" viewBox="0 0 1000 680" role="presentation">
+                <path
+                  class="brain-haze"
+                  d="M500 126C450 82 369 82 316 123C245 113 180 155 164 219C101 248 78 320 111 375C83 437 121 505 188 523C214 586 289 612 350 579C395 619 467 602 500 547C533 602 605 619 650 579C711 612 786 586 812 523C879 505 917 437 889 375C922 320 899 248 836 219C820 155 755 113 684 123C631 82 550 82 500 126Z"
+                />
+                <path
+                  class="brain-core"
+                  d="M500 145C454 105 385 104 338 140C275 129 218 168 208 226C153 250 137 311 167 357C140 409 170 465 226 480C245 537 307 562 357 532C395 569 466 550 500 501C534 550 605 569 643 532C693 562 755 537 774 480C830 465 860 409 833 357C863 311 847 250 792 226C782 168 725 129 662 140C615 104 546 105 500 145Z"
+                />
+                <g class="brain-ridges">
+                  <path d="M500 151C474 203 477 252 500 298C521 342 522 397 500 493" />
+                  <path d="M451 139C405 174 397 216 424 249C446 275 438 311 399 332C357 355 348 400 374 438" />
+                  <path d="M362 151C316 190 320 231 350 257C378 281 368 318 328 336C281 357 274 410 309 447" />
+                  <path d="M282 186C247 223 257 260 286 282C310 300 302 334 266 353C229 373 226 418 251 449" />
+                  <path d="M549 139C595 174 603 216 576 249C554 275 562 311 601 332C643 355 652 400 626 438" />
+                  <path d="M638 151C684 190 680 231 650 257C622 281 632 318 672 336C719 357 726 410 691 447" />
+                  <path d="M718 186C753 223 743 260 714 282C690 300 698 334 734 353C771 373 774 418 749 449" />
+                  <path d="M392 489C424 466 457 469 500 502C543 469 576 466 608 489" />
+                </g>
+                <g class="brain-nodes">
+                  <circle cx="350" cy="257" r="5" />
+                  <circle cx="424" cy="249" r="4" />
+                  <circle cx="328" cy="336" r="4" />
+                  <circle cx="399" cy="332" r="5" />
+                  <circle cx="650" cy="257" r="5" />
+                  <circle cx="576" cy="249" r="4" />
+                  <circle cx="672" cy="336" r="4" />
+                  <circle cx="601" cy="332" r="5" />
+                </g>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
       <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
+      <span id="brain-status" class="visually-hidden" role="status" aria-live="polite"></span>
       <header id="titlebar" class="topbar reveal">
         <div class="brand" aria-label="Lians">
           <span class="brand-mark" aria-hidden="true">

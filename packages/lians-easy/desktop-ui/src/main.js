@@ -14,6 +14,9 @@ const root = document.documentElement;
 const intro = document.querySelector("#intro");
 const introCanvas = document.querySelector("#intro-particles");
 const ambientCanvas = document.querySelector("#ambient-canvas");
+const neuralField = document.querySelector("#neural-field");
+const brainOrbit = document.querySelector("#brain-orbit");
+const brainStatus = document.querySelector("#brain-status");
 const content = document.querySelector("#content");
 const themeButton = document.querySelector("#theme-toggle");
 const refreshButton = document.querySelector("#refresh");
@@ -30,6 +33,10 @@ let ambientParticles = [];
 let ambientFrame = 0;
 let ambientLastDraw = 0;
 const pointer = { x: -1000, y: -1000 };
+const brainStates = {
+  compressed: { scaleX: 0.76, scaleY: 0.84, opacity: 0.62 },
+  expanded: { scaleX: 1.16, scaleY: 1.08, opacity: 0.86 },
+};
 
 function applyWindowState(state) {
   const maximized = state === "maximized";
@@ -315,11 +322,47 @@ function startAmbientBackground() {
   window.addEventListener("pointermove", (event) => {
     pointer.x = event.clientX;
     pointer.y = event.clientY;
+    if (!reduceMotion) {
+      const horizontal = ((event.clientX / Math.max(1, window.innerWidth)) - 0.5) * 12;
+      const vertical = ((event.clientY / Math.max(1, window.innerHeight)) - 0.5) * 8;
+      neuralField.style.setProperty("--brain-shift-x", `${horizontal.toFixed(2)}px`);
+      neuralField.style.setProperty("--brain-shift-y", `${vertical.toFixed(2)}px`);
+    }
   }, { passive: true });
   window.addEventListener("pointerleave", () => {
     pointer.x = -1000;
     pointer.y = -1000;
+    neuralField.style.setProperty("--brain-shift-x", "0px");
+    neuralField.style.setProperty("--brain-shift-y", "0px");
   });
+}
+
+function setBrainState(state, animateChange = true) {
+  const next = brainStates[state] ? state : "compressed";
+  const values = brainStates[next];
+  neuralField.dataset.state = next;
+  localStorage.setItem("lians-brain-state", next);
+  if (animateChange && !reduceMotion) {
+    motionAnimate(
+      brainOrbit,
+      {
+        scaleX: values.scaleX,
+        scaleY: values.scaleY,
+        opacity: values.opacity,
+      },
+      { type: "spring", bounce: 0.08, duration: 0.72 },
+    );
+  } else {
+    brainOrbit.style.transform = `scale(${values.scaleX}, ${values.scaleY})`;
+    brainOrbit.style.opacity = String(values.opacity);
+  }
+  brainStatus.textContent = next === "expanded" ? "Background expanded" : "Background compressed";
+}
+
+function toggleBrain(event) {
+  if (event.target.closest("button, a, input, textarea, select, [contenteditable='true']")) return;
+  event.preventDefault();
+  setBrainState(neuralField.dataset.state === "expanded" ? "compressed" : "expanded");
 }
 
 function setTheme(theme, animateChange = true) {
@@ -473,6 +516,7 @@ function installInteractions() {
       }
     });
   });
+  content.addEventListener("contextmenu", toggleBrain);
 }
 
 themeButton.addEventListener("click", () => {
@@ -494,6 +538,7 @@ window.addEventListener("pywebviewready", () => {
 });
 
 setTheme(localStorage.getItem("lians-theme") === "light" ? "light" : "dark", false);
+setBrainState(localStorage.getItem("lians-brain-state") || "compressed", false);
 installInteractions();
 startAmbientBackground();
 runIntro();
