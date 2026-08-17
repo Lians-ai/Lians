@@ -23,8 +23,8 @@ classifiers = [
 dependencies = ["httpx>=0.25"]
 
 [project.optional-dependencies]
-langchain     = ["langchain-core>=0.2"]
-langgraph     = ["langchain-core>=0.2", "langgraph>=0.1"]
+langchain     = ["langchain-core>=1.5.4"]
+langgraph     = ["langchain-core>=1.5.4", "langgraph>=0.1"]
 crewai        = ["crewai>=0.28"]
 openai-agents = ["openai-agents>=0.0.1"]
 autogen       = ["autogen-core>=0.4"]
