@@ -222,25 +222,14 @@ main,
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 20px;
-  letter-spacing: -0.025em;
-  font-family: var(--font-display);
 }
 
-.brand-mark {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  background: transparent;
-}
-
-.brand-mark img {
+.brand-wordmark {
   display: block;
-  width: 40px;
+  width: 108px;
   height: 40px;
   object-fit: contain;
+  object-position: left center;
 }
 
 .theme-toggle {
@@ -381,7 +370,13 @@ main {
   width: 34px;
   height: 34px;
   border-radius: 10px;
+  filter: none;
   object-fit: contain;
+  transition: filter 120ms ease-out;
+}
+
+:root[data-theme="light"] .connection[data-agent="codex"] img {
+  filter: invert(1);
 }
 
 .metric-rail {

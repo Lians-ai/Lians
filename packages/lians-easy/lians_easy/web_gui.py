@@ -300,6 +300,20 @@ def _reserve_taskbar_trigger(
     return (left, top, right, bottom)
 
 
+def _side_snap_bounds(
+    work_area: tuple[int, int, int, int], side: str
+) -> tuple[int, int, int, int]:
+    """Return the Windows-style left or right half of a monitor work area."""
+
+    left, top, right, bottom = work_area
+    midpoint = left + (right - left) // 2
+    if side == "left":
+        return (left, top, midpoint, bottom)
+    if side == "right":
+        return (midpoint, top, right, bottom)
+    raise ValueError(f"Unsupported snap side: {side}")
+
+
 def _taskbar_safe_work_area(handle: int) -> tuple[int, int, int, int] | None:
     if sys.platform != "win32" or not handle:
         return None
@@ -408,6 +422,7 @@ class DesktopApi:
         self._drag_lock = threading.Lock()
         self._dragging = False
         self._restore_bounds: tuple[int, int, int, int] | None = None
+        self._snap_state: str | None = None
         self.preferred_client: str | None = None
 
     def snapshot(self) -> dict[str, Any]:
@@ -509,7 +524,10 @@ class DesktopApi:
             ):
                 return
 
-            if _native_window_state(handle) == "maximized":
+            if _native_window_state(handle) == "maximized" or self._snap_state in {
+                "left",
+                "right",
+            }:
                 current_width = max(1, rect.right - rect.left)
                 ratio = min(0.9, max(0.1, (cursor.x - rect.left) / current_width))
                 restore = self._clamped_restore_bounds(handle)
@@ -527,6 +545,7 @@ class DesktopApi:
                     height,
                     0x0004 | 0x0040,
                 )
+                self._snap_state = None
             else:
                 offset_x = cursor.x - rect.left
                 offset_y = cursor.y - rect.top
@@ -550,10 +569,23 @@ class DesktopApi:
                 time.sleep(1 / 120)
 
             work = _taskbar_safe_work_area(handle)
-            snap_top = work[1] if work is not None else 0
-            if get_cursor(ctypes.byref(cursor)) and cursor.y <= snap_top + 8:
+            if work is not None and get_cursor(ctypes.byref(cursor)):
                 current = _window_rect(handle)
-                self._maximize_to_work_area(handle, restore_bounds=current)
+                if cursor.y <= work[1] + 8:
+                    self._maximize_to_work_area(handle, restore_bounds=current)
+                    self._snap_state = "maximized"
+                elif cursor.x <= work[0] + 8:
+                    if current is not None:
+                        self._restore_bounds = current
+                    if _set_window_bounds(handle, _side_snap_bounds(work, "left")):
+                        self._snap_state = "left"
+                elif cursor.x >= work[2] - 8:
+                    if current is not None:
+                        self._restore_bounds = current
+                    if _set_window_bounds(handle, _side_snap_bounds(work, "right")):
+                        self._snap_state = "right"
+                else:
+                    self._snap_state = None
         except (AttributeError, OSError, TypeError, ValueError):
             return
         finally:
@@ -613,13 +645,12 @@ class DesktopApi:
         if _native_window_state(handle) == "maximized":
             ctypes.windll.user32.ShowWindow(handle, 9)  # SW_RESTORE
             _set_window_bounds(handle, self._clamped_restore_bounds(handle))
+            self._snap_state = None
             return "windowed"
         current = _window_rect(handle)
-        return (
-            "maximized"
-            if self._maximize_to_work_area(handle, restore_bounds=current)
-            else "windowed"
-        )
+        maximized = self._maximize_to_work_area(handle, restore_bounds=current)
+        self._snap_state = "maximized" if maximized else None
+        return "maximized" if maximized else "windowed"
 
     def close(self) -> bool:
         if self._window is not None:

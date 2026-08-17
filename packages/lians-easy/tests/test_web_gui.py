@@ -96,6 +96,15 @@ def test_auto_hide_taskbar_trigger_strip_stays_outside_maximized_window() -> Non
     assert _reserve_taskbar_trigger(monitor, None) == monitor
 
 
+def test_side_snap_divides_the_taskbar_safe_work_area() -> None:
+    from lians_easy.web_gui import _side_snap_bounds
+
+    work_area = (2, 0, 1918, 1040)
+
+    assert _side_snap_bounds(work_area, "left") == (2, 0, 960, 1040)
+    assert _side_snap_bounds(work_area, "right") == (960, 0, 1918, 1040)
+
+
 def test_desktop_header_uses_the_approved_favicon_byte_for_byte() -> None:
     desktop = files("lians_easy").joinpath("desktop")
     source = desktop.joinpath("favicon.png").read_bytes()
@@ -119,6 +128,9 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     css = (package_root / "lians_easy" / "desktop" / "web" / "style.css").read_text(
         encoding="utf-8"
     )
+    web_gui_source = (package_root / "lians_easy" / "web_gui.py").read_text(
+        encoding="utf-8"
+    )
 
     assert 'from "animejs"' in source
     assert 'from "motion"' in source
@@ -136,9 +148,13 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'id="tokens-label"' in html
     assert 'id="tokens-detail"' in html
     assert "metrics.token_metric" in source
-    assert 'class="brand-mark"' in html
-    assert '<img src="lotus.png" width="40" height="40"' in html
-    assert "background: transparent" in css
+    assert 'class="brand-wordmark"' in html
+    assert 'src="lians-wordmark.png"' in html
+    assert 'width="108"' in html
+    assert "connection[data-agent=\"codex\"] img" in css
+    assert "filter: invert(1)" in css
+    assert "connection.dataset.agent = snapshot.agent.key" in source
+    assert "delete connection.dataset.agent" in source
     assert 'id="titlebar" class="topbar reveal"' in html
     assert 'id="intro-particles"' in html
     assert 'id="ambient-canvas"' not in html
@@ -168,6 +184,9 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'id="support-status"' in html
     assert "save_help_report" in source
     assert "start_drag" in source
+    assert "_side_snap_bounds" in web_gui_source
+    assert 'self._snap_state = "left"' in web_gui_source
+    assert 'self._snap_state = "right"' in web_gui_source
     assert "https://" not in html
     assert "overflow: hidden" in css
 
@@ -183,6 +202,18 @@ def test_companion_build_separates_windowed_app_from_console_runtime() -> None:
     assert "companion_entrypoint.py" in script
     assert "LiansMemory.exe" in script
     assert "windows-launcher.cs" in script
+
+
+def test_windows_layout_checks_use_fresh_tk_processes() -> None:
+    package_root = Path(__file__).resolve().parents[1]
+    workflow = (package_root.parents[1] / ".github" / "workflows" / "build-lians-easy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert workflow.count(
+        "python -m pytest packages/lians-easy/tests/test_gui_layout.py::"
+    ) == 2
+    assert "python -m pytest packages/lians-easy/tests/test_gui_layout.py -q" not in workflow
 
 
 def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> None:

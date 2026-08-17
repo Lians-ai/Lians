@@ -92,7 +92,8 @@ jobs:
         run: |
           python -c "import os, pathlib, sys, tkinter as tk; assert pathlib.Path(sys.executable).resolve() == pathlib.Path(os.environ['LIANS_BUILD_PYTHON']).resolve(); root = tk.Tk(); root.withdraw(); root.destroy()"
           python -m pip install pytest==8.4.1
-          python -m pytest packages/lians-easy/tests/test_gui_layout.py -q
+          python -m pytest packages/lians-easy/tests/test_gui_layout.py::test_primary_setup_action_fits_at_125_percent_scaling -q
+          python -m pytest packages/lians-easy/tests/test_gui_layout.py::test_resident_companion_is_clear_and_fits_at_125_percent_scaling -q
         env:
           PYTHONPATH: packages/lians-easy
       - name: Build frozen Bridge artifact

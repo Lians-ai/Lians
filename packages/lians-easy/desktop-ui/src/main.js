@@ -355,12 +355,14 @@ function render(snapshot) {
   const connectionText = document.querySelector("#connection-text");
   if (snapshot?.agent) {
     connection.dataset.state = "connected";
+    connection.dataset.agent = snapshot.agent.key;
     connectionIcon.src = `agents/${snapshot.agent.key}.png`;
     connectionIcon.alt = "";
     connectionIcon.hidden = false;
     connectionText.textContent = `${snapshot.agent.label} connected`;
   } else {
     connection.dataset.state = "offline";
+    delete connection.dataset.agent;
     connectionIcon.hidden = true;
     connectionText.textContent = "No connection detected";
   }
