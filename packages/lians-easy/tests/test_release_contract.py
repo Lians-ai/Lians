@@ -184,7 +184,12 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     )
     assert "Python Software Foundation" in windows_tk_repair
     assert "msiexec.exe" in windows_tk_repair
+    assert "tcl8.6/init.tcl" in windows_tk_repair
     assert "tk8.6\\ttk\\button.tcl" in windows_tk_repair
+    assert "$env:TCL_LIBRARY = $sourceTclLibrary" in windows_tk_repair
+    assert "$env:TK_LIBRARY = $sourceTkLibrary" in windows_tk_repair
+    for build_contract in (workflow, pull_request_workflow):
+        assert "-EnvironmentFile $env:GITHUB_ENV" in build_contract
     assert "--add-data" in companion_builder
     assert "lians_easy/app" in companion_builder
     assert "windows-lians.ico" in companion_builder

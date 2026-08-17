@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$Python,
   [Parameter(Mandatory = $true)]
-  [string]$ExtractionRoot
+  [string]$ExtractionRoot,
+  [string]$EnvironmentFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +21,6 @@ $downloadRoot = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) {
 $msi = Join-Path $downloadRoot "python-$pythonVersion-tcltk-amd64.msi"
 
 $pythonFile = Get-Item -LiteralPath $Python
-$pythonRoot = $pythonFile.Directory.FullName
 if ((& $pythonFile.FullName -c 'import sys; print(".".join(map(str, sys.version_info[:3])))').Trim() -ne $pythonVersion) {
   throw "The Windows build must use Python $pythonVersion"
 }
@@ -50,17 +50,28 @@ if ($extract.ExitCode -ne 0) {
 }
 
 $sourceTcl = Join-Path $ExtractionRoot 'tcl'
+$sourceTclLibrary = Join-Path $sourceTcl 'tcl8.6'
+$sourceTkLibrary = Join-Path $sourceTcl 'tk8.6'
+$sourceInit = Join-Path $sourceTclLibrary 'init.tcl'
 $sourceButton = Join-Path $sourceTcl 'tk8.6\ttk\button.tcl'
-$targetTcl = Join-Path $pythonRoot 'tcl'
+if (-not (Test-Path -LiteralPath $sourceInit -PathType Leaf)) {
+  throw 'The verified Python Tcl/Tk MSI is missing tcl8.6/init.tcl'
+}
 if (-not (Test-Path -LiteralPath $sourceButton -PathType Leaf)) {
   throw 'The verified Python Tcl/Tk MSI is missing ttk/button.tcl'
 }
-if (-not (Test-Path -LiteralPath $targetTcl -PathType Container)) {
-  New-Item -ItemType Directory -Path $targetTcl | Out-Null
+
+# Keep the checksum- and signature-verified extraction separate from the
+# mutable setup-python tool cache. Explicit library paths make every later
+# process in the job use the same files that are validated below.
+$env:TCL_LIBRARY = $sourceTclLibrary
+$env:TK_LIBRARY = $sourceTkLibrary
+if (-not [string]::IsNullOrWhiteSpace($EnvironmentFile)) {
+  "TCL_LIBRARY=$sourceTclLibrary" | Out-File -LiteralPath $EnvironmentFile -Encoding utf8 -Append
+  "TK_LIBRARY=$sourceTkLibrary" | Out-File -LiteralPath $EnvironmentFile -Encoding utf8 -Append
 }
-Copy-Item -Path (Join-Path $sourceTcl '*') -Destination $targetTcl -Recurse -Force
 
 & $pythonFile.FullName -c 'import tkinter as tk; root = tk.Tk(); root.withdraw(); root.update_idletasks(); root.destroy()'
 if ($LASTEXITCODE -ne 0) {
-  throw 'The repaired Windows build Python could not initialize Tk'
+  throw 'The Windows build Python could not initialize the verified Tcl/Tk runtime'
 }
