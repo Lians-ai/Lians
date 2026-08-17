@@ -635,6 +635,13 @@ def _windows_acl_snapshot(path: Path) -> dict[str, object]:
     )
     child_env = dict(os.environ)
     child_env["LIANS_BOOTSTRAP_ACL_PATH"] = str(path)
+    # Codex can be launched from PowerShell 7, whose PSModulePath is not
+    # compatible with Windows PowerShell 5.1. Let the trusted Windows
+    # PowerShell process rebuild its native module path so Get-Acl can load
+    # Microsoft.PowerShell.Security reliably.
+    for name in tuple(child_env):
+        if name.upper() == "PSMODULEPATH":
+            child_env.pop(name, None)
     result = subprocess.run(
         [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
         env=child_env,
