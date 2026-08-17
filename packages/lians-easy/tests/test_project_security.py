@@ -85,23 +85,35 @@ def test_verified_linked_worktree_uses_common_git_config(tmp_path, monkeypatch):
     assert project.origin == "github.com/lians-ai/lians"
 
 
-@pytest.mark.parametrize("value", ["missing", "bad\x00path"])
-def test_invalid_project_paths_fail_closed(tmp_path, value):
-    candidate = tmp_path / value if "\x00" not in value else value
+@pytest.mark.parametrize("value", ["", "bad\x00path"])
+def test_invalid_project_paths_fail_closed(value):
 
     with pytest.raises(ValueError, match="project path must"):
-        detect_project(candidate)
+        detect_project(value)
 
 
-def test_explicit_project_path_selects_that_existing_workspace(tmp_path, monkeypatch):
+def test_external_project_path_is_logical_and_never_reads_its_git_metadata(
+    tmp_path, monkeypatch
+):
     launched = tmp_path / "launched"
     launched.mkdir()
     root = tmp_path / "selected"
-    nested = root / "src" / "api"
-    nested.mkdir(parents=True)
+    root.mkdir()
     (root / ".git").mkdir()
+    (root / ".git" / "config").write_text(
+        '[remote "origin"]\n\turl = https://user:secret@example.com/private/repo.git\n',
+        encoding="utf-8",
+    )
     monkeypatch.chdir(launched)
 
-    project = detect_project(nested)
+    project = detect_project(root)
 
     assert project.root == str(root)
+    assert project.origin is None
+    assert project.trusted_root is None
+    assert project.public() == {
+        "id": project.id,
+        "name": "selected",
+        "root": str(root),
+        "origin": None,
+    }

@@ -6,7 +6,7 @@ import configparser
 import hashlib
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -26,22 +26,34 @@ class Project:
     name: str
     root: str
     origin: str | None
+    trusted_root: Path | None = None
 
     def public(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            "id": self.id,
+            "name": self.name,
+            "root": self.root,
+            "origin": self.origin,
+        }
 
 
-def _validated_project_path(value: str | Path) -> Path:
+def _normalized_project_hint(value: str | Path, *, launched: Path) -> str:
     raw = os.fspath(value)
     if not raw or len(raw) > _MAX_PATH_CHARS or _CONTROL.search(raw):
         raise ValueError("project path must be a bounded local path")
+    expanded = os.path.expanduser(raw)
+    if not os.path.isabs(expanded):
+        expanded = os.path.join(str(launched), expanded)
+    return os.path.normpath(expanded)
+
+
+def _inside_workspace(value: str, *, root: Path) -> bool:
     try:
-        resolved = Path(raw).expanduser().resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise ValueError("project path must exist and be accessible") from exc
-    if not (resolved.is_dir() or resolved.is_file()):
-        raise ValueError("project path must identify a file or directory")
-    return resolved
+        requested = os.path.normcase(value)
+        boundary = os.path.normcase(str(root))
+        return os.path.commonpath([requested, boundary]) == boundary
+    except (OSError, ValueError):
+        return False
 
 
 def _repository_root(start: Path) -> Path:
@@ -170,9 +182,26 @@ def _origin(root: Path) -> str | None:
 
 
 def detect_project(cwd: str | Path | None = None) -> Project:
-    root = _repository_root(_validated_project_path(cwd or Path.cwd()))
-    origin = _origin(root)
-    identity = origin or os.path.normcase(str(root))
+    try:
+        launched = Path.cwd().resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("launched workspace must exist and be accessible") from exc
+    launched_root = _repository_root(launched)
+    requested = (
+        str(launched)
+        if cwd is None
+        else _normalized_project_hint(cwd, launched=launched)
+    )
+    trusted_root = launched_root if _inside_workspace(requested, root=launched_root) else None
+    root = str(trusted_root) if trusted_root is not None else requested
+    origin = _origin(trusted_root) if trusted_root is not None else None
+    identity = origin or os.path.normcase(root)
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
-    name = origin.rsplit("/", 1)[-1] if origin else root.name
-    return Project(id=f"project-{digest}", name=name or "Project", root=str(root), origin=origin)
+    name = origin.rsplit("/", 1)[-1] if origin else os.path.basename(root)
+    return Project(
+        id=f"project-{digest}",
+        name=name or "Project",
+        root=root,
+        origin=origin,
+        trusted_root=trusted_root,
+    )

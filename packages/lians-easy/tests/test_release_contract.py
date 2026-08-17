@@ -135,7 +135,7 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
         "Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82"
         in desktop_job
     )
-    assert "http://timestamp.acs.microsoft.com" in desktop_job
+    assert "timestamp-rfc3161:" in desktop_job
     assert "dist/windows-companion/Lians.exe" in desktop_job
     assert "dist/windows-companion/LiansApp/Lians.exe" in desktop_job
     assert "dist/windows-companion/LiansApp/LiansMemory.exe" in desktop_job

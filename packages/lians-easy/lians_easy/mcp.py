@@ -155,12 +155,14 @@ def call_tool(
     sync = cloud_sync or CloudSyncService.for_store(store)
 
     def refresh_cursor_rule(*, force: bool = False) -> None:
-        rule = Path(project.root) / ".cursor" / "rules" / "lians-memory.mdc"
+        if project.trusted_root is None:
+            return
+        rule = project.trusted_root / ".cursor" / "rules" / "lians-memory.mdc"
         if not force and not rule.exists():
             return
         from .bridge import write_cursor_rule
 
-        write_cursor_rule(project.root, store=store)
+        write_cursor_rule(project.trusted_root, store=store)
 
     if name == "remember":
         sync.pull_if_connected()

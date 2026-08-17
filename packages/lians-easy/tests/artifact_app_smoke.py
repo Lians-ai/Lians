@@ -81,6 +81,8 @@ def main() -> None:
     origin = f"http://127.0.0.1:{port}"
     with tempfile.TemporaryDirectory(prefix="lians-app-smoke-") as directory:
         data_path = Path(directory) / "memory.sqlite3"
+        runtime_environment = os.environ.copy()
+        runtime_environment["LIANS_EASY_HOME"] = directory
         process = subprocess.Popen(
             [
                 str(binary),
@@ -93,14 +95,20 @@ def main() -> None:
                 str(data_path),
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=runtime_environment,
             start_new_session=os.name != "nt",
         )
         try:
             deadline = time.monotonic() + 20
             while True:
                 if process.poll() is not None:
-                    raise RuntimeError(f"Frozen Bridge exited with {process.returncode}")
+                    _stdout, stderr = process.communicate(timeout=5)
+                    detail = stderr.decode("utf-8", errors="replace")[-4_000:].strip()
+                    suffix = f"\n{detail}" if detail else ""
+                    raise RuntimeError(
+                        f"Frozen Bridge exited with {process.returncode}{suffix}"
+                    )
                 try:
                     response = _open(origin)
                     break
