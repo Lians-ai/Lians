@@ -2091,7 +2091,10 @@ def _ensure_windows_autostart() -> None:
         import winreg
 
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        command = f'"{Path(sys.executable).resolve()}" --background'
+        # A frozen Windows executable already exposes an absolute native path.
+        # Resolving it through pathlib is harmful in cross-platform validation:
+        # a Linux runner interprets ``C:\\...`` as a relative POSIX path.
+        command = f'"{sys.executable}" --background'
         with winreg.CreateKeyEx(
             winreg.HKEY_CURRENT_USER,
             key_path,
