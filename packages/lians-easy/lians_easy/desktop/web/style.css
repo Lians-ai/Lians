@@ -131,7 +131,19 @@ main,
   letter-spacing: -0.025em;
 }
 
-.brand img {
+.brand-mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  background: #020304;
+}
+
+:root[data-theme="light"] .brand-mark {
+  background: #ffffff;
+}
+
+.brand-mark img {
   display: block;
   width: 40px;
   height: 40px;
