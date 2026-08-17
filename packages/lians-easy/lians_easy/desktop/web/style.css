@@ -136,11 +136,7 @@ main,
   width: 40px;
   height: 40px;
   place-items: center;
-  background: #020304;
-}
-
-:root[data-theme="light"] .brand-mark {
-  background: #ffffff;
+  background: var(--background);
 }
 
 .brand-mark img {

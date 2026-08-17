@@ -81,8 +81,7 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert "drawAmbient" in source
     assert 'class="brand-mark"' in html
     assert '<img src="lotus.png" width="40" height="40"' in html
-    assert ':root[data-theme="light"] .brand-mark' in css
-    assert "background: #ffffff" in css
+    assert "background: var(--background)" in css
     assert 'id="titlebar" class="topbar reveal"' in html
     assert 'id="intro-particles"' in html
     assert 'id="ambient-canvas"' in html
