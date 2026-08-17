@@ -143,7 +143,8 @@ jobs:
           & packages/lians-easy/scripts/repair_windows_build_tk.ps1 `
             -Python (Get-Command python).Source `
             -ExtractionRoot (Join-Path $env:RUNNER_TEMP 'lians-python-3.12.10-tcltk') `
-            -EnvironmentFile $env:GITHUB_ENV
+            -EnvironmentFile $env:GITHUB_ENV `
+            -PathFile $env:GITHUB_PATH
       - name: Build native Windows companion bundle
         shell: pwsh
         run: |

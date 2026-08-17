@@ -66,7 +66,8 @@ jobs:
           & packages/lians-easy/scripts/repair_windows_build_tk.ps1 `
             -Python (Get-Command python).Source `
             -ExtractionRoot (Join-Path $env:RUNNER_TEMP 'lians-python-3.12.10-tcltk') `
-            -EnvironmentFile $env:GITHUB_ENV
+            -EnvironmentFile $env:GITHUB_ENV `
+            -PathFile $env:GITHUB_PATH
       - run: python -m pip install packages/lians-easy pyinstaller==6.22.0
       - name: Build current cryptography with static OpenSSL on Intel macOS
         if: runner.os == 'macOS' && matrix.macos_architecture == 'x86_64'
@@ -85,6 +86,7 @@ jobs:
       - name: Verify consumer layout at common Windows scaling
         if: runner.os == 'Windows'
         run: |
+          python -c "import os, pathlib, sys, tkinter as tk; assert pathlib.Path(sys.executable).resolve() == pathlib.Path(os.environ['LIANS_BUILD_PYTHON']).resolve(); root = tk.Tk(); root.withdraw(); root.destroy()"
           python -m pip install pytest==8.4.1
           python -m pytest packages/lians-easy/tests/test_gui_layout.py -q
         env:
