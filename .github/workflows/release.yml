@@ -124,7 +124,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
-      - name: Build standalone desktop runtime
+      - name: Build native Windows companion bundle
         shell: pwsh
         run: |
           $versionLine = Select-String -LiteralPath packages/lians-easy/pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
@@ -135,22 +135,21 @@ jobs:
           if ("v$packageVersion" -ne $env:RELEASE_TAG) {
             throw "Lians Bridge version $packageVersion does not match $env:RELEASE_TAG"
           }
-          python -m pip install packages/lians-easy pyinstaller==6.22.0
-          python -m PyInstaller --noconfirm --clean --onefile `
-            --name LiansMemory `
-            --paths packages/lians-easy `
-            --add-data "packages/lians-easy/lians_easy/app;lians_easy/app" `
-            --icon packages/lians-easy/windows-lians.ico `
-            --version-file packages/lians-easy/windows-version-info.txt `
-            packages/lians-easy/entrypoint.py
+          python -m pip install uv==0.11.26
+          $buildPython = (Get-Command python).Source
+          uv sync --project packages/lians-easy --frozen --group build --python $buildPython
+          $env:PATH = "$(Resolve-Path packages/lians-easy/.venv/Scripts);$env:PATH"
+          & packages/lians-easy/scripts/build_windows_companion.ps1 `
+            -OutputDirectory dist/windows-companion `
+            -Overwrite
       - name: Verify frozen Lians App and Bridge API
         run: |
-          python packages/lians-easy/tests/artifact_app_smoke.py --binary dist/LiansMemory.exe
-          python packages/lians-easy/tests/artifact_portability_smoke.py --binary dist/LiansMemory.exe
+          python packages/lians-easy/tests/artifact_app_smoke.py --binary dist/windows-companion/LiansApp/LiansMemory.exe
+          python packages/lians-easy/tests/artifact_portability_smoke.py --binary dist/windows-companion/LiansApp/LiansMemory.exe
       - name: Verify Windows package identity
         shell: pwsh
         run: |
-          $info = (Get-Item -LiteralPath dist/LiansMemory.exe).VersionInfo
+          $info = (Get-Item -LiteralPath dist/windows-companion/LiansApp/LiansMemory.exe).VersionInfo
           $versionLine = Select-String -LiteralPath packages/lians-easy/pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
           if (-not $versionLine -or $versionLine.Line -notmatch '^version\s*=\s*"([^"]+)"') {
             throw 'Could not read the Lians Bridge package version'
@@ -173,7 +172,7 @@ jobs:
       - name: Verify frozen installer crash recovery
         run: >-
           python packages/lians-easy/tests/artifact_crash_smoke.py
-          --binary dist/LiansMemory.exe
+          --binary dist/windows-companion/LiansApp/LiansMemory.exe
       - name: Sign the Windows runtime
         shell: pwsh
         env:
@@ -205,9 +204,16 @@ jobs:
             if (-not $signTool) {
               throw 'Windows SDK signtool.exe was not found'
             }
-            & $signTool.FullName sign /sha1 $certificate.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 dist/LiansMemory.exe
-            if ($LASTEXITCODE -ne 0) {
-              throw "Runtime signing failed with exit code $LASTEXITCODE"
+            $executables = @(
+              'dist/windows-companion/Lians.exe',
+              'dist/windows-companion/LiansApp/Lians.exe',
+              'dist/windows-companion/LiansApp/LiansMemory.exe'
+            )
+            foreach ($executable in $executables) {
+              & $signTool.FullName sign /sha1 $certificate.Thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $executable
+              if ($LASTEXITCODE -ne 0) {
+                throw "Signing '$executable' failed with exit code $LASTEXITCODE"
+              }
             }
             "LIANS_WINDOWS_CERT_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             "LIANS_SIGNTOOL=$($signTool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -218,12 +224,19 @@ jobs:
       - name: Verify signed runtime publisher
         shell: pwsh
         run: |
-          $signature = Get-AuthenticodeSignature -LiteralPath dist/LiansMemory.exe
-          if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
-            throw "Windows runtime requires a valid Authenticode signature; status was '$($signature.Status)'"
-          }
-          if ($signature.SignerCertificate.Thumbprint -ne $env:LIANS_WINDOWS_CERT_THUMBPRINT) {
-            throw 'Windows runtime signer does not match the configured publisher certificate'
+          $executables = @(
+            'dist/windows-companion/Lians.exe',
+            'dist/windows-companion/LiansApp/Lians.exe',
+            'dist/windows-companion/LiansApp/LiansMemory.exe'
+          )
+          foreach ($executable in $executables) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $executable
+            if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
+              throw "Windows executable '$executable' requires a valid Authenticode signature; status was '$($signature.Status)'"
+            }
+            if ($signature.SignerCertificate.Thumbprint -ne $env:LIANS_WINDOWS_CERT_THUMBPRINT) {
+              throw "Windows executable '$executable' does not match the configured publisher certificate"
+            }
           }
       - name: Install pinned Windows packaging tool
         shell: pwsh
@@ -233,11 +246,12 @@ jobs:
         shell: pwsh
         run: |
           & packages/lians-easy/scripts/build_windows_installer.ps1 `
-            -Binary dist/LiansMemory.exe `
+            -CompanionRoot dist/windows-companion `
             -OutputDirectory dist/installer
           & packages/lians-easy/scripts/build_windows_installer.ps1 `
-            -Binary packages/lians-easy/README.md `
-            -OutputDirectory dist/rollback-fixture
+            -CompanionRoot dist/windows-companion `
+            -OutputDirectory dist/rollback-fixture `
+            -RuntimeOverride packages/lians-easy/README.md
       - name: Sign and verify the Windows installer
         shell: pwsh
         run: |

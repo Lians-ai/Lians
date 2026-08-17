@@ -91,6 +91,17 @@ jobs:
         run: >-
           python packages/lians-easy/tests/artifact_portability_smoke.py
           --binary dist/LiansMemory${{ runner.os == 'Windows' && '.exe' || '' }}
+      - name: Build native Windows companion bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install uv==0.11.26
+          $buildPython = (Get-Command python).Source
+          uv sync --project packages/lians-easy --frozen --group build --python $buildPython
+          $env:PATH = "$(Resolve-Path packages/lians-easy/.venv/Scripts);$env:PATH"
+          & packages/lians-easy/scripts/build_windows_companion.ps1 `
+            -OutputDirectory dist/windows-companion `
+            -Overwrite
       - name: Verify Windows package identity
         if: runner.os == 'Windows'
         shell: pwsh
@@ -208,11 +219,12 @@ jobs:
         shell: pwsh
         run: |
           & packages/lians-easy/scripts/build_windows_installer.ps1 `
-            -Binary dist/LiansMemory.exe `
+            -CompanionRoot dist/windows-companion `
             -OutputDirectory dist/installer
           & packages/lians-easy/scripts/build_windows_installer.ps1 `
-            -Binary packages/lians-easy/README.md `
-            -OutputDirectory dist/rollback-fixture
+            -CompanionRoot dist/windows-companion `
+            -OutputDirectory dist/rollback-fixture `
+            -RuntimeOverride packages/lians-easy/README.md
       - name: Verify install, bundled app, and memory-preserving removal
         if: runner.os == 'Windows'
         shell: pwsh

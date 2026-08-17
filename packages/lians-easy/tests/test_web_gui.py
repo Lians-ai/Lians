@@ -160,3 +160,13 @@ def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> N
     assert "applyWindowState" in source
     assert 'WithArgument(args, "--intro-complete")' in launcher
     assert 'parser.add_argument("--intro-complete"' in entrypoint
+    assert "listen_for_windows_installer_shutdown" in entrypoint
+
+
+def test_codex_setup_explains_the_required_hook_trust_step() -> None:
+    package_root = Path(__file__).resolve().parents[1]
+    source = (package_root / "lians_easy" / "gui.py").read_text(encoding="utf-8")
+
+    assert '"codex" in result.get("requires_trust", [])' in source
+    assert "open /hooks" in source
+    assert "Copy /hooks" in source

@@ -4,8 +4,17 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+
+[assembly: AssemblyCompany("Lians")]
+[assembly: AssemblyCopyright("Copyright 2026 Lians")]
+[assembly: AssemblyDescription("Lians agent lifeline")]
+[assembly: AssemblyFileVersion("0.5.0.0")]
+[assembly: AssemblyProduct("Lians")]
+[assembly: AssemblyTitle("Lians")]
+[assembly: AssemblyVersion("0.5.0.0")]
 
 internal static class LiansLauncher
 {

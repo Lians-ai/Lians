@@ -137,16 +137,19 @@ Open the executable without arguments for guided setup. Its final action opens
 the bundled control center through the loopback-only Bridge. Once at least one
 AI client is connected, later launches return to that control center directly.
 
-The Windows build workflow also wraps the frozen runtime in a per-user
+The Windows build workflow packages the native windowed companion, its quiet
+launcher, and its console-only MCP sidecar in a per-user
 `Lians-Setup-<version>.exe`. It creates Start-menu entries, does not request
 administrator access, and is exercised through install, launch, and uninstall
-on a fresh runner. On an upgrade, Setup asks the existing Bridge to release the
-runtime, keeps a hidden previous-runtime copy, runs a local health check on the
-candidate, and commits only after it passes. A failed candidate restores the
-working runtime without changing memory or AI-client configuration. Silent
-removal preserves encrypted memory; interactive removal asks separately before
-erasure. Pull-request installers are unsigned technical fixtures until the
-publisher-gated release job signs both the runtime and setup executable.
+on a fresh runner. Application files live under the user's Programs directory;
+encrypted memories remain in a separate private data directory. On an upgrade,
+Setup asks every Lians process to exit, stages and health-checks the complete
+candidate bundle, and atomically swaps it only after it passes. A failed
+candidate restores the prior launcher and app directory without changing
+memory or AI-client configuration. Silent removal preserves encrypted memory;
+interactive removal asks separately before erasure. Pull-request installers
+are unsigned technical fixtures until the publisher-gated release job signs
+the launcher, windowed app, MCP sidecar, and setup executable.
 
 The macOS workflow builds separate native Apple-silicon and Intel
 `Lians-<version>-macos-<architecture>.dmg` images. Each has a conventional

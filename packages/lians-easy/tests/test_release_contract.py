@@ -127,7 +127,12 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     assert "WINDOWS_SIGNING_CERT_PASSWORD" in desktop_job
     assert "WINDOWS_SIGNING_CERT_SHA1" in desktop_job
     assert "signtool.exe" in desktop_job
-    assert "dist/LiansMemory.exe" in desktop_job
+    assert "dist/windows-companion/Lians.exe" in desktop_job
+    assert "dist/windows-companion/LiansApp/Lians.exe" in desktop_job
+    assert "dist/windows-companion/LiansApp/LiansMemory.exe" in desktop_job
+    assert "build_windows_companion.ps1" in desktop_job
+    assert "uv==0.11.26" in desktop_job
+    assert "uv sync --project packages/lians-easy --frozen --group build --python $buildPython" in desktop_job
     assert "build_windows_installer.ps1" in desktop_job
     assert "artifact_windows_installer_smoke.py" in desktop_job
     assert "--rollback-fixture" in desktop_job
@@ -143,14 +148,19 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
+    companion_builder = (
+        PACKAGE_ROOT / "scripts" / "build_windows_companion.ps1"
+    ).read_text(encoding="utf-8")
     for build_contract in (workflow, pull_request_workflow):
-        assert "--add-data" in build_contract
-        assert "lians_easy/app" in build_contract
+        assert "build_windows_companion.ps1" in build_contract
         assert "artifact_portability_smoke.py" in build_contract
-        assert "--icon packages/lians-easy/windows-lians.ico" in build_contract
-        assert "--version-file packages/lians-easy/windows-version-info.txt" in build_contract
         assert "Verify Windows package identity" in build_contract
         assert "artifact_app_smoke.py" in build_contract
+        assert "uv sync --project packages/lians-easy --frozen --group build --python $buildPython" in build_contract
+    assert "--add-data" in companion_builder
+    assert "lians_easy/app" in companion_builder
+    assert "windows-lians.ico" in companion_builder
+    assert "windows-version-info.txt" in companion_builder
 
 
 def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
@@ -279,15 +289,20 @@ def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() 
     script = (PACKAGE_ROOT / "windows-installer.nsi").read_text(encoding="utf-8")
 
     assert 'RequestExecutionLevel user' in script
-    assert 'InstallDir "$LOCALAPPDATA\\Lians"' in script
+    assert 'InstallDir "$LOCALAPPDATA\\Programs\\Lians"' in script
     assert "MUI_PAGE_DIRECTORY" not in script
     assert 'MUI_FINISHPAGE_RUN_TEXT "Open Lians"' in script
     assert 'CreateShortcut "$SMPROGRAMS\\Lians\\Lians.lnk"' in script
     assert "uninstall --clients all --yes" in script
-    assert "IfSilent KeepEncryptedMemory" in script
+    assert 'ReadEnvStr $8 "LIANS_EASY_HOME"' in script
+    assert 'Delete "$8\\${PRODUCT_RUNTIME}"' in script
+    assert 'DeleteRegValue HKCU "${PRODUCT_STARTUP_KEY}" "Lians"' in script
+    assert "IfSilent UninstallFinished" in script
     assert "Permanently erase all encrypted Lians memories" in script
-    assert 'StrCmp "$INSTDIR" "$LOCALAPPDATA\\Lians" 0 RefuseUnsafeErase' in script
-    assert script.index("IfSilent KeepEncryptedMemory") < script.index('RMDir /r "$INSTDIR"')
+    assert 'RMDir /r "$LOCALAPPDATA\\Lians"' in script
+    assert script.index("IfSilent UninstallFinished") < script.index(
+        'RMDir /r "$LOCALAPPDATA\\Lians"'
+    )
 
 
 def test_windows_installer_health_checks_upgrades_and_restores_failed_candidates() -> None:
@@ -297,14 +312,16 @@ def test_windows_installer_health_checks_upgrades_and_restores_failed_candidates
     ).read_text(encoding="utf-8")
 
     assert "PRODUCT_SHUTDOWN_EVENT" in script
-    assert "PRODUCT_RUNTIME_BACKUP" in script
-    assert "CopyFiles /SILENT" in script
+    assert "PRODUCT_CANDIDATE_APP" in script
+    assert "PRODUCT_PREVIOUS_APP" in script
+    assert "PRODUCT_PREVIOUS_LAUNCHER" in script
+    assert 'File /r "${LIANS_APP_BUNDLE}\\*"' in script
     assert "doctor --json" in script
-    assert "Rename \"$INSTDIR\\${PRODUCT_RUNTIME_BACKUP}\"" in script
+    assert 'Rename "$INSTDIR\\${PRODUCT_PREVIOUS_APP}" "$INSTDIR\\${PRODUCT_APP_DIR}"' in script
     assert script.index("doctor --json") < script.index("WriteUninstaller")
     assert "SetErrorLevel 1603" in script
     assert "--rollback-fixture" in workflow
-    assert "packages/lians-easy/README.md" in workflow
+    assert "-RuntimeOverride packages/lians-easy/README.md" in workflow
 
 
 def test_packaged_control_center_is_source_pinned_and_bounded() -> None:

@@ -29,6 +29,11 @@ dependencies = [
   "pywebview==6.2.1; sys_platform == 'win32'",
 ]
 
+[dependency-groups]
+build = [
+  "pyinstaller==6.22.0",
+]
+
 [project.urls]
 Homepage = "https://www.lians.ai"
 Documentation = "https://github.com/Lians-ai/Lians/blob/master/docs/easy-install.md"

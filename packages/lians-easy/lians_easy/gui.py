@@ -814,6 +814,43 @@ class SetupApp:
             wraplength=590,
             anchor="w",
         ).pack(fill="x", pady=(10, 14))
+
+        if "codex" in result.get("requires_trust", []):
+            self._label(
+                try_card,
+                "One Codex step",
+                background=BLUE_SOFT,
+                foreground=TEXT,
+                font=("Segoe UI", 11, "bold"),
+                anchor="w",
+            ).pack(fill="x", pady=(2, 0))
+            self._label(
+                try_card,
+                (
+                    "Restart Codex, open /hooks, review the Lians memory hook, and choose "
+                    "Trust. Codex will not run a new or changed local hook until you approve "
+                    "its exact contents."
+                ),
+                background=BLUE_SOFT,
+                foreground=MUTED,
+                justify="left",
+                wraplength=590,
+                anchor="w",
+            ).pack(fill="x", pady=(8, 10))
+            tk.Button(
+                try_card,
+                text="Copy /hooks",
+                command=lambda: self._copy("/hooks"),
+                background=PANEL_SOFT,
+                foreground=TEXT,
+                activebackground=PANEL,
+                activeforeground=TEXT,
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                padx=16,
+                pady=8,
+            ).pack(anchor="w", pady=(0, 12))
         tk.Button(
             try_card,
             text="Copy the first prompt",
