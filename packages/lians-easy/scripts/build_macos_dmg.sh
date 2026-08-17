@@ -111,15 +111,29 @@ fi
 codesign --verify --deep --strict --verbose=2 "$app"
 
 dmg="$output_directory/Lians-$version-macos-$architecture.dmg"
-hdiutil create \
-  -quiet \
-  -ov \
-  -format UDZO \
-  -fs HFS+ \
-  -imagekey zlib-level=9 \
-  -volname "Lians" \
-  -srcfolder "$volume_root" \
-  "$dmg"
+dmg_created=false
+for attempt in 1 2 3; do
+  if hdiutil create \
+    -ov \
+    -format UDZO \
+    -fs HFS+ \
+    -imagekey zlib-level=9 \
+    -volname "Lians" \
+    -srcfolder "$volume_root" \
+    "$dmg"; then
+    dmg_created=true
+    break
+  fi
+  rm -f "$dmg"
+  if [[ "$attempt" -lt 3 ]]; then
+    echo "hdiutil create failed on attempt $attempt; retrying" >&2
+    sleep $((attempt * 2))
+  fi
+done
+if [[ "$dmg_created" != true ]]; then
+  echo "Could not create the Lians disk image after 3 attempts" >&2
+  exit 1
+fi
 
 if [[ -n "$signing_identity" ]]; then
   codesign --force --timestamp --sign "$signing_identity" "$dmg"

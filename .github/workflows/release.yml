@@ -462,6 +462,15 @@ jobs:
           fi
           export MACOSX_DEPLOYMENT_TARGET=13.0
           python -m pip install packages/lians-easy pyinstaller==6.22.0 Pillow==11.3.0
+          if [[ "${{ matrix.architecture }}" == "x86_64" ]]; then
+            OPENSSL_STATIC=1 \
+            OPENSSL_DIR="$(brew --prefix openssl@3)" \
+              python -m pip install \
+                --force-reinstall \
+                --no-cache-dir \
+                --no-binary cryptography \
+                cryptography==50.0.0
+          fi
           python -m PyInstaller --noconfirm --clean --onefile \
             --name LiansMemory \
             --paths packages/lians-easy \

@@ -188,6 +188,9 @@ def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
     assert "build_macos_dmg.sh" in workflow
     assert "artifact_macos_dmg_smoke.py" in workflow
     assert "dist/installer/Lians-*.dmg" in workflow
+    assert "OPENSSL_STATIC=1" in workflow
+    assert "--no-binary cryptography" in workflow
+    assert "cryptography==50.0.0" in workflow
 
 
 def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
@@ -281,6 +284,9 @@ def test_stable_macos_release_requires_developer_id_and_notarization() -> None:
     assert "APPLE_NOTARY_KEY_ID" in macos_job
     assert "APPLE_NOTARY_ISSUER_ID" in macos_job
     assert '--codesign-identity "$MACOS_SIGNING_IDENTITY"' in macos_job
+    assert "OPENSSL_STATIC=1" in macos_job
+    assert "--no-binary cryptography" in macos_job
+    assert "cryptography==50.0.0" in macos_job
     assert "artifact_macos_dmg_smoke.py" in macos_job
     assert "--expected-signing-identity" in macos_job
     assert "--expected-team-id" in macos_job
