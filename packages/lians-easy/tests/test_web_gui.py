@@ -98,8 +98,10 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'from "motion"' in source
     assert "createTimeline" in source
     assert all(name in source for name in ("hover", "press", "resize", "frame"))
-    assert "wordmarkTargetPoints" in source
-    assert 'loadImage("lians-wordmark.png")' in source
+    assert "lotusTargetPoints" in source
+    assert 'loadImage("lotus.png")' in source
+    assert "ringParticles" in source
+    assert "portalHold" in source
     assert "drawAmbient" in source
     assert 'id="tokens-label"' in html
     assert 'id="tokens-detail"' in html
@@ -152,9 +154,12 @@ def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> N
     source = (package_root / "desktop-ui" / "src" / "main.js").read_text(encoding="utf-8")
 
     assert "BuildParticles" in launcher
-    assert '"lians-wordmark.png"' in launcher
-    assert "ParticleWordmarkSurface" in launcher
-    assert "requestedCount = 4200" in launcher
+    assert '"lotus.png"' in launcher
+    assert "CosmicPortalSurface" in launcher
+    assert "requestedCount = 2600" in launcher
+    assert "ringCount = 980" in launcher
+    assert "DrawPortal" in launcher
+    assert "DrawLotus" in launcher
     assert "start.UseShellExecute = false" in launcher
     assert "start.CreateNoWindow = true" in launcher
     assert "start.WindowStyle = ProcessWindowStyle.Hidden" in launcher

@@ -78,10 +78,10 @@ function loadImage(source) {
   });
 }
 
-function wordmarkTargetPoints(image, count = 4200) {
+function lotusTargetPoints(image, count = 2600) {
   const sample = document.createElement("canvas");
-  sample.width = 650;
-  sample.height = 240;
+  sample.width = 256;
+  sample.height = 256;
   const context = sample.getContext("2d", { willReadFrequently: true });
   context.drawImage(image, 0, 0, sample.width, sample.height);
   const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
@@ -90,13 +90,19 @@ function wordmarkTargetPoints(image, count = 4200) {
   const colorAt = (x, y) => {
     if (x < 0 || y < 0 || x >= sample.width || y >= sample.height) return null;
     const offset = (y * sample.width + x) * 4;
-    return { red: pixels[offset], green: pixels[offset + 1], blue: pixels[offset + 2] };
+    return {
+      red: pixels[offset],
+      green: pixels[offset + 1],
+      blue: pixels[offset + 2],
+      alpha: pixels[offset + 3],
+    };
   };
-  const isWordmark = (color) => color
+  const isLotus = (color) => color
+    && color.alpha > 16
     && color.blue >= 5
-    && color.blue > color.red * 1.45
-    && color.blue > color.green * 1.35;
-  const isWordmarkAt = (x, y) => isWordmark(colorAt(x, y));
+    && color.blue > color.red * 1.35
+    && color.blue > color.green * 1.18;
+  const isLotusAt = (x, y) => isLotus(colorAt(x, y));
   const opacityFor = (color) => {
     if (!color) return 0;
     return Math.min(255, Math.max(96, color.blue * 1.7));
@@ -104,16 +110,16 @@ function wordmarkTargetPoints(image, count = 4200) {
   for (let y = 0; y < sample.height; y += 2) {
     for (let x = 0; x < sample.width; x += 2) {
       const color = colorAt(x, y);
-      if (!isWordmark(color)) continue;
+      if (!isLotus(color)) continue;
       const point = {
         x: x / (sample.width - 1),
         y: y / (sample.height - 1),
         alpha: opacityFor(color),
       };
-      const edge = !isWordmarkAt(x - 4, y)
-        || !isWordmarkAt(x + 4, y)
-        || !isWordmarkAt(x, y - 4)
-        || !isWordmarkAt(x, y + 4);
+      const edge = !isLotusAt(x - 4, y)
+        || !isLotusAt(x + 4, y)
+        || !isLotusAt(x, y - 4)
+        || !isLotusAt(x, y + 4);
       (edge ? edgeCandidates : fillCandidates).push(point);
     }
   }
@@ -161,21 +167,20 @@ async function runIntro() {
     return;
   }
   try {
-    const image = await loadImage("lians-wordmark.png");
-    const targets = wordmarkTargetPoints(image);
+    const image = await loadImage("lotus.png");
+    const targets = lotusTargetPoints(image);
     const { context, width, height } = sizeCanvas(introCanvas);
     const random = seededRandom();
-    const aspect = image.naturalWidth / image.naturalHeight;
-    const targetWidth = Math.min(width * 0.64, height * 0.39 * aspect);
-    const targetHeight = targetWidth / aspect;
+    const targetWidth = Math.min(width * 0.48, height * 0.72);
+    const targetHeight = targetWidth;
     const left = (width - targetWidth) / 2;
     const top = (height - targetHeight) / 2;
-    const particles = targets.map((target) => ({
+    const lotusParticles = targets.map((target) => ({
       startX: random() * width,
       startY: random() * height,
-      targetX: left + target.x * targetWidth,
-      targetY: top + target.y * targetHeight,
-      size: 0.65 + random() * 1,
+      targetX: left + (0.24 + target.x * 0.52) * targetWidth,
+      targetY: top + (0.24 + target.y * 0.52) * targetHeight,
+      size: 0.42 + random() * 0.78,
       phase: random() * Math.PI * 2,
       speed: 0.7 + random() * 1.8,
       driftX: 24 + random() * 82,
@@ -183,12 +188,33 @@ async function runIntro() {
       bendX: (random() - 0.5) * width * 0.34,
       bendY: (random() - 0.5) * height * 0.38,
       opacity: 0.5 + (target.alpha / 255) * 0.5,
+      portal: false,
     }));
+    const ringParticles = Array.from({ length: 980 }, (_, index) => {
+      const angle = Math.PI * 2 * index / 980 + (random() - 0.5) * 0.014;
+      const radius = 0.474 + (random() - 0.5) * 0.022;
+      return {
+        startX: random() * width,
+        startY: random() * height,
+        targetX: left + (0.5 + Math.cos(angle) * radius) * targetWidth,
+        targetY: top + (0.5 + Math.sin(angle) * radius) * targetHeight,
+        size: 0.48 + random() * 0.92,
+        phase: random() * Math.PI * 2,
+        speed: 0.8 + random() * 1.4,
+        driftX: 32 + random() * 96,
+        driftY: 26 + random() * 82,
+        bendX: (random() - 0.5) * width * 0.46,
+        bendY: (random() - 0.5) * height * 0.46,
+        opacity: 0.56 + random() * 0.42,
+        portal: true,
+      };
+    });
+    const particles = [...lotusParticles, ...ringParticles];
     const started = performance.now();
-    const chaosDuration = 220;
-    const gatherDuration = 820;
-    const wordmarkHold = 170;
-    const duration = chaosDuration + gatherDuration + wordmarkHold;
+    const chaosDuration = 90;
+    const gatherDuration = 670;
+    const portalHold = 260;
+    const duration = chaosDuration + gatherDuration + portalHold;
     const render = (now) => {
       const elapsed = now - started;
       const gatherProgress = Math.min(
@@ -200,6 +226,26 @@ async function runIntro() {
         : 1 - Math.pow(-2 * gatherProgress + 2, 3) / 2;
       const seconds = elapsed * 0.001;
       context.clearRect(0, 0, width, height);
+      if (eased > 0.01) {
+        const radius = targetWidth / 2;
+        const centerX = left + radius;
+        const centerY = top + radius;
+        context.save();
+        context.shadowColor = `rgba(49, 95, 233, ${eased * 0.7})`;
+        context.shadowBlur = 34;
+        context.strokeStyle = `rgba(106, 148, 255, ${eased * 0.82})`;
+        context.lineWidth = 1.4;
+        context.beginPath();
+        context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        context.stroke();
+        context.shadowBlur = 0;
+        context.strokeStyle = `rgba(74, 113, 238, ${eased * 0.55})`;
+        context.lineWidth = 2.2;
+        context.beginPath();
+        context.arc(centerX, centerY, radius, seconds * 0.65, seconds * 0.65 + 1.3);
+        context.stroke();
+        context.restore();
+      }
       for (const particle of particles) {
         let x;
         let y;
@@ -219,14 +265,30 @@ async function runIntro() {
             + Math.cos(particle.phase + seconds * particle.speed * 4.4) * flutter;
         }
         context.beginPath();
-        const red = Math.round(60 + eased * 44);
-        const green = Math.round(98 + eased * 55);
-        const blue = Math.round(218 + eased * 37);
+        const red = particle.portal ? 88 : 62;
+        const green = particle.portal ? 132 : 102;
+        const blue = particle.portal ? 255 : 232;
         const alpha = particle.opacity * (0.58 + eased * 0.42);
         context.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-        const displaySize = particle.size * (0.18 + eased * 1.12);
+        const displaySize = particle.size * (0.16 + eased * 0.96);
         context.arc(x, y, displaySize, 0, Math.PI * 2);
         context.fill();
+      }
+      const revealRaw = Math.min(1, Math.max(0, (elapsed - 360) / 270));
+      const reveal = revealRaw * revealRaw * (3 - 2 * revealRaw);
+      if (reveal > 0.01) {
+        const pulse = 1 + Math.sin(elapsed * 0.008) * 0.012 * eased;
+        const logoSize = targetWidth * (0.46 + reveal * 0.08) * pulse;
+        context.save();
+        context.globalAlpha = reveal;
+        context.drawImage(
+          image,
+          left + (targetWidth - logoSize) / 2,
+          top + (targetHeight - logoSize) / 2,
+          logoSize,
+          logoSize,
+        );
+        context.restore();
       }
       if (elapsed < duration) {
         requestAnimationFrame(render);
