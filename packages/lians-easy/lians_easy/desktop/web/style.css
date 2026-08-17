@@ -7,8 +7,6 @@
 
 :root {
   color-scheme: dark;
-  --font-primary: "IvyPresto Text", "IvyPresto", Georgia, "Times New Roman", serif;
-  --font-display: "IvyPresto Display", "IvyPresto Headline", "IvyPresto Text", Georgia, serif;
   --background: #020304;
   --surface: #080b10;
   --surface-hover: #0c1119;
@@ -18,10 +16,6 @@
   --muted: #8c96a6;
   --blue: #315fe9;
   --blue-clear: #6d91ff;
-  --brain-haze: rgba(45, 87, 221, 0.22);
-  --brain-core: rgba(77, 117, 244, 0.12);
-  --brain-line: rgba(111, 147, 255, 0.17);
-  --brain-node: rgba(126, 157, 255, 0.32);
 }
 
 :root[data-theme="light"] {
@@ -35,10 +29,6 @@
   --muted: #626a75;
   --blue: #3159c8;
   --blue-clear: #244db9;
-  --brain-haze: rgba(49, 89, 200, 0.13);
-  --brain-core: rgba(49, 89, 200, 0.075);
-  --brain-line: rgba(36, 77, 185, 0.13);
-  --brain-node: rgba(36, 77, 185, 0.24);
 }
 
 * {
@@ -56,7 +46,7 @@ body {
 body {
   background: var(--background);
   color: var(--text);
-  font-family: var(--font-primary);
+  font-family: "Sora", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
   transition: background-color 120ms ease-out, color 120ms ease-out;
@@ -98,7 +88,7 @@ button {
   height: 100%;
   min-width: 900px;
   min-height: 640px;
-  background: color-mix(in srgb, var(--background) 94%, transparent);
+  background: var(--background);
   transition: background-color 120ms ease-out;
 }
 
@@ -106,102 +96,21 @@ button {
   content: none;
 }
 
-.neural-field {
-  --brain-shift-x: 0px;
-  --brain-shift-y: 0px;
+.ambient-canvas {
   position: absolute;
   z-index: 0;
   inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.brain-stage {
-  position: absolute;
-  top: 51%;
-  left: 54%;
-  width: min(90vw, 1320px);
-  aspect-ratio: 1000 / 680;
-  transform: translate(-50%, -50%);
-}
-
-.brain-parallax {
-  width: 100%;
-  height: 100%;
-  transform: translate(var(--brain-shift-x), var(--brain-shift-y));
-  transition: transform 800ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.brain-orbit {
-  width: 100%;
-  height: 100%;
-  transform-origin: center;
-  will-change: transform, opacity;
-}
-
-.ambient-brain {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  animation: brain-drift 18s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-.brain-haze {
-  fill: var(--brain-haze);
-  filter: blur(72px);
-}
-
-.brain-core {
-  fill: var(--brain-core);
-  filter: blur(26px);
-}
-
-.brain-ridges {
-  fill: none;
-  stroke: var(--brain-line);
-  stroke-linecap: round;
-  stroke-width: 5;
-  filter: blur(3px);
-}
-
-.brain-nodes {
-  fill: var(--brain-node);
-  filter: blur(3px);
-}
-
-@keyframes brain-drift {
-  0% { transform: translate3d(-8px, 5px, 0) rotate(-0.6deg); }
-  48% { transform: translate3d(5px, -7px, 0) rotate(0.35deg); }
-  100% { transform: translate3d(10px, 4px, 0) rotate(0.75deg); }
-}
-
-.ambient-canvas {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  opacity: 0.38;
+  opacity: 0.72;
 }
 
 .topbar,
 main,
 .footer {
   position: relative;
-  z-index: 2;
-}
-
-.visually-hidden {
-  position: fixed;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
+  z-index: 1;
 }
 
 .topbar {
@@ -220,7 +129,6 @@ main,
   gap: 12px;
   font-size: 20px;
   letter-spacing: -0.025em;
-  font-family: var(--font-display);
 }
 
 .brand-mark {
@@ -343,7 +251,6 @@ main {
   font-weight: 560;
   letter-spacing: -0.07em;
   line-height: 0.9;
-  font-family: var(--font-display);
 }
 
 .hero p {
@@ -385,8 +292,7 @@ main {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 24px;
-  background: color-mix(in srgb, var(--surface) 74%, transparent);
-  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
 .metric {
@@ -446,7 +352,6 @@ main {
   font-size: clamp(24px, 2vw, 32px);
   font-weight: 590;
   letter-spacing: -0.04em;
-  font-family: var(--font-display);
 }
 
 .section-heading span {
@@ -474,7 +379,7 @@ main {
   z-index: 1;
   margin: 0;
   padding: 0 24px;
-  background: color-mix(in srgb, var(--background) 82%, transparent);
+  background: var(--background);
   font-size: clamp(15px, 1.15vw, 18px);
   transition: background-color 120ms ease-out;
 }
@@ -686,9 +591,5 @@ main {
     scroll-behavior: auto !important;
     transition-duration: 0.001ms !important;
     animation-duration: 0.001ms !important;
-  }
-
-  .ambient-brain {
-    animation: none;
   }
 }
