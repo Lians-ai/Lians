@@ -16,6 +16,9 @@ internal static class LiansLauncher
     private static extern bool ShowWindow(IntPtr handle, int command);
 
     [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr handle);
+
+    [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -48,7 +51,7 @@ internal static class LiansLauncher
         IntPtr existing = FindWindow(null, "Lians");
         if (existing != IntPtr.Zero)
         {
-            ShowWindow(existing, 3);
+            ShowWindow(existing, IsIconic(existing) ? 9 : 5);
             SetForegroundWindow(existing);
             return 0;
         }
@@ -187,7 +190,7 @@ internal static class LiansLauncher
             if (!windowSeen.HasValue)
             {
                 windowSeen = DateTime.UtcNow;
-                ShowWindow(child.MainWindowHandle, 3);
+                ShowWindow(child.MainWindowHandle, 5);
                 SetForegroundWindow(child.MainWindowHandle);
                 return;
             }

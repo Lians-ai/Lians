@@ -445,11 +445,17 @@ function installInteractions() {
     });
   });
 
+  document.querySelector(".window-actions").addEventListener("mousedown", (event) => {
+    event.stopPropagation();
+  });
   titlebar.addEventListener("mousedown", (event) => {
     if (event.button === 0 && event.detail === 1 && !event.target.closest("button")) {
-      event.preventDefault();
-      const request = window.pywebview?.api.drag_window();
-      request?.then(applyWindowState).catch(() => {});
+      window.pywebview?.api.start_drag().catch(() => {});
+      window.addEventListener("mouseup", () => {
+        window.setTimeout(() => {
+          window.pywebview?.api.window_state().then(applyWindowState).catch(() => {});
+        }, 120);
+      }, { once: true });
     }
   });
   titlebar.addEventListener("dblclick", (event) => {

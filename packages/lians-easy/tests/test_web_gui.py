@@ -68,6 +68,7 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'loadImage("lians-wordmark.png")' in source
     assert "drawAmbient" in source
     assert '<img src="favicon.png" width="40" height="40"' in html
+    assert 'id="titlebar" class="topbar reveal"' in html
     assert 'id="intro-particles"' in html
     assert 'id="ambient-canvas"' in html
     assert 'src="lotus.png"' in html
@@ -77,7 +78,7 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert "resize-handle" in html
     assert "intro-ring" not in html
     assert "radial-gradient" not in css
-    assert "drag_window" in source
+    assert "start_drag" in source
     assert "https://" not in html
     assert "overflow: hidden" in css
 
@@ -108,11 +109,14 @@ def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> N
     assert "start.UseShellExecute = false" in launcher
     assert "start.CreateNoWindow = true" in launcher
     assert "start.WindowStyle = ProcessWindowStyle.Hidden" in launcher
+    assert 'querySelector(".window-actions")' in source
+    assert "event.stopPropagation()" in source
+    assert "api.drag_window" not in source
+    assert "api.start_drag" in source
     web_gui = (package_root / "lians_easy" / "web_gui.py").read_text(encoding="utf-8")
-    assert "_begin_native_window_drag" in web_gui
-    assert "send_message(handle, 0x00A1, 2, 0)" in web_gui
-    assert "show_window(handle, 9)" in web_gui
-    assert "horizontal_ratio" in web_gui
+    assert "GetAsyncKeyState" in web_gui
+    assert "lians-native-window-drag" in web_gui
+    assert "time.sleep(1 / 120)" in web_gui
     assert "window_state" in source
     assert "applyWindowState" in source
     assert 'WithArgument(args, "--intro-complete")' in launcher

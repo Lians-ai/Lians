@@ -203,97 +203,6 @@ def _native_window_state(handle: int) -> str:
         return "windowed"
 
 
-def _begin_native_window_drag(handle: int) -> bool:
-    """Start the real Windows move loop, restoring a maximized window first."""
-
-    if sys.platform != "win32" or not handle:
-        return False
-
-    class WindowPlacement(ctypes.Structure):
-        _fields_ = [
-            ("length", wintypes.UINT),
-            ("flags", wintypes.UINT),
-            ("show_cmd", wintypes.UINT),
-            ("min_position", wintypes.POINT),
-            ("max_position", wintypes.POINT),
-            ("normal_position", wintypes.RECT),
-        ]
-
-    try:
-        user32 = ctypes.windll.user32
-        is_zoomed = user32.IsZoomed
-        is_zoomed.argtypes = (wintypes.HWND,)
-        is_zoomed.restype = wintypes.BOOL
-        get_cursor = user32.GetCursorPos
-        get_cursor.argtypes = (ctypes.POINTER(wintypes.POINT),)
-        get_cursor.restype = wintypes.BOOL
-        get_rect = user32.GetWindowRect
-        get_rect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
-        get_rect.restype = wintypes.BOOL
-        get_placement = user32.GetWindowPlacement
-        get_placement.argtypes = (wintypes.HWND, ctypes.POINTER(WindowPlacement))
-        get_placement.restype = wintypes.BOOL
-        show_window = user32.ShowWindow
-        show_window.argtypes = (wintypes.HWND, ctypes.c_int)
-        show_window.restype = wintypes.BOOL
-        set_window_pos = user32.SetWindowPos
-        set_window_pos.argtypes = (
-            wintypes.HWND,
-            wintypes.HWND,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.c_int,
-            wintypes.UINT,
-        )
-        set_window_pos.restype = wintypes.BOOL
-        release_capture = user32.ReleaseCapture
-        release_capture.argtypes = ()
-        release_capture.restype = wintypes.BOOL
-        send_message = user32.SendMessageW
-        send_message.argtypes = (
-            wintypes.HWND,
-            wintypes.UINT,
-            wintypes.WPARAM,
-            wintypes.LPARAM,
-        )
-        send_message.restype = ctypes.c_ssize_t
-
-        if is_zoomed(handle):
-            cursor = wintypes.POINT()
-            current = wintypes.RECT()
-            placement = WindowPlacement()
-            placement.length = ctypes.sizeof(WindowPlacement)
-            if get_cursor(ctypes.byref(cursor)) and get_rect(handle, ctypes.byref(current)):
-                current_width = max(1, current.right - current.left)
-                horizontal_ratio = min(
-                    0.9,
-                    max(0.1, (cursor.x - current.left) / current_width),
-                )
-                if get_placement(handle, ctypes.byref(placement)):
-                    normal = placement.normal_position
-                    width = max(900, normal.right - normal.left)
-                    height = max(640, normal.bottom - normal.top)
-                else:
-                    width, height = 1440, 900
-                show_window(handle, 9)  # SW_RESTORE
-                set_window_pos(
-                    handle,
-                    None,
-                    int(cursor.x - width * horizontal_ratio),
-                    int(cursor.y - 34),
-                    width,
-                    height,
-                    0x0004 | 0x0040,  # SWP_NOZORDER | SWP_SHOWWINDOW
-                )
-
-        release_capture()
-        send_message(handle, 0x00A1, 2, 0)  # WM_NCLBUTTONDOWN, HTCAPTION
-        return True
-    except (AttributeError, OSError, TypeError, ValueError):
-        return False
-
-
 class DesktopApi:
     """Small, read-only JS bridge for the lifeline console."""
 
@@ -301,6 +210,8 @@ class DesktopApi:
         self.store = store
         self.bridge = bridge
         self._window: Any | None = None
+        self._drag_lock = threading.Lock()
+        self._dragging = False
         self.preferred_client: str | None = None
 
     def snapshot(self) -> dict[str, Any]:
@@ -321,12 +232,128 @@ class DesktopApi:
             self._window.minimize()
         return True
 
-    def drag_window(self) -> str:
-        """Hand dragging to Windows so restore, movement, and snap stay native."""
+    def start_drag(self) -> bool:
+        """Follow the physical Windows cursor while the title bar is held."""
 
         handle = _lians_window_handle()
-        _begin_native_window_drag(handle)
-        return _native_window_state(handle)
+        if not handle or sys.platform != "win32":
+            return False
+        with self._drag_lock:
+            if self._dragging:
+                return True
+            self._dragging = True
+        threading.Thread(
+            target=self._drag_window_loop,
+            args=(handle,),
+            daemon=True,
+            name="lians-native-window-drag",
+        ).start()
+        return True
+
+    def _drag_window_loop(self, handle: int) -> None:
+        class WindowPlacement(ctypes.Structure):
+            _fields_ = [
+                ("length", wintypes.UINT),
+                ("flags", wintypes.UINT),
+                ("show_cmd", wintypes.UINT),
+                ("min_position", wintypes.POINT),
+                ("max_position", wintypes.POINT),
+                ("normal_position", wintypes.RECT),
+            ]
+
+        try:
+            user32 = ctypes.windll.user32
+            get_key_state = user32.GetAsyncKeyState
+            get_key_state.argtypes = (ctypes.c_int,)
+            get_key_state.restype = ctypes.c_short
+            get_cursor = user32.GetCursorPos
+            get_cursor.argtypes = (ctypes.POINTER(wintypes.POINT),)
+            get_cursor.restype = wintypes.BOOL
+            get_rect = user32.GetWindowRect
+            get_rect.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.RECT))
+            get_rect.restype = wintypes.BOOL
+            is_zoomed = user32.IsZoomed
+            is_zoomed.argtypes = (wintypes.HWND,)
+            is_zoomed.restype = wintypes.BOOL
+            get_placement = user32.GetWindowPlacement
+            get_placement.argtypes = (wintypes.HWND, ctypes.POINTER(WindowPlacement))
+            get_placement.restype = wintypes.BOOL
+            show_window = user32.ShowWindow
+            show_window.argtypes = (wintypes.HWND, ctypes.c_int)
+            show_window.restype = wintypes.BOOL
+            set_window_pos = user32.SetWindowPos
+            set_window_pos.argtypes = (
+                wintypes.HWND,
+                wintypes.HWND,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.c_int,
+                wintypes.UINT,
+            )
+            set_window_pos.restype = wintypes.BOOL
+
+            cursor = wintypes.POINT()
+            rect = wintypes.RECT()
+            if not (get_key_state(0x01) & 0x8000):
+                return
+            if not get_cursor(ctypes.byref(cursor)) or not get_rect(
+                handle, ctypes.byref(rect)
+            ):
+                return
+
+            if is_zoomed(handle):
+                current_width = max(1, rect.right - rect.left)
+                ratio = min(0.9, max(0.1, (cursor.x - rect.left) / current_width))
+                placement = WindowPlacement()
+                placement.length = ctypes.sizeof(WindowPlacement)
+                if get_placement(handle, ctypes.byref(placement)):
+                    normal = placement.normal_position
+                    width = max(900, normal.right - normal.left)
+                    height = max(640, normal.bottom - normal.top)
+                else:
+                    width, height = 1440, 900
+                offset_x = int(width * ratio)
+                offset_y = 34
+                show_window(handle, 9)  # SW_RESTORE
+                set_window_pos(
+                    handle,
+                    None,
+                    cursor.x - offset_x,
+                    cursor.y - offset_y,
+                    width,
+                    height,
+                    0x0004 | 0x0040,
+                )
+            else:
+                offset_x = cursor.x - rect.left
+                offset_y = cursor.y - rect.top
+
+            last_position: tuple[int, int] | None = None
+            while get_key_state(0x01) & 0x8000:
+                if not get_cursor(ctypes.byref(cursor)):
+                    break
+                position = (cursor.x - offset_x, cursor.y - offset_y)
+                if position != last_position:
+                    set_window_pos(
+                        handle,
+                        None,
+                        position[0],
+                        position[1],
+                        0,
+                        0,
+                        0x0001 | 0x0004 | 0x0040,
+                    )
+                    last_position = position
+                time.sleep(1 / 120)
+
+            if get_cursor(ctypes.byref(cursor)) and cursor.y <= 8:
+                show_window(handle, 3)  # SW_MAXIMIZE
+        except (AttributeError, OSError, TypeError, ValueError):
+            return
+        finally:
+            with self._drag_lock:
+                self._dragging = False
 
     def resize_window(self, edge: int) -> bool:
         """Resize a frameless window through the standard Windows hit targets."""
@@ -368,13 +395,6 @@ def _start_bridge(store: MemoryStore) -> Any | None:
     bridge = BridgeApplication(store)
     threading.Thread(target=bridge.serve, daemon=True, name="lians-loopback-bridge").start()
     return bridge
-
-
-def _prepare_window(window: Any, background_start: bool) -> None:
-    """Apply the initial state after WinForms has installed the frameless chrome."""
-
-    if not background_start:
-        window.maximize()
 
 
 def launch(*, background_start: bool = False, intro_complete: bool = False) -> None:
@@ -427,8 +447,6 @@ def launch(*, background_start: bool = False, intro_complete: bool = False) -> N
 
     try:
         webview.start(
-            _prepare_window,
-            (window, background_start),
             gui="edgechromium",
             debug=False,
             private_mode=False,
