@@ -161,6 +161,10 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
+    assert 'artifact: LiansMemory-windows\n            python_version: "3.11"' in (
+        pull_request_workflow
+    )
+    assert "python-version: ${{ matrix.python_version }}" in pull_request_workflow
     companion_builder = (
         PACKAGE_ROOT / "scripts" / "build_windows_companion.ps1"
     ).read_text(encoding="utf-8")
