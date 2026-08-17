@@ -25,6 +25,7 @@ def test_desktop_api_reports_only_the_active_agent_and_lifeline(monkeypatch) -> 
     from lians_easy import web_gui
 
     monkeypatch.setattr(web_gui, "_active_ai_client", lambda _preferred=None: "codex")
+    monkeypatch.setattr(web_gui, "codex_lifeline_snapshot", lambda **_kwargs: None)
     api = web_gui.DesktopApi(FakeStore())
 
     result = api.snapshot()
@@ -34,6 +35,27 @@ def test_desktop_api_reports_only_the_active_agent_and_lifeline(monkeypatch) -> 
     assert result["metrics"]["context_events"] == 8
     assert result["metrics"]["memories_reused"] == 12
     assert result["metrics"]["repeated_tokens_avoided_estimate"] == 3200
+
+
+def test_desktop_api_uses_installed_codex_receipts(monkeypatch) -> None:
+    from lians_easy import web_gui
+
+    codex_metrics = {
+        "saved_memories": 20,
+        "context_events": 9,
+        "memories_reused": 34,
+        "context_tokens_sent_estimate": 2400,
+        "repeated_tokens_avoided_estimate": 0,
+        "activity": [],
+    }
+    monkeypatch.setattr(web_gui, "_active_ai_client", lambda _preferred=None: "codex")
+    monkeypatch.setattr(
+        web_gui, "codex_lifeline_snapshot", lambda **_kwargs: codex_metrics
+    )
+
+    result = web_gui.DesktopApi(FakeStore()).snapshot()
+
+    assert result["metrics"] is codex_metrics
 
 
 def test_auto_hide_taskbar_trigger_strip_stays_outside_maximized_window() -> None:
@@ -79,6 +101,9 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert "wordmarkTargetPoints" in source
     assert 'loadImage("lians-wordmark.png")' in source
     assert "drawAmbient" in source
+    assert 'id="tokens-label"' in html
+    assert 'id="tokens-detail"' in html
+    assert "metrics.token_metric" in source
     assert 'class="brand-mark"' in html
     assert '<img src="lotus.png" width="40" height="40"' in html
     assert "background: var(--background)" in css

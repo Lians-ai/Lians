@@ -379,9 +379,12 @@ function escapeHtml(value) {
 
 function render(snapshot) {
   const metrics = snapshot?.metrics || {};
-  document.querySelector("#tokens-value").textContent = `~${formatNumber(
-    metrics.repeated_tokens_avoided_estimate,
-  )}`;
+  const tokenMetric = metrics.token_metric || {};
+  const tokenValue = tokenMetric.value ?? metrics.repeated_tokens_avoided_estimate;
+  const tokenPrefix = tokenMetric.approximate === false ? "" : "~";
+  document.querySelector("#tokens-label").textContent = tokenMetric.label || "Tokens saved";
+  document.querySelector("#tokens-value").textContent = `${tokenPrefix}${formatNumber(tokenValue)}`;
+  document.querySelector("#tokens-detail").textContent = tokenMetric.detail || "Repeated context removed";
   document.querySelector("#handoffs-value").textContent = formatNumber(metrics.context_events);
   document.querySelector("#memory-value").textContent = formatNumber(metrics.memories_reused);
   document.querySelector("#saved-memory-count").textContent = `${formatNumber(

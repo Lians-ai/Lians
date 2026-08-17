@@ -13,6 +13,7 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import urlopen
 
+from .codex_lifeline import codex_lifeline_snapshot
 from .installer import client_targets, user_data_dir
 from .lifeline import lifeline_snapshot
 from .mcp import default_data_path
@@ -406,6 +407,8 @@ class DesktopApi:
         client = _active_ai_client(self.preferred_client)
         self.preferred_client = client
         metrics = lifeline_snapshot(self.store, limit=4)
+        if client == "codex":
+            metrics = codex_lifeline_snapshot(limit=4) or metrics
         return {
             "agent": (
                 {"key": client, "label": _AI_LABELS[client], "connected": True}
