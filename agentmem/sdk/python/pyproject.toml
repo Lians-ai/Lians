@@ -59,7 +59,7 @@ bge-onnx      = [
     "tokenizers>=0.20,<1",
 ]
 mcp           = [
-    "mcp>=1.0.0,<2",
+    "mcp>=1.29.0,<2",
     "httpx>=0.27.0",
     "sqlalchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.19",
