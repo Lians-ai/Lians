@@ -73,6 +73,7 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'src="lotus.png"' in html
     assert "Extended usage. Better memory." in html
     assert 'id="titlebar"' in html
+    assert 'class="restore-icon"' in html
     assert "resize-handle" in html
     assert "intro-ring" not in html
     assert "radial-gradient" not in css
@@ -98,6 +99,7 @@ def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> N
     package_root = Path(__file__).resolve().parents[1]
     launcher = (package_root / "windows-launcher.cs").read_text(encoding="utf-8")
     entrypoint = (package_root / "companion_entrypoint.py").read_text(encoding="utf-8")
+    source = (package_root / "desktop-ui" / "src" / "main.js").read_text(encoding="utf-8")
 
     assert "BuildParticles" in launcher
     assert '"lians-wordmark.png"' in launcher
@@ -106,8 +108,12 @@ def test_native_launcher_owns_the_particle_intro_and_skips_the_web_replay() -> N
     assert "start.UseShellExecute = false" in launcher
     assert "start.CreateNoWindow = true" in launcher
     assert "start.WindowStyle = ProcessWindowStyle.Hidden" in launcher
-    assert "SendMessageW(handle, 0x00A1, 2, 0)" in (
-        package_root / "lians_easy" / "web_gui.py"
-    ).read_text(encoding="utf-8")
+    web_gui = (package_root / "lians_easy" / "web_gui.py").read_text(encoding="utf-8")
+    assert "_begin_native_window_drag" in web_gui
+    assert "send_message(handle, 0x00A1, 2, 0)" in web_gui
+    assert "show_window(handle, 9)" in web_gui
+    assert "horizontal_ratio" in web_gui
+    assert "window_state" in source
+    assert "applyWindowState" in source
     assert 'WithArgument(args, "--intro-complete")' in launcher
     assert 'parser.add_argument("--intro-complete"' in entrypoint

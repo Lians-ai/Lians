@@ -31,6 +31,12 @@ let ambientFrame = 0;
 let ambientLastDraw = 0;
 const pointer = { x: -1000, y: -1000 };
 
+function applyWindowState(state) {
+  const maximized = state === "maximized";
+  maximizeButton.dataset.state = maximized ? "maximized" : "windowed";
+  maximizeButton.setAttribute("aria-label", maximized ? "Restore window" : "Maximize window");
+}
+
 function seededRandom(seed = 0x4c49414e) {
   let value = seed >>> 0;
   return () => {
@@ -440,9 +446,10 @@ function installInteractions() {
   });
 
   titlebar.addEventListener("mousedown", (event) => {
-    if (event.button === 0 && !event.target.closest("button")) {
+    if (event.button === 0 && event.detail === 1 && !event.target.closest("button")) {
+      event.preventDefault();
       const request = window.pywebview?.api.drag_window();
-      request?.catch(() => {});
+      request?.then(applyWindowState).catch(() => {});
     }
   });
   titlebar.addEventListener("dblclick", (event) => {
@@ -464,11 +471,15 @@ themeButton.addEventListener("click", () => {
 });
 refreshButton.addEventListener("click", refresh);
 minimizeButton.addEventListener("click", () => window.pywebview?.api.minimize());
-maximizeButton.addEventListener("click", () => window.pywebview?.api.toggle_maximize());
+maximizeButton.addEventListener("click", async () => {
+  const state = await window.pywebview?.api.toggle_maximize();
+  applyWindowState(state);
+});
 closeButton.addEventListener("click", () => window.pywebview?.api.close());
 
 window.addEventListener("pywebviewready", () => {
   bridgeReady = true;
+  window.pywebview.api.window_state().then(applyWindowState).catch(() => {});
   refresh();
   window.setInterval(refresh, 3000);
 });

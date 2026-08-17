@@ -210,6 +210,18 @@ main,
   stroke-width: 1.35;
 }
 
+.window-control .restore-icon {
+  display: none;
+}
+
+.window-control[data-state="maximized"] .maximize-icon {
+  display: none;
+}
+
+.window-control[data-state="maximized"] .restore-icon {
+  display: block;
+}
+
 main {
   display: grid;
   grid-template-rows: auto auto minmax(140px, 1fr);
