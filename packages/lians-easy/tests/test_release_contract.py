@@ -161,6 +161,24 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
+    assert "id-token: write" in pull_request_workflow
+    assert "attestations: write" in pull_request_workflow
+    assert "Write SHA-256 checksums for desktop artifacts" in pull_request_workflow
+    assert "Get-FileHash" in pull_request_workflow
+    assert "Generate free GitHub build provenance" in pull_request_workflow
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in (
+        pull_request_workflow
+    )
+    assert "github.actor != 'dependabot[bot]'" in pull_request_workflow
+    assert (
+        "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
+        in pull_request_workflow
+    )
+    assert "subject-path:" in pull_request_workflow
+    assert "dist/installer/*.sha256" in pull_request_workflow
+    assert pull_request_workflow.index(
+        "Generate free GitHub build provenance"
+    ) < pull_request_workflow.index("actions/upload-artifact")
     assert 'artifact: LiansMemory-windows\n            python_version: "3.12.10"' in (
         pull_request_workflow
     )

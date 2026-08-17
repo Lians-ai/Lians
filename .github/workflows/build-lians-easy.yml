@@ -33,6 +33,10 @@ jobs:
 
   build:
     needs: test
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -274,6 +278,40 @@ jobs:
           --phase prepare
           --binary dist/LiansMemory.exe
           --fixture .lians-cold-restart
+      - name: Write SHA-256 checksums for desktop artifacts
+        shell: pwsh
+        run: |
+          $patterns = @(
+            'dist/LiansMemory*',
+            'dist/installer/Lians-Setup-*.exe',
+            'dist/installer/Lians-*.dmg',
+            'dist/installer/Lians-*.AppImage'
+          )
+          $artifacts = @(
+            Get-ChildItem -Path $patterns -File -ErrorAction SilentlyContinue |
+              Sort-Object -Property FullName -Unique
+          )
+          if (-not $artifacts) {
+            throw 'No desktop artifacts were found for checksum generation'
+          }
+          foreach ($artifact in $artifacts) {
+            $digest = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$digest  $($artifact.Name)" |
+              Set-Content -LiteralPath "$($artifact.FullName).sha256" -Encoding ascii -NoNewline
+          }
+      - name: Generate free GitHub build provenance
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          (github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]')
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: |
+            dist/LiansMemory*
+            dist/installer/Lians-Setup-*.exe
+            dist/installer/Lians-*.dmg
+            dist/installer/Lians-*.AppImage
+            dist/installer/*.sha256
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: runner.os == 'Windows'
         with:
@@ -289,8 +327,11 @@ jobs:
           path: |
             dist/LiansMemory*
             dist/installer/Lians-Setup-*.exe
+            dist/installer/Lians-Setup-*.exe.sha256
             dist/installer/Lians-*.dmg
+            dist/installer/Lians-*.dmg.sha256
             dist/installer/Lians-*.AppImage
+            dist/installer/Lians-*.AppImage.sha256
           if-no-files-found: error
 
   cold-restart:

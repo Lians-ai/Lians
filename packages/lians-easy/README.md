@@ -149,7 +149,20 @@ candidate restores the prior launcher and app directory without changing
 memory or AI-client configuration. Silent removal preserves encrypted memory;
 interactive removal asks separately before erasure. Pull-request installers
 are unsigned technical fixtures until the publisher-gated release job signs
-the launcher, windowed app, MCP sidecar, and setup executable.
+the launcher, windowed app, MCP sidecar, and setup executable. The free build
+path still writes a SHA-256 checksum beside every desktop artifact and records
+GitHub OIDC build provenance for same-repository pull requests and manual
+builds. After downloading an artifact, verify its origin with:
+
+```bash
+gh attestation verify PATH_TO_ARTIFACT --repo Lians-ai/Lians
+```
+
+This proves that the file was built by the public Lians repository at a named
+commit. It does not create a Windows publisher signature or Apple Developer ID,
+so unsigned Windows and macOS previews can still show operating-system trust
+warnings. Use these builds for transparent closed testing, not as a substitute
+for a future signed public release.
 
 The desktop footer can save a **Help report** directly to Downloads. The report
 contains version, platform, client connection state, recovery state, and a
