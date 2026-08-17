@@ -36,6 +36,18 @@ def test_desktop_api_reports_only_the_active_agent_and_lifeline(monkeypatch) -> 
     assert result["metrics"]["repeated_tokens_avoided_estimate"] == 3200
 
 
+def test_auto_hide_taskbar_trigger_strip_stays_outside_maximized_window() -> None:
+    from lians_easy.web_gui import _reserve_taskbar_trigger
+
+    monitor = (0, 0, 1920, 1080)
+
+    assert _reserve_taskbar_trigger(monitor, "bottom") == (0, 0, 1920, 1078)
+    assert _reserve_taskbar_trigger(monitor, "top") == (0, 2, 1920, 1080)
+    assert _reserve_taskbar_trigger(monitor, "left") == (2, 0, 1920, 1080)
+    assert _reserve_taskbar_trigger(monitor, "right") == (0, 0, 1918, 1080)
+    assert _reserve_taskbar_trigger(monitor, None) == monitor
+
+
 def test_desktop_header_uses_the_approved_favicon_byte_for_byte() -> None:
     desktop = files("lians_easy").joinpath("desktop")
     source = desktop.joinpath("favicon.png").read_bytes()
