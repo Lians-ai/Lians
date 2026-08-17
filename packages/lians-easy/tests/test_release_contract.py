@@ -161,19 +161,30 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
-    assert 'artifact: LiansMemory-windows\n            python_version: "3.11"' in (
+    assert 'artifact: LiansMemory-windows\n            python_version: "3.12.10"' in (
         pull_request_workflow
     )
     assert "python-version: ${{ matrix.python_version }}" in pull_request_workflow
+    windows_tk_repair = (
+        PACKAGE_ROOT / "scripts" / "repair_windows_build_tk.ps1"
+    ).read_text(encoding="utf-8")
     companion_builder = (
         PACKAGE_ROOT / "scripts" / "build_windows_companion.ps1"
     ).read_text(encoding="utf-8")
     for build_contract in (workflow, pull_request_workflow):
+        assert "repair_windows_build_tk.ps1" in build_contract
         assert "build_windows_companion.ps1" in build_contract
         assert "artifact_portability_smoke.py" in build_contract
         assert "Verify Windows package identity" in build_contract
         assert "artifact_app_smoke.py" in build_contract
         assert "uv sync --project packages/lians-easy --frozen --group build --python $buildPython" in build_contract
+    assert "https://www.python.org/ftp/python/" in windows_tk_repair
+    assert "55c96ffad69b1c834aa52e11b9ce41637a178ba6ad6607e83956044834276e2a" in (
+        windows_tk_repair
+    )
+    assert "Python Software Foundation" in windows_tk_repair
+    assert "msiexec.exe" in windows_tk_repair
+    assert "tk8.6\\ttk\\button.tcl" in windows_tk_repair
     assert "--add-data" in companion_builder
     assert "lians_easy/app" in companion_builder
     assert "windows-lians.ico" in companion_builder

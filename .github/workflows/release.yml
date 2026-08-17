@@ -136,7 +136,13 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
-          python-version: "3.12"
+          python-version: "3.12.10"
+      - name: Restore checksum-verified official Tcl/Tk runtime
+        shell: pwsh
+        run: |
+          & packages/lians-easy/scripts/repair_windows_build_tk.ps1 `
+            -Python (Get-Command python).Source `
+            -ExtractionRoot (Join-Path $env:RUNNER_TEMP 'lians-python-3.12.10-tcltk')
       - name: Build native Windows companion bundle
         shell: pwsh
         run: |
