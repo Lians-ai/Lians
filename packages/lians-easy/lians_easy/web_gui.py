@@ -14,7 +14,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from .codex_lifeline import codex_lifeline_snapshot
-from .installer import client_targets, user_data_dir
+from .installer import client_targets, user_data_dir, write_support_report
 from .lifeline import lifeline_snapshot
 from .mcp import default_data_path
 from .store import MemoryStore
@@ -392,11 +392,18 @@ def _native_window_state(handle: int) -> str:
 
 
 class DesktopApi:
-    """Small, read-only JS bridge for the lifeline console."""
+    """Narrow JS bridge for the lifeline console and safe local actions."""
 
-    def __init__(self, store: MemoryStore, bridge: Any | None = None) -> None:
+    def __init__(
+        self,
+        store: MemoryStore,
+        bridge: Any | None = None,
+        *,
+        downloads_dir: Path | None = None,
+    ) -> None:
         self.store = store
         self.bridge = bridge
+        self._downloads_dir = downloads_dir
         self._window: Any | None = None
         self._drag_lock = threading.Lock()
         self._dragging = False
@@ -422,6 +429,31 @@ class DesktopApi:
         if self._window is not None:
             self._window.minimize()
         return True
+
+    def save_help_report(self) -> dict[str, Any]:
+        """Save a redacted report without exposing an absolute user path to JS."""
+
+        try:
+            directory = self._downloads_dir or (Path.home() / "Downloads")
+            directory.mkdir(parents=True, exist_ok=True)
+            destination = directory / "Lians-help-report.json"
+            suffix = 2
+            while destination.exists():
+                destination = directory / f"Lians-help-report-{suffix}.json"
+                suffix += 1
+                if suffix > 1000:
+                    raise OSError("too many existing help reports")
+            write_support_report(destination)
+            return {
+                "saved": True,
+                "filename": destination.name,
+                "location": "Downloads",
+            }
+        except OSError:
+            return {
+                "saved": False,
+                "message": "Could not save the help report. Try again after checking Downloads access.",
+            }
 
     def start_drag(self) -> bool:
         """Follow the physical Windows cursor while the title bar is held."""

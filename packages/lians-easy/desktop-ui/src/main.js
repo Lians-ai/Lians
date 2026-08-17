@@ -13,13 +13,14 @@ import {
 const root = document.documentElement;
 const intro = document.querySelector("#intro");
 const introCanvas = document.querySelector("#intro-particles");
-const ambientCanvas = document.querySelector("#ambient-canvas");
-const neuralField = document.querySelector("#neural-field");
-const brainOrbit = document.querySelector("#brain-orbit");
-const brainStatus = document.querySelector("#brain-status");
+const ambientField = document.querySelector("#ambient-field");
+const lightStage = document.querySelector("#light-stage");
+const ambientStatus = document.querySelector("#ambient-status");
 const content = document.querySelector("#content");
 const themeButton = document.querySelector("#theme-toggle");
 const refreshButton = document.querySelector("#refresh");
+const supportButton = document.querySelector("#support-report");
+const supportStatus = document.querySelector("#support-status");
 const titlebar = document.querySelector("#titlebar");
 const minimizeButton = document.querySelector("#window-minimize");
 const maximizeButton = document.querySelector("#window-maximize");
@@ -29,13 +30,10 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").match
 
 let bridgeReady = false;
 let refreshing = false;
-let ambientParticles = [];
-let ambientFrame = 0;
-let ambientLastDraw = 0;
-const pointer = { x: -1000, y: -1000 };
-const brainStates = {
-  compressed: { scaleX: 0.76, scaleY: 0.84, opacity: 0.62 },
-  expanded: { scaleX: 1.16, scaleY: 1.08, opacity: 0.86 },
+const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const lightFieldStates = {
+  compressed: { scale: 0.96, opacity: 0.74 },
+  expanded: { scale: 1.08, opacity: 0.94 },
 };
 
 function applyWindowState(state) {
@@ -240,129 +238,46 @@ async function runIntro() {
   }
 }
 
-function resetAmbientParticles(width, height) {
-  const random = seededRandom(0x414d4249);
-  const count = Math.max(24, Math.min(42, Math.round((width * height) / 46000)));
-  ambientParticles = Array.from({ length: count }, () => ({
-    x: random() * width,
-    y: random() * height,
-    vx: (random() - 0.5) * 0.12,
-    vy: (random() - 0.5) * 0.08,
-    size: 0.8 + random() * 1.5,
-    phase: random() * Math.PI * 2,
-  }));
-}
-
-function drawAmbient(now) {
-  if (!reduceMotion) ambientFrame = requestAnimationFrame(drawAmbient);
-  if (document.hidden || (!reduceMotion && now - ambientLastDraw < 32)) return;
-  ambientLastDraw = now;
-  const { context, width, height } = sizeCanvas(ambientCanvas);
-  if (!ambientParticles.length) resetAmbientParticles(width, height);
-  context.clearRect(0, 0, width, height);
-  const dark = root.dataset.theme !== "light";
-  const time = now * 0.00016;
-
-  for (let band = 0; band < 4; band += 1) {
-    context.beginPath();
-    for (let x = -20; x <= width + 20; x += 24) {
-      const y = height * (0.62 + band * 0.075)
-        + Math.sin(x * 0.008 + time * (1 + band * 0.08)) * (9 + band * 2);
-      if (x === -20) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.strokeStyle = dark ? "rgba(57, 96, 205, 0.055)" : "rgba(37, 74, 168, 0.065)";
-    context.lineWidth = 1;
-    context.stroke();
-  }
-
-  for (const particle of ambientParticles) {
-    if (!reduceMotion) {
-      particle.x += particle.vx + Math.sin(time + particle.phase) * 0.025;
-      particle.y += particle.vy + Math.cos(time + particle.phase) * 0.018;
-      const dx = particle.x - pointer.x;
-      const dy = particle.y - pointer.y;
-      const distance = Math.hypot(dx, dy);
-      if (distance < 120 && distance > 0) {
-        particle.x += (dx / distance) * 0.22;
-        particle.y += (dy / distance) * 0.22;
-      }
-      if (particle.x < -12) particle.x = width + 12;
-      if (particle.x > width + 12) particle.x = -12;
-      if (particle.y < -12) particle.y = height + 12;
-      if (particle.y > height + 12) particle.y = -12;
-    }
-  }
-
-  for (let first = 0; first < ambientParticles.length; first += 1) {
-    const a = ambientParticles[first];
-    for (let second = first + 1; second < ambientParticles.length; second += 1) {
-      const b = ambientParticles[second];
-      const distance = Math.hypot(a.x - b.x, a.y - b.y);
-      if (distance < 135) {
-        context.beginPath();
-        context.moveTo(a.x, a.y);
-        context.lineTo(b.x, b.y);
-        const opacity = (1 - distance / 135) * (dark ? 0.075 : 0.09);
-        context.strokeStyle = `rgba(64, 103, 215, ${opacity})`;
-        context.stroke();
-      }
-    }
-    context.beginPath();
-    context.fillStyle = dark ? "rgba(82, 122, 232, 0.24)" : "rgba(42, 78, 177, 0.22)";
-    context.arc(a.x, a.y, a.size, 0, Math.PI * 2);
-    context.fill();
-  }
-}
-
 function startAmbientBackground() {
-  cancelAnimationFrame(ambientFrame);
-  resetAmbientParticles(ambientCanvas.clientWidth, ambientCanvas.clientHeight);
-  ambientFrame = requestAnimationFrame(drawAmbient);
   window.addEventListener("pointermove", (event) => {
-    pointer.x = event.clientX;
-    pointer.y = event.clientY;
     if (!reduceMotion) {
       const horizontal = ((event.clientX / Math.max(1, window.innerWidth)) - 0.5) * 12;
       const vertical = ((event.clientY / Math.max(1, window.innerHeight)) - 0.5) * 8;
-      neuralField.style.setProperty("--brain-shift-x", `${horizontal.toFixed(2)}px`);
-      neuralField.style.setProperty("--brain-shift-y", `${vertical.toFixed(2)}px`);
+      ambientField.style.setProperty("--light-shift-x", `${horizontal.toFixed(2)}px`);
+      ambientField.style.setProperty("--light-shift-y", `${vertical.toFixed(2)}px`);
     }
   }, { passive: true });
   window.addEventListener("pointerleave", () => {
-    pointer.x = -1000;
-    pointer.y = -1000;
-    neuralField.style.setProperty("--brain-shift-x", "0px");
-    neuralField.style.setProperty("--brain-shift-y", "0px");
+    ambientField.style.setProperty("--light-shift-x", "0px");
+    ambientField.style.setProperty("--light-shift-y", "0px");
   });
 }
 
-function setBrainState(state, animateChange = true) {
-  const next = brainStates[state] ? state : "compressed";
-  const values = brainStates[next];
-  neuralField.dataset.state = next;
-  localStorage.setItem("lians-brain-state", next);
+function setLightFieldState(state, animateChange = true) {
+  const next = lightFieldStates[state] ? state : "compressed";
+  const values = lightFieldStates[next];
+  ambientField.dataset.state = next;
+  localStorage.setItem("lians-light-field-state", next);
   if (animateChange && !reduceMotion) {
     motionAnimate(
-      brainOrbit,
+      lightStage,
       {
-        scaleX: values.scaleX,
-        scaleY: values.scaleY,
+        scale: values.scale,
         opacity: values.opacity,
       },
-      { type: "spring", bounce: 0.08, duration: 0.72 },
+      { type: "spring", bounce: 0.04, duration: 0.64 },
     );
   } else {
-    brainOrbit.style.transform = `scale(${values.scaleX}, ${values.scaleY})`;
-    brainOrbit.style.opacity = String(values.opacity);
+    lightStage.style.transform = `scale(${values.scale})`;
+    lightStage.style.opacity = String(values.opacity);
   }
-  brainStatus.textContent = next === "expanded" ? "Background expanded" : "Background compressed";
+  ambientStatus.textContent = next === "expanded" ? "Background expanded" : "Background compressed";
 }
 
-function toggleBrain(event) {
+function toggleLightField(event) {
   if (event.target.closest("button, a, input, textarea, select, [contenteditable='true']")) return;
   event.preventDefault();
-  setBrainState(neuralField.dataset.state === "expanded" ? "compressed" : "expanded");
+  setLightFieldState(ambientField.dataset.state === "expanded" ? "compressed" : "expanded");
 }
 
 function setTheme(theme, animateChange = true) {
@@ -393,7 +308,8 @@ function renderActivity(items) {
       </div>`;
     return;
   }
-  container.innerHTML = items
+  const visibleItems = items.slice(0, 3);
+  container.innerHTML = visibleItems
     .map(
       (item) => `
         <article class="activity-row">
@@ -463,6 +379,22 @@ async function refresh() {
   }
 }
 
+async function saveHelpReport() {
+  if (!bridgeReady || supportButton.getAttribute("aria-busy") === "true") return;
+  supportButton.setAttribute("aria-busy", "true");
+  supportStatus.textContent = "Preparing help report...";
+  try {
+    const result = await window.pywebview.api.save_help_report();
+    supportStatus.textContent = result.saved
+      ? `Saved ${result.filename} to ${result.location}.`
+      : result.message || "Could not save the help report.";
+  } catch {
+    supportStatus.textContent = "Could not save the help report.";
+  } finally {
+    supportButton.removeAttribute("aria-busy");
+  }
+}
+
 function installInteractions() {
   hover(".metric", (element) => {
     motionAnimate(element, { y: -4 }, { type: "spring", bounce: 0.08, duration: 0.24 });
@@ -487,7 +419,6 @@ function installInteractions() {
     frame.render(() => {
       root.style.setProperty("--viewport-width", `${width}px`);
       root.style.setProperty("--viewport-height", `${height}px`);
-      resetAmbientParticles(width, height);
     });
   });
 
@@ -516,13 +447,14 @@ function installInteractions() {
       }
     });
   });
-  content.addEventListener("contextmenu", toggleBrain);
+  content.addEventListener("contextmenu", toggleLightField);
 }
 
 themeButton.addEventListener("click", () => {
   setTheme(root.dataset.theme === "dark" ? "light" : "dark");
 });
 refreshButton.addEventListener("click", refresh);
+supportButton.addEventListener("click", saveHelpReport);
 minimizeButton.addEventListener("click", () => window.pywebview?.api.minimize());
 maximizeButton.addEventListener("click", async () => {
   const state = await window.pywebview?.api.toggle_maximize();
@@ -534,11 +466,11 @@ window.addEventListener("pywebviewready", () => {
   bridgeReady = true;
   window.pywebview.api.window_state().then(applyWindowState).catch(() => {});
   refresh();
-  window.setInterval(refresh, 3000);
+  window.setInterval(refresh, AUTO_REFRESH_INTERVAL_MS);
 });
 
 setTheme(localStorage.getItem("lians-theme") === "light" ? "light" : "dark", false);
-setBrainState(localStorage.getItem("lians-brain-state") || "compressed", false);
+setLightFieldState(localStorage.getItem("lians-light-field-state") || "compressed", false);
 installInteractions();
 startAmbientBackground();
 runIntro();

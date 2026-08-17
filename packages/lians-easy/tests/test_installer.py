@@ -568,6 +568,36 @@ def test_support_report_excludes_paths_settings_memory_and_error_content(
     assert str(data_dir) not in rendered
 
 
+def test_crash_diagnostics_and_support_report_never_include_exception_content(
+    tmp_path, monkeypatch
+):
+    from lians_easy import diagnostics
+
+    data_dir = tmp_path / "private-lians-data"
+    secret = "do-not-share-this-prompt-or-api-key"
+    private_path = tmp_path / "private-user" / secret / "worker.py"
+    monkeypatch.setenv("LIANS_EASY_HOME", str(data_dir))
+
+    try:
+        raise RuntimeError(f"{secret} at {private_path}")
+    except RuntimeError as error:
+        diagnostics.record_exception(
+            type(error), error, error.__traceback__, component="test-runtime"
+        )
+
+    report = support_report(home=tmp_path / "home")
+    rendered = json.dumps(report)
+    crash_log = (data_dir / "diagnostics" / "crashes.jsonl").read_text()
+
+    assert report["application_errors"]["recent"][0]["exception_type"] == "RuntimeError"
+    assert report["application_errors"]["recent"][0]["component"] == "test-runtime"
+    assert report["application_errors"]["recent"][0]["crash_fingerprint"]
+    assert secret not in crash_log
+    assert secret not in rendered
+    assert str(private_path) not in crash_log
+    assert str(private_path) not in rendered
+
+
 def test_interrupted_existing_config_is_exactly_recovered_before_retry(
     tmp_path, monkeypatch
 ):

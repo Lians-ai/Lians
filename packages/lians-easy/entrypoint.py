@@ -45,7 +45,11 @@ def _hide_owned_windows_console() -> None:
 
 _hide_owned_windows_console()
 
-from lians_easy.cli import main  # noqa: E402
+from lians_easy.diagnostics import install_crash_logging
+
+install_crash_logging(component="cli-runtime")
+
+from lians_easy.cli import main
 
 if __name__ == "__main__":
     main()

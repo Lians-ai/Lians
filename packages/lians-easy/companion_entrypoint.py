@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import argparse
 
+from lians_easy.diagnostics import install_crash_logging
+
 
 def main() -> None:
+    install_crash_logging(component="desktop-companion")
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--background", action="store_true")
     parser.add_argument("--intro-complete", action="store_true")

@@ -59,21 +59,40 @@ def _uninstall_registration_exists() -> bool:
 
 
 def _verify_authenticode(
-    path: Path, thumbprint: str, *, environment: dict[str, str]
+    path: Path,
+    *,
+    environment: dict[str, str],
+    thumbprint: str | None = None,
+    subject: str | None = None,
 ) -> None:
     powershell = shutil.which("pwsh") or shutil.which("powershell")
     if powershell is None:
         raise RuntimeError("PowerShell is required to verify Authenticode")
     script = (
         "$signature = Get-AuthenticodeSignature -LiteralPath $args[0]; "
-        "$expected = $args[1].Replace(' ', '').ToUpperInvariant(); "
-        "if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate -or "
-        "$signature.SignerCertificate.Thumbprint.ToUpperInvariant() -ne $expected) { "
-        "Write-Error 'Installed runtime signature is invalid or has the wrong publisher'; "
+        "$expectedThumbprint = $args[1].Replace(' ', '').ToUpperInvariant(); "
+        "$expectedSubject = $args[2]; "
+        "if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { "
+        "Write-Error 'Installed runtime signature is invalid'; exit 1 }; "
+        "$invalidThumbprint = $expectedThumbprint -and "
+        "$signature.SignerCertificate.Thumbprint.ToUpperInvariant() -ne $expectedThumbprint; "
+        "$invalidSubject = $expectedSubject -and "
+        "$signature.SignerCertificate.Subject -ne $expectedSubject; "
+        "if ($invalidThumbprint -or $invalidSubject) { "
+        "Write-Error 'Installed runtime has the wrong publisher'; "
         "exit 1 }"
     )
     verified = _run(
-        [powershell, "-NoProfile", "-NonInteractive", "-Command", script, str(path), thumbprint],
+        [
+            powershell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            script,
+            str(path),
+            thumbprint or "",
+            subject or "",
+        ],
         environment=environment,
         timeout=60,
     )
@@ -176,6 +195,7 @@ def main() -> None:
     parser.add_argument("--rollback-fixture", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--expected-signer-thumbprint")
+    parser.add_argument("--expected-signer-subject")
     arguments = parser.parse_args()
     installer = arguments.installer.resolve()
     rollback_fixture = arguments.rollback_fixture.resolve()
@@ -227,12 +247,16 @@ def main() -> None:
             assert _pe_subsystem(launcher) == 2
             assert _pe_subsystem(windowed_app) == 2
             assert _pe_subsystem(binary) == 3
-            if arguments.expected_signer_thumbprint:
+            if (
+                arguments.expected_signer_thumbprint
+                or arguments.expected_signer_subject
+            ):
                 for executable in (launcher, windowed_app, binary):
                     _verify_authenticode(
                         executable,
-                        arguments.expected_signer_thumbprint,
                         environment=environment,
+                        thumbprint=arguments.expected_signer_thumbprint,
+                        subject=arguments.expected_signer_subject,
                     )
 
             with winreg.OpenKey(
@@ -387,6 +411,7 @@ def main() -> None:
                         "runtime_rollback_verified": True,
                         "runtime_signature_verified": bool(
                             arguments.expected_signer_thumbprint
+                            or arguments.expected_signer_subject
                         ),
                         "separate_app_and_data_roots": True,
                         "successful_upgrade_preserved_memory": True,

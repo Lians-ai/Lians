@@ -123,10 +123,19 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     )[0]
 
     assert "vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true'" in desktop_job
-    assert "WINDOWS_SIGNING_CERT_PFX_BASE64" in desktop_job
-    assert "WINDOWS_SIGNING_CERT_PASSWORD" in desktop_job
-    assert "WINDOWS_SIGNING_CERT_SHA1" in desktop_job
-    assert "signtool.exe" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_CLIENT_ID" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_TENANT_ID" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_SUBSCRIPTION_ID" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_ENDPOINT" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_ACCOUNT" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_PROFILE" in desktop_job
+    assert "WINDOWS_SIGNING_SUBJECT" in desktop_job
+    assert "azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5" in desktop_job
+    assert (
+        "Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82"
+        in desktop_job
+    )
+    assert "http://timestamp.acs.microsoft.com" in desktop_job
     assert "dist/windows-companion/Lians.exe" in desktop_job
     assert "dist/windows-companion/LiansApp/Lians.exe" in desktop_job
     assert "dist/windows-companion/LiansApp/LiansMemory.exe" in desktop_job
@@ -136,14 +145,18 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     assert "build_windows_installer.ps1" in desktop_job
     assert "artifact_windows_installer_smoke.py" in desktop_job
     assert "--rollback-fixture" in desktop_job
-    assert "--expected-signer-thumbprint" in desktop_job
+    assert "--expected-signer-subject" in desktop_job
     assert "Lians-Setup-*.exe" in desktop_job
     assert "Get-AuthenticodeSignature" in desktop_job
     assert "signature.Status -ne 'Valid'" in desktop_job
-    assert "SignerCertificate.Thumbprint" in desktop_job
-    assert desktop_job.index("Sign and verify the Windows installer") < desktop_job.index(
-        "gh release upload"
-    )
+    assert "SignerCertificate.Subject" in desktop_job
+    assert "Attest signed Windows installer build provenance" in desktop_job
+    assert "gh attestation verify" in desktop_job
+    assert "Refusing to overwrite existing release asset" in desktop_job
+    assert "--clobber" not in desktop_job
+    assert desktop_job.index(
+        "Sign the Windows installer with Artifact Signing"
+    ) < desktop_job.index("gh release upload")
 
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"

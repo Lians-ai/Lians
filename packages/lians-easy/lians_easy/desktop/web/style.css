@@ -18,10 +18,9 @@
   --muted: #8c96a6;
   --blue: #315fe9;
   --blue-clear: #6d91ff;
-  --brain-haze: rgba(45, 87, 221, 0.22);
-  --brain-core: rgba(77, 117, 244, 0.12);
-  --brain-line: rgba(111, 147, 255, 0.17);
-  --brain-node: rgba(126, 157, 255, 0.32);
+  --water-opacity: 0.62;
+  --water-drift-opacity: 0.16;
+  --water-shade: rgba(2, 3, 4, 0.28);
 }
 
 :root[data-theme="light"] {
@@ -35,10 +34,9 @@
   --muted: #626a75;
   --blue: #3159c8;
   --blue-clear: #244db9;
-  --brain-haze: rgba(49, 89, 200, 0.13);
-  --brain-core: rgba(49, 89, 200, 0.075);
-  --brain-line: rgba(36, 77, 185, 0.13);
-  --brain-node: rgba(36, 77, 185, 0.24);
+  --water-opacity: 0.14;
+  --water-drift-opacity: 0.06;
+  --water-shade: rgba(243, 242, 238, 0.2);
 }
 
 * {
@@ -92,6 +90,7 @@ button {
 
 .app-shell {
   position: relative;
+  isolation: isolate;
   display: grid;
   grid-template-rows: 76px minmax(0, 1fr) 72px;
   width: 100%;
@@ -106,85 +105,91 @@ button {
   content: none;
 }
 
-.neural-field {
-  --brain-shift-x: 0px;
-  --brain-shift-y: 0px;
+.ambient-field {
+  --light-shift-x: 0px;
+  --light-shift-y: 0px;
   position: absolute;
   z-index: 0;
   inset: 0;
   overflow: hidden;
+  contain: strict;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
+}
+
+:root[data-theme="light"] .ambient-field {
+  opacity: 0;
+}
+
+:root[data-theme="light"] .water-scene {
+  animation-play-state: paused;
+}
+
+.light-stage {
+  position: absolute;
+  inset: -8%;
+  overflow: hidden;
+  transform-origin: center;
+  translate: var(--light-shift-x) var(--light-shift-y);
+  transition: translate 900ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform, opacity, translate;
+}
+
+.water-scene,
+.water-scene-shade {
+  position: absolute;
+  inset: -4%;
+  display: block;
   pointer-events: none;
 }
 
-.brain-stage {
-  position: absolute;
-  top: 51%;
-  left: 54%;
-  width: min(90vw, 1320px);
-  aspect-ratio: 1000 / 680;
-  transform: translate(-50%, -50%);
-}
-
-.brain-parallax {
-  width: 100%;
-  height: 100%;
-  transform: translate(var(--brain-shift-x), var(--brain-shift-y));
-  transition: transform 800ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.brain-orbit {
-  width: 100%;
-  height: 100%;
-  transform-origin: center;
-  will-change: transform, opacity;
-}
-
-.ambient-brain {
-  display: block;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  animation: brain-drift 18s ease-in-out infinite alternate;
+.water-scene {
+  background-image: url("water-lights.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: blur(8px) saturate(0.86);
+  transform: translate3d(0, 0, 0) scale(1.05);
   will-change: transform;
 }
 
-.brain-haze {
-  fill: var(--brain-haze);
-  filter: blur(72px);
+.water-scene-base {
+  opacity: var(--water-opacity);
+  animation: water-drift 28s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
 }
 
-.brain-core {
-  fill: var(--brain-core);
-  filter: blur(26px);
+.water-scene-drift {
+  inset: -9%;
+  opacity: var(--water-drift-opacity);
+  background-position: 48% 54%;
+  filter: blur(18px) saturate(0.82);
+  mix-blend-mode: screen;
+  transform-origin: 38% 52%;
+  animation: water-refraction 17s cubic-bezier(0.37, 0, 0.63, 1) infinite alternate;
 }
 
-.brain-ridges {
-  fill: none;
-  stroke: var(--brain-line);
-  stroke-linecap: round;
-  stroke-width: 5;
-  filter: blur(3px);
-}
-
-.brain-nodes {
-  fill: var(--brain-node);
-  filter: blur(3px);
-}
-
-@keyframes brain-drift {
-  0% { transform: translate3d(-8px, 5px, 0) rotate(-0.6deg); }
-  48% { transform: translate3d(5px, -7px, 0) rotate(0.35deg); }
-  100% { transform: translate3d(10px, 4px, 0) rotate(0.75deg); }
-}
-
-.ambient-canvas {
-  position: absolute;
-  z-index: 1;
+.water-scene-shade {
   inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  opacity: 0.38;
+  background: var(--water-shade);
+  transition: background-color 120ms ease-out;
+}
+
+@keyframes water-drift {
+  0% { transform: translate3d(-2%, -1.2%, 0) scale(1.1, 1.07) rotate(-0.18deg); }
+  24% { transform: translate3d(-0.4%, 0.2%, 0) scale(1.12, 1.09) rotate(0.08deg); }
+  51% { transform: translate3d(1.7%, 1.1%, 0) scale(1.09, 1.12) rotate(0.22deg); }
+  76% { transform: translate3d(0.5%, 1.8%, 0) scale(1.12, 1.08) rotate(-0.04deg); }
+  100% { transform: translate3d(-1.2%, 0.5%, 0) scale(1.1, 1.11) rotate(-0.2deg); }
+}
+
+@keyframes water-refraction {
+  0% { transform: translate3d(2.8%, -1.8%, 0) scale(1.15, 1.08) skewX(-0.8deg); }
+  19% { transform: translate3d(0.8%, -0.4%, 0) scale(1.11, 1.14) skewX(0.4deg); }
+  43% { transform: translate3d(-1.8%, 1.1%, 0) scale(1.08, 1.17) skewX(0.9deg); }
+  67% { transform: translate3d(1.2%, 2.2%, 0) scale(1.16, 1.1) skewX(-0.3deg); }
+  84% { transform: translate3d(-0.4%, 0.8%, 0) scale(1.13, 1.15) skewX(-0.7deg); }
+  100% { transform: translate3d(-2.2%, -0.6%, 0) scale(1.1, 1.16) skewX(0.5deg); }
 }
 
 .topbar,
@@ -228,7 +233,7 @@ main,
   width: 40px;
   height: 40px;
   place-items: center;
-  background: var(--background);
+  background: transparent;
 }
 
 .brand-mark img {
@@ -529,7 +534,17 @@ main {
 
 .footer-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
+}
+
+.support-status {
+  max-width: min(36vw, 360px);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .local-note {
@@ -688,7 +703,7 @@ main {
     animation-duration: 0.001ms !important;
   }
 
-  .ambient-brain {
+  .water-scene {
     animation: none;
   }
 }

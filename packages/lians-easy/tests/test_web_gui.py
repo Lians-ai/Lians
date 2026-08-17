@@ -58,6 +58,32 @@ def test_desktop_api_uses_installed_codex_receipts(monkeypatch) -> None:
     assert result["metrics"] is codex_metrics
 
 
+def test_desktop_api_saves_a_redacted_help_report_without_returning_user_path(
+    tmp_path, monkeypatch
+) -> None:
+    from lians_easy import web_gui
+
+    captured: list[Path] = []
+
+    def fake_write(destination: Path) -> Path:
+        captured.append(destination)
+        destination.write_text('{"schema":"lians-support-report/v1"}\n')
+        return destination
+
+    monkeypatch.setattr(web_gui, "write_support_report", fake_write)
+    (tmp_path / "Lians-help-report.json").write_text("existing")
+
+    result = web_gui.DesktopApi(FakeStore(), downloads_dir=tmp_path).save_help_report()
+
+    assert result == {
+        "saved": True,
+        "filename": "Lians-help-report-2.json",
+        "location": "Downloads",
+    }
+    assert captured == [tmp_path / "Lians-help-report-2.json"]
+    assert str(tmp_path) not in str(result)
+
+
 def test_auto_hide_taskbar_trigger_strip_stays_outside_maximized_window() -> None:
     from lians_easy.web_gui import _reserve_taskbar_trigger
 
@@ -100,19 +126,26 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert all(name in source for name in ("hover", "press", "resize", "frame"))
     assert "wordmarkTargetPoints" in source
     assert 'loadImage("lians-wordmark.png")' in source
-    assert "drawAmbient" in source
+    assert "startAmbientBackground" in source
+    assert 'class="water-scene water-scene-base"' in html
+    assert 'class="water-scene water-scene-drift"' in html
+    assert 'background-image: url("water-lights.png")' in css
+    assert "water-refraction" in css
+    assert ':root[data-theme="light"] .ambient-field' in css
+    assert "filter: blur(8px)" in css
     assert 'id="tokens-label"' in html
     assert 'id="tokens-detail"' in html
     assert "metrics.token_metric" in source
     assert 'class="brand-mark"' in html
     assert '<img src="lotus.png" width="40" height="40"' in html
-    assert "background: var(--background)" in css
+    assert "background: transparent" in css
     assert 'id="titlebar" class="topbar reveal"' in html
     assert 'id="intro-particles"' in html
-    assert 'id="ambient-canvas"' in html
-    assert 'id="neural-field"' in html
-    assert 'id="brain-orbit"' in html
-    assert 'id="brain-status"' in html
+    assert 'id="ambient-canvas"' not in html
+    assert 'id="ambient-field"' in html
+    assert 'id="light-stage"' in html
+    assert 'id="ambient-status"' in html
+    assert "ambient-brain" not in html
     assert 'src="lotus.png"' in html
     assert "Extended usage. Better memory." in html
     assert 'id="titlebar"' in html
@@ -122,11 +155,18 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert "radial-gradient" not in css
     assert '"IvyPresto Text"' in css
     assert '"IvyPresto Display"' in css
-    assert "brain-drift" in css
+    assert "water-drift" in css
     assert "prefers-reduced-motion" in css
-    assert 'content.addEventListener("contextmenu", toggleBrain)' in source
-    assert 'localStorage.setItem("lians-brain-state", next)' in source
+    assert 'content.addEventListener("contextmenu", toggleLightField)' in source
+    assert 'localStorage.setItem("lians-light-field-state", next)' in source
+    assert "items.slice(0, 3)" in source
+    assert "AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000" in source
+    assert "window.setInterval(refresh, AUTO_REFRESH_INTERVAL_MS)" in source
+    assert "window.setInterval(refresh, 3000)" not in source
     assert "motionAnimate(" in source
+    assert 'id="support-report"' in html
+    assert 'id="support-status"' in html
+    assert "save_help_report" in source
     assert "start_drag" in source
     assert "https://" not in html
     assert "overflow: hidden" in css

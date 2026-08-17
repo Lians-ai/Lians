@@ -21,6 +21,7 @@ from stat import S_IMODE
 from typing import Any
 
 from . import __version__
+from .diagnostics import recent_crash_summaries
 
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
 MANAGED_END = "# <<< Lians Memory (managed by Lians Easy)"
@@ -1355,6 +1356,9 @@ def support_report(
                 if _transaction_dir().is_dir()
                 else 0
             )
+        },
+        "application_errors": {
+            "recent": recent_crash_summaries(limit=5),
         },
         "clients": [
             {

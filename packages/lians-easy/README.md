@@ -151,6 +151,26 @@ interactive removal asks separately before erasure. Pull-request installers
 are unsigned technical fixtures until the publisher-gated release job signs
 the launcher, windowed app, MCP sidecar, and setup executable.
 
+The desktop footer can save a **Help report** directly to Downloads. The report
+contains version, platform, client connection state, recovery state, and a
+bounded list of structural crash fingerprints. It never includes prompts,
+memory contents, exception messages, API keys, settings, or absolute user
+paths. Stable Windows installers also receive GitHub OIDC build provenance;
+the release workflow refuses to overwrite an existing desktop asset.
+
+Public Windows releases use Microsoft Azure Artifact Signing with GitHub OIDC,
+so no exportable publisher private key is stored in GitHub. After Microsoft
+approves the Public Trust identity and its certificate profile has the
+**Artifact Signing Certificate Profile Signer** role, configure these repository
+variables: `AZURE_ARTIFACT_SIGNING_CLIENT_ID`,
+`AZURE_ARTIFACT_SIGNING_TENANT_ID`,
+`AZURE_ARTIFACT_SIGNING_SUBSCRIPTION_ID`,
+`AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`,
+`AZURE_ARTIFACT_SIGNING_PROFILE`, and the exact certificate subject in
+`WINDOWS_SIGNING_SUBJECT`. Finally set `PUBLISH_SIGNED_LIANS_DESKTOP=true`.
+The stable job refuses to publish if any variable, signature, subject match,
+fresh-runner lifecycle test, checksum, or provenance verification is missing.
+
 The macOS workflow builds separate native Apple-silicon and Intel
 `Lians-<version>-macos-<architecture>.dmg` images. Each has a conventional
 **Lians.app -> Applications** drag-and-drop layout and is mounted, copied, and
