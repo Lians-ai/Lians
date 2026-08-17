@@ -567,7 +567,7 @@ main {
   position: absolute;
   z-index: 3;
   right: clamp(30px, 3.8vw, 68px);
-  bottom: 76px;
+  bottom: 58px;
   display: grid;
   width: 66px;
   height: 66px;
@@ -675,7 +675,7 @@ main {
   }
 
   .lotus-pet {
-    bottom: 56px;
+    bottom: 42px;
   }
 }
 
