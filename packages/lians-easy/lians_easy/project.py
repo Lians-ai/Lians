@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _SCP_REMOTE = re.compile(
     r"^(?:[^@/:\s]+@)?(?P<host>[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?):(?P<path>[^?#\s]+)$"
@@ -32,18 +31,17 @@ class Project:
         return asdict(self)
 
 
-def _validate_workspace_hint(value: str | Path, *, root: Path) -> None:
+def _validated_project_path(value: str | Path) -> Path:
     raw = os.fspath(value)
     if not raw or len(raw) > _MAX_PATH_CHARS or _CONTROL.search(raw):
         raise ValueError("project path must be a bounded local path")
     try:
-        requested = os.path.normcase(os.path.abspath(os.path.expanduser(raw)))
-        boundary = os.path.normcase(str(root))
-        inside = os.path.commonpath([requested, boundary]) == boundary
-    except (OSError, ValueError):
-        inside = False
-    if not inside:
-        raise ValueError("project path must stay inside the launched workspace")
+        resolved = Path(raw).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("project path must exist and be accessible") from exc
+    if not (resolved.is_dir() or resolved.is_file()):
+        raise ValueError("project path must identify a file or directory")
+    return resolved
 
 
 def _repository_root(start: Path) -> Path:
@@ -172,13 +170,7 @@ def _origin(root: Path) -> str | None:
 
 
 def detect_project(cwd: str | Path | None = None) -> Project:
-    try:
-        current = Path.cwd().resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise ValueError("launched workspace must exist and be accessible") from exc
-    root = _repository_root(current)
-    if cwd is not None:
-        _validate_workspace_hint(cwd, root=root)
+    root = _repository_root(_validated_project_path(cwd or Path.cwd()))
     origin = _origin(root)
     identity = origin or os.path.normcase(str(root))
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]

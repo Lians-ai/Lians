@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from lians_easy.project import detect_project
 
 
@@ -86,22 +85,22 @@ def test_verified_linked_worktree_uses_common_git_config(tmp_path, monkeypatch):
     assert project.origin == "github.com/lians-ai/lians"
 
 
-@pytest.mark.parametrize("value", ["../outside", "bad\x00path"])
-def test_project_hints_outside_the_launched_workspace_fail_closed(tmp_path, monkeypatch, value):
-    root = tmp_path / "project"
-    root.mkdir()
-    monkeypatch.chdir(root)
-    candidate = root / value if "\x00" not in value else value
+@pytest.mark.parametrize("value", ["missing", "bad\x00path"])
+def test_invalid_project_paths_fail_closed(tmp_path, value):
+    candidate = tmp_path / value if "\x00" not in value else value
 
     with pytest.raises(ValueError, match="project path must"):
         detect_project(candidate)
 
 
-def test_project_hint_inside_workspace_never_changes_the_trusted_root(tmp_path, monkeypatch):
-    root = tmp_path / "project"
+def test_explicit_project_path_selects_that_existing_workspace(tmp_path, monkeypatch):
+    launched = tmp_path / "launched"
+    launched.mkdir()
+    root = tmp_path / "selected"
     nested = root / "src" / "api"
     nested.mkdir(parents=True)
-    monkeypatch.chdir(root)
+    (root / ".git").mkdir()
+    monkeypatch.chdir(launched)
 
     project = detect_project(nested)
 
