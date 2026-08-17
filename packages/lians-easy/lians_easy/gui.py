@@ -923,6 +923,7 @@ class CompanionApp:
         self._refresh_job: str | None = None
         self._intro_job: str | None = None
         self._intro_frame_job: str | None = None
+        self._intro_started: float | None = None
         self._intro_lotus_item: int | None = None
         self._lifeline_lotus_item: int | None = None
         self._pet_job: str | None = None
@@ -1122,7 +1123,7 @@ class CompanionApp:
                 continue
 
     def _build_intro(self) -> None:
-        """Show the exact Lotus at its native size while the bridge starts."""
+        """Settle the exact native-size Lotus once the window has real geometry."""
         for child in self.root.winfo_children():
             child.destroy()
         self.root.configure(background="#000000")
@@ -1134,32 +1135,54 @@ class CompanionApp:
         )
         self.intro_canvas.pack(fill="both", expand=True)
         self._intro_lotus_item = None
-        self._intro_started = time.monotonic()
-        self._intro_frame_job = self.root.after_idle(self._animate_intro)
-        self._intro_job = self.root.after(460, self._finish_intro)
+        self._intro_started = None
+        self.intro_canvas.bind("<Configure>", self._position_intro_lotus)
+        self._intro_frame_job = self.root.after(16, self._animate_intro)
+
+    def _position_intro_lotus(self, _event: tk.Event | None = None) -> None:
+        """Keep the intro centered even while Windows is mapping the window."""
+
+        if self._stopping or not self.intro_canvas.winfo_exists():
+            return
+        width = self.intro_canvas.winfo_width()
+        height = self.intro_canvas.winfo_height()
+        if width < 64 or height < 64:
+            return
+        elapsed = (
+            0.0
+            if self._intro_started is None
+            else max(0.0, time.monotonic() - self._intro_started)
+        )
+        progress = min(1.0, elapsed / 0.32)
+        offset_y = round((1.0 - _anime_in_out_sine(progress)) * 12)
+        frame = self.intro_favicon or self.lotus_mark
+        if frame is None:
+            return
+        center_x = width / 2
+        center_y = height / 2 + offset_y
+        if self._intro_lotus_item is None:
+            self._intro_lotus_item = self.intro_canvas.create_image(
+                center_x,
+                center_y,
+                image=frame,
+                tags="intro-motion",
+            )
+            return
+        self.intro_canvas.coords(self._intro_lotus_item, center_x, center_y)
 
     def _animate_intro(self) -> None:
         if self._stopping or not self.intro_canvas.winfo_exists():
             return
-        canvas = self.intro_canvas
-        width = max(1, canvas.winfo_width())
-        height = max(1, canvas.winfo_height())
-        center_x = width / 2
-        center_y = height / 2
-        frame = self.intro_favicon or self.lotus_mark
-        if frame is not None:
-            if self._intro_lotus_item is None:
-                self._intro_lotus_item = canvas.create_image(
-                    center_x,
-                    center_y,
-                    image=frame,
-                    tags="intro-motion",
-                )
-            else:
-                canvas.coords(self._intro_lotus_item, center_x, center_y)
-        # The source favicon is intentionally never enlarged. Repositioning the
-        # native bitmap is crisp and avoids the grain caused by resampling it to
-        # the size of a display.
+        if self.intro_canvas.winfo_width() < 64 or self.intro_canvas.winfo_height() < 64:
+            self._intro_frame_job = self.root.after(16, self._animate_intro)
+            return
+        if self._intro_started is None:
+            self._intro_started = time.monotonic()
+            self._intro_job = self.root.after(680, self._finish_intro)
+        self._position_intro_lotus()
+        if time.monotonic() - self._intro_started < 0.32:
+            self._intro_frame_job = self.root.after(16, self._animate_intro)
+            return
         self._intro_frame_job = None
 
     def _finish_intro(self) -> None:
@@ -1172,7 +1195,13 @@ class CompanionApp:
             except tk.TclError:
                 pass
             self._intro_frame_job = None
-        self._build()
+        redraw_suspended = self._set_windows_redraw(False)
+        try:
+            self._build()
+            self.root.update_idletasks()
+        finally:
+            if redraw_suspended:
+                self._set_windows_redraw(True)
         self._refresh_job = self.root.after(20, self._refresh)
         if self.auto_minimize:
             self.root.after(180, self._minimize)
@@ -1820,6 +1849,25 @@ class CompanionApp:
             self._window_handle = handle
         except (AttributeError, OSError, tk.TclError):
             self._window_handle = None
+
+    def _set_windows_redraw(self, enabled: bool) -> bool:
+        """Hold one frame while replacing the intro or an entire themed tree."""
+
+        if sys.platform != "win32":
+            return False
+        try:
+            self.root.update_idletasks()
+            user32 = ctypes.windll.user32
+            handle = self._window_handle
+            if handle is None:
+                handle = user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            user32.SendMessageW(handle, 0x000B, int(enabled), 0)
+            if enabled:
+                redraw_flags = 0x0001 | 0x0004 | 0x0080 | 0x0100
+                user32.RedrawWindow(handle, None, None, redraw_flags)
+            return True
+        except (AttributeError, OSError, tk.TclError):
+            return False
 
     def _begin_drag(self, event: tk.Event) -> None:
         if self._maximized or self._snap_state is not None:

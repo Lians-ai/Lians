@@ -219,6 +219,15 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
         assert app.intro_canvas.itemcget(intro_items[0], "image") == str(
             app.intro_favicon
         )
+        intro_x, intro_y = app.intro_canvas.coords(intro_items[0])
+        assert intro_x == pytest.approx(app.intro_canvas.winfo_width() / 2)
+        assert app.intro_canvas.winfo_height() / 2 <= intro_y <= (
+            app.intro_canvas.winfo_height() / 2 + 12
+        )
+        if app._intro_frame_job is not None:
+            root.after_cancel(app._intro_frame_job)
+        app._intro_started = time.monotonic() - 0.4
+        app._animate_intro()
         assert app._intro_frame_job is None
     finally:
         root.destroy()
