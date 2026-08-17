@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -66,15 +65,15 @@ internal static class LiansLauncher
             return 0;
         }
 
-        string lotus = Path.Combine(
+        string wordmark = Path.Combine(
             Path.GetDirectoryName(executable),
             "_internal",
             "lians_easy",
             "desktop",
             "web",
-            "lotus.png"
+            "lians-wordmark.png"
         );
-        if (!File.Exists(lotus))
+        if (!File.Exists(wordmark))
         {
             StartApplication(executable, args);
             return 0;
@@ -82,7 +81,7 @@ internal static class LiansLauncher
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new Splash(executable, args, lotus));
+        Application.Run(new Splash(executable, args, wordmark));
         return 0;
     }
 
@@ -168,16 +167,16 @@ internal static class LiansLauncher
         private readonly DateTime started = DateTime.UtcNow;
         private DateTime? windowSeen;
 
-        internal Splash(string executable, string[] args, string lotus)
+        internal Splash(string executable, string[] args, string wordmark)
         {
             AutoScaleMode = AutoScaleMode.None;
-            BackColor = Color.Black;
+            BackColor = Color.FromArgb(2, 3, 4);
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
             Bounds = Screen.PrimaryScreen.Bounds;
             TopMost = true;
-            Controls.Add(new CosmicPortalSurface(lotus));
+            Controls.Add(new ParticleWordmarkSurface(wordmark));
             child = StartApplication(executable, WithArgument(args, "--intro-complete"));
             timer = new Timer();
             timer.Interval = 15;
@@ -205,7 +204,7 @@ internal static class LiansLauncher
                 return;
             }
             if ((DateTime.UtcNow - windowSeen.Value).TotalMilliseconds < 180
-                || (DateTime.UtcNow - started).TotalMilliseconds < 1180)
+                || (DateTime.UtcNow - started).TotalMilliseconds < 1300)
             {
                 return;
             }
@@ -226,7 +225,7 @@ internal static class LiansLauncher
         }
     }
 
-    private sealed class CosmicPortalSurface : Control
+    private sealed class ParticleWordmarkSurface : Control
     {
         private sealed class Particle
         {
@@ -241,36 +240,23 @@ internal static class LiansLauncher
             internal float DriftY;
             internal float BendX;
             internal float BendY;
-            internal float Alpha;
-            internal bool Portal;
-        }
-
-        private sealed class Star
-        {
-            internal float X;
-            internal float Y;
-            internal float Size;
-            internal float Phase;
-            internal float Speed;
         }
 
         private readonly List<Particle> particles = new List<Particle>();
-        private readonly List<Star> stars = new List<Star>();
-        private readonly SolidBrush particleBrush = new SolidBrush(Color.FromArgb(160, 76, 118, 242));
-        private readonly SolidBrush starBrush = new SolidBrush(Color.FromArgb(70, 98, 137, 247));
-        private readonly Image lotus;
+        private readonly SolidBrush particleBrush = new SolidBrush(Color.FromArgb(154, 60, 98, 218));
         private readonly Timer animationTimer;
         private readonly DateTime started = DateTime.UtcNow;
+        private float wordmarkAspect = 325f / 120f;
 
-        internal CosmicPortalSurface(string path)
+        internal ParticleWordmarkSurface(string path)
         {
-            BackColor = Color.Black;
+            BackColor = Color.FromArgb(2, 3, 4);
             Dock = DockStyle.Fill;
             DoubleBuffered = true;
             using (Image source = Image.FromFile(path))
             {
-                lotus = new Bitmap(source);
-                BuildParticles(lotus);
+                wordmarkAspect = source.Width / (float)source.Height;
+                BuildParticles(source);
             }
             animationTimer = new Timer();
             animationTimer.Interval = 16;
@@ -282,8 +268,8 @@ internal static class LiansLauncher
         {
             List<PointF> edgeCandidates = new List<PointF>();
             List<PointF> fillCandidates = new List<PointF>();
-            const int sampleWidth = 256;
-            const int sampleHeight = 256;
+            const int sampleWidth = 650;
+            const int sampleHeight = 240;
             using (Bitmap sample = new Bitmap(sampleWidth, sampleHeight))
             using (Graphics graphics = Graphics.FromImage(sample))
             {
@@ -294,15 +280,15 @@ internal static class LiansLauncher
                 {
                     for (int x = 0; x < sampleWidth; x += 2)
                     {
-                        if (!IsLotusPixel(sample.GetPixel(x, y)))
+                        if (!IsWordmarkPixel(sample.GetPixel(x, y)))
                         {
                             continue;
                         }
                         bool edge = x < 4 || x > sampleWidth - 5 || y < 4 || y > sampleHeight - 5
-                            || !IsLotusPixel(sample.GetPixel(x - 4, y))
-                            || !IsLotusPixel(sample.GetPixel(x + 4, y))
-                            || !IsLotusPixel(sample.GetPixel(x, y - 4))
-                            || !IsLotusPixel(sample.GetPixel(x, y + 4));
+                            || !IsWordmarkPixel(sample.GetPixel(x - 4, y))
+                            || !IsWordmarkPixel(sample.GetPixel(x + 4, y))
+                            || !IsWordmarkPixel(sample.GetPixel(x, y - 4))
+                            || !IsWordmarkPixel(sample.GetPixel(x, y + 4));
                         PointF point = new PointF(
                             x / (float)(sampleWidth - 1),
                             y / (float)(sampleHeight - 1)
@@ -334,7 +320,7 @@ internal static class LiansLauncher
                 fillCandidates[index] = fillCandidates[swap];
                 fillCandidates[swap] = value;
             }
-            int requestedCount = 2600;
+            int requestedCount = 4200;
             int edgeCount = Math.Min(edgeCandidates.Count, (int)(requestedCount * 0.38));
             List<PointF> candidates = edgeCandidates.GetRange(0, edgeCount);
             int fillCount = Math.Min(fillCandidates.Count, requestedCount - candidates.Count);
@@ -347,61 +333,22 @@ internal static class LiansLauncher
                 {
                     StartX = (float)random.NextDouble(),
                     StartY = (float)random.NextDouble(),
-                    TargetX = 0.24f + target.X * 0.52f,
-                    TargetY = 0.24f + target.Y * 0.52f,
-                    Size = 0.42f + (float)random.NextDouble() * 0.78f,
+                    TargetX = target.X,
+                    TargetY = target.Y,
+                    Size = 0.7f + (float)random.NextDouble(),
                     Phase = (float)random.NextDouble() * (float)Math.PI * 2f,
                     Speed = 0.7f + (float)random.NextDouble() * 1.8f,
                     DriftX = 24f + (float)random.NextDouble() * 82f,
                     DriftY = 18f + (float)random.NextDouble() * 64f,
                     BendX = ((float)random.NextDouble() - 0.5f) * 0.34f,
-                    BendY = ((float)random.NextDouble() - 0.5f) * 0.38f,
-                    Alpha = 0.48f + (float)random.NextDouble() * 0.5f,
-                    Portal = false
-                });
-            }
-
-            const int ringCount = 980;
-            for (int index = 0; index < ringCount; index++)
-            {
-                double angle = Math.PI * 2.0 * index / ringCount
-                    + ((random.NextDouble() - 0.5) * 0.014);
-                float radius = 0.474f + ((float)random.NextDouble() - 0.5f) * 0.022f;
-                particles.Add(new Particle
-                {
-                    StartX = (float)random.NextDouble(),
-                    StartY = (float)random.NextDouble(),
-                    TargetX = 0.5f + (float)Math.Cos(angle) * radius,
-                    TargetY = 0.5f + (float)Math.Sin(angle) * radius,
-                    Size = 0.48f + (float)random.NextDouble() * 0.92f,
-                    Phase = (float)random.NextDouble() * (float)Math.PI * 2f,
-                    Speed = 0.8f + (float)random.NextDouble() * 1.4f,
-                    DriftX = 32f + (float)random.NextDouble() * 96f,
-                    DriftY = 26f + (float)random.NextDouble() * 82f,
-                    BendX = ((float)random.NextDouble() - 0.5f) * 0.46f,
-                    BendY = ((float)random.NextDouble() - 0.5f) * 0.46f,
-                    Alpha = 0.56f + (float)random.NextDouble() * 0.42f,
-                    Portal = true
-                });
-            }
-
-            for (int index = 0; index < 190; index++)
-            {
-                stars.Add(new Star
-                {
-                    X = (float)random.NextDouble(),
-                    Y = (float)random.NextDouble(),
-                    Size = 0.35f + (float)random.NextDouble() * 1.15f,
-                    Phase = (float)random.NextDouble() * (float)Math.PI * 2f,
-                    Speed = 0.45f + (float)random.NextDouble() * 1.15f
+                    BendY = ((float)random.NextDouble() - 0.5f) * 0.38f
                 });
             }
         }
 
-        private static bool IsLotusPixel(Color color)
+        private static bool IsWordmarkPixel(Color color)
         {
-            return color.A > 16 && color.B >= 5
-                && color.B > color.R * 1.35 && color.B > color.G * 1.18;
+            return color.B >= 5 && color.B > color.R * 1.45 && color.B > color.G * 1.35;
         }
 
         protected override void OnPaint(PaintEventArgs args)
@@ -411,30 +358,24 @@ internal static class LiansLauncher
             args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             args.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             double elapsed = (DateTime.UtcNow - started).TotalMilliseconds;
-            const double chaosDuration = 90.0;
-            const double gatherDuration = 670.0;
+            const double chaosDuration = 220.0;
+            const double gatherDuration = 820.0;
             double gatherProgress = Math.Min(1.0, Math.Max(0.0, (elapsed - chaosDuration) / gatherDuration));
             double eased = gatherProgress < 0.5
                 ? 4.0 * gatherProgress * gatherProgress * gatherProgress
                 : 1.0 - Math.Pow(-2.0 * gatherProgress + 2.0, 3.0) / 2.0;
-            float targetWidth = Math.Min(ClientSize.Width * 0.48f, ClientSize.Height * 0.72f);
-            float targetHeight = targetWidth;
+            float targetWidth = Math.Min(ClientSize.Width * 0.64f, ClientSize.Height * 0.39f * wordmarkAspect);
+            float targetHeight = targetWidth / wordmarkAspect;
             float left = (ClientSize.Width - targetWidth) / 2f;
             float top = (ClientSize.Height - targetHeight) / 2f;
             float seconds = (float)(elapsed * 0.001);
             float brightness = (float)eased;
-
-            foreach (Star star in stars)
-            {
-                float pulse = 0.5f + 0.5f * (float)Math.Sin(star.Phase + seconds * star.Speed);
-                int alpha = (int)((16f + pulse * 48f) * (1f - brightness * 0.28f));
-                starBrush.Color = Color.FromArgb(alpha, 90, 128, 236);
-                float x = star.X * ClientSize.Width + (float)Math.Sin(star.Phase + seconds * 0.16f) * 6f;
-                float y = star.Y * ClientSize.Height + (float)Math.Cos(star.Phase + seconds * 0.12f) * 4f;
-                args.Graphics.FillEllipse(starBrush, x, y, star.Size, star.Size);
-            }
-
-            DrawPortal(args.Graphics, left, top, targetWidth, brightness, seconds);
+            particleBrush.Color = Color.FromArgb(
+                (int)(154f + brightness * 101f),
+                (int)(60f + brightness * 44f),
+                (int)(98f + brightness * 55f),
+                (int)(218f + brightness * 37f)
+            );
             foreach (Particle particle in particles)
             {
                 float startX = particle.StartX * ClientSize.Width;
@@ -464,85 +405,13 @@ internal static class LiansLauncher
                         + curve * particle.BendY * ClientSize.Height
                         + (float)Math.Cos(particle.Phase + seconds * particle.Speed * 4.4f) * flutter;
                 }
-                int alpha = (int)((46f + brightness * 196f) * particle.Alpha);
-                int red = particle.Portal ? 88 : 62;
-                int green = particle.Portal ? 132 : 102;
-                int blue = particle.Portal ? 255 : 232;
-                particleBrush.Color = Color.FromArgb(Math.Max(0, Math.Min(255, alpha)), red, green, blue);
-                float displaySize = particle.Size * (0.16f + (float)eased * 0.96f);
+                float displaySize = particle.Size * (0.18f + (float)eased * 1.12f);
                 args.Graphics.FillEllipse(
                     particleBrush,
                     x - displaySize / 2f,
                     y - displaySize / 2f,
                     displaySize,
                     displaySize
-                );
-            }
-
-            DrawLotus(args.Graphics, left, top, targetWidth, elapsed, brightness);
-        }
-
-        private static void DrawPortal(
-            Graphics graphics,
-            float left,
-            float top,
-            float diameter,
-            float brightness,
-            float seconds
-        )
-        {
-            if (brightness <= 0.01f)
-            {
-                return;
-            }
-            RectangleF ring = new RectangleF(left, top, diameter, diameter);
-            int glow = (int)(brightness * 44f);
-            using (Pen outerGlow = new Pen(Color.FromArgb(glow, 49, 95, 233), 24f))
-            using (Pen innerGlow = new Pen(Color.FromArgb((int)(brightness * 90f), 85, 130, 255), 8f))
-            using (Pen rim = new Pen(Color.FromArgb((int)(brightness * 218f), 122, 158, 255), 1.4f))
-            using (Pen orbit = new Pen(Color.FromArgb((int)(brightness * 116f), 74, 113, 238), 2.2f))
-            {
-                graphics.DrawEllipse(outerGlow, ring);
-                graphics.DrawEllipse(innerGlow, ring);
-                graphics.DrawEllipse(rim, ring);
-                graphics.DrawArc(orbit, ring, seconds * 38f, 74f);
-                graphics.DrawArc(orbit, ring, 184f + seconds * 28f, 48f);
-            }
-        }
-
-        private void DrawLotus(
-            Graphics graphics,
-            float left,
-            float top,
-            float diameter,
-            double elapsed,
-            float brightness
-        )
-        {
-            float reveal = Math.Min(1f, Math.Max(0f, (float)((elapsed - 360.0) / 270.0)));
-            reveal = reveal * reveal * (3f - 2f * reveal);
-            if (reveal <= 0.01f)
-            {
-                return;
-            }
-            float pulse = 1f + (float)Math.Sin(elapsed * 0.008) * 0.012f * brightness;
-            int size = (int)(diameter * (0.46f + reveal * 0.08f) * pulse);
-            int x = (int)(left + (diameter - size) / 2f);
-            int y = (int)(top + (diameter - size) / 2f);
-            ColorMatrix matrix = new ColorMatrix();
-            matrix.Matrix33 = reveal;
-            using (ImageAttributes attributes = new ImageAttributes())
-            {
-                attributes.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-                graphics.DrawImage(
-                    lotus,
-                    new Rectangle(x, y, size, size),
-                    0,
-                    0,
-                    lotus.Width,
-                    lotus.Height,
-                    GraphicsUnit.Pixel,
-                    attributes
                 );
             }
         }
@@ -553,8 +422,6 @@ internal static class LiansLauncher
             {
                 animationTimer.Dispose();
                 particleBrush.Dispose();
-                starBrush.Dispose();
-                lotus.Dispose();
             }
             base.Dispose(disposing);
         }
