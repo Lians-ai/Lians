@@ -1,0 +1,32 @@
+{
+  "correctness": {
+    "counterexample_rate": 1.0,
+    "false_claim_detection_recall": 1.0,
+    "python_source_counterexample_found": true,
+    "scenarios": 40,
+    "source_mutation_changes_binding": true,
+    "unsafe_python_source_rejected": true,
+    "vacuous_proof_rejected": true,
+    "valid_proof_rate": 1.0
+  },
+  "elapsed_ms": 4871.579,
+  "pass": true,
+  "python_scale": {
+    "bounded_implementation_correctness_proven": true,
+    "checked_assignments": 125000,
+    "enumeration_complete": true,
+    "project_code_executed": false,
+    "single_digit_seconds": true,
+    "state_space": 125000,
+    "verification_ms": 1126.032
+  },
+  "scale": {
+    "checked_assignments": 125000,
+    "enumeration_complete": true,
+    "project_code_executed": false,
+    "single_digit_seconds": true,
+    "state_space": 125000,
+    "verification_ms": 1131.7
+  },
+  "schema": "https://lians.ai/schemas/formal-proof-benchmark/v0.1"
+}

@@ -14,6 +14,7 @@ import tempfile
 import time
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -204,6 +205,55 @@ def main() -> None:
             if memory_content not in context.get("context", ""):
                 raise RuntimeError("Frozen Lians App did not recall imported memory")
 
+            task_id = "packaged-continuity"
+            with _post(
+                origin,
+                "/v1/tasks",
+                cookie,
+                {
+                    "task_id": task_id,
+                    "goal": "Verify packaged cross-agent continuity",
+                    "success_criteria": ["The frozen runtime returns a signed resume brief"],
+                    "constraints": ["Keep all state in the temporary local profile"],
+                    "cwd": directory,
+                    "client": "claude",
+                },
+            ) as task_response:
+                task = json.loads(task_response.read())
+            if task.get("task_id") != task_id:
+                raise RuntimeError("Frozen Lians App could not create continuity state")
+            with _post(
+                origin,
+                "/v1/task-checkpoints",
+                cookie,
+                {
+                    "task_id": task_id,
+                    "summary": "The package is serving encrypted state",
+                    "current_action": "Request the continuity brief from Codex",
+                    "decisions": [
+                        {
+                            "decision": "Use the frozen runtime",
+                            "reason": "The smoke test must exercise the distributed binary",
+                        }
+                    ],
+                    "open_questions": ["Does the receipt verify?"],
+                    "cwd": directory,
+                    "client": "claude",
+                },
+            ) as checkpoint_response:
+                checkpoint = json.loads(checkpoint_response.read())
+            if checkpoint.get("state", {}).get("client") != "claude":
+                raise RuntimeError("Frozen Lians App did not preserve the checkpoint")
+            query = urlencode({"cwd": directory, "client": "codex"})
+            with _open(f"{origin}/v1/continue?{query}", cookie=cookie) as continue_response:
+                continued = json.loads(continue_response.read())
+            if continued.get("status") != "ready":
+                raise RuntimeError("Frozen Lians App could not select the active task")
+            if "Does the receipt verify?" not in continued.get("context", ""):
+                raise RuntimeError("Frozen continuity brief omitted open work")
+            if continued.get("receipt", {}).get("signature", {}).get("algorithm") != "Ed25519":
+                raise RuntimeError("Frozen continuity brief was not signed")
+
             print(
                 json.dumps(
                     {
@@ -211,6 +261,7 @@ def main() -> None:
                         "bridge_api_ready": True,
                         "encrypted_memory": True,
                         "portable_backup_restored": True,
+                        "signed_continuity_resumed": True,
                         "process_running": process.poll() is None,
                     },
                     sort_keys=True,

@@ -44,6 +44,7 @@ def test_product_status_keeps_setup_and_measured_impact_simple(tmp_path, monkeyp
     assert result["privacy"]["ai_account_credentials_required"] is False
     assert result["efficiency"]["context_events"] == 1
     assert result["efficiency"]["repeated_memory_tokens_avoided_estimate"] > 0
+    assert result["control"]["policy"]["mode"] == "guide"
 
 
 def test_status_command_outputs_machine_readable_product_state(tmp_path, monkeypatch, capsys) -> None:
@@ -118,6 +119,17 @@ def test_brief_command_is_local_and_simple() -> None:
     assert parsed.input.name == "posts.jsonl"
     assert parsed.output.name == "brief.json"
     assert parsed.evidence == 12
+
+
+def test_continue_command_is_the_plain_resume_path() -> None:
+    parsed = cli.parser().parse_args(
+        ["continue", "release-test", "--client", "codex", "--max-tokens", "512"]
+    )
+
+    assert parsed.command == "continue"
+    assert parsed.task_id == "release-test"
+    assert parsed.client == "codex"
+    assert parsed.max_tokens == 512
 
 
 def test_claude_experiment_plan_does_not_call_claude(monkeypatch, capsys) -> None:

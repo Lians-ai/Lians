@@ -35,6 +35,8 @@ Keep your current AI account, editor, and normal workflow. Lians runs locally
 between your work history and your AI tool.
 
 - Reuse a project fact, preference, constraint, or decision in a new chat.
+- Stop agents from reusing saved work after the fact it depended on changes.
+- Bind repository changes to the original task and produce a signed review receipt.
 - Turn thousands of research posts or browser events into one bounded brief.
 - Inspect, correct, export, or delete anything Lians saves.
 - Use one local memory store with multiple compatible AI tools.
@@ -68,7 +70,34 @@ What Python version and test runner does this project use?
 
 Lians can supply the saved detail without replaying the previous chat.
 
+If that saved detail later changes, Lians can mark dependent memories and work
+for review, keep stale memory out of normal recall, and give every connected AI
+the same current replacement state.
+
 [Watch the 33-second remember, reuse, and delete proof](https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4).
+
+## Verify agent work before you ship it
+
+For repository work, a connected agent can create a task contract, restrict the
+approved file scope, map changed files back to success criteria, and request a
+signed Lians verification receipt before claiming completion. Lians checks the
+actual Git diff, whitespace integrity, current-state invalidations, recorded
+task evidence, required check attestations, credential patterns, and common
+high-risk code patterns.
+
+The receipt binds those measured facts to the base commit and exact diff hash.
+It does not ask a model to grade its own work, run arbitrary project commands,
+or claim that semantic correctness has been formally proven. Test output
+provided by an agent is labeled caller-attested, and every passing result still
+requires a human ship decision.
+
+For bounded critical logic, Lians can also exhaustively prove a declared finite
+model, reject vacuous assumptions, return a concrete counterexample, and bind
+the proof plus source hashes into the same receipt. A second backend proves an
+actual restricted pure Python function across every declared finite input
+without importing or executing it. These are bounded proofs, not a claim that
+an arbitrary application is completely correct. [Read the formal verification
+boundary and manifest format](docs/formal-verification.md).
 
 ## Compress a large workday
 
@@ -95,6 +124,10 @@ consumer package is being tested.
 | Cursor, Claude Code, Codex, Gemini, Antigravity, Windsurf, Cline, and OpenCode setup | Available |
 | Local research and browser brief compiler | Available from source |
 | Bounded context and signed selection receipts | Available |
+| State-change blast radius and bounded repair briefs | Beta candidate |
+| Git-scoped task verification and signed review receipts | Beta candidate |
+| Exhaustive finite-model proofs with counterexamples | Beta candidate |
+| Bounded proofs over actual restricted Python functions | Beta candidate |
 | Guided desktop installer and local control center | Release candidate |
 | Managed cross-device continuity | Technical preview |
 
@@ -179,7 +212,9 @@ monorepo and need to identify the current packages, start with
 
 Lians can supersede stale facts, reconstruct point-in-time state, inspect
 lineage and conflicts, maintain tamper-evident audit history, enforce
-information barriers, and perform confirmed erasure.
+information barriers, and perform confirmed erasure. Encrypted backups and
+opaque device sync preserve the dependency graph as well as the memories, so
+stale-work protections survive a move to another machine.
 
 - [Memory engine](docs/memory-engine.md)
 - [Decision evidence](docs/decision-evidence.md)

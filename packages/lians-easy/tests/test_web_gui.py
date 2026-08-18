@@ -84,6 +84,107 @@ def test_desktop_api_saves_a_redacted_help_report_without_returning_user_path(
     assert str(tmp_path) not in str(result)
 
 
+def test_desktop_api_exposes_control_policy_and_pause_without_a_model_proxy(tmp_path) -> None:
+    from lians_easy.store import MemoryStore
+    from lians_easy.web_gui import DesktopApi
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    memory = store.remember("Keep the release local.", scope="global")
+    api = DesktopApi(store)
+
+    assert api.control_status()["policy"]["mode"] == "guide"
+    protected = api.update_control_policy(
+        {"mode": "protect", "approval_actions": ["publishing"]}
+    )
+    paused = api.set_memory_paused(memory["id"], True)
+
+    assert protected["policy"]["mode"] == "protect"
+    assert paused["paused"] is True
+    graph = api.work_graph()
+    assert graph["control"]["policy"]["mode"] == "protect"
+    assert any(node["type"] == "policy" for node in graph["nodes"])
+
+
+def test_desktop_work_graph_exposes_bounded_state_repair_brief(tmp_path) -> None:
+    from lians_easy.state_integrity import StateIntegrityService
+    from lians_easy.store import MemoryStore
+    from lians_easy.web_gui import DesktopApi
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    integrity = StateIntegrityService(store)
+    current = store.set_current(
+        "release/platform",
+        "Ship on Windows only.",
+        project_id="release",
+    )
+    integrity.link(
+        current["id"],
+        "docs/platform-support.md",
+        dependent_type="artifact",
+        project_id="release",
+        label="Platform support page",
+    )
+    store.set_current(
+        "release/platform",
+        "Ship on Windows and macOS.",
+        project_id="release",
+        reason="macOS joined the release",
+    )
+    api = DesktopApi(store)
+
+    graph = api.work_graph()
+    invalidation = next(node for node in graph["nodes"] if node["type"] == "invalidation")
+    brief = api.state_repair_brief(invalidation["invalidation_id"])
+
+    assert graph["summary"]["invalidation_count"] == 1
+    assert brief["status"] == "repair_required"
+    assert "docs/platform-support.md" in brief["context"]
+    assert brief["token_estimate"] <= 768
+
+
+def test_desktop_api_exposes_local_understanding_and_read_only_memory_health(tmp_path) -> None:
+    from lians_easy.store import MemoryStore
+    from lians_easy.web_gui import DesktopApi
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    store.remember(
+        "The user writes for college students.",
+        kind="profile",
+        scope="global",
+    )
+    api = DesktopApi(store)
+
+    brief = api.understand_request("Write an onboarding guide")
+    health = api.memory_health()
+
+    assert brief["intent"] == "write"
+    assert brief["privacy"]["request_persisted"] is False
+    assert brief["privacy"]["external_model_called"] is False
+    assert health["mutated"] is False
+    assert health["hierarchy"]["identity"] == 1
+
+
+def test_desktop_api_exposes_recent_cross_project_continuity(tmp_path) -> None:
+    from lians_easy.store import MemoryStore
+    from lians_easy.task_contract import TaskContractService
+    from lians_easy.web_gui import DesktopApi
+
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    TaskContractService(store).start(
+        "Finish the beta package",
+        ["The continuity brief is visible"],
+        project_id="project-beta",
+        task_id="beta",
+        client="claude",
+    )
+
+    result = DesktopApi(store).continuity()
+
+    assert result["status"] == "ready"
+    assert result["task_id"] == "beta"
+    assert "Finish the beta package" in result["context"]
+
+
 def test_auto_hide_taskbar_trigger_strip_stays_outside_maximized_window() -> None:
     from lians_easy.web_gui import _reserve_taskbar_trigger
 
@@ -163,7 +264,7 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert 'id="ambient-status"' in html
     assert "ambient-brain" not in html
     assert 'src="lotus.png"' in html
-    assert "Extended usage. Better memory." in html
+    assert "Context windows end. Your work does not." in html
     assert 'id="titlebar"' in html
     assert 'class="restore-icon"' in html
     assert "resize-handle" in html
@@ -182,6 +283,22 @@ def test_desktop_ui_uses_local_animation_libraries_and_no_remote_assets() -> Non
     assert "motionAnimate(" in source
     assert 'id="support-report"' in html
     assert 'id="support-status"' in html
+    assert 'id="understanding"' in html
+    assert 'id="understanding-panel"' in html
+    assert 'src="understanding.js"' in html
+    assert 'id="continuity-card"' in html
+    assert 'src="continuity.js"' in html
+    continuity_source = (
+        package_root / "lians_easy" / "desktop" / "web" / "continuity.js"
+    ).read_text(encoding="utf-8")
+    assert "api.continuity" in continuity_source
+    assert "Copy brief" in html
+    understanding_source = (
+        package_root / "lians_easy" / "desktop" / "web" / "understanding.js"
+    ).read_text(encoding="utf-8")
+    assert "api.understand_request" in understanding_source
+    assert "api.memory_health" in understanding_source
+    assert "request is not saved or sent to another model" in html
     assert "save_help_report" in source
     assert "start_drag" in source
     assert "_side_snap_bounds" in web_gui_source
@@ -251,3 +368,48 @@ def test_codex_setup_explains_the_required_hook_trust_step() -> None:
     assert '"codex" in result.get("requires_trust", [])' in source
     assert "open /hooks" in source
     assert "Copy /hooks" in source
+
+
+def test_desktop_work_map_is_local_bounded_and_inspectable() -> None:
+    package_root = Path(__file__).resolve().parents[1]
+    web_root = package_root / "lians_easy" / "desktop" / "web"
+    html = (web_root / "index.html").read_text(encoding="utf-8")
+    css = (web_root / "style.css").read_text(encoding="utf-8")
+    script = (web_root / "work-map.js").read_text(encoding="utf-8")
+
+    assert 'id="work-map"' in html
+    assert 'id="map-panel"' in html
+    assert 'id="map-reset"' in html
+    assert 'id="map-node-action"' in html
+    assert 'src="work-map.js"' in html
+    assert 'src="control-center.js"' in html
+    assert ".map-panel[hidden]" in css
+    assert "window.pywebview.api.work_graph()" in script
+    assert ".slice(0, 120)" in script
+    assert 'edge.method === "neural"' in script
+    assert "camera.yaw" in script
+    assert "camera.pitch" in script
+    assert "camera.zoom" in script
+    assert "setPointerCapture" in script
+    assert "set_memory_paused" in script
+    assert "state_repair_brief" in script
+    assert "changes to review" in script
+    assert "https://" not in script
+
+
+def test_desktop_control_center_is_local_policy_ui() -> None:
+    package_root = Path(__file__).resolve().parents[1]
+    web_root = package_root / "lians_easy" / "desktop" / "web"
+    html = (web_root / "index.html").read_text(encoding="utf-8")
+    css = (web_root / "style.css").read_text(encoding="utf-8")
+    script = (web_root / "control-center.js").read_text(encoding="utf-8")
+
+    assert 'data-mode="observe"' in html
+    assert 'data-mode="guide"' in html
+    assert 'data-mode="protect"' in html
+    assert 'id="context-budget"' in html
+    assert 'id="approval-actions"' in html
+    assert ".control-panel[hidden]" in css
+    assert "window.pywebview.api.control_status()" in script
+    assert "window.pywebview.api.update_control_policy" in script
+    assert "https://" not in script

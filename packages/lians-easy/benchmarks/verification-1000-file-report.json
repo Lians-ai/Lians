@@ -1,0 +1,27 @@
+{
+  "correctness": {
+    "detection_recall": 1.0,
+    "malicious_scenarios": 80,
+    "median_verification_ms": 259.991,
+    "p95_verification_ms": 311.331,
+    "pass": true,
+    "ready_false_block_rate": 0.0,
+    "scenarios": 90,
+    "secret_leak_rate": 0.0,
+    "task_contract_only_false_ready_rate": 1.0
+  },
+  "elapsed_ms": 39045.646,
+  "pass": true,
+  "scale": {
+    "changed_files": 1000,
+    "database_bytes": 245760,
+    "observed_files": 1000,
+    "pass": true,
+    "receipt_bytes": 8904,
+    "sampled_files": 50,
+    "single_digit_seconds": true,
+    "verdict": "ready_for_human_ship_review",
+    "verification_ms": 2181.396
+  },
+  "schema": "https://lians.ai/schemas/verification-benchmark/v0.1"
+}

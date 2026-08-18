@@ -22,12 +22,16 @@ from .claude_experiment import (
     build_experiment_plan,
     run_claude_experiment,
 )
+from .control_policy import ControlPolicyService
 from .installer import client_targets, doctor, install, plan, uninstall
 from .lifecycle import listen_for_windows_installer_shutdown
 from .mcp import default_data_path, run
 from .portability import export_backup, import_backup, verify_backup
+from .project import detect_project
 from .store import MemoryStore
 from .stretch_experiment import build_stretch_plan, run_stretch_experiment
+from .task_contract import TaskContractService
+from .video_pipeline import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, VideoAnalysisPipeline
 from .work_brief import WorkBriefError, compile_work_brief_file
 
 
@@ -55,6 +59,10 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
         avoided = int(efficiency.get("repeated_memory_tokens_avoided_estimate") or 0)
         events = int(efficiency.get("context_events") or 0)
         print(f"- Repeated memory context left out: ~{avoided} tokens across {events} tasks")
+    control = result.get("control")
+    if isinstance(control, dict):
+        mode = str((control.get("policy") or {}).get("mode") or "guide").title()
+        print(f"- Agent control: {mode} mode")
     if result.get("next_step"):
         print(result["next_step"])
 
@@ -66,12 +74,13 @@ def product_status(
     targets = client_targets(home)
     configured = [target for target in targets.values() if target.configured]
     detected = [target for target in targets.values() if target.detected]
-    memory = MemoryStore(data_path or default_data_path()).stats()
+    store = MemoryStore(data_path or default_data_path())
+    memory = store.stats()
+    control = ControlPolicyService(store).status()
     return {
         "status": "optimized" if configured else "not_configured",
         "headline": (
-            f"Lians is active in {len(configured)} AI app"
-            f"{'s' if len(configured) != 1 else ''}."
+            f"Lians is active in {len(configured)} AI app{'s' if len(configured) != 1 else ''}."
             if configured
             else "Lians is ready to optimize your AI apps."
         ),
@@ -92,6 +101,7 @@ def product_status(
         "configured_clients": len(configured),
         "detected_clients": len(detected),
         "efficiency": memory["efficiency"],
+        "control": control,
         "privacy": {
             "local": True,
             "encrypted": memory["encrypted"],
@@ -107,7 +117,8 @@ def product_status(
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        prog="lians", description="Use less repeated context in the AI tools you already use"
+        prog="lians",
+        description="See, guide, and control work in the AI agents you already use",
     )
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     result.add_argument("--background", action="store_true", help=argparse.SUPPRESS)
@@ -146,6 +157,16 @@ def parser() -> argparse.ArgumentParser:
     context.add_argument("--data", type=Path)
     context.add_argument("--json", action="store_true")
 
+    continue_work = commands.add_parser(
+        "continue", help="Resume unfinished work with a small signed continuity brief"
+    )
+    continue_work.add_argument("task_id", nargs="?")
+    continue_work.add_argument("--client", default="cli")
+    continue_work.add_argument("--cwd", type=Path, default=Path.cwd())
+    continue_work.add_argument("--data", type=Path)
+    continue_work.add_argument("--max-tokens", type=int, default=768)
+    continue_work.add_argument("--json", action="store_true")
+
     cursor_rule = commands.add_parser(
         "cursor-rule", help="Refresh Cursor's always-applied Lians project context"
     )
@@ -181,7 +202,7 @@ def parser() -> argparse.ArgumentParser:
     brief = commands.add_parser(
         "brief", help="Turn a large local work export into a small AI-ready brief"
     )
-    brief.add_argument("kind", choices=("research", "browser"))
+    brief.add_argument("kind", choices=("research", "browser", "session"))
     brief.add_argument("input", type=Path)
     brief.add_argument("--evidence", type=int, default=12)
     brief.add_argument("--output", type=Path)
@@ -233,6 +254,52 @@ def parser() -> argparse.ArgumentParser:
     stretch_experiment.add_argument("--output", type=Path)
     stretch_experiment.add_argument("--overwrite", action="store_true")
     stretch_experiment.add_argument("--json", action="store_true")
+
+    video = commands.add_parser(
+        "video", help="Import and query large provider-neutral video-analysis corpora"
+    )
+    video_commands = video.add_subparsers(dest="video_action", required=True)
+    video_ingest = video_commands.add_parser(
+        "ingest", help="Resumably import encrypted JSONL analysis outputs"
+    )
+    video_ingest.add_argument("--input", type=Path, required=True)
+    video_ingest.add_argument("--run-id", required=True)
+    video_ingest.add_argument("--project-id")
+    video_ingest.add_argument("--cwd", type=Path, default=Path.cwd())
+    video_ingest.add_argument("--data", type=Path)
+    video_ingest.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Records per transaction (1-{MAX_BATCH_SIZE})",
+    )
+    video_ingest.add_argument("--json", action="store_true")
+    video_status = video_commands.add_parser("status", help="Show one resumable import run")
+    video_status.add_argument("--run-id", required=True)
+    video_status.add_argument("--data", type=Path)
+    video_status.add_argument("--json", action="store_true")
+    video_search = video_commands.add_parser(
+        "search", help="Search encrypted analysis outputs using the local blind index"
+    )
+    video_search.add_argument("query")
+    video_search.add_argument("--project-id")
+    video_search.add_argument("--cwd", type=Path, default=Path.cwd())
+    video_search.add_argument("--data", type=Path)
+    video_search.add_argument("--limit", type=int, default=20)
+    video_search.add_argument("--json", action="store_true")
+    video_summary = video_commands.add_parser(
+        "summarize", help="Build a bounded deterministic corpus consolidation"
+    )
+    video_summary.add_argument("--project-id")
+    video_summary.add_argument("--cwd", type=Path, default=Path.cwd())
+    video_summary.add_argument("--data", type=Path)
+    video_summary.add_argument("--top", type=int, default=20)
+    video_summary.add_argument(
+        "--remember",
+        action="store_true",
+        help="Promote only the bounded consolidation into agent memory",
+    )
+    video_summary.add_argument("--json", action="store_true")
 
     backup = commands.add_parser("backup", help="Move encrypted memory safely between devices")
     backup_commands = backup.add_subparsers(dest="backup_action", required=True)
@@ -322,6 +389,25 @@ def main(argv: list[str] | None = None) -> None:
         )
         print(json.dumps(pack, ensure_ascii=False, indent=2) if args.json else pack["context"])
         return
+    if args.command == "continue":
+        project = detect_project(args.cwd)
+        result = TaskContractService(
+            MemoryStore(args.data or default_data_path())
+        ).continue_work(
+            project_id=project.id,
+            task_id=args.task_id,
+            client=args.client,
+            max_tokens=args.max_tokens,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif result["status"] == "ready":
+            print(result["context"])
+        else:
+            print(result["message"])
+            for item in result.get("tasks", []):
+                print(f"- {item['task_id']}: {item['title']} ({item['status']})")
+        return
     if args.command == "cursor-rule":
         result = write_cursor_rule(
             args.project, store=MemoryStore(args.data or default_data_path())
@@ -357,6 +443,68 @@ def main(argv: list[str] | None = None) -> None:
                 f"{receipt['estimated_work_per_input_token_multiplier']}x"
             )
             print("Raw records were not sent to an AI provider.")
+        return
+    if args.command == "video":
+        pipeline = VideoAnalysisPipeline(MemoryStore(args.data or default_data_path()))
+        try:
+            if args.video_action == "status":
+                result = pipeline.status(args.run_id)
+            else:
+                project_id = args.project_id or detect_project(args.cwd).id
+                if args.video_action == "ingest":
+                    result = pipeline.ingest_jsonl(
+                        args.input,
+                        run_id=args.run_id,
+                        project_id=project_id,
+                        batch_size=args.batch_size,
+                    )
+                elif args.video_action == "search":
+                    matches = pipeline.search(
+                        args.query,
+                        project_id=project_id,
+                        limit=args.limit,
+                    )
+                    result = {
+                        "project_id": project_id,
+                        "query": args.query,
+                        "matches": matches,
+                        "count": len(matches),
+                    }
+                else:
+                    result = pipeline.consolidate(
+                        project_id=project_id,
+                        top_n=args.top,
+                        remember=args.remember,
+                    )
+        except (FileNotFoundError, KeyError, RuntimeError, TypeError, ValueError) as error:
+            raise SystemExit(str(error)) from error
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.video_action == "ingest":
+            print(
+                f"Lians secured {result['inserted']:,} video analyses "
+                f"({result['duplicates']:,} duplicates skipped)."
+            )
+            print(f"- Run: {result['run_id']} ({result['status']})")
+            print(f"- Checkpoint: {result['checkpoint']:,} records")
+        elif args.video_action == "status":
+            print(f"Video analysis run {result['run_id']}: {result['status']}")
+            print(f"- Checkpoint: {result['checkpoint']:,} records")
+            print(f"- Inserted: {result['inserted']:,}")
+            print(f"- Duplicates: {result['duplicates']:,}")
+        elif args.video_action == "search":
+            print(f"Found {result['count']} encrypted video analyses.")
+            for match in result["matches"]:
+                print(f"- {match['external_id']}: {match['title'] or match['summary'][:100]}")
+        else:
+            print(f"Consolidated {result['record_count']:,} encrypted video analyses.")
+            print(f"- Analyzed-text tokens: ~{result['analysis_tokens']:,}")
+            print(
+                "- Top tags: "
+                + (", ".join(item["value"] for item in result["top_tags"][:10]) or "none")
+            )
+            if result.get("memory"):
+                print("- Bounded consolidation promoted into agent memory")
         return
     if args.command == "experiment":
         if args.output is not None and args.output.exists() and not args.overwrite:
@@ -437,7 +585,9 @@ def main(argv: list[str] | None = None) -> None:
                 "- Provider-reported input-token reduction: "
                 f"{comparison['provider_reported_input_token_reduction_percent']}%"
             )
-            print(f"- 50% evidence gate: {'passed' if result['evidence_gate']['met'] else 'not met'}")
+            print(
+                f"- 50% evidence gate: {'passed' if result['evidence_gate']['met'] else 'not met'}"
+            )
             if args.output is not None:
                 print(f"- Report: {args.output}")
             print(result["next_step"])
@@ -445,8 +595,7 @@ def main(argv: list[str] | None = None) -> None:
             comparison = result["comparison"]
             print(f"Lians {result['provider']} stretch comparison complete.")
             print(
-                "- Compiled answer exact: "
-                f"{'yes' if comparison['compiled_answer_exact'] else 'no'}"
+                f"- Compiled answer exact: {'yes' if comparison['compiled_answer_exact'] else 'no'}"
             )
             if comparison["mode"] == "paired":
                 print(
@@ -460,8 +609,7 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 print("- Provider comparison: compiled-only; no raw replay was sent")
             print(
-                "- Evidence gate: "
-                f"{'passed' if result['evidence_gate']['live_met'] else 'not met'}"
+                f"- Evidence gate: {'passed' if result['evidence_gate']['live_met'] else 'not met'}"
             )
             if args.output is not None:
                 print(f"- Report: {args.output}")

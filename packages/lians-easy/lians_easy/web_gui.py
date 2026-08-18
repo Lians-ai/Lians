@@ -14,10 +14,17 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from .codex_lifeline import codex_lifeline_snapshot
+from .continuity import build_continuity_graph
+from .control_policy import ControlPolicyService
 from .installer import client_targets, user_data_dir, write_support_report
 from .lifeline import lifeline_snapshot
 from .mcp import default_data_path
+from .memory_health import MemoryHealthService
+from .project import detect_project
+from .state_integrity import StateIntegrityService
 from .store import MemoryStore
+from .task_contract import TaskContractService
+from .understanding import UnderstandingService
 
 _AI_PROCESS_NAMES = {
     "claude": {"claude.exe", "claude desktop.exe"},
@@ -269,16 +276,8 @@ def _taskbar_edge_for_monitor(
         left, top, right, bottom = taskbars[0]
         monitor_left, monitor_top, monitor_right, monitor_bottom = monitor_bounds
         if right - left >= bottom - top:
-            return (
-                "top"
-                if abs(top - monitor_top) <= abs(bottom - monitor_bottom)
-                else "bottom"
-            )
-        return (
-            "left"
-            if abs(left - monitor_left) <= abs(right - monitor_right)
-            else "right"
-        )
+            return "top" if abs(top - monitor_top) <= abs(bottom - monitor_bottom) else "bottom"
+        return "left" if abs(left - monitor_left) <= abs(right - monitor_right) else "right"
     except (AttributeError, OSError, TypeError, ValueError):
         return None
 
@@ -300,9 +299,7 @@ def _reserve_taskbar_trigger(
     return (left, top, right, bottom)
 
 
-def _side_snap_bounds(
-    work_area: tuple[int, int, int, int], side: str
-) -> tuple[int, int, int, int]:
+def _side_snap_bounds(work_area: tuple[int, int, int, int], side: str) -> tuple[int, int, int, int]:
     """Return the Windows-style left or right half of a monitor work area."""
 
     left, top, right, bottom = work_area
@@ -396,8 +393,10 @@ def _native_window_state(handle: int) -> str:
             return "maximized"
         rect = _window_rect(handle)
         work = _taskbar_safe_work_area(handle)
-        if rect is not None and work is not None and all(
-            abs(current - expected) <= 2 for current, expected in zip(rect, work)
+        if (
+            rect is not None
+            and work is not None
+            and all(abs(current - expected) <= 2 for current, expected in zip(rect, work))
         ):
             return "maximized"
         return "windowed"
@@ -433,11 +432,81 @@ class DesktopApi:
             metrics = codex_lifeline_snapshot(limit=4) or metrics
         return {
             "agent": (
-                {"key": client, "label": _AI_LABELS[client], "connected": True}
-                if client
-                else None
+                {"key": client, "label": _AI_LABELS[client], "connected": True} if client else None
             ),
             "metrics": metrics,
+        }
+
+    def work_graph(self) -> dict[str, Any]:
+        """Return a bounded local map for the native companion."""
+
+        graph = build_continuity_graph(self.store, limit=120)
+        graph["control"] = ControlPolicyService(self.store).status()
+        return graph
+
+    def state_repair_brief(self, invalidation_id: str) -> dict[str, Any]:
+        """Return a bounded local repair brief for one selected blast radius."""
+
+        rendered_id = str(invalidation_id).strip()
+        if not rendered_id or len(rendered_id) > 128:
+            raise ValueError("invalidation_id is invalid")
+        integrity = StateIntegrityService(self.store)
+        selected = integrity.invalidation(rendered_id, status="open")
+        return integrity.repair_brief(
+            project_id=selected.get("project_id"),
+            root_trigger_memory_id=selected["root_trigger_memory_id"],
+            max_tokens=768,
+        )
+
+    def continuity(self, task_id: str | None = None) -> dict[str, Any]:
+        """Return the active cross-agent work state without choosing ambiguously."""
+
+        client = _active_ai_client(self.preferred_client) or "lians-app"
+        return TaskContractService(self.store).continue_work(
+            project_id=None,
+            task_id=str(task_id) if task_id else None,
+            client=client,
+            max_tokens=768,
+        )
+
+    def control_status(self) -> dict[str, Any]:
+        """Return the user-owned policy without exposing decrypted memory rows."""
+
+        return ControlPolicyService(self.store).status()
+
+    def understand_request(self, request: str) -> dict[str, Any]:
+        """Preview the local understanding layer without storing the request."""
+
+        rendered = str(request)
+        project = detect_project(Path.cwd())
+        memories = self.store.recall(
+            rendered,
+            limit=3,
+            max_chars=2400,
+            project_id=project.id,
+        )
+        return UnderstandingService.analyze(rendered, memories=memories, max_questions=3)
+
+    def memory_health(self) -> dict[str, Any]:
+        """Return content-free, read-only memory quality diagnostics."""
+
+        return MemoryHealthService(self.store).inspect()
+
+    def update_control_policy(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Apply a strictly validated policy change from the local companion."""
+
+        return ControlPolicyService(self.store).update(changes, client="lians-app")
+
+    def set_memory_paused(self, memory_id: str, paused: bool) -> dict[str, Any]:
+        """Pause or resume one selected Work Graph memory node."""
+
+        if type(paused) is not bool:
+            raise TypeError("paused must be true or false")
+        item = self.store.pause(str(memory_id), paused=paused)
+        return {
+            "memory_id": item["id"],
+            "state": item["state"],
+            "paused": item["state"] == "paused",
         }
 
     def minimize(self) -> bool:
@@ -519,9 +588,7 @@ class DesktopApi:
             rect = wintypes.RECT()
             if not (get_key_state(0x01) & 0x8000):
                 return
-            if not get_cursor(ctypes.byref(cursor)) or not get_rect(
-                handle, ctypes.byref(rect)
-            ):
+            if not get_cursor(ctypes.byref(cursor)) or not get_rect(handle, ctypes.byref(rect)):
                 return
 
             if _native_window_state(handle) == "maximized" or self._snap_state in {

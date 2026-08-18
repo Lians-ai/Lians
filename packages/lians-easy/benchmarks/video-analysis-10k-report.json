@@ -1,0 +1,95 @@
+{
+  "status": "passed",
+  "scope": {
+    "records": 10000,
+    "batch_size": 10000,
+    "input_bytes": 49184000,
+    "provider_inference": "excluded; fixture represents completed provider outputs"
+  },
+  "timing": {
+    "fixture_generation_seconds": 0.55,
+    "partial_ingest_seconds": 2.829,
+    "resume_seconds": 4.59,
+    "total_ingest_seconds": 7.419,
+    "records_per_second": 1347.91,
+    "idempotent_replay_seconds": 6.129,
+    "search_ms": 184.09,
+    "consolidation_seconds": 1.327
+  },
+  "resources": {
+    "database_bytes": 86831104,
+    "process_peak_rss_bytes": 193175552
+  },
+  "run": {
+    "run_id": "ten-thousand-video-analysis",
+    "project_id": "video-research",
+    "input_sha256": "9612c3cb64e05393fe9e5df5b3c917d01df386dac8cc3bef0300b12a61725671",
+    "status": "complete",
+    "checkpoint": 10000,
+    "inserted": 10000,
+    "duplicates": 0,
+    "batches": 3,
+    "started_at": "2026-08-18T13:19:59.135727+00:00",
+    "updated_at": "2026-08-18T13:20:06.442561+00:00",
+    "completed_at": "2026-08-18T13:20:06.442561+00:00",
+    "resumed_from": 4000,
+    "input": "C:\\Users\\jedie\\AppData\\Local\\Temp\\lians-video-10k-ftara5e5\\video-analysis.jsonl"
+  },
+  "replay": {
+    "run_id": "ten-thousand-video-analysis-replay",
+    "project_id": "video-research",
+    "input_sha256": "9612c3cb64e05393fe9e5df5b3c917d01df386dac8cc3bef0300b12a61725671",
+    "status": "complete",
+    "checkpoint": 10000,
+    "inserted": 0,
+    "duplicates": 10000,
+    "batches": 1,
+    "started_at": "2026-08-18T13:20:06.543740+00:00",
+    "updated_at": "2026-08-18T13:20:12.609786+00:00",
+    "completed_at": "2026-08-18T13:20:12.609786+00:00",
+    "resumed_from": 0,
+    "input": "C:\\Users\\jedie\\AppData\\Local\\Temp\\lians-video-10k-ftara5e5\\video-analysis.jsonl"
+  },
+  "project": {
+    "project_id": "video-research",
+    "records": 10000,
+    "analysis_tokens": 1858000,
+    "videos": 10000,
+    "runs": 2,
+    "encrypted": true
+  },
+  "top_tags": [
+    {
+      "value": "agent-workflow",
+      "count": 10000
+    },
+    {
+      "value": "trust",
+      "count": 2000
+    },
+    {
+      "value": "pricing",
+      "count": 2000
+    },
+    {
+      "value": "retention",
+      "count": 2000
+    },
+    {
+      "value": "workflow",
+      "count": 2000
+    }
+  ],
+  "gates": {
+    "all_records_committed": true,
+    "interruption_recovered": true,
+    "no_duplicate_rows": true,
+    "replay_was_idempotent": true,
+    "oldest_or_latest_evidence_searchable": true,
+    "bounded_consolidation_created": true,
+    "sqlite_integrity_ok": true,
+    "ciphertext_has_no_obvious_plaintext": true,
+    "single_digit_structured_ingest": true,
+    "single_digit_complete_hot_path": true
+  }
+}

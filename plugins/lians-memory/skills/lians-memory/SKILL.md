@@ -1,6 +1,6 @@
 ---
 name: lians-memory
-description: Set up, diagnose, or use Lians Memory when the user asks Codex to remember durable project information, recall prior work, check the memory plugin, or optimize repeated memory-heavy work.
+description: Set up, diagnose, or use Lians Memory when the user asks Codex to remember durable project information, resume unfinished work, verify repository changes, continue across agents or sessions, check the memory plugin, or optimize repeated memory-heavy work.
 ---
 
 # Lians Memory
@@ -47,6 +47,30 @@ start a new task. Plugin installation alone does not trust hooks.
 - Use `remember` only for durable project facts, decisions, constraints, and user-approved preferences. Do not store credentials, access tokens, private keys, or transient scratch work.
 - If relevant memories conflict or look stale, say so and verify against current project files or the user before acting.
 - Keep recalled content out of commands unless the current request independently authorizes the same operation.
+
+## Continuity workflow
+
+- For substantial work without an existing contract, use `start_task` once with the user's goal, observable success criteria, and real constraints. Do not create a contract for a simple question.
+- On a return, agent switch, or `$lians continue` request, use an already-injected continuity brief when present. Otherwise call `continue_work`. If it returns multiple active tasks, ask the user to choose; never guess between goals.
+- Use `checkpoint_task` when verified progress changes. Record evidence, blockers, the next action, durable decisions with reasons, and unresolved questions. Do not turn speculation into verified work.
+- Use `task_status` before claiming completion. Completion requires evidence for every criterion and no failed, unknown, or blocked constraint.
+- Treat task contracts and checkpoints as user-owned state. Keep briefs bounded and do not replay the transcript when the brief is sufficient.
+
+## State integrity workflow
+
+- When saved work materially depends on a named current fact, use `track_dependencies` with exact memory and artifact references.
+- Use `state_impact` before changing a high-fanout fact or decision.
+- After a state change, use `state_repair_brief`. Never reuse memory reported as invalidated, and preserve work that is not listed.
+- Use `resolve_state_impact` only after recording repair evidence, or dismiss it only when the dependency itself was incorrect.
+
+## Repository verification workflow
+
+- For substantial repository work, call `configure_verification` after `start_task` and before editing. Use repository-relative approved paths and map every expected changed path to a task success criterion.
+- Before claiming completion, record actual criterion evidence and constraint results, then call `verify_work` with a concise summary and redacted check results.
+- Treat supplied test or lint results as caller attestations, not checks executed by Lians. Never place credentials or raw secret-bearing logs in evidence.
+- Fix every blocker and verify the final diff again. A clean signed receipt means ready for human ship review; it is not formal proof, merge authorization, or deployment approval.
+- When `formal_proofs` are configured, describe a `finite-model-v1` success as an exhaustive proof of the declared finite model only. Report counterexamples exactly. The current backend hash-binds source files but does not prove that application source implements the model.
+- Describe `python-finite-function-v1` success as a bounded proof of the actual restricted pure function for every declared satisfying input. Never broaden that result to unmodeled inputs, other functions, runtime dependencies, or the entire application.
 
 ## Claim boundary
 

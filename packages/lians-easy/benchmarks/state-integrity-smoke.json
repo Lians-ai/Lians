@@ -1,0 +1,37 @@
+{
+  "correctness": {
+    "detected_impacts": 20,
+    "expected_impacts": 20,
+    "false_invalidation_rate": 0.0,
+    "fanout": 2,
+    "impact_recall": 1.0,
+    "median_change_ms": 8.411,
+    "median_repair_to_replay_ratio": 7.4839,
+    "p95_change_ms": 8.772,
+    "pass": true,
+    "scenarios": 5,
+    "stale_retrieval_block_rate": 1.0,
+    "unaffected_preservation_rate": 1.0
+  },
+  "elapsed_ms": 616.965,
+  "naive_memory_baseline": {
+    "scenarios": 5,
+    "stale_retrieval_block_rate": 0.0,
+    "stale_retrieval_rate": 1.0
+  },
+  "pass": true,
+  "scale": {
+    "bounded_repair_brief_ms": 9.179,
+    "change_and_invalidate_ms": 9.215,
+    "database_bytes": 229376,
+    "impacts": 100,
+    "link_ms": 13.434,
+    "observed_impacts": 100,
+    "ordinary_recall_ms": 10.484,
+    "pass": true,
+    "repair_brief_included_impacts": 19,
+    "repair_brief_tokens": 761,
+    "single_digit_seconds": true
+  },
+  "schema": "https://lians.ai/schemas/state-integrity-benchmark/v0.1"
+}

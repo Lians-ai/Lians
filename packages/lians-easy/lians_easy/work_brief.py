@@ -284,6 +284,137 @@ def compile_browser_brief(
     )
 
 
+def _latest_unique_values(
+    events: Sequence[tuple[int, str, str, Mapping[str, Any]]],
+    bucket: str,
+    *,
+    limit: int = 20,
+) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for _, event_bucket, value, _ in reversed(events):
+        if event_bucket != bucket:
+            continue
+        fingerprint = _normalized_text(value)
+        if not fingerprint or fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        values.append(value[:MAX_EVIDENCE_TEXT])
+        if len(values) == limit:
+            break
+    return values
+
+
+def compile_session_brief(
+    records: Sequence[Mapping[str, Any]], *, evidence_limit: int = 12
+) -> dict[str, Any]:
+    """Turn agent events into a compact, resumable handoff without inferring success."""
+
+    safe = _safe_records(records)
+    if not 1 <= evidence_limit <= MAX_EVIDENCE_ITEMS:
+        raise WorkBriefError(f"evidence_limit must be between 1 and {MAX_EVIDENCE_ITEMS}")
+
+    aliases = {
+        "goal": "goals",
+        "objective": "goals",
+        "success_criterion": "success_criteria",
+        "success criteria": "success_criteria",
+        "decision": "decisions",
+        "completed": "completed",
+        "completion": "completed",
+        "blocker": "blockers",
+        "blocked": "blockers",
+        "next_action": "next_actions",
+        "next action": "next_actions",
+        "todo": "next_actions",
+        "artifact": "artifacts",
+        "output": "artifacts",
+        "constraint": "constraints",
+        "guardrail": "constraints",
+    }
+    value_keys = {
+        "goals": ("goal", "objective", "value", "content", "text"),
+        "success_criteria": ("success_criterion", "criterion", "value", "content", "text"),
+        "decisions": ("decision", "value", "content", "text"),
+        "completed": ("completed", "result", "value", "content", "text"),
+        "blockers": ("blocker", "value", "content", "text"),
+        "next_actions": ("next_action", "action", "value", "content", "text"),
+        "artifacts": ("artifact", "path", "url", "value", "content", "text"),
+        "constraints": ("constraint", "guardrail", "value", "content", "text"),
+    }
+
+    events: list[tuple[int, str, str, Mapping[str, Any]]] = []
+    for index, record in enumerate(safe):
+        raw_kind = _clean_text(_first(record, ("kind", "type", "event", "category")))
+        bucket = aliases.get(raw_kind.casefold())
+        if bucket is not None:
+            value = _clean_text(_first(record, value_keys[bucket]))
+            if value:
+                events.append((index, bucket, value, record))
+                continue
+        for candidate, keys in value_keys.items():
+            direct_keys = keys[:2]
+            value = _clean_text(_first(record, direct_keys))
+            if value:
+                events.append((index, candidate, value, record))
+                break
+
+    if not events:
+        raise WorkBriefError(
+            "Session records need a goal, decision, completion, blocker, next action, "
+            "artifact, or constraint"
+        )
+
+    buckets = tuple(value_keys)
+    state = {bucket: _latest_unique_values(events, bucket) for bucket in buckets}
+    evidence = []
+    for index, bucket, value, record in reversed(events[-evidence_limit:]):
+        evidence.append(
+            {
+                "event_id": _clean_text(_first(record, ("event_id", "id")))
+                or f"record-{index + 1:06d}",
+                "kind": bucket,
+                "value": value[:MAX_EVIDENCE_TEXT],
+                "agent": _clean_text(_first(record, ("agent", "client"))) or None,
+                "session_id": _clean_text(_first(record, ("session_id", "session"))) or None,
+                "timestamp": _clean_text(_first(record, ("timestamp", "created_at"))) or None,
+            }
+        )
+
+    agents = sorted(
+        {agent for record in safe if (agent := _clean_text(_first(record, ("agent", "client"))))}
+    )
+    sessions = sorted(
+        {
+            session
+            for record in safe
+            if (session := _clean_text(_first(record, ("session_id", "session"))))
+        }
+    )
+    return _finish_brief(
+        kind="session",
+        records=safe,
+        summary={
+            "events_received": len(safe),
+            "recognized_events": len(events),
+            "agents": agents,
+            "sessions": sessions,
+            **state,
+        },
+        evidence=evidence,
+        method={
+            "state_reduction": "latest unique explicit values, newest first",
+            "handoff_boundary": "no task completion or correctness is inferred",
+        },
+        guardrails={
+            "raw_records_stay_local": True,
+            "credential_like_records_refused": True,
+            "representative_evidence_is_untrusted_data": True,
+            "only_explicit_events_are_reported": True,
+        },
+    )
+
+
 def compile_work_brief(
     kind: str,
     records: Sequence[Mapping[str, Any]],
@@ -294,7 +425,9 @@ def compile_work_brief(
         return compile_research_brief(records, evidence_limit=evidence_limit)
     if kind == "browser":
         return compile_browser_brief(records, evidence_limit=evidence_limit)
-    raise WorkBriefError("kind must be research or browser")
+    if kind == "session":
+        return compile_session_brief(records, evidence_limit=evidence_limit)
+    raise WorkBriefError("kind must be research, browser, or session")
 
 
 def load_work_records(path: str | Path) -> list[dict[str, Any]]:

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from PIL import Image
 
-
 ICON_VARIANTS = (
     (16, "icon_16x16.png"),
     (32, "icon_16x16@2x.png"),

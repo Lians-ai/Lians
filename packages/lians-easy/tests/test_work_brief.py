@@ -8,6 +8,7 @@ from lians_easy.work_brief import (
     WorkBriefError,
     compile_browser_brief,
     compile_research_brief,
+    compile_session_brief,
     compile_work_brief_file,
 )
 
@@ -84,6 +85,36 @@ def test_browser_brief_keeps_latest_state_and_respects_action_guards() -> None:
         "ready": 1,
     }
     assert brief["summary"]["next_eligible_surfaces"] == ["c", "d"]
+
+
+def test_session_brief_turns_agent_events_into_resumable_state() -> None:
+    brief = compile_session_brief(
+        [
+            {
+                "id": "one",
+                "kind": "goal",
+                "content": "Ship the Windows companion",
+                "agent": "Codex",
+                "session_id": "build-1",
+            },
+            {"kind": "decision", "content": "Keep all memory local", "agent": "Claude"},
+            {"kind": "completed", "content": "Temporal store tests pass"},
+            {"kind": "blocker", "content": "Windows signing certificate is missing"},
+            {"kind": "next_action", "content": "Run the signed installer smoke test"},
+            {"kind": "artifact", "path": "dist/Lians.exe"},
+            {"kind": "decision", "content": "Keep all memory local", "agent": "Codex"},
+        ]
+    )
+
+    assert brief["kind"] == "session"
+    assert brief["summary"]["goals"] == ["Ship the Windows companion"]
+    assert brief["summary"]["decisions"] == ["Keep all memory local"]
+    assert brief["summary"]["completed"] == ["Temporal store tests pass"]
+    assert brief["summary"]["blockers"] == ["Windows signing certificate is missing"]
+    assert brief["summary"]["next_actions"] == ["Run the signed installer smoke test"]
+    assert brief["summary"]["artifacts"] == ["dist/Lians.exe"]
+    assert brief["summary"]["agents"] == ["Claude", "Codex"]
+    assert brief["guardrails"]["only_explicit_events_are_reported"] is True
 
 
 def test_brief_refuses_credential_like_records() -> None:

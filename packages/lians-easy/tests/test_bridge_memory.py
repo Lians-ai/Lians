@@ -179,7 +179,7 @@ def test_credentials_are_rejected_before_encryption(tmp_path):
     store = MemoryStore(tmp_path / "bridge.sqlite3")
 
     with pytest.raises(ValueError, match="excluded and not stored"):
-        store.remember("API_KEY=sk-example-secret-value-12345")
+        store.remember("API_KEY=" + "sk-" + ("example-secret-value-" * 2))
 
     assert store.list() == []
 

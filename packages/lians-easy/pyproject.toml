@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "lians-bridge"
 version = "0.5.0"
-description = "Less repeated context for the AI tools you already use"
+description = "Local control, continuity, and observability for the AI agents you already use"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 readme = "README.md"
 authors = [{ name = "Lians" }]
 keywords = ["ai", "memory", "mcp", "codex", "claude", "cursor", "gemini"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Intended Audience :: End Users/Desktop",

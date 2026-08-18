@@ -21,6 +21,13 @@ const themeButton = document.querySelector("#theme-toggle");
 const refreshButton = document.querySelector("#refresh");
 const supportButton = document.querySelector("#support-report");
 const supportStatus = document.querySelector("#support-status");
+const understandingButton = document.querySelector("#understanding");
+const understandingPanel = document.querySelector("#understanding-panel");
+const understandingClose = document.querySelector("#understanding-close");
+const understandingInput = document.querySelector("#understanding-input");
+const understandingRun = document.querySelector("#understanding-run");
+const understandingStatus = document.querySelector("#understanding-status");
+const understandingResult = document.querySelector("#understanding-result");
 const titlebar = document.querySelector("#titlebar");
 const minimizeButton = document.querySelector("#window-minimize");
 const maximizeButton = document.querySelector("#window-maximize");
@@ -304,7 +311,7 @@ function renderActivity(items) {
     container.innerHTML = `
       <div class="empty-state">
         <span class="waterline" aria-hidden="true"></span>
-        <p>Waiting for the first handoff.</p>
+        <p>Waiting for agent activity.</p>
       </div>`;
     return;
   }
@@ -397,6 +404,73 @@ async function saveHelpReport() {
   }
 }
 
+function renderUnderstanding(brief, health) {
+  const questions = brief?.questions || [];
+  document.querySelector("#understanding-intent").textContent = brief?.intent || "Ready";
+  document.querySelector("#understanding-headline").textContent = brief?.needs_clarification
+    ? questions[0]?.question || "One detail is missing."
+    : "Your request is ready to move.";
+  const memoryCount = brief?.privacy?.memory_items_considered || 0;
+  document.querySelector("#understanding-detail").textContent = brief?.needs_clarification
+    ? questions[0]?.why || "This answer changes the next useful action."
+    : `${memoryCount} relevant memories checked. Lians will avoid asking for what it already knows.`;
+  document.querySelector("#understanding-questions").innerHTML = questions
+    .slice(brief?.needs_clarification ? 1 : 0, 3)
+    .map((item) => `
+      <article class="understanding-question">
+        <strong>${escapeHtml(item.question)}</strong>
+        <p>${escapeHtml(item.why)}</p>
+      </article>`)
+    .join("");
+  document.querySelector("#memory-health-score").textContent = health
+    ? `${formatNumber(health.score)} / 100`
+    : "Unavailable";
+  understandingResult.hidden = false;
+  if (!reduceMotion) {
+    motionAnimate(
+      understandingResult,
+      { opacity: [0, 1], y: [12, 0] },
+      { duration: 0.28 },
+    );
+  }
+}
+
+async function runUnderstanding() {
+  const request = understandingInput.value.trim();
+  if (!bridgeReady || !request || understandingRun.getAttribute("aria-busy") === "true") {
+    understandingStatus.textContent = request ? "Lians is still starting." : "Describe the outcome first.";
+    return;
+  }
+  understandingRun.setAttribute("aria-busy", "true");
+  understandingStatus.textContent = "Finding what matters...";
+  try {
+    const [brief, health] = await Promise.all([
+      window.pywebview.api.understand_request(request),
+      window.pywebview.api.memory_health(),
+    ]);
+    renderUnderstanding(brief, health);
+    understandingStatus.textContent = brief.needs_clarification
+      ? "One answer will sharpen the work."
+      : "Ready to use with your agent.";
+  } catch {
+    understandingStatus.textContent = "Lians could not read this request.";
+  } finally {
+    understandingRun.removeAttribute("aria-busy");
+  }
+}
+
+function openUnderstanding() {
+  understandingPanel.hidden = false;
+  understandingInput.focus();
+  if (!reduceMotion) {
+    motionAnimate(understandingPanel, { opacity: [0, 1] }, { duration: 0.2 });
+  }
+}
+
+function closeUnderstanding() {
+  understandingPanel.hidden = true;
+}
+
 function installInteractions() {
   hover(".metric", (element) => {
     motionAnimate(element, { y: -4 }, { type: "spring", bounce: 0.08, duration: 0.24 });
@@ -457,6 +531,17 @@ themeButton.addEventListener("click", () => {
 });
 refreshButton.addEventListener("click", refresh);
 supportButton.addEventListener("click", saveHelpReport);
+if (understandingButton.dataset.bound !== "true") {
+  understandingButton.dataset.bound = "true";
+  understandingButton.addEventListener("click", openUnderstanding);
+  understandingClose.addEventListener("click", closeUnderstanding);
+  understandingRun.addEventListener("click", runUnderstanding);
+  understandingInput.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      runUnderstanding();
+    }
+  });
+}
 minimizeButton.addEventListener("click", () => window.pywebview?.api.minimize());
 maximizeButton.addEventListener("click", async () => {
   const state = await window.pywebview?.api.toggle_maximize();
