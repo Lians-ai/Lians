@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from pathlib import Path
 
 import lians_easy.installer as installer_module
@@ -53,7 +54,7 @@ def test_installer_preserves_json_and_creates_backup(tmp_path, monkeypatch):
     assert session_hook["statusMessage"] == "Lians is saving project continuity"
     assert "hook --client claude" in session_hook["command"]
     assert session_hook["timeout"] == 12
-    assert session_hook["command"].startswith("'C:\\")
+    assert shlex.split(session_hook["command"])[0] == installer_module.sys.executable
 
     removed = uninstall(["claude"], home=home)
     assert "lians" not in json.loads(config.read_text())["mcpServers"]
