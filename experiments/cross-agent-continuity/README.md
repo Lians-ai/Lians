@@ -26,6 +26,16 @@ path for the included fixture. They do not prove that every live agent session w
 perfectly or that a second agent will never repeat work. The latter requires the live comparison
 test described below.
 
+The production hook path was also exercised on Windows with Claude Code 2.1.210. Claude changed
+two fixture files, ran pytest successfully, and intentionally left one documentation task open.
+The real `SessionEnd` hook automatically captured three completed items, the unfinished item, the
+pytest decision, the v1-to-v2 supersession, touched files, and do-not-redo constraints without
+storing the transcript. The candidate Codex `UserPromptSubmit` hook then emitted a signed,
+project-scoped continuation brief bounded to 1,809 characters. This validates the live hook seam;
+it is not a claim that arbitrary agent prose will always extract perfectly. The acceptance prompt
+requested the explicit section headings consumed by the deterministic extractor; the user did not
+write or paste a handoff and did not call `remember` manually.
+
 ## What it reuses
 
 - repository-derived project identity from `lians_easy.project`
@@ -50,7 +60,9 @@ fresh Codex prompt hook
 bounded project continuity context
 ```
 
-The JSON session record is the output contract for a future Claude session-end hook. It is
+The JSON session record remains the deterministic fixture contract. In an installed client, the
+Claude `SessionEnd` hook reads only a bounded JSONL transcript tail and maps explicit headings,
+tool-touched files, and current work state into the same Lians primitives. The transcript is
 evidence input, not the canonical handoff and not a stored transcript. The canonical state stays
 inside Lians. The handoff is generated when the next agent asks to continue.
 
@@ -78,12 +90,11 @@ still open, pytest must remain, the v1 route is stale, and documentation is the 
 ## Real Claude to Codex path
 
 1. Install Lians for both Claude Code and Codex using the existing installer.
-2. Work in Claude on one repository. Use the existing `start_task` and `checkpoint_task` tools, or
-   export the session-end JSON contract used by this experiment.
-3. Run `capture` once at session end. Do not write a manual Markdown handoff.
-4. Close Claude completely.
-5. Open a fresh Codex session in the same Git repository.
-6. Ask `Pick up where we left off.`
+2. Work in Claude on one repository and end the session normally.
+3. Lians captures explicit completed work, open work, decisions, changes, constraints, and touched
+   files automatically from Claude's `SessionEnd` evidence. Do not write a manual Markdown handoff.
+4. Open a fresh Codex session in the same Git repository.
+5. Ask `Pick up where we left off.`
 
 The existing Codex prompt hook detects the repository, finds the only unresolved task contract,
 and injects bounded current Lians state. To inspect the exact derived view without an agent, run
@@ -143,14 +154,14 @@ Compare correctness, stale assumptions, repeated work, user re-explanation, cont
 to the first useful action. Lians does not need to beat a careful human summary. It needs to approach
 that handoff quality without making the human write it.
 
-## Current boundary and missing automation
+## Current boundary
 
 The existing Lians primitives cover scope, supersession, work state, bounded retrieval, receipts,
-and cross-agent injection. The remaining integration gap is a production Claude session-end hook
-that automatically emits this structured extraction from transcript evidence, tool calls, diffs,
-commits, and tests. This experiment intentionally defines and validates that seam without adding a
-transcript database or changing the core memory model.
+and cross-agent injection. The production Claude session-end adapter now performs conservative,
+deterministic extraction from explicit session language and file-tool evidence. It intentionally
+does not use a hidden model call, retain transcripts, infer unspoken decisions, or claim that test
+output is verified beyond Claude's reported evidence.
 
-This is ready for public beta testing from a source checkout. It is not a general-availability
-claim. Promotion should describe it as a reproducible cross-agent continuity beta until the live
-Claude-to-Codex acceptance run and automatic session-end extraction are complete.
+This is ready for public beta testing. It is not a general-availability claim. The next evidence
+gate is repeated live Claude-to-Codex comparison across varied real repositories, measuring
+extraction misses and redundant work rather than presenting one successful path as universal.

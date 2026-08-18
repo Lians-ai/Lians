@@ -26,6 +26,7 @@ from .diagnostics import recent_crash_summaries
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
 MANAGED_END = "# <<< Lians Memory (managed by Lians Easy)"
 HOOK_STATUS = "Recalling Lians memory"
+SESSION_HOOK_STATUS = "Lians is saving project continuity"
 LIANS_HOOK_NAME = "lians-memory-recall"
 ANTIGRAVITY_PLUGIN_NAME = "lians-memory"
 
@@ -486,7 +487,7 @@ def _json_config(
     return backup
 
 
-def _lians_hook_group(client: str) -> dict[str, Any]:
+def _lians_hook_group(client: str, *, event_name: str | None = None) -> dict[str, Any]:
     argv = _runtime_argv("hook", "--client", client)
     if client == "gemini":
         return {
@@ -502,12 +503,18 @@ def _lians_hook_group(client: str) -> dict[str, Any]:
                 }
             ],
         }
+    # Claude Code launches command hooks through Bash on Windows. POSIX quoting
+    # preserves Windows path backslashes there; list2cmdline does not.
+    windows_command = sys.platform == "win32" and client != "claude"
     hook: dict[str, Any] = {
         "type": "command",
-        "command": _shell_command(argv, windows=sys.platform == "win32"),
+        "command": _shell_command(argv, windows=windows_command),
         "timeout": 8,
         "statusMessage": HOOK_STATUS,
     }
+    if client == "claude" and event_name == "SessionEnd":
+        hook["statusMessage"] = SESSION_HOOK_STATUS
+        hook["timeout"] = 12
     if client == "codex":
         hook["commandWindows"] = _shell_command(argv, windows=True)
         hook["additionalContextLimit"] = 2048
@@ -519,7 +526,10 @@ def _is_lians_hook_group(value: Any) -> bool:
         return False
     return any(
         isinstance(hook, dict)
-        and (hook.get("statusMessage") == HOOK_STATUS or hook.get("name") == LIANS_HOOK_NAME)
+        and (
+            hook.get("statusMessage") in {HOOK_STATUS, SESSION_HOOK_STATUS}
+            or hook.get("name") == LIANS_HOOK_NAME
+        )
         for hook in value["hooks"]
     )
 
@@ -543,15 +553,18 @@ def _hook_config(
     hooks = document.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise TypeError(f"hooks must be an object in {path}")
-    event_name = "BeforeAgent" if client == "gemini" else "UserPromptSubmit"
-    prompt_hooks = hooks.setdefault(event_name, [])
-    if not isinstance(prompt_hooks, list):
-        raise TypeError(f"hooks.{event_name} must be an array in {path}")
-    prompt_hooks[:] = [group for group in prompt_hooks if not _is_lians_hook_group(group)]
-    if not remove:
-        prompt_hooks.append(_lians_hook_group(client))
-    if remove and not prompt_hooks:
-        hooks.pop(event_name, None)
+    event_names = ["BeforeAgent" if client == "gemini" else "UserPromptSubmit"]
+    if client == "claude":
+        event_names.append("SessionEnd")
+    for event_name in event_names:
+        prompt_hooks = hooks.setdefault(event_name, [])
+        if not isinstance(prompt_hooks, list):
+            raise TypeError(f"hooks.{event_name} must be an array in {path}")
+        prompt_hooks[:] = [group for group in prompt_hooks if not _is_lians_hook_group(group)]
+        if not remove:
+            prompt_hooks.append(_lians_hook_group(client, event_name=event_name))
+        if remove and not prompt_hooks:
+            hooks.pop(event_name, None)
     if remove and not hooks:
         document.pop("hooks", None)
     backup = _backup(path, on_created=on_backup)
@@ -987,6 +1000,11 @@ def _verify_client(key: str, *, home: Path) -> None:
         hooks = document.get("hooks", {})
         groups = hooks.get(event_name, []) if isinstance(hooks, dict) else []
         verified = isinstance(groups, list) and any(_is_lians_hook_group(group) for group in groups)
+        if verified and key == "claude":
+            session_groups = hooks.get("SessionEnd", []) if isinstance(hooks, dict) else []
+            verified = isinstance(session_groups, list) and any(
+                _is_lians_hook_group(group) for group in session_groups
+            )
     if not verified:
         raise RuntimeError(f"Lians could not verify automatic recall for {target.label}")
 

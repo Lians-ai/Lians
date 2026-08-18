@@ -30,6 +30,7 @@ from .installer import client_targets, uninstall
 from .mcp import default_data_path
 from .portability import export_backup, import_backup, verify_backup
 from .project import detect_project
+from .session_capture import capture_claude_session_end
 from .store import ConcurrentUpdateError, MemoryStore
 from .task_contract import TaskContractService
 from .understanding import UnderstandingService
@@ -156,7 +157,7 @@ def context_for_event(
         limit=3,
         max_tokens=max(64, total_budget - task_budget) if task_context else total_budget,
         include_all_project=client == "antigravity" or include_all_project,
-        excluded_kinds={"control_policy", "task_contract", "task_state"},
+        excluded_kinds={"control_policy", "session_capture", "task_contract", "task_state"},
     )
     sections: list[str] = []
     policy_guidance = ControlPolicyService.guidance(policy)
@@ -1237,6 +1238,9 @@ def run_hook(*, client: str, data_path: str | Path | None = None) -> int:
             sys.stdout.write("{}")
             return 0
         store = MemoryStore(data_path or default_data_path())
+        if client == "claude" and event.get("hook_event_name") == "SessionEnd":
+            capture_claude_session_end(event, store=store)
+            return 0
         cloud_sync = CloudSyncService.for_store(store)
         default_query = (
             "Active project preferences constraints decisions and handoff"

@@ -348,6 +348,28 @@ def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
     assert "Use FastAPI for services." in output.getvalue()
 
 
+def test_claude_session_end_hook_captures_without_prompt_output(tmp_path, monkeypatch):
+    event = {
+        "hook_event_name": "SessionEnd",
+        "session_id": "session-1",
+        "transcript_path": str(tmp_path / "session.jsonl"),
+        "cwd": str(tmp_path),
+    }
+    captured = []
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(event)))
+    output = StringIO()
+    monkeypatch.setattr(sys, "stdout", output)
+    monkeypatch.setattr(
+        "lians_easy.bridge.capture_claude_session_end",
+        lambda received, *, store: captured.append((received, store.path)),
+    )
+
+    assert run_hook(client="claude", data_path=tmp_path / "bridge.sqlite3") == 0
+    assert captured[0][0] == event
+    assert captured[0][1] == tmp_path / "bridge.sqlite3"
+    assert output.getvalue() == ""
+
+
 def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)

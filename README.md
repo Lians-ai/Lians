@@ -51,8 +51,9 @@ quota.
 
 > **Cross-agent continuity beta:** the included Claude-to-Codex fixture recovers
 > **10/10 expected continuity facts**, presents **0 stale facts as current**, and
-> produces a **231-token handoff**. This is a deterministic synthetic fixture,
-> not yet a claim about every live coding session.
+> produces a **231-token handoff**. A live Windows Claude session also completed
+> the automatic `SessionEnd` to fresh Codex-hook path. These are bounded beta
+> results, not a claim that every live coding session extracts perfectly.
 > [Run the experiment](experiments/cross-agent-continuity/README.md).
 
 ## See the handoff
@@ -162,7 +163,7 @@ consumer package is being tested.
 | Free local memory through MCP and Python | Available |
 | Cursor, Claude Code, Codex, Gemini, Antigravity, Windsurf, Cline, and OpenCode setup | Available |
 | Local research and browser brief compiler | Available from source |
-| Project-scoped Claude-to-Codex continuity experiment | Beta, reproducible from source |
+| Automatic project-scoped Claude-to-Codex continuity | Beta, live hook and fixture tested |
 | Bounded context and signed selection receipts | Available |
 | State-change blast radius and bounded repair briefs | Beta candidate |
 | Git-scoped task verification and signed review receipts | Beta candidate |
@@ -184,10 +185,12 @@ decisions, constraints, and one superseded route. A fresh Codex handoff selected
 excluded the stale route from current state. The evaluator and fixture are
 [included in the repository](experiments/cross-agent-continuity/README.md).
 
-Automatic extraction from an arbitrary live Claude session remains the next
-production integration step. The current beta validates project isolation,
-supersession, bounded recall, signed provenance, and the Claude-to-Codex handoff
-contract without claiming that the live behavior test is complete.
+The installed Claude integration now captures a compact continuity checkpoint at
+`SessionEnd`; it reads a bounded transcript tail as evidence and never stores the
+transcript as memory. A live Windows gate carried completed work, an unfinished
+README update, the pytest decision, and the current v2 route into the candidate
+Codex hook while marking v1 stale. Repeated multi-repository behavior testing
+remains necessary before any general-availability claim.
 
 In four bounded paired synthetic workloads, signed-in Claude Code and Codex
 returned the exact expected answer while Lians used **79.9% to 96.7% fewer

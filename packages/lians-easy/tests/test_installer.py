@@ -48,6 +48,12 @@ def test_installer_preserves_json_and_creates_backup(tmp_path, monkeypatch):
     assert hook["statusMessage"] == HOOK_STATUS
     assert "hook --client claude" in hook["command"]
     assert str(expected_database) in hook["command"]
+    [session_group] = hooks["SessionEnd"]
+    [session_hook] = session_group["hooks"]
+    assert session_hook["statusMessage"] == "Lians is saving project continuity"
+    assert "hook --client claude" in session_hook["command"]
+    assert session_hook["timeout"] == 12
+    assert session_hook["command"].startswith("'C:\\")
 
     removed = uninstall(["claude"], home=home)
     assert "lians" not in json.loads(config.read_text())["mcpServers"]
