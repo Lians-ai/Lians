@@ -7,6 +7,25 @@ This experiment tests one product claim:
 It is not a second memory framework. The experiment is a thin mapper and evaluator over the
 existing local Lians runtime.
 
+## Result
+
+The committed synthetic fixture currently produces:
+
+| Measure | Result |
+| --- | ---: |
+| Expected continuity facts recovered | 10 / 10 |
+| Continuity accuracy | 100% |
+| Stale facts presented as current | 0 |
+| Selected continuity items | 11 |
+| Estimated handoff size | 231 tokens |
+| Active project memories considered | 8 |
+| Superseded facts excluded | 1 |
+
+These results prove the deterministic extraction, supersession, scoping, and bounded-selection
+path for the included fixture. They do not prove that every live agent session will be extracted
+perfectly or that a second agent will never repeat work. The latter requires the live comparison
+test described below.
+
 ## What it reuses
 
 - repository-derived project identity from `lians_easy.project`
@@ -131,3 +150,7 @@ and cross-agent injection. The remaining integration gap is a production Claude 
 that automatically emits this structured extraction from transcript evidence, tool calls, diffs,
 commits, and tests. This experiment intentionally defines and validates that seam without adding a
 transcript database or changing the core memory model.
+
+This is ready for public beta testing from a source checkout. It is not a general-availability
+claim. Promotion should describe it as a reproducible cross-agent continuity beta until the live
+Claude-to-Codex acceptance run and automatic session-end extraction are complete.

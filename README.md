@@ -25,17 +25,19 @@
   <a href="https://github.com/Lians-ai/Lians/stargazers"><img src="https://img.shields.io/github/stars/Lians-ai/Lians?style=social" alt="Star Lians on GitHub"></a>
 </p>
 
-# Use less context. Get more AI.
+# Start a new AI coding session without re-explaining your project.
 
-Lians gives Claude, Cursor, Codex, and other AI tools the small amount of saved
-context they need instead of making them reread every previous chat or raw work
-record.
+Lians gives Claude Code, Codex, Cursor, and other AI tools the current project
+state they need to pick up where another session stopped. It keeps completed
+work, open work, decisions, constraints, and changed facts separate so the next
+agent can continue without repeating or reversing prior work.
 
 Keep your current AI account, editor, and normal workflow. Lians runs locally
 between your work history and your AI tool.
 
-- Reuse a project fact, preference, constraint, or decision in a new chat.
-- Stop agents from reusing saved work after the fact it depended on changes.
+- Resume a project with what is complete, what is open, and what should happen next.
+- Stop agents from redoing completed work or reviving a superseded decision.
+- Give each new session a small, project-scoped handoff instead of a transcript dump.
 - Bind repository changes to the original task and produce a signed review receipt.
 - Turn thousands of research posts or browser events into one bounded brief.
 - Inspect, correct, export, or delete anything Lians saves.
@@ -45,7 +47,42 @@ Lians does not ask for your Claude, Cursor, or Codex password or provider API
 key. It does not enlarge a provider context window or change a subscription
 quota.
 
-## Try Lians in two chats
+> **Cross-agent continuity beta:** the included Claude-to-Codex fixture recovers
+> **10/10 expected continuity facts**, presents **0 stale facts as current**, and
+> produces a **231-token handoff**. This is a deterministic synthetic fixture,
+> not yet a claim about every live coding session.
+> [Run the experiment](experiments/cross-agent-continuity/README.md).
+
+## See the handoff
+
+A fresh agent receives a bounded continuation view like this:
+
+```text
+Completed:
+- migrated the orders API to /v2/orders
+- updated tests
+
+Still open:
+- update documentation
+
+Decisions:
+- keep pytest
+
+Changed:
+- /v1/orders is stale; use /v2/orders
+
+Do NOT:
+- redo the migration
+- replace pytest with unittest
+
+Next:
+- update documentation before touching unrelated UI
+```
+
+The handoff is derived from current Lians state. It is not a manually maintained
+summary and it does not expose the full session transcript.
+
+## Try saved memory in two chats
 
 Choose the AI tool you already use:
 
@@ -123,6 +160,7 @@ consumer package is being tested.
 | Free local memory through MCP and Python | Available |
 | Cursor, Claude Code, Codex, Gemini, Antigravity, Windsurf, Cline, and OpenCode setup | Available |
 | Local research and browser brief compiler | Available from source |
+| Project-scoped Claude-to-Codex continuity experiment | Beta, reproducible from source |
 | Bounded context and signed selection receipts | Available |
 | State-change blast radius and bounded repair briefs | Beta candidate |
 | Git-scoped task verification and signed review receipts | Beta candidate |
@@ -137,6 +175,17 @@ Developer ID signing and notarization. Read the
 [desktop preview boundary](docs/easy-install.md).
 
 ## Measured results
+
+The cross-agent continuity fixture captured current project truth, work state,
+decisions, constraints, and one superseded route. A fresh Codex handoff selected
+11 useful items in an estimated 231 tokens, recovered all 10 expected facts, and
+excluded the stale route from current state. The evaluator and fixture are
+[included in the repository](experiments/cross-agent-continuity/README.md).
+
+Automatic extraction from an arbitrary live Claude session remains the next
+production integration step. The current beta validates project isolation,
+supersession, bounded recall, signed provenance, and the Claude-to-Codex handoff
+contract without claiming that the live behavior test is complete.
 
 In four bounded paired synthetic workloads, signed-in Claude Code and Codex
 returned the exact expected answer while Lians used **79.9% to 96.7% fewer
