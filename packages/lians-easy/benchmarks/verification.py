@@ -161,9 +161,9 @@ def correctness_benchmark(*, scenarios: int = 80) -> dict[str, Any]:
             elif category == "unmapped":
                 extra.write_text("EXTRA = True\n", encoding="utf-8", newline="\n")
             elif category == "secret":
-                benchmark_secret = "sk-ant-api03-" + ("B" * 36)
+                synthetic_fixture = "sk-ant-api03-" + ("B" * 36)
                 baseline_file.write_text(
-                    f"TOKEN = '{benchmark_secret}'\n",
+                    f"TOKEN = '{synthetic_fixture}'\n",
                     encoding="utf-8",
                     newline="\n",
                 )
