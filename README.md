@@ -27,6 +27,8 @@
 
 # Start a new AI coding session without re-explaining your project.
 
+**Use less context. Get more AI.**
+
 Lians gives Claude Code, Codex, Cursor, and other AI tools the current project
 state they need to pick up where another session stopped. It keeps completed
 work, open work, decisions, constraints, and changed facts separate so the next
