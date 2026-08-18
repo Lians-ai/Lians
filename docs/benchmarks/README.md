@@ -33,6 +33,21 @@ are not directly comparable to LLM-judged answer-accuracy leaderboards.
 
 ## Public retrieval and answer benchmarks
 
+- [Large-workload work-per-token gate, August 16, 2026](work-per-token-2026-08-16.md)
+  tests 1,000-record paired social-research and browser-history workloads on
+  Claude Code and Codex. All four exact-answer runs exceeded the predefined 3x
+  work-per-input-token target; separate compiled-only checks reached 10,000
+  posts and 2,400 browser events. The report keeps quota claims explicitly out
+  of scope.
+- [Claude Code bounded-context baseline](claude-code-baseline.md) defines an
+  offline-first paired test of full replay and Lians-selected context, with a
+  fail-closed subscription-auth preflight before any live call. Its first
+  [sanitized smoke report](claude-code-baseline-2026-08-15.json) preserved both
+  exact answers while reporting 15.9% fewer input tokens in one synthetic run.
+  A larger two-repetition
+  [market-research report](claude-market-research-2026-08-15.json) replayed 48
+  session records plus six locked decisions, preserved all four exact answers,
+  and reported 77.2% fewer average input tokens for bounded context.
 - [Cross-agent memory evidence, August 14, 2026](cross-agent-memory-2026-08-14.md)
   records a live Cursor-to-Claude handoff, confirmed deletion, a balanced Cursor
   native-rule comparison, and the exact platform blockers observed during the

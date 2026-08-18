@@ -5,6 +5,7 @@ import json
 import re
 import sys
 import threading
+import time
 from http.server import ThreadingHTTPServer
 from io import StringIO
 from urllib.error import HTTPError
@@ -20,9 +21,12 @@ from lians_easy.bridge import (
     run_hook,
     write_cursor_rule,
 )
+from lians_easy.control_policy import ControlPolicyService
 from lians_easy.installer import ClientTarget
 from lians_easy.mcp import call_tool
+from lians_easy.project import detect_project
 from lians_easy.store import MemoryStore
+from lians_easy.task_contract import TaskContractService
 
 
 def _json_request(url, *, cookie, data=None, origin=None):
@@ -41,9 +45,10 @@ def _json_request(url, *, cookie, data=None, origin=None):
         return response.status, json.loads(response.read())
 
 
-def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path):
+def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     remembered = call_tool(
         store,
@@ -134,9 +139,10 @@ def test_hook_adapter_and_cursor_rule_use_the_same_context(tmp_path):
     assert context_for_event(event, client="claude", store=store)["context"] == ""
 
 
-def test_cursor_remember_creates_the_first_project_rule(tmp_path):
+def test_cursor_remember_creates_the_first_project_rule(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
 
     call_tool(
@@ -156,7 +162,8 @@ def test_cursor_remember_creates_the_first_project_rule(tmp_path):
     assert "Never use em dashes." in rule.read_text(encoding="utf-8")
 
 
-def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path):
+def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
 
     class PullingCloud:
@@ -188,9 +195,131 @@ def test_hook_context_pulls_cloud_memory_before_building_its_receipt(tmp_path):
     assert pack["cloud_sync"]["revisions_pulled"] == 1
 
 
+def test_hook_automatically_injects_the_only_unresolved_task_contract(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    detected = detect_project(project)
+    tasks = TaskContractService(store)
+    tasks.start(
+        "Ship the verified Windows package",
+        ["The executable starts", "The runtime lists every tool"],
+        constraints=["Do not expose credentials"],
+        project_id=detected.id,
+        task_id="windows-release",
+        client="cursor",
+    )
+
+    pack = context_for_event(
+        {"prompt": "Continue the work", "cwd": str(project)},
+        client="codex",
+        store=store,
+    )
+
+    assert pack["task_selection"] == {
+        "status": "automatic",
+        "task_ids": ["windows-release"],
+    }
+    assert "Ship the verified Windows package" in pack["context"]
+    assert "criterion-2" in pack["context"]
+    assert pack["task_context"]["receipt"]["client"] == "codex"
+    assert all(
+        item["kind"] not in {"task_contract", "task_state"}
+        for item in pack["memories"]
+    )
+
+
+def test_hook_refuses_to_guess_between_tasks_but_accepts_an_exact_task_id(
+    tmp_path, monkeypatch
+):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
+    store = MemoryStore(tmp_path / "bridge.sqlite3")
+    detected = detect_project(project)
+    tasks = TaskContractService(store)
+    for task_id, goal in (("desktop", "Ship the desktop app"), ("docs", "Publish the docs")):
+        tasks.start(
+            goal,
+            ["The work is verified"],
+            project_id=detected.id,
+            task_id=task_id,
+        )
+
+    ambiguous = context_for_event(
+        {"prompt": "Continue", "cwd": str(project)},
+        client="claude",
+        store=store,
+    )
+    assert ambiguous["task_selection"]["status"] == "ambiguous"
+    assert set(ambiguous["task_selection"]["task_ids"]) == {"desktop", "docs"}
+    assert "No contract was injected" in ambiguous["context"]
+
+    exact = context_for_event(
+        {"prompt": "Continue", "cwd": str(project), "lians_task_id": "docs"},
+        client="claude",
+        store=store,
+    )
+    assert exact["task_selection"] == {"status": "exact", "task_ids": ["docs"]}
+    assert "Publish the docs" in exact["context"]
+    assert "Ship the desktop app" not in exact["context"]
+
+
+def test_hook_control_modes_observe_guide_and_protect_without_storing_prompt(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
+    database = tmp_path / "bridge.sqlite3"
+    store = MemoryStore(database)
+    store.remember(
+        "Use the verified release checklist.",
+        kind="preference",
+        scope="global",
+    )
+    control = ControlPolicyService(store)
+
+    control.update({"mode": "observe"})
+    observed = context_for_event(
+        {"prompt": "Private prompt text that must not be stored", "cwd": str(project)},
+        client="claude",
+        store=store,
+    )
+    assert observed["context"] == ""
+    assert observed["task_selection"]["status"] == "observe"
+    assert observed["observation"]["content_stored"] is False
+    assert b"Private prompt text that must not be stored" not in database.read_bytes()
+
+    control.update({"mode": "guide", "context_budget_tokens": 256})
+    guided = context_for_event(
+        {"prompt": "Continue the release", "cwd": str(project)},
+        client="claude",
+        store=store,
+    )
+    assert "verified release checklist" in guided["context"]
+    assert guided["receipt"]["limits"]["max_tokens"] == 256
+    assert "Lians user control policy" not in guided["context"]
+
+    control.update(
+        {
+            "mode": "protect",
+            "approval_actions": ["publishing", "destructive_filesystem"],
+        }
+    )
+    protected = context_for_event(
+        {"prompt": "Publish the release", "cwd": str(project)},
+        client="codex",
+        store=store,
+    )
+    assert "Lians user control policy" in protected["context"]
+    assert "Never infer approval" in protected["context"]
+    assert protected["control"]["enforcement"]["requests_approval"] is True
+
+
 def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     detected = call_tool(
@@ -219,9 +348,32 @@ def test_hook_accepts_a_utf8_bom_from_windows_hosts(tmp_path, monkeypatch):
     assert "Use FastAPI for services." in output.getvalue()
 
 
+def test_claude_session_end_hook_captures_without_prompt_output(tmp_path, monkeypatch):
+    event = {
+        "hook_event_name": "SessionEnd",
+        "session_id": "session-1",
+        "transcript_path": str(tmp_path / "session.jsonl"),
+        "cwd": str(tmp_path),
+    }
+    captured = []
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(event)))
+    output = StringIO()
+    monkeypatch.setattr(sys, "stdout", output)
+    monkeypatch.setattr(
+        "lians_easy.bridge.capture_claude_session_end",
+        lambda received, *, store: captured.append((received, store.path)),
+    )
+
+    assert run_hook(client="claude", data_path=tmp_path / "bridge.sqlite3") == 0
+    assert captured[0][0] == event
+    assert captured[0][1] == tmp_path / "bridge.sqlite3"
+    assert output.getvalue() == ""
+
+
 def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     call_tool(
@@ -255,6 +407,7 @@ def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch)
 def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     call_tool(
@@ -296,6 +449,7 @@ def test_antigravity_hook_injects_once_per_agent_loop(tmp_path, monkeypatch):
 def test_antigravity_empty_workspace_injects_global_memory_only(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
+    monkeypatch.chdir(project)
     data = tmp_path / "bridge.sqlite3"
     store = MemoryStore(data)
     call_tool(
@@ -334,7 +488,8 @@ def test_antigravity_empty_workspace_injects_global_memory_only(tmp_path, monkey
     assert pack["receipt"]["excluded"]["scope"] == 1
 
 
-def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_path):
+def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     store = MemoryStore(tmp_path / "bridge.sqlite3")
     app = BridgeApplication(store, port=0)
     server = ThreadingHTTPServer(("127.0.0.1", 0), app.handler())
@@ -355,6 +510,26 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         assert body["memory"]["encrypted"] is True
         assert body["cloud"]["state"] == "unavailable"
         assert {item["key"] for item in body["integrations"]} >= {"claude", "cursor", "codex"}
+
+        status, control = _json_request(f"{app.origin}/v1/control", cookie=cookie)
+        assert status == 200
+        assert control["policy"]["mode"] == "guide"
+
+        status, control = _json_request(
+            f"{app.origin}/v1/control",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "policy": {
+                    "mode": "protect",
+                    "context_budget_tokens": 768,
+                    "approval_actions": ["publishing"],
+                }
+            },
+        )
+        assert status == 200
+        assert control["policy"]["mode"] == "protect"
+        assert control["enforcement"]["requests_approval"] is True
 
         status, remembered = _json_request(
             f"{app.origin}/v1/remember",
@@ -383,6 +558,51 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         assert pack["receipt_line"].startswith("1 memories used")
         assert "FastAPI" in pack["context"]
 
+        status, task = _json_request(
+            f"{app.origin}/v1/tasks",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "task_id": "bridge-task",
+                "goal": "Ship the bridge",
+                "success_criteria": ["The endpoint works"],
+                "constraints": ["Keep memory local"],
+                "cwd": str(tmp_path),
+            },
+        )
+        assert status == 201
+        assert task["assessment"]["status"] == "active"
+
+        status, checkpoint = _json_request(
+            f"{app.origin}/v1/task-checkpoints",
+            cookie=cookie,
+            origin=app.origin,
+            data={
+                "task_id": "bridge-task",
+                "summary": "Endpoint test passed",
+                "evidence": [
+                    {"criterion_id": "criterion-1", "evidence": "HTTP 200 response"}
+                ],
+                "constraint_checks": [
+                    {
+                        "constraint_id": "constraint-1",
+                        "status": "passed",
+                        "evidence": "Loopback-only service",
+                    }
+                ],
+                "cwd": str(tmp_path),
+            },
+        )
+        assert status == 200
+        assert checkpoint["assessment"]["status"] == "ready_for_review"
+
+        status, task_status = _json_request(
+            f"{app.origin}/v1/task-status?task_id=bridge-task",
+            cookie=cookie,
+        )
+        assert status == 200
+        assert task_status["assessment"]["may_claim_completion"] is True
+
         with pytest.raises(HTTPError) as error:
             _json_request(
                 f"{app.origin}/v1/remember",
@@ -396,6 +616,23 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_bridge_application_can_be_started_and_stopped_as_a_resident_service(tmp_path):
+    app = BridgeApplication(MemoryStore(tmp_path / "resident.sqlite3"), port=0)
+    thread = threading.Thread(target=app.serve, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 5
+    while not app.running and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert app.running is True
+    assert app.port > 0
+    with urlopen(app.origin, timeout=2) as response:
+        assert response.headers["Server"].startswith("LiansBridge/")
+    app.shutdown()
+    thread.join(timeout=5)
+    assert thread.is_alive() is False
+    assert app.running is False
 
 
 def test_loopback_cloud_auth_exposes_status_and_confirmed_actions_without_tokens(tmp_path):
@@ -638,7 +875,8 @@ def test_loopback_add_device_routes_are_short_code_only_and_confirmation_guarded
         thread.join(timeout=5)
 
 
-def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path):
+def test_loopback_memory_operations_pull_then_write_through_to_cloud(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     calls = []
 
     class FakeCloudAuth:

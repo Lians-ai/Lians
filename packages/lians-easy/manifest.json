@@ -3,8 +3,8 @@
   "name": "lians-memory",
   "display_name": "Lians",
   "version": "0.5.0",
-  "description": "Use less repeated context in Cursor, Claude, Codex, and other AI tools.",
-  "long_description": "Save a useful preference, fact, or decision once. Lians reuses only the relevant context in later tasks instead of replaying everything. It runs locally by default, encrypts saved context on your device, and needs no AI account password or provider API key.",
+  "description": "Deeper understanding, compact memory, and user-owned control inside the agents you already use.",
+  "long_description": "Lians is a local understanding, memory, control, and verification layer for AI agents. It turns vague requests into bounded working briefs, asks only questions that materially change the work, and supplies relevant current state without replaying an entire history. Observe mode maps content-free activity without changing agent context. Guide mode supplies bounded understanding, current state, tasks, and recovery context. Protect mode adds explicit approval boundaries and reports where a host cannot technically enforce them. Repository verification binds frozen intent and the actual Git diff into a signed receipt, with optional exhaustive proofs over declared finite models. The local 3D Work Graph makes projects, agents, decisions, evidence, blockers, and provenance inspectable without requiring an AI account password, provider API key, hosted prompt proxy, or replacement chat interface.",
   "author": {
     "name": "Lians",
     "email": "info@lians.ai",
@@ -37,12 +37,80 @@
       "description": "Save one useful fact, preference, decision, or handoff with explicit scope."
     },
     {
+      "name": "set_current",
+      "description": "Atomically update named current state while preserving temporal history."
+    },
+    {
       "name": "recall",
       "description": "Recall a small, relevant set of current memories."
     },
     {
+      "name": "understand_request",
+      "description": "Build a local working brief and identify only missing details that materially change the work."
+    },
+    {
       "name": "list_memories",
       "description": "Inspect saved memories and their current state."
+    },
+    {
+      "name": "memory_health",
+      "description": "Inspect memory hierarchy, scope, duplication, size, versioning, and staleness without changing content."
+    },
+    {
+      "name": "memory_history",
+      "description": "Inspect the complete lineage of one named state value."
+    },
+    {
+      "name": "memory_at",
+      "description": "Resolve what was true, or what an agent knew, at a requested time."
+    },
+    {
+      "name": "track_dependencies",
+      "description": "Record encrypted relationships between current state and dependent work."
+    },
+    {
+      "name": "state_impact",
+      "description": "Preview the transitive blast radius of changing one memory."
+    },
+    {
+      "name": "state_repair_brief",
+      "description": "Return current replacement state plus only the work invalidated by a change."
+    },
+    {
+      "name": "resolve_state_impact",
+      "description": "Resolve an invalidated dependency after repair evidence or explicit dismissal."
+    },
+    {
+      "name": "start_task",
+      "description": "Create a durable goal, definition of done, and constraints shared by every agent."
+    },
+    {
+      "name": "checkpoint_task",
+      "description": "Record task progress, evidence, constraints, blockers, and current action."
+    },
+    {
+      "name": "task_status",
+      "description": "Verify completion evidence and detect blockers or drift before an agent stops."
+    },
+    {
+      "name": "task_context",
+      "description": "Return a bounded signed task contract for another agent to continue safely."
+    },
+    {
+      "name": "continue_work",
+      "description": "Resume the only active task with a bounded signed continuity brief."
+    },
+    {
+      "name": "configure_verification",
+      "description": "Bind a task to approved repository scope, evidence, checks, formal models, and communication rules."
+    },
+    {
+      "name": "verify_work",
+      "description": "Inspect Git changes against frozen intent and store a signed verification receipt."
+    },
+    {
+      "name": "verification_status",
+      "description": "Return the latest signed verification receipt for a task."
     },
     {
       "name": "correct_memory",
@@ -57,6 +125,13 @@
   "keywords": [
     "ai",
     "agent-memory",
+    "agent-reliability",
+    "agent-control",
+    "agent-observability",
+    "agent-understanding",
+    "formal-verification",
+    "context-engineering",
+    "task-orchestration",
     "local-first",
     "encrypted",
     "cursor",

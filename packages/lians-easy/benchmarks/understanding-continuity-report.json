@@ -1,0 +1,130 @@
+{
+  "aggregate": {
+    "full_replay": {
+      "context_tokens_estimate": 2913,
+      "context_vs_full_replay_percent": 100.0,
+      "essential_fact_recall_percent": 100.0,
+      "useful_question_precision_percent": null
+    },
+    "lians": {
+      "context_tokens_estimate": 736,
+      "context_vs_full_replay_percent": 25.3,
+      "essential_fact_recall_percent": 100.0,
+      "useful_question_precision_percent": 100.0
+    },
+    "prompt_only": {
+      "context_tokens_estimate": 0,
+      "context_vs_full_replay_percent": 0.0,
+      "essential_fact_recall_percent": 0.0,
+      "useful_question_precision_percent": null
+    }
+  },
+  "claim_boundary": "Compares prompt-only, replay-all, and Lians strategies on checked fixtures. It is not a benchmark of Mem0, Letta, Supermemory, Graphiti, Graphify, or Pieces.",
+  "method": "deterministic fixture; no model or vendor API called",
+  "scenarios": [
+    {
+      "intent": "research",
+      "lians_selected_fact_tags": [
+        "audience",
+        "evidence",
+        "format"
+      ],
+      "lians_selected_memory_count": 3,
+      "readiness": "needs_clarification",
+      "scenario": "social-research",
+      "strategies": {
+        "full_replay": {
+          "context_tokens_estimate": 978,
+          "essential_facts_recalled": 2,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        },
+        "lians": {
+          "context_tokens_estimate": 252,
+          "essential_facts_recalled": 2,
+          "essential_facts_total": 2,
+          "question_dimensions": [
+            "outcome"
+          ],
+          "useful_question_dimensions": 1
+        },
+        "prompt_only": {
+          "context_tokens_estimate": 0,
+          "essential_facts_recalled": 0,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        }
+      }
+    },
+    {
+      "intent": "build",
+      "lians_selected_fact_tags": [
+        "audience",
+        "constraint",
+        "handoff"
+      ],
+      "lians_selected_memory_count": 3,
+      "readiness": "ready",
+      "scenario": "desktop-build",
+      "strategies": {
+        "full_replay": {
+          "context_tokens_estimate": 971,
+          "essential_facts_recalled": 2,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        },
+        "lians": {
+          "context_tokens_estimate": 247,
+          "essential_facts_recalled": 2,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        },
+        "prompt_only": {
+          "context_tokens_estimate": 0,
+          "essential_facts_recalled": 0,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        }
+      }
+    },
+    {
+      "intent": "write",
+      "lians_selected_fact_tags": [
+        "format",
+        "style"
+      ],
+      "lians_selected_memory_count": 3,
+      "readiness": "ready",
+      "scenario": "student-writing",
+      "strategies": {
+        "full_replay": {
+          "context_tokens_estimate": 964,
+          "essential_facts_recalled": 2,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        },
+        "lians": {
+          "context_tokens_estimate": 237,
+          "essential_facts_recalled": 2,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        },
+        "prompt_only": {
+          "context_tokens_estimate": 0,
+          "essential_facts_recalled": 0,
+          "essential_facts_total": 2,
+          "question_dimensions": [],
+          "useful_question_dimensions": 0
+        }
+      }
+    }
+  ],
+  "schema": "https://lians.ai/schemas/understanding-benchmark/v0.1"
+}

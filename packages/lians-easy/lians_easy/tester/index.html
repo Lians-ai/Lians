@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#05070b">
+    <title>Lians</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="stylesheet" href="style.css">
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <img src="wordmark.png" alt="Lians">
+        <span>Local preview</span>
+      </header>
+
+      <section class="hero">
+        <h1>Use less context. Get more AI.</h1>
+        <p class="lead">
+          Bring in the work you already have. Lians turns it into a smaller brief,
+          sends only that brief to Claude, Codex, or Cursor, and gives you a receipt.
+        </p>
+      </section>
+
+      <ol class="steps" aria-label="How Lians works">
+        <li><b>1</b><span><strong>Connect</strong>Your signed-in AI tool</span></li>
+        <li><b>2</b><span><strong>Add work</strong>A local JSON export</span></li>
+        <li><b>3</b><span><strong>Run</strong>Your next real task</span></li>
+      </ol>
+
+      <section class="card" aria-labelledby="connect-title">
+        <div class="section-heading">
+          <span class="step-number">1</span>
+          <div>
+            <h2 id="connect-title">Connect the AI you already use</h2>
+            <p>Lians checks the local CLI login. It never asks for your password or API key.</p>
+          </div>
+        </div>
+
+        <div class="provider-grid" role="radiogroup" aria-label="AI tool">
+          <button class="provider-option selected" type="button" data-provider="claude" aria-pressed="true">
+            <strong>Claude</strong>
+            <span>Pro or Max</span>
+          </button>
+          <button class="provider-option" type="button" data-provider="codex" aria-pressed="false">
+            <strong>Codex</strong>
+            <span>ChatGPT account</span>
+          </button>
+          <button class="provider-option" type="button" data-provider="cursor" aria-pressed="false">
+            <strong>Cursor</strong>
+            <span>Signed-in account</span>
+          </button>
+        </div>
+
+        <div class="status-row" role="status" aria-live="polite">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Checking Claude</span>
+          <button class="text-button" id="check-button" type="button">Check again</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="work-title">
+        <div class="section-heading">
+          <span class="step-number">2</span>
+          <div>
+            <h2 id="work-title">Add the work that is eating your context</h2>
+            <p>The original file stays on this device. Lians keeps only the brief while the app is open.</p>
+          </div>
+        </div>
+
+        <div class="kind-grid" role="radiogroup" aria-label="Work type">
+          <button class="kind-option selected" type="button" data-kind="research" aria-pressed="true">
+            <strong>Research</strong>
+            <span>Posts, interviews, notes, feedback</span>
+          </button>
+          <button class="kind-option" type="button" data-kind="browser" aria-pressed="false">
+            <strong>Browser work</strong>
+            <span>Leads, pages, actions, status history</span>
+          </button>
+        </div>
+
+        <div class="file-panel">
+          <input id="work-file" type="file" accept=".json,.jsonl,application/json" hidden>
+          <button class="secondary" id="file-button" type="button">Choose JSON or JSONL</button>
+          <button class="text-button" id="sample-button" type="button">Use sample work</button>
+          <p id="file-status">Choose an export or load the built-in sample.</p>
+        </div>
+
+        <button id="compile-button" type="button" disabled>Create smaller context</button>
+        <p class="helper" id="compile-helper">Nothing is sent to an AI during this step.</p>
+
+        <div class="compact-result" id="brief-result" hidden aria-live="polite">
+          <div>
+            <span id="brief-reduction">0%</span>
+            <p>smaller estimated context</p>
+          </div>
+          <dl>
+            <div><dt>Work records</dt><dd id="record-count">0</dd></div>
+            <div><dt>Before</dt><dd id="raw-tokens">0 tokens</dd></div>
+            <div><dt>After</dt><dd id="brief-tokens">0 tokens</dd></div>
+          </dl>
+          <a class="small-link" href="api/brief" download>Download the brief</a>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="task-title">
+        <div class="section-heading">
+          <span class="step-number">3</span>
+          <div>
+            <h2 id="task-title">Run your next task</h2>
+            <p>Only your task and the smaller Lians brief go to the selected AI.</p>
+          </div>
+        </div>
+
+        <label for="task-input">What do you want the AI to do?</label>
+        <textarea id="task-input" rows="6" maxlength="12000" placeholder="Example: Summarize the strongest themes, show the evidence, and recommend the next three actions."></textarea>
+        <button id="ask-button" type="button" disabled>Run with Claude</button>
+        <p class="helper" id="task-helper">Connect an AI and create a context brief first.</p>
+      </section>
+
+      <section class="card answer-card" id="answer-card" hidden aria-labelledby="answer-title">
+        <h2 id="answer-title">Answer</h2>
+        <div class="answer" id="answer"></div>
+        <dl class="answer-metrics">
+          <div><dt>AI input</dt><dd id="provider-input">0 tokens</dd></div>
+          <div><dt>Time</dt><dd id="duration">0 seconds</dd></div>
+          <div><dt>Tool</dt><dd id="answer-provider">Claude</dd></div>
+        </dl>
+        <div class="actions">
+          <button class="secondary" id="copy-button" type="button">Copy answer</button>
+          <a class="button-link secondary" href="api/task-report" download>Download receipt</a>
+        </div>
+      </section>
+
+      <section class="proof" aria-labelledby="proof-title">
+        <div>
+          <h2 id="proof-title">Want to test the claim first?</h2>
+          <p>Run a controlled comparison using synthetic research. It makes four small calls and checks answer quality.</p>
+        </div>
+        <button class="secondary" id="benchmark-button" type="button" disabled>Run proof test</button>
+        <div class="proof-result" id="proof-result" hidden aria-live="polite"></div>
+      </section>
+
+      <footer>
+        Lians runs locally. It does not change a provider quota or context window. Results depend on the work and model.
+        <button class="text-button" id="close-button" type="button">Close Lians</button>
+      </footer>
+    </main>
+  </body>
+</html>

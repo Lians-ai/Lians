@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Lians</title>
+    <link rel="icon" href="favicon.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="intro" class="intro" aria-hidden="true">
+      <canvas id="intro-particles"></canvas>
+    </div>
+
+    <div id="content" class="app-shell">
+      <div id="ambient-field" class="ambient-field" data-state="compressed" aria-hidden="true">
+        <div id="light-stage" class="light-stage">
+          <span class="water-scene water-scene-base"></span>
+          <span class="water-scene water-scene-drift"></span>
+          <span class="water-scene-shade"></span>
+        </div>
+      </div>
+      <span id="ambient-status" class="visually-hidden" role="status" aria-live="polite"></span>
+      <header id="titlebar" class="topbar reveal">
+        <div class="brand">
+          <img
+            class="brand-wordmark"
+            src="lians-wordmark.png"
+            width="108"
+            height="40"
+            alt="Lians"
+          />
+        </div>
+        <div class="window-actions">
+          <button id="theme-toggle" class="theme-toggle control" type="button" data-icon="sun">
+            <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.6"></circle>
+              <path d="M12 2.4v2.1M12 19.5v2.1M2.4 12h2.1M19.5 12h2.1M5.2 5.2l1.5 1.5M17.3 17.3l1.5 1.5M18.8 5.2l-1.5 1.5M6.7 17.3l-1.5 1.5"></path>
+            </svg>
+            <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.7 15.4A8.2 8.2 0 0 1 8.6 4.3 8.3 8.3 0 1 0 19.7 15.4Z"></path>
+            </svg>
+          </button>
+          <span class="action-divider" aria-hidden="true"></span>
+          <button id="window-minimize" class="window-control" type="button" aria-label="Minimize">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5h10"></path></svg>
+          </button>
+          <button id="window-maximize" class="window-control" type="button" aria-label="Maximize or restore">
+            <svg class="maximize-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1"></rect></svg>
+            <svg class="restore-icon" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M7.5 6.5V5.8c0-.7.6-1.3 1.3-1.3h5.4c.7 0 1.3.6 1.3 1.3v5.4c0 .7-.6 1.3-1.3 1.3h-.7"></path>
+              <rect x="4.5" y="7.5" width="8" height="8" rx="1"></rect>
+            </svg>
+          </button>
+          <button id="window-close" class="window-control close-control" type="button" aria-label="Close">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero reveal">
+          <div>
+            <h1>Continuity</h1>
+            <p>Context windows end. Your work does not.</p>
+          </div>
+          <div id="connection" class="connection" data-state="offline">
+            <img id="connection-icon" width="34" height="34" alt="" hidden />
+            <span id="connection-text">No connection detected</span>
+          </div>
+        </section>
+
+        <section id="continuity-card" class="continuity-card reveal" aria-live="polite">
+          <div class="continuity-topline">
+            <span>Active work</span>
+            <span id="continuity-status" data-state="loading">Finding your place</span>
+          </div>
+          <div id="continuity-ready" class="continuity-ready" hidden>
+            <div class="continuity-primary">
+              <p>Goal</p>
+              <h2 id="continuity-goal">Your current goal</h2>
+              <span id="continuity-progress">0 of 0 outcomes verified</span>
+            </div>
+            <div class="continuity-detail">
+              <p>Checkpoint</p>
+              <strong id="continuity-checkpoint">No checkpoint yet</strong>
+            </div>
+            <div class="continuity-detail continuity-next">
+              <p>Next</p>
+              <strong id="continuity-next">Continue from the latest verified work</strong>
+            </div>
+            <button id="continuity-copy" class="continue-button" type="button">Copy brief</button>
+          </div>
+          <div id="continuity-empty" class="continuity-empty">
+            <strong>No active work yet</strong>
+            <p>Start a substantial task in a connected agent. Lians will carry the goal, decisions, and next step forward.</p>
+          </div>
+          <div id="continuity-choices" class="continuity-choices" hidden></div>
+        </section>
+
+        <section class="metric-rail reveal" aria-label="Lians totals">
+          <article class="metric">
+            <p id="tokens-label">Tokens saved</p>
+            <strong id="tokens-value">~0</strong>
+            <span id="tokens-detail">Repeated context removed</span>
+          </article>
+          <article class="metric">
+            <p>Handoffs</p>
+            <strong id="handoffs-value">0</strong>
+            <span>Context carried forward</span>
+          </article>
+          <article class="metric">
+            <p>Memories reused</p>
+            <strong id="memory-value">0</strong>
+            <span>Useful details returned</span>
+          </article>
+        </section>
+
+        <section class="activity reveal">
+          <div class="section-heading">
+            <h2>Activity</h2>
+            <span id="saved-memory-count">0 saved memories</span>
+          </div>
+          <div id="activity-list" class="activity-list">
+            <div class="empty-state">
+              <span class="waterline" aria-hidden="true"></span>
+              <p>Waiting for agent activity.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer reveal">
+        <div class="footer-actions">
+          <button id="refresh" class="control primary" type="button">Refresh</button>
+          <button id="understanding" class="control quiet" type="button">Understand</button>
+          <button id="work-map" class="control quiet" type="button">Work graph</button>
+          <button id="control-center" class="control quiet" type="button">Control</button>
+          <button id="support-report" class="control quiet" type="button">Help report</button>
+          <span id="support-status" class="support-status" role="status" aria-live="polite"></span>
+        </div>
+        <span class="local-note">Local. Encrypted.</span>
+      </footer>
+
+      <section id="understanding-panel" class="understanding-panel" aria-label="Lians understanding" hidden>
+        <header class="understanding-header">
+          <div>
+            <h2>Understand</h2>
+            <p>Find the one missing detail that would make your agent more useful.</p>
+          </div>
+          <button id="understanding-close" class="control quiet" type="button">Close</button>
+        </header>
+        <div class="understanding-grid">
+          <div class="understanding-input-card">
+            <label for="understanding-input">What are you trying to do?</label>
+            <textarea
+              id="understanding-input"
+              maxlength="20000"
+              placeholder="I want to research 10,000 public posts and turn the patterns into a client report."
+            ></textarea>
+            <div class="understanding-actions">
+              <button id="understanding-run" class="control primary" type="button">Think with Lians</button>
+              <span id="understanding-status" role="status" aria-live="polite"></span>
+            </div>
+            <small>Runs locally. Your request is not saved or sent to another model.</small>
+          </div>
+          <div id="understanding-result" class="understanding-result" hidden>
+            <span id="understanding-intent">Ready</span>
+            <strong id="understanding-headline">Your request is ready.</strong>
+            <p id="understanding-detail"></p>
+            <div id="understanding-questions" class="understanding-questions"></div>
+            <div class="memory-health-line">
+              <span>Memory health</span>
+              <strong id="memory-health-score">Checking</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <button id="lotus-pet" class="lotus-pet" type="button" aria-label="Lotus">
+        <img src="lotus.png" width="58" height="58" alt="" />
+      </button>
+
+      <section id="map-panel" class="map-panel" aria-label="3D Work Graph" hidden>
+        <header class="map-header">
+          <div>
+            <h2>Work graph</h2>
+            <p id="map-summary">Your work, agents, evidence, and decisions in one living view</p>
+          </div>
+          <div class="map-actions">
+            <button id="map-reset" class="control quiet" type="button">Reset view</button>
+            <button id="map-close" class="map-close control quiet" type="button">Close</button>
+          </div>
+        </header>
+        <div class="map-stage">
+          <canvas id="work-map-canvas" aria-label="Rotatable three dimensional agent work graph"></canvas>
+          <p class="map-instructions">Drag to orbit · Scroll to zoom · Select a point to inspect</p>
+          <aside id="map-detail" class="map-detail">
+            <span id="map-detail-kind">Work graph</span>
+            <strong id="map-detail-title">Select any point</strong>
+            <p id="map-detail-body">Inspect where information came from, what it affected, and whether it is current.</p>
+            <small id="map-detail-meta"></small>
+            <button id="map-node-action" class="control quiet" type="button" hidden></button>
+          </aside>
+          <div class="map-legend" aria-hidden="true">
+            <span data-kind="memory">Memory</span>
+            <span data-kind="agent">Agent</span>
+            <span data-kind="task">Task</span>
+            <span data-kind="evidence">Evidence</span>
+            <span data-kind="blocker">Risk</span>
+            <span data-kind="session">Activity</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="control-panel" class="control-panel" aria-label="Agent control" hidden>
+        <header class="control-header">
+          <div>
+            <h2>Agent control</h2>
+            <p>Choose how Lians supports the agents you already use.</p>
+          </div>
+          <button id="control-close" class="control quiet" type="button">Close</button>
+        </header>
+        <div class="control-grid">
+          <div class="mode-picker" role="radiogroup" aria-label="Control mode">
+            <button class="mode-card" data-mode="observe" type="button" role="radio" aria-checked="false">
+              <span>Observe</span>
+              <strong>See the work</strong>
+              <p>Record content-free activity without changing agent context.</p>
+            </button>
+            <button class="mode-card" data-mode="guide" type="button" role="radio" aria-checked="true">
+              <span>Guide</span>
+              <strong>Keep work aligned</strong>
+              <p>Supply bounded context, current tasks, and recovery state.</p>
+            </button>
+            <button class="mode-card" data-mode="protect" type="button" role="radio" aria-checked="false">
+              <span>Protect</span>
+              <strong>Require approval</strong>
+              <p>Add explicit user approval boundaries where supported.</p>
+            </button>
+          </div>
+          <div class="control-settings">
+            <label class="setting-row" for="context-budget">
+              <span><strong>Context budget</strong><small>Maximum Lians context per agent event</small></span>
+              <select id="context-budget">
+                <option value="256">256 tokens</option>
+                <option value="512">512 tokens</option>
+                <option value="768">768 tokens</option>
+                <option value="1024">1,024 tokens</option>
+                <option value="2048">2,048 tokens</option>
+              </select>
+            </label>
+            <label class="setting-row toggle-row">
+              <span><strong>Automatic task context</strong><small>Continue the only active task without another setup step</small></span>
+              <input id="auto-task-context" type="checkbox" checked />
+            </label>
+            <label class="setting-row toggle-row">
+              <span><strong>Inferred relationships</strong><small>Show neural links separately from verified links when available</small></span>
+              <input id="show-inferred-links" type="checkbox" />
+            </label>
+            <fieldset id="approval-actions" class="approval-actions">
+              <legend>Require approval before</legend>
+              <label><input type="checkbox" value="destructive_filesystem" checked /> Destructive file changes</label>
+              <label><input type="checkbox" value="external_communication" checked /> External messages</label>
+              <label><input type="checkbox" value="publishing" checked /> Publishing or deployment</label>
+              <label><input type="checkbox" value="spending" checked /> Spending or commitments</label>
+              <label><input type="checkbox" value="credential_access" checked /> Credential access</label>
+            </fieldset>
+            <div class="control-boundary">
+              <strong id="control-enforcement">Guide mode is active.</strong>
+              <p id="control-boundary-text">Lians supplies user-owned context through supported native integrations.</p>
+            </div>
+            <div class="control-save-row">
+              <button id="control-save" class="control primary" type="button">Save control policy</button>
+              <span id="control-status" role="status" aria-live="polite"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <span class="resize-handle resize-top" data-edge="12"></span>
+      <span class="resize-handle resize-right" data-edge="11"></span>
+      <span class="resize-handle resize-bottom" data-edge="15"></span>
+      <span class="resize-handle resize-left" data-edge="10"></span>
+      <span class="resize-handle resize-top-left" data-edge="13"></span>
+      <span class="resize-handle resize-top-right" data-edge="14"></span>
+      <span class="resize-handle resize-bottom-left" data-edge="16"></span>
+      <span class="resize-handle resize-bottom-right" data-edge="17"></span>
+    </div>
+    <script src="app.js" defer></script>
+    <script src="continuity.js" defer></script>
+    <script src="understanding.js" defer></script>
+    <script src="work-map.js" defer></script>
+    <script src="control-center.js" defer></script>
+  </body>
+</html>

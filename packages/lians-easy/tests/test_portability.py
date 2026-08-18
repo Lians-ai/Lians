@@ -5,6 +5,7 @@ import sqlite3
 
 import pytest
 from lians_easy.portability import export_backup, import_backup, verify_backup
+from lians_easy.state_integrity import StateIntegrityService
 from lians_easy.store import MemoryStore
 
 PASSPHRASE = "correct horse battery staple"
@@ -97,6 +98,53 @@ def test_portable_backup_is_encrypted_verified_reencrypted_and_idempotent(tmp_pa
     repeated = import_backup(target, destination, PASSPHRASE)
     assert repeated["imported"] == {"memories": 0, "activity": 0, "receipts": 0}
     assert repeated["already_present"] == {"memories": 4, "activity": 6, "receipts": 1}
+
+
+def test_portable_backup_preserves_encrypted_state_integrity_graph(tmp_path) -> None:
+    source = MemoryStore(tmp_path / "source-state" / "memory.sqlite3")
+    source_integrity = StateIntegrityService(source)
+    current = source.set_current(
+        "research/sample-window",
+        "Analyze the last 30 days.",
+        project_id="project-research",
+    )
+    source_integrity.link(
+        current["id"],
+        "reports/audience-study.md",
+        dependent_type="artifact",
+        project_id="project-research",
+        label="Audience study",
+    )
+    source.set_current(
+        "research/sample-window",
+        "Analyze the last 90 days.",
+        project_id="project-research",
+        reason="The study window changed",
+    )
+
+    destination = tmp_path / "state-integrity.liansbackup"
+    report = export_backup(source, destination, PASSPHRASE)
+    assert report["state_dependencies"] == 1
+    assert report["state_invalidations"] == 1
+    assert b"reports/audience-study.md" not in destination.read_bytes()
+    assert b"The study window changed" not in destination.read_bytes()
+
+    target = MemoryStore(tmp_path / "target-state" / "memory.sqlite3")
+    imported = import_backup(target, destination, PASSPHRASE)
+    assert imported["state_integrity"]["imported"] == {
+        "dependencies": 1,
+        "invalidations": 1,
+    }
+    target_invalidations = StateIntegrityService(target).invalidations()
+    assert len(target_invalidations) == 1
+    assert target_invalidations[0]["dependent_ref"] == "reports/audience-study.md"
+    assert target_invalidations[0]["reason"] == "The study window changed"
+
+    repeated = import_backup(target, destination, PASSPHRASE)
+    assert repeated["state_integrity"]["already_present"] == {
+        "dependencies": 1,
+        "invalidations": 1,
+    }
 
 
 def test_backup_rejects_wrong_passphrase_tampering_and_unsafe_output(tmp_path) -> None:

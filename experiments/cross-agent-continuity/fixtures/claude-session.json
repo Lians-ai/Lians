@@ -1,0 +1,74 @@
+{
+  "schema": "https://lians.ai/schemas/cross-agent-session/v0.1",
+  "session_id": "claude-orders-v2",
+  "event_time": "2026-08-18T15:00:00Z",
+  "source_reference": "claude-session:orders-v2",
+  "task": {
+    "id": "orders-api-migration",
+    "title": "Migrate the orders API",
+    "goal": "Move the orders API to v2 without breaking the project test contract."
+  },
+  "project_truth": [
+    {
+      "key": "project/testing-framework",
+      "content": "Tests use pytest."
+    },
+    {
+      "key": "project/production-database",
+      "content": "Production uses PostgreSQL."
+    }
+  ],
+  "completed": [
+    {
+      "id": "api-implementation",
+      "description": "Migrate the orders API implementation to /v2/orders.",
+      "evidence": "src/orders.py and tests/test_orders.py changed; pytest passed."
+    },
+    {
+      "id": "tests",
+      "description": "Update the orders API tests.",
+      "evidence": "pytest tests/test_orders.py passed."
+    }
+  ],
+  "not_started": [
+    {
+      "id": "docs",
+      "description": "Update the orders API documentation."
+    }
+  ],
+  "decisions": [
+    {
+      "key": "decisions/test-framework",
+      "decision": "Keep pytest rather than replacing it with unittest.",
+      "reason": "The existing suite and contributor workflow already use pytest."
+    }
+  ],
+  "constraints": [
+    {
+      "key": "constraints/test-framework",
+      "content": "Do not replace pytest with unittest."
+    }
+  ],
+  "changes": [
+    {
+      "key": "api/orders-route",
+      "description": "The current orders route is /v2/orders.",
+      "previous": "The current orders route is /v1/orders.",
+      "current": "The current orders route is /v2/orders.",
+      "previous_event_time": "2026-08-18T14:00:00Z",
+      "reason": "The orders schema moved to v2."
+    }
+  ],
+  "do_not_repeat": [
+    "Do not redo the completed orders API migration."
+  ],
+  "next_actions": [
+    "Update the orders API documentation before touching unrelated UI."
+  ],
+  "files_touched": [
+    "src/orders.py",
+    "tests/test_orders.py"
+  ],
+  "commit": "82ac4f",
+  "summary": "The v2 implementation and tests are complete; documentation remains open."
+}

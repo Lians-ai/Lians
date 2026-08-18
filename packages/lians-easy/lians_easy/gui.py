@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import ctypes
+import json
+import math
 import sys
 import threading
+import time
 import tkinter as tk
+import tkinter.font as tkfont
+from ctypes import wintypes
+from importlib.resources import files
 from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from .installer import (
     ClientTarget,
@@ -16,6 +25,7 @@ from .installer import (
     user_data_dir,
     write_support_report,
 )
+from .lifeline import format_count, lifeline_snapshot
 
 BACKGROUND = "#05070b"
 PANEL = "#0b1019"
@@ -27,6 +37,295 @@ BLUE = "#3777ff"
 BLUE_SOFT = "#13244a"
 GREEN = "#4fe0a0"
 RED = "#ff6d83"
+
+COMPANION_THEMES = {
+    "dark": {
+        "background": "#030405",
+        "surface": "#080A0D",
+        "surface_soft": "#0D1014",
+        "border": "#171B22",
+        "grid": "#10141B",
+        "grid_strong": "#202836",
+        "text": "#EEF1F5",
+        "muted": "#828B98",
+        "blue": "#315FE9",
+        "blue_hover": "#294FC2",
+        "blue_soft": "#0C1633",
+        "green": "#4BC99B",
+        "amber": "#F2BE5C",
+        "red": "#FF7087",
+    },
+    "light": {
+        "background": "#F1F0EC",
+        "surface": "#FAFAF8",
+        "surface_soft": "#EAE9E4",
+        "border": "#D7D5CF",
+        "grid": "#E4E2DC",
+        "grid_strong": "#C8CDD8",
+        "text": "#15171A",
+        "muted": "#626A74",
+        "blue": "#3159C8",
+        "blue_hover": "#284BAA",
+        "blue_soft": "#E2E8F8",
+        "green": "#087F58",
+        "amber": "#9A6500",
+        "red": "#C93651",
+    },
+}
+
+_AI_PROCESS_NAMES = {
+    "claude": {"claude.exe", "claude desktop.exe"},
+    "codex": {"codex.exe", "codex app.exe"},
+    "cursor": {"cursor.exe"},
+}
+_AI_LABELS = {"claude": "Claude", "codex": "Codex", "cursor": "Cursor"}
+
+
+def _anime_in_out_sine(progress: float) -> float:
+    """Mirror Anime.js's built-in inOutSine ease for native Tk animation."""
+
+    progress = min(1.0, max(0.0, progress))
+    return -(math.cos(math.pi * progress) - 1.0) / 2.0
+
+
+def _windows_process_snapshot() -> dict[int, str]:
+    """Read process names without spawning tasklist or adding a dependency."""
+
+    if sys.platform != "win32":
+        return {}
+
+    class ProcessEntry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", wintypes.LONG),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+        create_snapshot = kernel32.CreateToolhelp32Snapshot
+        create_snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+        create_snapshot.restype = wintypes.HANDLE
+        process_first = kernel32.Process32FirstW
+        process_first.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry))
+        process_first.restype = wintypes.BOOL
+        process_next = kernel32.Process32NextW
+        process_next.argtypes = (wintypes.HANDLE, ctypes.POINTER(ProcessEntry))
+        process_next.restype = wintypes.BOOL
+        snapshot = create_snapshot(0x00000002, 0)
+        if not snapshot or snapshot == ctypes.c_void_p(-1).value:
+            return {}
+        processes: dict[int, str] = {}
+        try:
+            entry = ProcessEntry()
+            entry.dwSize = ctypes.sizeof(ProcessEntry)
+            if process_first(snapshot, ctypes.byref(entry)):
+                while True:
+                    processes[int(entry.th32ProcessID)] = entry.szExeFile.lower()
+                    if not process_next(snapshot, ctypes.byref(entry)):
+                        break
+        finally:
+            kernel32.CloseHandle(snapshot)
+        return processes
+    except (AttributeError, OSError, ValueError):
+        return {}
+
+
+def _foreground_process_id() -> int | None:
+    if sys.platform != "win32":
+        return None
+    try:
+        process_id = wintypes.DWORD()
+        window = ctypes.windll.user32.GetForegroundWindow()
+        if not window:
+            return None
+        ctypes.windll.user32.GetWindowThreadProcessId(window, ctypes.byref(process_id))
+        return int(process_id.value) or None
+    except (AttributeError, OSError):
+        return None
+
+
+def _active_ai_client(
+    preferred: str | None = None,
+    *,
+    processes: dict[int, str] | None = None,
+    foreground_process_id: int | None = None,
+) -> str | None:
+    """Choose the foreground AI, then retain the last active AI if still open."""
+
+    if processes is None:
+        processes = _windows_process_snapshot()
+    if foreground_process_id is None:
+        foreground_process_id = _foreground_process_id()
+
+    def client_for_process(name: str | None) -> str | None:
+        normalized = (name or "").lower()
+        for key, process_names in _AI_PROCESS_NAMES.items():
+            if normalized in process_names:
+                return key
+        return None
+
+    foreground_client = client_for_process(processes.get(foreground_process_id or -1))
+    if foreground_client is not None:
+        return foreground_client
+
+    running = {
+        client
+        for name in processes.values()
+        if (client := client_for_process(name)) is not None
+    }
+    if preferred in running:
+        return preferred
+    return next((key for key in ("codex", "claude", "cursor") if key in running), None)
+
+def _draw_round_rectangle(
+    canvas: tk.Canvas,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    radius: float,
+    *,
+    fill: str,
+    tags: str,
+) -> int:
+    """Draw one compact smooth rounded rectangle without platform chrome."""
+
+    radius = min(radius, (x2 - x1) / 2, (y2 - y1) / 2)
+    points = (
+        x1 + radius,
+        y1,
+        x2 - radius,
+        y1,
+        x2,
+        y1,
+        x2,
+        y1 + radius,
+        x2,
+        y2 - radius,
+        x2,
+        y2,
+        x2 - radius,
+        y2,
+        x1 + radius,
+        y2,
+        x1,
+        y2,
+        x1,
+        y2 - radius,
+        x1,
+        y1 + radius,
+        x1,
+        y1,
+    )
+    return canvas.create_polygon(
+        points,
+        smooth=True,
+        splinesteps=24,
+        fill=fill,
+        outline="",
+        tags=tags,
+    )
+
+_WINDOWS_DPI_AWARE = False
+
+
+def _enable_windows_dpi_awareness() -> None:
+    """Keep Tk geometry and the Windows work area in the same pixel space."""
+    global _WINDOWS_DPI_AWARE
+    if sys.platform != "win32" or _WINDOWS_DPI_AWARE:
+        return
+    try:
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            _WINDOWS_DPI_AWARE = True
+            return
+    except (AttributeError, OSError):
+        pass
+    try:
+        if ctypes.windll.shcore.SetProcessDpiAwareness(2) == 0:
+            _WINDOWS_DPI_AWARE = True
+            return
+    except (AttributeError, OSError):
+        pass
+    try:
+        _WINDOWS_DPI_AWARE = bool(ctypes.windll.user32.SetProcessDPIAware())
+    except (AttributeError, OSError):
+        pass
+
+
+def _windows_display_scale() -> float:
+    if sys.platform != "win32":
+        return 1.0
+    if _WINDOWS_DPI_AWARE:
+        return 1.0
+    try:
+        return max(1.0, ctypes.windll.user32.GetDpiForSystem() / 96)
+    except (AttributeError, OSError):
+        return 1.0
+
+
+def _register_sora(root: tk.Tk) -> str:
+    """Load the bundled Sora font privately for this process on Windows."""
+
+    if sys.platform == "win32":
+        try:
+            font_path = files("lians_easy").joinpath(
+                "desktop", "fonts", "Sora-Variable.ttf"
+            )
+            loaded = ctypes.windll.gdi32.AddFontResourceExW(str(font_path), 0x10, None)
+            if loaded:
+                root.update_idletasks()
+        except (AttributeError, OSError, tk.TclError):
+            pass
+    try:
+        if "Sora" in tkfont.families(root):
+            return "Sora"
+    except tk.TclError:
+        pass
+    return "Segoe UI"
+
+
+def _display_font(root: tk.Tk, fallback: str) -> str:
+    """Use a quieter Japanese UI face for display copy when Windows has it."""
+    try:
+        families = set(tkfont.families(root))
+    except tk.TclError:
+        return fallback
+    for candidate in (
+        "Yu Mincho",
+        "Yu Gothic UI",
+        "Yu Gothic",
+        fallback,
+        "Segoe UI",
+    ):
+        if candidate in families:
+            return candidate
+    return fallback
+
+
+def _saved_companion_theme() -> str:
+    try:
+        value = json.loads((user_data_dir() / "ui-preferences.json").read_text(encoding="utf-8"))
+        theme = value.get("theme")
+        return theme if theme in COMPANION_THEMES else "dark"
+    except (AttributeError, json.JSONDecodeError, OSError, TypeError):
+        return "dark"
+
+
+def _save_companion_theme(theme: str) -> None:
+    try:
+        destination = user_data_dir() / "ui-preferences.json"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps({"theme": theme}), encoding="utf-8")
+    except OSError:
+        pass
 
 
 class SetupApp:
@@ -515,6 +814,43 @@ class SetupApp:
             wraplength=590,
             anchor="w",
         ).pack(fill="x", pady=(10, 14))
+
+        if "codex" in result.get("requires_trust", []):
+            self._label(
+                try_card,
+                "One Codex step",
+                background=BLUE_SOFT,
+                foreground=TEXT,
+                font=("Segoe UI", 11, "bold"),
+                anchor="w",
+            ).pack(fill="x", pady=(2, 0))
+            self._label(
+                try_card,
+                (
+                    "Restart Codex, open /hooks, review the Lians memory hook, and choose "
+                    "Trust. Codex will not run a new or changed local hook until you approve "
+                    "its exact contents."
+                ),
+                background=BLUE_SOFT,
+                foreground=MUTED,
+                justify="left",
+                wraplength=590,
+                anchor="w",
+            ).pack(fill="x", pady=(8, 10))
+            tk.Button(
+                try_card,
+                text="Copy /hooks",
+                command=lambda: self._copy("/hooks"),
+                background=PANEL_SOFT,
+                foreground=TEXT,
+                activebackground=PANEL,
+                activeforeground=TEXT,
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                padx=16,
+                pady=8,
+            ).pack(anchor="w", pady=(0, 12))
         tk.Button(
             try_card,
             text="Copy the first prompt",
@@ -601,13 +937,1217 @@ class SetupApp:
         self.root.destroy()
 
 
-def launch() -> None:
-    if any(target.configured for target in client_targets().values()):
-        from .bridge import BridgeApplication
-        from .mcp import default_data_path
-        from .store import MemoryStore
+class CompanionApp:
+    """Resident branded dashboard shown while AI clients use Lians."""
 
-        BridgeApplication(MemoryStore(default_data_path())).serve(open_browser=True)
+    def __init__(
+        self,
+        root: tk.Tk,
+        bridge: Any,
+        *,
+        start_bridge: bool = True,
+        owns_bridge: bool | None = None,
+        animate_intro: bool = True,
+        auto_minimize: bool = False,
+        theme: str | None = None,
+    ) -> None:
+        self.root = root
+        self.bridge = bridge
+        self.owns_bridge = start_bridge if owns_bridge is None else owns_bridge
+        self._stopping = False
+        self._bridge_error: str | None = None
+        self._bridge_thread: threading.Thread | None = None
+        self._refresh_job: str | None = None
+        self._intro_job: str | None = None
+        self._intro_frame_job: str | None = None
+        self._intro_started: float | None = None
+        self._intro_lotus_item: int | None = None
+        self._lifeline_lotus_item: int | None = None
+        self._pet_job: str | None = None
+        self._pet_reaction_started: float | None = None
+        self._shell_min_height = 0
+        self._shell_layout_size: tuple[int, int, int] | None = None
+        self._active_client_key = _active_ai_client()
+        self._window_handle: int | None = None
+        self._drag_origin: tuple[int, int, int, int] | None = None
+        self._display_scale = _windows_display_scale()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        usable_width = round((screen_width - 80) / self._display_scale)
+        usable_height = round((screen_height - 70) / self._display_scale)
+        window_width = min(1120, max(880, usable_width))
+        window_height = min(820, max(620, usable_height))
+        offset_x = max(0, round((screen_width / self._display_scale - window_width) / 2))
+        offset_y = max(0, round((screen_height / self._display_scale - window_height) / 2))
+        self._normal_geometry = (
+            f"{window_width}x{window_height}+{offset_x}+{offset_y}"
+        )
+        self._maximized = False
+        self._snap_state: str | None = None
+        self.theme_name = theme if theme in COMPANION_THEMES else _saved_companion_theme()
+        self.colors = COMPANION_THEMES[self.theme_name]
+        self.font_family = _register_sora(root)
+        # One type family renders more cleanly than mixing Windows' Japanese
+        # display fonts with Sora at different ClearType hinting boundaries.
+        self.display_font_family = self.font_family
+        self.activity_labels: list[tk.Label] = []
+        self._activity_state: tuple[tuple[str, str, str], ...] | None = None
+        self.animate_intro = animate_intro
+        self.auto_minimize = auto_minimize
+
+        self.status = tk.StringVar(value="Starting Lians")
+        self.memory_status = tk.StringVar(value="0 saved memories")
+        self.token_value = tk.StringVar(value="0")
+        self.event_value = tk.StringVar(value="0")
+        self.reuse_value = tk.StringVar(value="0")
+        self.reduction_status = tk.StringVar(value="Waiting for the first handoff")
+        self.connection_status = tk.StringVar(
+            value=(
+                _AI_LABELS[self._active_client_key]
+                if self._active_client_key is not None
+                else "No connection detected"
+            )
+        )
+        self.notice = tk.StringVar(value="Estimates from encrypted local receipts.")
+
+        self.root.title("Lians")
+        self.root.geometry(self._normal_geometry)
+        self.root.minsize(880, 620)
+        self.root.protocol("WM_DELETE_WINDOW", self._stop)
+        if sys.platform == "win32":
+            self.root.overrideredirect(True)
+            try:
+                self.root.iconbitmap(default=sys.executable)
+            except tk.TclError:
+                pass
+
+        self._load_brand_images()
+        if sys.platform == "win32":
+            self.root.after(50, self._apply_windows_taskbar_style)
+        if start_bridge:
+            self._start_bridge()
+        if self.animate_intro:
+            self._build_intro()
+        else:
+            self._build()
+            self._refresh_job = self.root.after(200, self._refresh)
+            if self.auto_minimize:
+                self.root.after(260, self._minimize)
+
+    def _font(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
+        return (self.font_family, size, weight)
+
+    def _display(self, size: int, weight: str = "normal") -> tuple[str, int, str]:
+        return (self.display_font_family, size, weight)
+
+    def _label(self, parent: tk.Widget, text: str = "", **kwargs: Any) -> tk.Label:
+        return tk.Label(
+            parent,
+            text=text,
+            background=kwargs.pop("background", self.colors["background"]),
+            **kwargs,
+        )
+
+    def _rounded_panel(
+        self,
+        parent: tk.Widget,
+        *,
+        height: int,
+        fill_key: str = "surface",
+        radius: int = 24,
+        padding: int = 20,
+    ) -> tuple[tk.Canvas, tk.Frame]:
+        """Create a responsive rounded surface with a normal Tk content frame."""
+
+        background = self.colors[fill_key]
+        canvas = tk.Canvas(
+            parent,
+            height=height,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        inner = tk.Frame(canvas, background=background)
+        inner.place(
+            x=padding,
+            y=padding,
+            relwidth=1,
+            width=-(padding * 2),
+            relheight=1,
+            height=-(padding * 2),
+        )
+
+        redraw_job: list[str | None] = [None]
+        pending_size = [0, 0]
+        rendered_size = [-1, -1]
+
+        def render() -> None:
+            redraw_job[0] = None
+            width, canvas_height = pending_size
+            if [width, canvas_height] == rendered_size or not canvas.winfo_exists():
+                return
+            rendered_size[:] = [width, canvas_height]
+            canvas.delete("panel-shape")
+            _draw_round_rectangle(
+                canvas,
+                1,
+                1,
+                max(2, width - 1),
+                max(2, canvas_height - 1),
+                radius,
+                fill=self.colors["border"],
+                tags="panel-shape",
+            )
+            _draw_round_rectangle(
+                canvas,
+                2,
+                2,
+                max(3, width - 2),
+                max(3, canvas_height - 2),
+                max(1, radius - 1),
+                fill=background,
+                tags="panel-shape",
+            )
+            canvas.tag_lower("panel-shape")
+
+        def redraw(event: tk.Event) -> None:
+            pending_size[:] = [event.width, event.height]
+            if redraw_job[0] is None:
+                redraw_job[0] = canvas.after_idle(render)
+
+        canvas.bind("<Configure>", redraw)
+        return canvas, inner
+
+    def _load_brand_images(self) -> None:
+        try:
+            logo_path = files("lians_easy").joinpath("app", "logo-blue.png")
+            self.logo = tk.PhotoImage(file=str(logo_path))
+            if self.logo.width() > 150:
+                factor = max(1, round(self.logo.width() / 150))
+                self.logo = self.logo.subsample(factor, factor)
+        except (OSError, tk.TclError):
+            self.logo = None
+        try:
+            lotus_path = files("lians_easy").joinpath("desktop", "lotus.png")
+            self.lotus_mark = tk.PhotoImage(file=str(lotus_path))
+            factor = max(1, round(self.lotus_mark.width() / 32))
+            self.lotus = self.lotus_mark.subsample(factor, factor)
+        except (OSError, tk.TclError):
+            self.lotus = None
+            self.lotus_mark = None
+        try:
+            favicon_path = files("lians_easy").joinpath("desktop", "favicon.png")
+            self.intro_favicon = tk.PhotoImage(file=str(favicon_path))
+        except (OSError, tk.TclError):
+            self.intro_favicon = None
+        self.agent_icons: dict[str, tk.PhotoImage] = {}
+        for key in _AI_LABELS:
+            try:
+                icon_path = files("lians_easy").joinpath(
+                    "desktop", "agents", f"{key}.png"
+                )
+                self.agent_icons[key] = tk.PhotoImage(file=str(icon_path))
+            except (OSError, tk.TclError):
+                continue
+        self.theme_icons: dict[str, tk.PhotoImage] = {}
+        for key in ("sun", "moon"):
+            try:
+                icon_path = files("lians_easy").joinpath(
+                    "desktop", "ui", f"theme-{key}.png"
+                )
+                self.theme_icons[key] = tk.PhotoImage(file=str(icon_path))
+            except (OSError, tk.TclError):
+                continue
+
+    def _build_intro(self) -> None:
+        """Settle the exact native-size Lotus once the window has real geometry."""
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.root.configure(background="#000000")
+        self.intro_canvas = tk.Canvas(
+            self.root,
+            background="#000000",
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self.intro_canvas.pack(fill="both", expand=True)
+        self._intro_lotus_item = None
+        self._intro_started = None
+        self.intro_canvas.bind("<Configure>", self._position_intro_lotus)
+        self._intro_frame_job = self.root.after(16, self._animate_intro)
+
+    def _position_intro_lotus(self, _event: tk.Event | None = None) -> None:
+        """Keep the intro centered even while Windows is mapping the window."""
+
+        if self._stopping or not self.intro_canvas.winfo_exists():
+            return
+        width = self.intro_canvas.winfo_width()
+        height = self.intro_canvas.winfo_height()
+        if width < 64 or height < 64:
+            return
+        elapsed = (
+            0.0
+            if self._intro_started is None
+            else max(0.0, time.monotonic() - self._intro_started)
+        )
+        progress = min(1.0, elapsed / 0.32)
+        offset_y = round((1.0 - _anime_in_out_sine(progress)) * 12)
+        frame = self.intro_favicon or self.lotus_mark
+        if frame is None:
+            return
+        center_x = width / 2
+        center_y = height / 2 + offset_y
+        if self._intro_lotus_item is None:
+            self._intro_lotus_item = self.intro_canvas.create_image(
+                center_x,
+                center_y,
+                image=frame,
+                tags="intro-motion",
+            )
+            return
+        self.intro_canvas.coords(self._intro_lotus_item, center_x, center_y)
+
+    def _animate_intro(self) -> None:
+        if self._stopping or not self.intro_canvas.winfo_exists():
+            return
+        if self.intro_canvas.winfo_width() < 64 or self.intro_canvas.winfo_height() < 64:
+            self._intro_frame_job = self.root.after(16, self._animate_intro)
+            return
+        if self._intro_started is None:
+            self._intro_started = time.monotonic()
+            self._intro_job = self.root.after(680, self._finish_intro)
+        self._position_intro_lotus()
+        if time.monotonic() - self._intro_started < 0.32:
+            self._intro_frame_job = self.root.after(16, self._animate_intro)
+            return
+        self._intro_frame_job = None
+
+    def _finish_intro(self) -> None:
+        self._intro_job = None
+        if self._stopping:
+            return
+        if self._intro_frame_job is not None:
+            try:
+                self.root.after_cancel(self._intro_frame_job)
+            except tk.TclError:
+                pass
+            self._intro_frame_job = None
+        redraw_suspended = self._set_windows_redraw(False)
+        try:
+            self._build()
+            self.root.update_idletasks()
+        finally:
+            if redraw_suspended:
+                self._set_windows_redraw(True)
+        self._refresh_job = self.root.after(20, self._refresh)
+        if self.auto_minimize:
+            self.root.after(180, self._minimize)
+
+    def _build(self) -> None:
+        self._cancel_pet_animation()
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.colors = COMPANION_THEMES[self.theme_name]
+        self._activity_state = None
+        self._shell_min_height = 0
+        self._shell_layout_size = None
+        self.root.configure(background=self.colors["background"])
+        self.root.option_add("*Font", self._font(11))
+        self._build_titlebar()
+
+        body = tk.Frame(self.root, background=self.colors["background"])
+        body.pack(fill="both", expand=True)
+        self.body_canvas = tk.Canvas(
+            body,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self.scrollbar = tk.Canvas(
+            body,
+            width=7,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self.scrollbar.bind("<Button-1>", self._scroll_from_indicator)
+        self.scrollbar.bind("<B1-Motion>", self._scroll_from_indicator)
+        self.body_canvas.configure(yscrollcommand=self._update_scroll_indicator)
+        self.scrollbar.pack(side="right", fill="y")
+        self.body_canvas.pack(side="left", fill="both", expand=True)
+        self.shell = tk.Frame(
+            self.body_canvas,
+            background=self.colors["background"],
+            padx=54,
+            pady=26,
+        )
+        canvas_window = self.body_canvas.create_window(
+            (0, 0), window=self.shell, anchor="nw"
+        )
+        self.shell.bind(
+            "<Configure>",
+            lambda _event: self.body_canvas.configure(scrollregion=self.body_canvas.bbox("all")),
+        )
+        self.body_canvas.bind(
+            "<Configure>",
+            lambda event: self._resize_shell(event, canvas_window),
+        )
+        self.root.bind("<MouseWheel>", self._scroll_body)
+
+        hero = tk.Frame(self.shell, background=self.colors["background"])
+        hero.pack(fill="x", pady=(6, 22))
+        hero_left = tk.Frame(hero, background=self.colors["background"])
+        hero_left.pack(side="left", fill="both", expand=True, padx=(22, 32), pady=18)
+        state = tk.Frame(hero_left, background=self.colors["background"])
+        state.pack(fill="x", pady=(0, 16))
+        self.connection_icon_label = self._label(
+            state,
+            background=self.colors["background"],
+        )
+        self.connection_icon_label.pack(side="left", padx=(0, 9))
+        self.connection_label = self._label(
+            state,
+            textvariable=self.connection_status,
+            background=self.colors["background"],
+            foreground=self.colors["text"],
+            font=self._font(10, "bold"),
+        )
+        self.connection_label.pack(side="left")
+        self._render_connection_identity()
+        self._label(
+            hero_left,
+            "Agent lifeline",
+            background=self.colors["background"],
+            foreground=self.colors["text"],
+            font=self._display(32, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        self._label(
+            hero_left,
+            "Extended usage. Better memory.",
+            background=self.colors["background"],
+            foreground=self.colors["muted"],
+            font=self._font(11),
+            anchor="w",
+            justify="left",
+            wraplength=560,
+        ).pack(fill="x", pady=(7, 0))
+        self.lifeline_canvas = tk.Canvas(
+            hero,
+            width=310,
+            height=170,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        self.lifeline_canvas.pack(side="right", fill="y", padx=(0, 28))
+        self.lifeline_canvas.configure(cursor="hand2")
+        self._lifeline_lotus_item = None
+        self.lifeline_canvas.bind("<Configure>", self._render_lifeline)
+        self.lifeline_canvas.bind("<Button-1>", self._animate_pet)
+        self.root.after_idle(self._render_lifeline)
+
+        self.metrics_panel, metrics = self._rounded_panel(
+            self.shell,
+            height=166,
+            fill_key="surface",
+            radius=24,
+            padding=18,
+        )
+        self.metrics_panel.pack(fill="x")
+        metric_data = (
+            ("Tokens saved", self.token_value, "Repeated context removed"),
+            ("Handoffs", self.event_value, "Context carried forward"),
+            ("Memories reused", self.reuse_value, "Useful details returned"),
+        )
+        for index, data in enumerate(metric_data):
+            self._metric_card(metrics, *data, index=index)
+
+        activity_heading = tk.Frame(self.shell, background=self.colors["background"])
+        activity_heading.pack(fill="x", pady=(20, 9), padx=4)
+        self._label(
+            activity_heading,
+            "Activity",
+            foreground=self.colors["text"],
+            font=self._font(15, "bold"),
+        ).pack(side="left")
+        self._label(
+            activity_heading,
+            textvariable=self.reduction_status,
+            foreground=self.colors["muted"],
+            font=self._font(10),
+        ).pack(side="right")
+
+        self.activity_panel, self.activity_frame = self._rounded_panel(
+            self.shell,
+            height=168,
+            fill_key="surface",
+            radius=24,
+            padding=20,
+        )
+        self.activity_panel.pack(fill="both", expand=True)
+        self._show_activity([])
+
+        actions = tk.Frame(self.shell, background=self.colors["background"])
+        actions.pack(fill="x", pady=(18, 0), padx=4)
+        self.open_button = tk.Button(
+            actions,
+            text="Refresh",
+            command=self._refresh_now,
+            state="disabled",
+            background=self.colors["blue"],
+            foreground="#FFFFFF",
+            activebackground=self.colors["blue_hover"],
+            activeforeground="#FFFFFF",
+            disabledforeground="#8290A4",
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=self._font(11, "bold"),
+            padx=22,
+            pady=9,
+        )
+        self.open_button.pack(side="left")
+        tk.Button(
+            actions,
+            text="Minimize",
+            command=self._minimize,
+            background=self.colors["surface_soft"],
+            foreground=self.colors["text"],
+            activebackground=self.colors["surface"],
+            activeforeground=self.colors["text"],
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=self._font(11, "bold"),
+            padx=20,
+            pady=9,
+        ).pack(side="left", padx=(10, 0))
+        self.stop_button = tk.Button(
+            actions,
+            text="Quit Lians" if self.owns_bridge else "Close",
+            command=self._stop,
+            background=self.colors["background"],
+            foreground=self.colors["muted"],
+            activebackground=self.colors["surface_soft"],
+            activeforeground=self.colors["text"],
+            relief="flat",
+            borderwidth=0,
+            cursor="hand2",
+            font=self._font(10, "bold"),
+            padx=14,
+            pady=9,
+        )
+        self.stop_button.pack(side="right")
+        self._label(
+            actions,
+            textvariable=self.memory_status,
+            background=self.colors["background"],
+            foreground=self.colors["muted"],
+            font=self._font(9),
+        ).pack(side="right", padx=(0, 14))
+        self._label(
+            self.shell,
+            textvariable=self.notice,
+            foreground=self.colors["muted"],
+            justify="left",
+            wraplength=960,
+            anchor="w",
+            font=self._font(9),
+        ).pack(fill="x", pady=(9, 4), padx=4)
+
+    def _resize_shell(self, event: tk.Event, canvas_window: int) -> None:
+        """Fill tall windows while keeping short windows scrollable."""
+
+        width = min(event.width, 1320)
+        if not self._shell_min_height:
+            self._shell_min_height = self.shell.winfo_reqheight()
+        height = max(event.height, self._shell_min_height)
+        offset_x = round(max(0, (event.width - width) / 2))
+        layout = (width, height, offset_x)
+        if layout == self._shell_layout_size:
+            return
+        self._shell_layout_size = layout
+        self.body_canvas.itemconfigure(canvas_window, width=width, height=height)
+        self.body_canvas.coords(canvas_window, offset_x, 0)
+
+    def _scroll_body(self, event: tk.Event) -> str:
+        delta = int(-event.delta / 120) if event.delta else 0
+        if delta:
+            self.body_canvas.yview_scroll(delta, "units")
+        return "break"
+
+    def _update_scroll_indicator(self, first: str, last: str) -> None:
+        try:
+            start = float(first)
+            end = float(last)
+            height = max(1, self.scrollbar.winfo_height())
+            self.scrollbar.delete("thumb")
+            if end - start >= 0.999:
+                return
+            thumb_start = round(start * height)
+            thumb_end = max(thumb_start + 34, round(end * height))
+            thumb_end = min(height, thumb_end)
+            self.scrollbar.create_rectangle(
+                2,
+                thumb_start,
+                6,
+                thumb_end,
+                fill=self.colors["blue"],
+                outline="",
+                tags="thumb",
+            )
+        except (tk.TclError, TypeError, ValueError):
+            return
+
+    def _scroll_from_indicator(self, event: tk.Event) -> str:
+        height = max(1, self.scrollbar.winfo_height())
+        visible = self.body_canvas.yview()
+        visible_fraction = visible[1] - visible[0]
+        target = event.y / height - visible_fraction / 2
+        self.body_canvas.yview_moveto(min(1.0 - visible_fraction, max(0.0, target)))
+        return "break"
+
+    def _build_titlebar(self) -> None:
+        bar = tk.Frame(
+            self.root,
+            background=self.colors["background"],
+            height=48,
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+        )
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        brand = tk.Frame(bar, background=self.colors["background"])
+        brand.pack(side="left", fill="y", padx=(14, 0))
+        if self.lotus is not None:
+            tk.Label(brand, image=self.lotus, background=self.colors["background"]).pack(
+                side="left", padx=(0, 7)
+            )
+        self._label(
+            brand,
+            "Lians",
+            foreground=self.colors["text"],
+            font=self._font(11, "bold"),
+        ).pack(side="left")
+        mode = tk.Canvas(
+            bar,
+            width=36,
+            height=36,
+            background=self.colors["background"],
+            borderwidth=0,
+            highlightthickness=0,
+            cursor="hand2",
+        )
+        self.theme_button = mode
+        self._theme_toggle_hover = False
+        self._draw_theme_toggle()
+        mode.bind("<Button-1>", lambda _event: self._toggle_theme())
+        mode.bind("<Enter>", lambda _event: self._set_theme_toggle_hover(True))
+        mode.bind("<Leave>", lambda _event: self._set_theme_toggle_hover(False))
+        for text, command in (
+            ("×", self._stop),
+            ("□", self._toggle_maximize),
+            ("−", self._minimize),
+        ):
+            button = tk.Button(
+                bar,
+                text=text,
+                command=command,
+                background=self.colors["background"],
+                foreground=self.colors["muted"],
+                activebackground=self.colors["surface_soft"],
+                activeforeground=self.colors["text"],
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                font=self._font(12),
+                width=4,
+            )
+            button.pack(side="right", fill="y")
+            if text == "×":
+                self.close_button = button
+        mode.pack(side="right", padx=(0, 8), pady=6)
+        for widget in (bar, brand, *brand.winfo_children()):
+            widget.bind("<ButtonPress-1>", self._begin_drag)
+            widget.bind("<B1-Motion>", self._drag_window)
+            widget.bind("<ButtonRelease-1>", self._finish_drag)
+            widget.bind("<Double-Button-1>", lambda _event: self._toggle_maximize())
+
+    def _set_theme_toggle_hover(self, active: bool) -> None:
+        self._theme_toggle_hover = active
+        self._draw_theme_toggle()
+
+    def _draw_theme_toggle(self) -> None:
+        """Render a neutral circle around a pre-antialiased sun or moon."""
+
+        canvas = self.theme_button
+        canvas.delete("all")
+        if self.theme_name == "dark":
+            fill = self.colors["surface_soft"] if self._theme_toggle_hover else "#0B1019"
+            border = "#273247" if self._theme_toggle_hover else "#202836"
+            self.theme_toggle_icon = "sun"
+        else:
+            fill = self.colors["surface_soft"] if self._theme_toggle_hover else "#FFFFFF"
+            border = "#B9BEC6" if self._theme_toggle_hover else "#C7CDD5"
+            self.theme_toggle_icon = "moon"
+        canvas.create_oval(
+            1,
+            1,
+            35,
+            35,
+            fill=fill,
+            outline=border,
+            width=1,
+            tags="theme-toggle-ring",
+        )
+        icon = self.theme_icons.get(self.theme_toggle_icon)
+        if icon is not None:
+            canvas.create_image(
+                18,
+                18,
+                image=icon,
+                tags="theme-toggle-icon",
+            )
+            return
+        canvas.create_text(
+            18,
+            18,
+            text="○",
+            fill=self.colors["text"],
+            font=self._font(14),
+            tags="theme-toggle-icon",
+        )
+
+    def _render_connection_identity(self) -> None:
+        """Show one active AI identity, never a row of passive installations."""
+
+        key = self._active_client_key
+        icon = self.agent_icons.get(key or "")
+        if key is None:
+            self.connection_status.set("No connection detected")
+            self.connection_icon_label.configure(image="")
+            self.connection_icon_label.pack_forget()
+            self.connection_label.configure(foreground=self.colors["muted"])
+            return
+        self.connection_status.set(f"{_AI_LABELS[key]} connected")
+        self.connection_icon_label.configure(image=icon or "")
+        if icon is not None and not self.connection_icon_label.winfo_manager():
+            self.connection_icon_label.pack(
+                side="left", padx=(0, 9), before=self.connection_label
+            )
+        self.connection_label.configure(foreground=self.colors["text"])
+
+    def _render_lifeline(self, _event: tk.Event | None = None) -> None:
+        """Render the exact branded PNG as the dashboard's small companion."""
+        if self._stopping:
+            return
+        try:
+            if not self.lifeline_canvas.winfo_exists():
+                return
+            canvas = self.lifeline_canvas
+            width = max(240, canvas.winfo_width())
+            height = max(140, canvas.winfo_height())
+            center_x = width / 2
+            center_y = height / 2
+            if self.lotus_mark is not None:
+                if self._lifeline_lotus_item is None:
+                    self._lifeline_lotus_item = canvas.create_image(
+                        center_x,
+                        center_y,
+                        image=self.lotus_mark,
+                        tags="motion",
+                    )
+                else:
+                    canvas.coords(self._lifeline_lotus_item, center_x, center_y)
+        except tk.TclError:
+            return
+
+    def _cancel_pet_animation(self) -> None:
+        if self._pet_job is not None:
+            try:
+                self.root.after_cancel(self._pet_job)
+            except tk.TclError:
+                pass
+            self._pet_job = None
+        self._pet_reaction_started = None
+
+    def _animate_pet(self, _event: tk.Event | None = None) -> None:
+        """Give the native Lotus a restrained 500ms spring-like hop on click."""
+
+        self._cancel_pet_animation()
+        self._pet_reaction_started = time.monotonic()
+        self._animate_pet_frame()
+
+    def _animate_pet_frame(self) -> None:
+        if self._stopping or self._pet_reaction_started is None:
+            return
+        try:
+            if not self.lifeline_canvas.winfo_exists() or self._lifeline_lotus_item is None:
+                return
+            elapsed = time.monotonic() - self._pet_reaction_started
+            progress = min(1.0, elapsed / 0.5)
+            eased = _anime_in_out_sine(progress)
+            arc = math.sin(math.pi * eased)
+            settle = math.sin(math.pi * 3 * eased) * (1.0 - eased)
+            center_x = max(240, self.lifeline_canvas.winfo_width()) / 2
+            center_y = max(140, self.lifeline_canvas.winfo_height()) / 2
+            self.lifeline_canvas.coords(
+                self._lifeline_lotus_item,
+                center_x,
+                center_y - 10 * arc + 2 * settle,
+            )
+            if progress < 1.0:
+                self._pet_job = self.root.after(16, self._animate_pet_frame)
+                return
+            self._pet_job = None
+            self._pet_reaction_started = None
+            self.lifeline_canvas.coords(self._lifeline_lotus_item, center_x, center_y)
+        except tk.TclError:
+            self._pet_job = None
+            self._pet_reaction_started = None
+
+    def _metric_card(
+        self,
+        parent: tk.Widget,
+        title: str,
+        value: tk.StringVar,
+        detail: str,
+        *,
+        index: int,
+    ) -> None:
+        if index:
+            tk.Frame(parent, background=self.colors["border"], width=1).pack(
+                side="left", fill="y", padx=8
+            )
+        card = tk.Frame(
+            parent,
+            background=self.colors["surface"],
+            padx=14,
+            pady=2,
+        )
+        card.pack(side="left", fill="both", expand=True)
+        heading = tk.Frame(card, background=self.colors["surface"])
+        heading.pack(fill="x")
+        self._label(
+            heading,
+            title,
+            background=self.colors["surface"],
+            foreground=self.colors["muted"],
+            font=self._font(10),
+            anchor="w",
+            wraplength=250,
+        ).pack(side="left")
+        self._label(
+            card,
+            textvariable=value,
+            background=self.colors["surface"],
+            foreground=self.colors["blue"],
+            font=self._display(25, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(2, 1))
+        self._label(
+            card,
+            detail,
+            background=self.colors["surface"],
+            foreground=self.colors["muted"],
+            font=self._font(9),
+            anchor="w",
+            wraplength=250,
+        ).pack(fill="x")
+
+    def _show_activity(self, activity: list[dict[str, Any]]) -> None:
+        state = tuple((item["title"], item["time"], item["detail"]) for item in activity)
+        if state == self._activity_state:
+            return
+        self._activity_state = state
+        for child in self.activity_frame.winfo_children():
+            child.destroy()
+        self.activity_labels = []
+        if not activity:
+            empty = self._label(
+                self.activity_frame,
+                "Waiting for the first handoff.",
+                background=self.colors["surface"],
+                foreground=self.colors["muted"],
+                font=self._font(11),
+                anchor="w",
+            )
+            empty.pack(fill="both", expand=True, pady=22)
+            self.activity_labels.append(empty)
+            return
+        for index, item in enumerate(activity):
+            row = tk.Frame(self.activity_frame, background=self.colors["surface"], pady=6)
+            row.pack(fill="x")
+            heading = self._label(
+                row,
+                item["title"],
+                background=self.colors["surface"],
+                foreground=self.colors["text"],
+                font=self._font(11, "bold"),
+                anchor="w",
+            )
+            heading.pack(side="left")
+            self._label(
+                row,
+                item["time"],
+                background=self.colors["surface"],
+                foreground=self.colors["muted"],
+                font=self._font(9),
+            ).pack(side="right")
+            detail = self._label(
+                self.activity_frame,
+                item["detail"],
+                background=self.colors["surface"],
+                foreground=self.colors["muted"],
+                font=self._font(9),
+                anchor="w",
+            )
+            detail.pack(fill="x", pady=(0, 5))
+            self.activity_labels.extend((heading, detail))
+            if index < len(activity) - 1:
+                tk.Frame(
+                    self.activity_frame, background=self.colors["border"], height=1
+                ).pack(fill="x")
+
+    def _start_bridge(self) -> None:
+        def serve() -> None:
+            try:
+                self.bridge.serve()
+            except (OSError, RuntimeError) as error:
+                self._bridge_error = str(error)
+
+        self._bridge_thread = threading.Thread(target=serve, daemon=True)
+        self._bridge_thread.start()
+
+    def _refresh(self) -> None:
+        if self._stopping:
+            return
+        if self._bridge_error:
+            self.status.set("Lians could not start")
+            self.notice.set(self._bridge_error)
+            self.open_button.configure(state="disabled")
+        elif self.bridge.running:
+            self.status.set("Lians is running")
+            self.open_button.configure(state="normal")
+            try:
+                snapshot = lifeline_snapshot(self.bridge.store, limit=3)
+                count = snapshot["saved_memories"]
+                self.memory_status.set(
+                    f"{count} saved memor{'y' if count == 1 else 'ies'}"
+                )
+                self.token_value.set(
+                    f"~{format_count(snapshot['repeated_tokens_avoided_estimate'])}"
+                )
+                self.event_value.set(format_count(snapshot["context_events"]))
+                self.reuse_value.set(format_count(snapshot["memories_reused"]))
+                events = snapshot["context_events"]
+                if events:
+                    self.reduction_status.set(
+                        f"About {snapshot['reduction_percent_estimate']}% less repeated context"
+                    )
+                else:
+                    self.reduction_status.set("Waiting for the first handoff")
+                self._show_activity(snapshot["activity"])
+            except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+                self.memory_status.set("Encrypted memory ready")
+        self._active_client_key = _active_ai_client(self._active_client_key)
+        self._render_connection_identity()
+        self._refresh_job = self.root.after(5000, self._refresh)
+
+    def _toggle_theme(self) -> None:
+        if self._refresh_job is not None:
+            try:
+                self.root.after_cancel(self._refresh_job)
+            except tk.TclError:
+                pass
+            self._refresh_job = None
+        self.theme_name = "light" if self.theme_name == "dark" else "dark"
+        _save_companion_theme(self.theme_name)
+        self._build()
+        # Repaint the chosen theme before querying receipts. The live website
+        # swaps state immediately; doing I/O inside the click made Tk feel late.
+        self.root.update_idletasks()
+        if sys.platform == "win32":
+            self.root.after(20, self._apply_windows_taskbar_style)
+        self._refresh_job = self.root.after(20, self._refresh)
+
+    def _apply_windows_taskbar_style(self) -> None:
+        if sys.platform != "win32":
+            return
+        try:
+            self.root.update_idletasks()
+            user32 = ctypes.windll.user32
+            handle = user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            style = user32.GetWindowLongW(handle, -20)
+            style = (style & ~0x00000080) | 0x00040000
+            user32.SetWindowLongW(handle, -20, style)
+            user32.SetWindowPos(handle, 0, 0, 0, 0, 0x0027)
+            self._window_handle = handle
+        except (AttributeError, OSError, tk.TclError):
+            self._window_handle = None
+
+    def _set_windows_redraw(self, enabled: bool) -> bool:
+        """Hold one frame while replacing the intro or an entire themed tree."""
+
+        if sys.platform != "win32":
+            return False
+        try:
+            self.root.update_idletasks()
+            user32 = ctypes.windll.user32
+            handle = self._window_handle
+            if handle is None:
+                handle = user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+            user32.SendMessageW(handle, 0x000B, int(enabled), 0)
+            if enabled:
+                redraw_flags = 0x0001 | 0x0004 | 0x0080 | 0x0100
+                user32.RedrawWindow(handle, None, None, redraw_flags)
+            return True
+        except (AttributeError, OSError, tk.TclError):
+            return False
+
+    def _begin_drag(self, event: tk.Event) -> None:
+        if self._maximized or self._snap_state is not None:
+            current_width = max(1, self.root.winfo_width())
+            pointer_ratio = (event.x_root - self.root.winfo_x()) / current_width
+            saved_size = self._normal_geometry.split("+")[0]
+            width_text, height_text = saved_size.split("x", maxsplit=1)
+            restored_width = max(self.root.minsize()[0], int(width_text))
+            restored_height = max(self.root.minsize()[1], int(height_text))
+            restored_x = round(event.x_root - restored_width * pointer_ratio)
+            restored_y = max(0, event.y_root - 24)
+            self.root.geometry(
+                f"{restored_width}x{restored_height}+{restored_x}+{restored_y}"
+            )
+            self.root.update_idletasks()
+            self._maximized = False
+            self._snap_state = None
+        self._drag_origin = (event.x_root, event.y_root, self.root.winfo_x(), self.root.winfo_y())
+
+    def _drag_window(self, event: tk.Event) -> None:
+        if self._drag_origin is None or self._maximized:
+            return
+        start_x, start_y, window_x, window_y = self._drag_origin
+        self.root.geometry(f"+{window_x + event.x_root - start_x}+{window_y + event.y_root - start_y}")
+
+    def _work_area(self) -> tuple[int, int, int, int]:
+        if sys.platform == "win32":
+            try:
+                class WorkArea(ctypes.Structure):
+                    _fields_ = [
+                        ("left", ctypes.c_long),
+                        ("top", ctypes.c_long),
+                        ("right", ctypes.c_long),
+                        ("bottom", ctypes.c_long),
+                    ]
+
+                area = WorkArea()
+                ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0)
+                return tuple(
+                    round(value / self._display_scale)
+                    for value in (area.left, area.top, area.right, area.bottom)
+                )
+            except (AttributeError, OSError):
+                pass
+        return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+
+    def _finish_drag(self, event: tk.Event) -> None:
+        if self._drag_origin is None:
+            return
+        self._drag_origin = None
+        _left, top, _right, _bottom = self._work_area()
+        snap_margin = 12
+        if event.y_root <= top + snap_margin:
+            self._maximize_to_work_area()
+
+    def _maximize_to_work_area(self) -> None:
+        if not self._maximized and self._snap_state is None:
+            self._normal_geometry = self.root.geometry()
+        left, top, right, bottom = self._work_area()
+        self.root.geometry(f"{right - left}x{bottom - top}+{left}+{top}")
+        self._maximized = True
+        self._snap_state = "maximized"
+
+    def _toggle_maximize(self) -> None:
+        if self._maximized or self._snap_state is not None:
+            self.root.geometry(self._normal_geometry)
+            self._maximized = False
+            self._snap_state = None
+            return
+        self._maximize_to_work_area()
+
+    def _refresh_now(self) -> None:
+        if self._refresh_job is not None:
+            try:
+                self.root.after_cancel(self._refresh_job)
+            except tk.TclError:
+                pass
+            self._refresh_job = None
+        self._refresh()
+
+    def _minimize(self) -> None:
+        self.notice.set("Lians is still running. Open it from the Windows taskbar when needed.")
+        if sys.platform == "win32" and self._window_handle is not None:
+            try:
+                ctypes.windll.user32.ShowWindow(self._window_handle, 6)
+                return
+            except (AttributeError, OSError):
+                pass
+        if sys.platform == "win32":
+            self.root.overrideredirect(False)
+        self.root.iconify()
+
+    def _stop(self) -> None:
+        if self._stopping:
+            return
+        self._stopping = True
+        if hasattr(self, "open_button"):
+            self.open_button.configure(state="disabled")
+        if self._refresh_job is not None:
+            try:
+                self.root.after_cancel(self._refresh_job)
+            except tk.TclError:
+                pass
+            self._refresh_job = None
+        for attribute in ("_intro_job", "_intro_frame_job"):
+            job = getattr(self, attribute)
+            if job is not None:
+                try:
+                    self.root.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, attribute, None)
+        self._cancel_pet_animation()
+
+        if not self.owns_bridge:
+            self.root.destroy()
+            return
+
+        self.status.set("Stopping Lians")
+
+        def stop() -> None:
+            self.bridge.shutdown()
+            try:
+                self.root.after(0, self.root.destroy)
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=stop, daemon=False).start()
+
+
+def _running_bridge_origin() -> str | None:
+    from .bridge import DEFAULT_HOST, DEFAULT_PORT
+
+    origin = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
+    try:
+        with urlopen(origin, timeout=0.6) as response:
+            server = response.headers.get("Server", "")
+    except (OSError, URLError):
+        return None
+    return origin if server.startswith("LiansBridge/") else None
+
+
+def _focus_existing_companion() -> bool:
+    """Restore the existing Windows dashboard instead of opening a browser."""
+    if sys.platform != "win32":
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        handle = user32.FindWindowW(None, "Lians")
+        if not handle:
+            return False
+        user32.ShowWindowAsync(handle, 9)
+        user32.BringWindowToTop(handle)
+        flags = 0x0001 | 0x0002 | 0x0040
+        user32.SetWindowPos(handle, -1, 0, 0, 0, 0, flags)
+        user32.SetWindowPos(handle, -2, 0, 0, 0, 0, flags)
+        user32.SetForegroundWindow(handle)
+        return True
+    except (AttributeError, OSError):
+        return False
+
+
+class _AttachedBridge:
+    """Read-only connection metadata for a bridge owned by another process."""
+
+    def __init__(self, origin: str, store: Any) -> None:
+        self.origin = origin
+        self.store = store
+
+    @property
+    def running(self) -> bool:
+        return _running_bridge_origin() == self.origin
+
+    def shutdown(self) -> None:
+        return None
+
+
+def _ensure_windows_autostart() -> None:
+    """Register the frozen app for a quiet per-user Windows startup."""
+
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    try:
+        import winreg
+
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        # A frozen Windows executable already exposes an absolute native path.
+        # Resolving it through pathlib is harmful in cross-platform validation:
+        # a Linux runner interprets ``C:\\...`` as a relative POSIX path.
+        command = f'"{sys.executable}" --background'
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER,
+            key_path,
+            0,
+            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE,
+        ) as key:
+            try:
+                current, _kind = winreg.QueryValueEx(key, "Lians")
+            except FileNotFoundError:
+                current = None
+            if current != command:
+                winreg.SetValueEx(key, "Lians", 0, winreg.REG_SZ, command)
+    except (OSError, ValueError):
+        return
+
+
+def _launch_companion(*, background_start: bool = False) -> None:
+    from .bridge import BridgeApplication
+    from .mcp import default_data_path
+    from .store import MemoryStore
+
+    _ensure_windows_autostart()
+    data_path = default_data_path()
+    existing = _running_bridge_origin()
+    if existing is not None:
+        if background_start:
+            return
+        if _focus_existing_companion():
+            return
+        root = tk.Tk()
+        CompanionApp(
+            root,
+            _AttachedBridge(existing, MemoryStore(data_path)),
+            start_bridge=False,
+            owns_bridge=False,
+        )
+        root.mainloop()
+        return
+    root = tk.Tk()
+    CompanionApp(
+        root,
+        BridgeApplication(MemoryStore(data_path)),
+        auto_minimize=background_start,
+    )
+    root.mainloop()
+
+
+def launch(*, background_start: bool = False) -> None:
+    _enable_windows_dpi_awareness()
+    if any(target.configured for target in client_targets().values()):
+        _launch_companion(background_start=background_start)
+        return
+    if background_start:
         return
     root = tk.Tk()
     if sys.platform == "win32":
@@ -621,8 +2161,4 @@ def launch() -> None:
     app = SetupApp(root)
     root.mainloop()
     if app.open_requested:
-        from .bridge import BridgeApplication
-        from .mcp import default_data_path
-        from .store import MemoryStore
-
-        BridgeApplication(MemoryStore(default_data_path())).serve(open_browser=True)
+        _launch_companion()

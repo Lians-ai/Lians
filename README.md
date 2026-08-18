@@ -1,13 +1,19 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/logo-blue.png" width="420" alt="Lians lotus logo">
+    <img src="docs/images/favicon.png" width="88" alt="Lians Lotus">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Lians-ai/Lians">
+    <img src="docs/images/logo.png" width="320" alt="Lians">
   </a>
 </p>
 
 <p align="center">
   <a href="docs/install.md">Install</a> ·
   <a href="docs/easy-install.md">Desktop preview</a> ·
-  <a href="https://github.com/Lians-ai/Lians/tree/master/docs">Docs</a> ·
+  <a href="docs/">Docs</a> ·
   <a href="https://github.com/Lians-ai/Lians/issues">Issues</a>
 </p>
 
@@ -19,34 +25,78 @@
   <a href="https://github.com/Lians-ai/Lians/stargazers"><img src="https://img.shields.io/github/stars/Lians-ai/Lians?style=social" alt="Star Lians on GitHub"></a>
 </p>
 
-# Use less context. Get more AI.
+# Start a new AI coding session without re-explaining your project.
 
-Lians helps Claude, Cursor, Codex, and other AI tools stop rereading the same
-project context.
+**Use less context. Get more AI.**
 
-Save a useful preference, fact, constraint, or decision once. In a later task,
-Lians reuses only a small relevant slice and leaves the rest out. You keep your
-model, editor, and normal workflow.
+Lians gives Claude Code, Codex, Cursor, and other AI tools the current project
+state they need to pick up where another session stopped. It keeps completed
+work, open work, decisions, constraints, and changed facts separate so the next
+agent can continue without repeating or reversing prior work.
 
-- **Local by default:** encrypted saved context stays on your device.
-- **No AI credentials:** Lians does not ask for your Claude, Cursor, or Codex
-  password or provider API key.
-- **Measured:** signed receipts record what was reused, what was excluded, and
-  the estimated repeated memory context avoided.
-- **Portable:** one local store can support multiple compatible AI tools.
+Keep your current AI account, editor, and normal workflow. Lians runs locally
+between your work history and your AI tool.
 
-## Try Lians in two chats
+- Resume a project with what is complete, what is open, and what should happen next.
+- Stop agents from redoing completed work or reviving a superseded decision.
+- Give each new session a small, project-scoped handoff instead of a transcript dump.
+- Bind repository changes to the original task and produce a signed review receipt.
+- Turn thousands of research posts or browser events into one bounded brief.
+- Inspect, correct, export, or delete anything Lians saves.
+- Use one local memory store with multiple compatible AI tools.
+
+Lians does not ask for your Claude, Cursor, or Codex password or provider API
+key. It does not enlarge a provider context window or change a subscription
+quota.
+
+> **Cross-agent continuity beta:** the included Claude-to-Codex fixture recovers
+> **10/10 expected continuity facts**, presents **0 stale facts as current**, and
+> produces a **231-token handoff**. A live Windows Claude session also completed
+> the automatic `SessionEnd` to fresh Codex-hook path. These are bounded beta
+> results, not a claim that every live coding session extracts perfectly.
+> [Run the experiment](experiments/cross-agent-continuity/README.md).
+
+## See the handoff
+
+A fresh agent receives a bounded continuation view like this:
+
+```text
+Completed:
+- migrated the orders API to /v2/orders
+- updated tests
+
+Still open:
+- update documentation
+
+Decisions:
+- keep pytest
+
+Changed:
+- /v1/orders is stale; use /v2/orders
+
+Do NOT:
+- redo the migration
+- replace pytest with unittest
+
+Next:
+- update documentation before touching unrelated UI
+```
+
+The handoff is derived from current Lians state. It is not a manually maintained
+summary and it does not expose the full session transcript.
+
+## Try saved memory in two chats
 
 Choose the AI tool you already use:
 
-| Tool | Fastest current setup |
+| Tool | Fastest setup |
 |---|---|
 | Cursor | [One-click MCP install](integrations/cursor) |
 | Claude Code | [Two plugin commands](integrations/lians-plugin) |
 | Codex app, CLI, or IDE | [One-command MCP setup](integrations/codex) |
 | Other MCP clients | [Minimal local MCP configuration](#minimal-local-mcp-setup) |
 
-Then try:
+Then tell the AI tool:
 
 ```text
 Remember that this project uses Python 3.12 and pytest.
@@ -58,70 +108,104 @@ Open a new chat in the same project and ask:
 What Python version and test runner does this project use?
 ```
 
-Lians can reuse the saved detail without replaying the whole previous chat.
+Lians can supply the saved detail without replaying the previous chat.
 
-<p align="center">
-  <a href="https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4"><strong>▶ Watch the 33-second remember, reuse, and delete proof</strong></a>
-</p>
+If that saved detail later changes, Lians can mark dependent memories and work
+for review, keep stale memory out of normal recall, and give every connected AI
+the same current replacement state.
 
-## The product
+[Watch the 33-second remember, reuse, and delete proof](https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4).
 
-```text
-Open Lians → choose your AI apps → keep working normally
-                                      ↓
-                         relevant saved context only
-                                      ↓
-                         visible efficiency receipt
-```
+## Verify agent work before you ship it
 
-The desktop product detects supported AI apps and connects the ones a user
-selects. Claude, Codex, Gemini CLI, and Antigravity can receive bounded context
-through prompt hooks. Cursor uses its MCP connection and a generated project
-rule. The underlying memory, correction, backup, and deletion controls remain
-available when someone wants them; they are not the main job to be done.
+For repository work, a connected agent can create a task contract, restrict the
+approved file scope, map changed files back to success criteria, and request a
+signed Lians verification receipt before claiming completion. Lians checks the
+actual Git diff, whitespace integrity, current-state invalidations, recorded
+task evidence, required check attestations, credential patterns, and common
+high-risk code patterns.
 
-From a source checkout, developers can exercise that flow today:
+The receipt binds those measured facts to the base commit and exact diff hash.
+It does not ask a model to grade its own work, run arbitrary project commands,
+or claim that semantic correctness has been formally proven. Test output
+provided by an agent is labeled caller-attested, and every passing result still
+requires a human ship decision.
+
+For bounded critical logic, Lians can also exhaustively prove a declared finite
+model, reject vacuous assumptions, return a concrete counterexample, and bind
+the proof plus source hashes into the same receipt. A second backend proves an
+actual restricted pure Python function across every declared finite input
+without importing or executing it. These are bounded proofs, not a claim that
+an arbitrary application is completely correct. [Read the formal verification
+boundary and manifest format](docs/formal-verification.md).
+
+## Compress a large workday
+
+Compile a JSON or JSON Lines export locally before giving it to Claude or
+Codex:
 
 ```bash
-python -m pip install -e packages/lians-easy
-lians optimize --clients detected --plan
-lians optimize --clients detected --yes
-lians status
+lians brief research posts.jsonl --output research-brief.json
+lians brief browser browser-events.jsonl --output browser-brief.json
 ```
 
-Running `lians` with no subcommand opens guided setup. The Windows and macOS
-desktop artifacts are tested release candidates, not yet trusted consumer
-downloads: general promotion remains gated on Windows publisher signing and
-Apple Developer ID signing/notarization. See the
-[desktop preview boundary](docs/easy-install.md).
+Lians removes repeated research text and superseded browser states, preserves
+representative evidence, and writes a hash receipt. Raw records are not sent to
+an AI provider. Credential-like records are refused.
 
-## What is real today
+The brief compiler is currently available from a source checkout while the
+consumer package is being tested.
+
+## What is available
 
 | Capability | Status |
 |---|---|
 | Free local memory through MCP and Python | Available |
-| Cursor, Claude Code, Codex, Gemini, Antigravity, Windsurf, Cline, and OpenCode setup paths | Available |
-| Guided desktop installer and local control center | Release candidate; source/CI evaluation only until signing |
+| Cursor, Claude Code, Codex, Gemini, Antigravity, Windsurf, Cline, and OpenCode setup | Available |
+| Local research and browser brief compiler | Available from source |
+| Automatic project-scoped Claude-to-Codex continuity | Beta, live hook and fixture tested |
 | Bounded context and signed selection receipts | Available |
-| Estimated repeated memory tokens avoided | Available in receipts, `lians status`, and the local status API |
-| Managed cross-device continuity | Technical preview; not a general-availability claim |
+| State-change blast radius and bounded repair briefs | Beta candidate |
+| Git-scoped task verification and signed review receipts | Beta candidate |
+| Exhaustive finite-model proofs with counterexamples | Beta candidate |
+| Bounded proofs over actual restricted Python functions | Beta candidate |
+| Guided desktop installer and local control center | Release candidate |
+| Managed cross-device continuity | Technical preview |
 
-## Evidence, not magic
+The Windows and macOS desktop builds are tested release candidates. General
+consumer promotion remains gated on Windows publisher signing and Apple
+Developer ID signing and notarization. Read the
+[desktop preview boundary](docs/easy-install.md).
 
-In a balanced Cursor CLI stress test, bounded Lians-style context used
-**24.72% fewer provider-reported input tokens** than a 201-line always-applied
-rule while preserving all four exact answers. This is one synthetic workload,
-not a promise of universal token savings.
+## Measured results
 
-A separate live test stored one synthetic project fact through Cursor, recalled
-it in a new Cursor chat and a fresh Claude Code session, then confirmed that it
-was gone after deletion. Read the
-[methodology and raw aggregate evidence](docs/benchmarks/cross-agent-memory-2026-08-14.md).
+The cross-agent continuity fixture captured current project truth, work state,
+decisions, constraints, and one superseded route. A fresh Codex handoff selected
+11 useful items in an estimated 231 tokens, recovered all 10 expected facts, and
+excluded the stale route from current state. The evaluator and fixture are
+[included in the repository](experiments/cross-agent-continuity/README.md).
 
-Lians does not enlarge a provider context window or guarantee that every plan,
-quota, or bill lasts longer. It measures the narrower claim it controls: how
-much active saved memory could have been replayed, how much was selected, and
-the estimated repeated memory content left out.
+The installed Claude integration now captures a compact continuity checkpoint at
+`SessionEnd`; it reads a bounded transcript tail as evidence and never stores the
+transcript as memory. A live Windows gate carried completed work, an unfinished
+README update, the pytest decision, and the current v2 route into the candidate
+Codex hook while marking v1 stale. Repeated multi-repository behavior testing
+remains necessary before any general-availability claim.
+
+In four bounded paired synthetic workloads, signed-in Claude Code and Codex
+returned the exact expected answer while Lians used **79.9% to 96.7% fewer
+provider-reported input tokens**. That equals **4.96x to 30.21x work per input
+token** on the tested social-research and browser-history fixtures.
+
+Separate compiled-only checks processed 10,000 posts and 2,400 browser events.
+These are bounded synthetic results, not a promise that every workflow, plan,
+quota, or bill will improve by the same amount.
+
+[Read the method and machine-readable reports](docs/benchmarks/work-per-token-2026-08-16.md).
+
+A separate live test saved one synthetic project fact through Cursor, recalled
+it in a new Cursor chat and a fresh Claude Code session, then confirmed it was
+gone after deletion. [Read the cross-agent test](docs/benchmarks/cross-agent-memory-2026-08-14.md).
 
 ## Minimal local MCP setup
 
@@ -142,7 +226,7 @@ this server to an MCP-compatible AI tool:
 }
 ```
 
-Restart the AI tool. Local memory is stored in `~/.lians/mcp.db`; no Lians
+Restart the AI tool. Local memory is stored in `~/.lians/mcp.db`. No Lians
 account, Docker service, or provider API key is required. The first use may
 download the local semantic model.
 
@@ -172,23 +256,19 @@ result = memory.recall(
 See the [full install guide](docs/install.md) for TypeScript, Go, Java, C,
 framework integrations, and self-hosting.
 
-Running a class, club, hackathon, or campus developer group? The
-[student and community kit](docs/student-community-kit.md) contains a small
-workshop and project track. If you cloned the monorepo and are deciding which
-package is current, start with
+Running a class, club, hackathon, or campus developer group? Use the
+[student and community kit](docs/student-community-kit.md). If you cloned the
+monorepo and need to identify the current packages, start with
 [Supported paths and repository status](docs/supported-paths.md).
 
-The short [product direction](docs/product-direction.md) defines the customer,
-default experience, claims boundary, build order, and success metrics.
-
 <details>
-<summary><strong>Advanced memory and governance capabilities</strong></summary>
+<summary><strong>Advanced memory and governance</strong></summary>
 
 Lians can supersede stale facts, reconstruct point-in-time state, inspect
 lineage and conflicts, maintain tamper-evident audit history, enforce
-information barriers, and perform confirmed erasure. These capabilities are
-available for applications and teams that need them; they are not required to
-get started.
+information barriers, and perform confirmed erasure. Encrypted backups and
+opaque device sync preserve the dependency graph as well as the memories, so
+stale-work protections survive a move to another machine.
 
 - [Memory engine](docs/memory-engine.md)
 - [Decision evidence](docs/decision-evidence.md)
@@ -196,17 +276,6 @@ get started.
 - [Community and managed product boundary](docs/community-cloud-boundary.md)
 
 </details>
-
-## Repository map
-
-```text
-packages/lians-easy/        Desktop runtime, installer, control center, and receipts
-agentmem/sdk/python/        Python SDK, local client, and MCP server
-agentmem/src/lians/         Core engine and HTTP service
-integrations/               AI-client and framework connections
-plugins/                    Installable agent plugins
-docs/                       Setup, evidence, security, and operations
-```
 
 ## Development
 
@@ -226,6 +295,6 @@ so other AI-tool users can find it.
 
 ## License
 
-Apache 2.0 - see [LICENSE](LICENSE).
+Apache 2.0. See [LICENSE](LICENSE).
 
 <!-- mcp-name: io.github.ebeirne/lians -->

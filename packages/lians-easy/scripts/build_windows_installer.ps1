@@ -1,17 +1,34 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Binary,
+    [string]$CompanionRoot,
 
     [string]$OutputDirectory = "dist\installer",
 
-    [string]$Version
+    [string]$Version,
+
+    [string]$RuntimeOverride
 )
 
 $ErrorActionPreference = "Stop"
 $packageRoot = Split-Path -Parent $PSScriptRoot
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $packageRoot "..\..")).Path
-$binaryPath = (Resolve-Path -LiteralPath $Binary).Path
+$companionPath = (Resolve-Path -LiteralPath $CompanionRoot).Path
+$launcherPath = (Resolve-Path -LiteralPath (Join-Path $companionPath "Lians.exe")).Path
+$appBundlePath = (Resolve-Path -LiteralPath (Join-Path $companionPath "LiansApp")).Path
+$windowedAppPath = Join-Path $appBundlePath "Lians.exe"
+$runtimePath = Join-Path $appBundlePath "LiansMemory.exe"
+if (-not (Test-Path -LiteralPath $windowedAppPath -PathType Leaf)) {
+    throw "The companion bundle is missing its windowed app: $windowedAppPath"
+}
+if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) {
+    throw "The companion bundle is missing its MCP runtime: $runtimePath"
+}
+$runtimeOverridePath = if ($RuntimeOverride) {
+    (Resolve-Path -LiteralPath $RuntimeOverride).Path
+} else {
+    $null
+}
 $iconPath = (Resolve-Path -LiteralPath (Join-Path $packageRoot "windows-lians.ico")).Path
 $scriptPath = (Resolve-Path -LiteralPath (Join-Path $packageRoot "windows-installer.nsi")).Path
 
@@ -51,11 +68,15 @@ $outputPath = Join-Path (Resolve-Path -LiteralPath $outputRoot).Path "Lians-Setu
 $arguments = @(
     "/V4",
     "/DLIANS_VERSION=$Version",
-    "/DLIANS_BINARY=$binaryPath",
+    "/DLIANS_LAUNCHER=$launcherPath",
+    "/DLIANS_APP_BUNDLE=$appBundlePath",
     "/DLIANS_OUTPUT=$outputPath",
     "/DLIANS_ICON=$iconPath",
     $scriptPath
 )
+if ($runtimeOverridePath) {
+    $arguments = @($arguments[0..4]) + "/DLIANS_RUNTIME_OVERRIDE=$runtimeOverridePath" + @($arguments[5..($arguments.Count - 1)])
+}
 & $compilerPath @arguments
 if ($LASTEXITCODE -ne 0) {
     throw "NSIS failed with exit code $LASTEXITCODE"

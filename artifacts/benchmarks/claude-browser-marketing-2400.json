@@ -1,0 +1,117 @@
+{
+  "schema": "https://lians.ai/schemas/work-per-token-experiment/v0.1",
+  "status": "completed",
+  "workload": "browser-marketing",
+  "fixture": {
+    "name": "synthetic-browser-marketing-day-v1",
+    "synthetic": true,
+    "raw_record_count": 2400,
+    "expected_answer": {
+      "events_processed": 2400,
+      "surfaces_tracked": 200,
+      "published_surfaces": 60,
+      "blocked_surfaces": 30,
+      "waiting_surfaces": 30,
+      "candidate_surfaces": 80,
+      "history_events_collapsed": 2200,
+      "next_eligible_surfaces": [
+        "surface-0120",
+        "surface-0121",
+        "surface-0122",
+        "surface-0123",
+        "surface-0124"
+      ],
+      "never_repeat_published": true,
+      "never_contact_hard_excluded": true,
+      "approval_gates_respected": true
+    }
+  },
+  "variants": {
+    "full_replay": {
+      "prompt_token_estimate": 157070,
+      "prompt_sha256": "c3f3b30a06685dca7ecb5538b5942958569f47adbc7e594c553a4f11e78d3459"
+    },
+    "lians_compiled": {
+      "prompt_token_estimate": 670,
+      "prompt_sha256": "7f75e127da4bc6546af634918237068c2a1953a82dc373e9a225655ea61764e8",
+      "compiler_receipt": {
+        "events_processed": 2400,
+        "surfaces_tracked": 200,
+        "history_events_collapsed": 2200,
+        "next_action_evidence_count": 5,
+        "raw_records_sha256": "9a89e442c4e48416a74b6ae96bc954fcad8a2f896eac1ffb7fe494e838434406",
+        "summary_sha256": "83697ec2eb1b04598b7cd3e04383eaa7b29fd7708a1307e655e893c204b97340"
+      }
+    }
+  },
+  "projection": {
+    "estimated_work_per_input_token_multiplier": 234.43,
+    "estimated_usage_extension_percent": 23343.0,
+    "target_multiplier": 3.0,
+    "target_extension_percent": 200.0
+  },
+  "evidence_gate": {
+    "requires_exact_compiler_output": true,
+    "requires_live_answer_quality_when_run": true,
+    "minimum_work_per_input_token_multiplier": 3.0,
+    "offline_met": true,
+    "live_met": true
+  },
+  "claim_boundary": "This benchmark measures estimated raw prompt size, provider-reported input usage for calls that actually run, and exact answer quality on deterministic synthetic workloads. It does not prove that Lians changes a provider context window, subscription quota, rate limit, price, or every real workload. Social labels in this fixture are structured inputs; production classification cost is outside this benchmark.",
+  "next_step": "The compiled prompt answered exactly. A paired run is still required before making a provider-reported 3x claim.",
+  "provider": "claude",
+  "model": "sonnet",
+  "auth": {
+    "logged_in": true,
+    "auth_method": "claude.ai",
+    "provider": "firstParty"
+  },
+  "results": {
+    "lians_compiled": {
+      "runs": [
+        {
+          "answer": "{\"events_processed\":2400,\"surfaces_tracked\":200,\"published_surfaces\":60,\"blocked_surfaces\":30,\"waiting_surfaces\":30,\"candidate_surfaces\":80,\"history_events_collapsed\":2200,\"next_eligible_surfaces\":[\"surface-0120\",\"surface-0121\",\"surface-0122\",\"surface-0123\",\"surface-0124\"],\"never_repeat_published\":true,\"never_contact_hard_excluded\":true,\"approval_gates_respected\":true}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "events_processed": 2400,
+              "surfaces_tracked": 200,
+              "published_surfaces": 60,
+              "blocked_surfaces": 30,
+              "waiting_surfaces": 30,
+              "candidate_surfaces": 80,
+              "history_events_collapsed": 2200,
+              "next_eligible_surfaces": [
+                "surface-0120",
+                "surface-0121",
+                "surface-0122",
+                "surface-0123",
+                "surface-0124"
+              ],
+              "never_repeat_published": true,
+              "never_contact_hard_excluded": true,
+              "approval_gates_respected": true
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 3438,
+            "cache_read_input_tokens": 0,
+            "provider_reported_total_input_tokens": 3440,
+            "output_tokens": 812
+          },
+          "duration_seconds": 9.293,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 3440
+    }
+  },
+  "comparison": {
+    "mode": "compiled-only",
+    "compiled_answer_exact": true,
+    "provider_reported_input_token_reduction_percent": null,
+    "provider_reported_work_per_token_multiplier": null
+  }
+}

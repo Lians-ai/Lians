@@ -1,0 +1,61 @@
+{
+  "benchmark": "Lians local product stress",
+  "checks": {
+    "abrupt_exit_recovery": {
+      "committed_writes": 100,
+      "database": {
+        "bytes": 303104,
+        "integrity": "ok",
+        "memories": 100,
+        "receipts": 0
+      },
+      "passed": true,
+      "process_exit_code": 37,
+      "readable_writes": 100
+    },
+    "deep_retrieval": {
+      "database": {
+        "bytes": 13766656,
+        "integrity": "ok",
+        "memories": 2000,
+        "receipts": 0
+      },
+      "passed": true,
+      "recall_ms": 26.9,
+      "records": 2000,
+      "returned": 1,
+      "target_found": true
+    },
+    "stale_writer_contention": {
+      "committed": 1,
+      "conflicts": 15,
+      "history_versions": 2,
+      "integrity": "ok",
+      "passed": true,
+      "workers": 16
+    },
+    "storage_concurrency": {
+      "database": {
+        "bytes": 7516160,
+        "integrity": "ok",
+        "memories": 1600,
+        "receipts": 160
+      },
+      "errors": [],
+      "latency_ms": {
+        "max": 3785.12,
+        "p50": 46.3,
+        "p95": 453.4
+      },
+      "passed": true,
+      "receipts": 160,
+      "wall_seconds": 15.93,
+      "workers": 16,
+      "writes_committed": 1600,
+      "writes_per_second": 100.44,
+      "writes_requested": 1600
+    }
+  },
+  "claim_boundary": "One-machine engineering evidence for this build. It is not a hosted capacity claim, demand measurement, or comparison with another vendor.",
+  "passed": true
+}

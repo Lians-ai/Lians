@@ -1,0 +1,187 @@
+{
+  "schema": "https://lians.ai/schemas/claude-context-experiment/v0.1",
+  "status": "completed",
+  "experiment": "claude-full-replay-vs-lians-bounded-context",
+  "lane": "claude-code-print-mode",
+  "execution_isolation": {
+    "temporary_working_directory": true,
+    "setting_sources": [],
+    "tools_enabled": false,
+    "skills_enabled": false,
+    "mcp_mode": "strict-empty",
+    "session_persistence": false
+  },
+  "fixture": {
+    "name": "synthetic-market-research-project-v1",
+    "synthetic": true,
+    "saved_memory_count": 24,
+    "expected_answer": {
+      "campaign_codename": "Lotus Lantern",
+      "launch_region": "Canada",
+      "budget_cap_usd": 4200
+    }
+  },
+  "variants": {
+    "full_replay": {
+      "memory_count": 24,
+      "prompt_token_estimate": 473,
+      "prompt_sha256": "1f7eae61fc6cb9487d0b1636b0e784c36ee6c9e73a536bd3dfc1c59840500729"
+    },
+    "lians_bounded": {
+      "memory_count": 3,
+      "prompt_token_estimate": 108,
+      "prompt_sha256": "59e60b96a5ce8ccf744dbf147e0ae5595c61a86b4b72a797e4c0349f9839badb",
+      "selection_receipt": {
+        "schema": "https://lians.ai/schemas/context-receipt/v0.1",
+        "id": "f49d53ff-fd53-44c7-8aa6-e58154de00bf",
+        "created_at": "2026-08-16T03:22:59.273900+00:00",
+        "client": "claude-experiment",
+        "project": {
+          "id": "claude-baseline",
+          "name": "Claude baseline",
+          "origin": "synthetic/local"
+        },
+        "query_sha256": "bb391c1c57ba0afb8d17a1425e247a5656178641a61a39716a12fd68b8d3c319",
+        "context_sha256": "40fafb44ce3b55e260ebf921f0f0f7b273a3a505f5ba3155eecbb4e5a13266f8",
+        "memory_count": 3,
+        "token_estimate": 200,
+        "limits": {
+          "max_memories": 3,
+          "max_tokens": 256
+        },
+        "efficiency": {
+          "basis": "active in-scope memory content compared with full replay",
+          "available_memory_count": 24,
+          "available_memory_token_estimate": 325,
+          "selected_memory_count": 3,
+          "selected_memory_token_estimate": 29,
+          "repeated_memory_tokens_avoided_estimate": 296,
+          "reduction_percent_estimate": 91.1
+        },
+        "memories": [
+          {
+            "id": "e2d4197a-1b25-494a-8f0e-3fbc3bc20355",
+            "kind": "project",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:22:59.246028+00:00",
+            "score": 6.2492,
+            "reason": "Matched this prompt on: the, project, campaign, budget, cap",
+            "content_sha256": "92c20fa8881142b82c8ccaa48bbf0be8ff044e7921a12d3d7f9ab53a770a4cc0",
+            "token_estimate": 12
+          },
+          {
+            "id": "a3edbb80-962e-462e-9291-4a3b405382d1",
+            "kind": "project",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:22:59.241961+00:00",
+            "score": 4.249,
+            "reason": "Matched this prompt on: the, project, launch, region",
+            "content_sha256": "f58ae2334f7ca4b87433daa58334f27b664f7b426064409ec2d4bfeb1aca8e44",
+            "token_estimate": 7
+          },
+          {
+            "id": "dbea955b-edba-4d79-9c3b-b3cb1500fe11",
+            "kind": "project",
+            "scope": "project",
+            "source": "synthetic experiment fixture",
+            "source_client": "claude",
+            "source_ref": null,
+            "updated_at": "2026-08-16T03:22:59.235962+00:00",
+            "score": 4.2488,
+            "reason": "Matched this prompt on: the, project, campaign, codename",
+            "content_sha256": "602eceeb2205d84bcad040c6daba2e4c494d9135cf9cb6fe23645a487a6099c5",
+            "token_estimate": 10
+          }
+        ],
+        "excluded": {
+          "scope": 0,
+          "paused": 0,
+          "irrelevant": 0,
+          "budget": 21
+        },
+        "signature": {
+          "algorithm": "Ed25519",
+          "public_key": "dzKNH63eH1SVlEW4J43C6xxUr2Qi77/J4b++X0XrHI0=",
+          "value": "WURes3EpoH81FcselbvtGqO96O5cUdFuxyxV1gwu4a06IPUJIrnO9fDTaVNyAO9sQPGvFzPjyyYkhAc/bZQ3CA=="
+        }
+      }
+    }
+  },
+  "planned_prompt_reduction_percent": 77.2,
+  "claim_boundary": "This compares provider-reported usage for isolated Claude Code print-mode calls on a synthetic workload. It does not prove that Lians enlarges a context window, extends an interactive Claude plan quota, or produces the same savings on every task.",
+  "next_step": "Repeat with a representative real workflow before making a product or quota claim.",
+  "model": "sonnet",
+  "repetitions": 1,
+  "auth": {
+    "logged_in": true,
+    "auth_method": "claude.ai",
+    "provider": "firstParty"
+  },
+  "results": {
+    "full_replay": {
+      "runs": [
+        {
+          "answer": "{\"campaign_codename\":\"Lotus Lantern\",\"launch_region\":\"Canada\",\"budget_cap_usd\":4200}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "campaign_codename": "Lotus Lantern",
+              "launch_region": "Canada",
+              "budget_cap_usd": 4200
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 3052,
+            "cache_read_input_tokens": 0,
+            "provider_reported_total_input_tokens": 3054,
+            "output_tokens": 43
+          },
+          "duration_seconds": 3.832,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 3054,
+      "average_output_tokens": 43
+    },
+    "lians_bounded": {
+      "runs": [
+        {
+          "answer": "{\"campaign_codename\":\"Lotus Lantern\",\"launch_region\":\"Canada\",\"budget_cap_usd\":4200}",
+          "quality": {
+            "passed": true,
+            "parsed_answer": {
+              "campaign_codename": "Lotus Lantern",
+              "launch_region": "Canada",
+              "budget_cap_usd": 4200
+            }
+          },
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 285,
+            "cache_read_input_tokens": 2280,
+            "provider_reported_total_input_tokens": 2567,
+            "output_tokens": 43
+          },
+          "duration_seconds": 4.963,
+          "repetition": 1
+        }
+      ],
+      "all_answers_correct": true,
+      "average_provider_reported_total_input_tokens": 2567,
+      "average_output_tokens": 43
+    }
+  },
+  "comparison": {
+    "both_variants_answered_correctly": true,
+    "average_provider_reported_input_token_delta": 487.0,
+    "provider_reported_input_token_reduction_percent": 15.9
+  }
+}

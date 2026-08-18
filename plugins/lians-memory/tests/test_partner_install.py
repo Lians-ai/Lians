@@ -950,6 +950,34 @@ def test_windows_acl_snapshot_rejects_a_preexisting_broad_explicit_ace() -> None
     assert not bootstrap._windows_acl_snapshot_is_private(broad, is_directory=True)
 
 
+def test_windows_acl_snapshot_drops_incompatible_powershell_module_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    snapshot = {
+        "protected": True,
+        "current_sid": "S-1-5-21-100-200-300-400",
+        "owner_sid": "S-1-5-21-100-200-300-400",
+        "rules": [],
+    }
+    monkeypatch.setenv("PSMODULEPATH", "C:/PowerShell/7/Modules")
+    monkeypatch.setattr(
+        bootstrap, "_trusted_windows_tool", lambda _name: "powershell.exe"
+    )
+
+    def fake_run(*_args, **kwargs):
+        child_env = kwargs["env"]
+        assert all(name.upper() != "PSMODULEPATH" for name in child_env)
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(snapshot),
+            stderr="",
+        )
+
+    monkeypatch.setattr(bootstrap.subprocess, "run", fake_run)
+
+    assert bootstrap._windows_acl_snapshot(tmp_path) == snapshot
+
+
 def test_windows_acl_snapshot_rejects_a_foreign_owner() -> None:
     user_sid = "S-1-5-21-100-200-300-400"
     snapshot = {

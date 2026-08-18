@@ -1,0 +1,3 @@
+{"external_id":"smoke-video-1","title":"Setup interview","summary":"A student describes onboarding friction and a need for clearer setup guidance.","findings":["Visible progress improves confidence."],"tags":["onboarding","students"],"provider":"fixture"}
+{"external_id":"smoke-video-2","title":"Research workflow","summary":"A researcher wants agent evidence connected to its original source.","findings":["Inspectability improves trust."],"tags":["research","trust"],"provider":"fixture"}
+{"external_id":"smoke-video-3","title":"Long-running work","summary":"A developer needs continuity after context compaction and agent switching.","findings":["Bounded handoffs prevent repeated context."],"tags":["continuity","developers"],"provider":"fixture"}

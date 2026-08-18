@@ -22,7 +22,11 @@ def test_public_python_package_has_product_aligned_commands() -> None:
 
     assert 'requires = ["hatchling==1.32.0"]' in pyproject
     assert 'name = "lians-bridge"' in pyproject
-    assert 'description = "Less repeated context for the AI tools you already use"' in pyproject
+    assert (
+        'description = "Local control, continuity, and observability for the AI agents you already use"'
+        in pyproject
+    )
+    assert '"Development Status :: 4 - Beta"' in pyproject
     assert 'lians = "lians_easy.cli:main"' in pyproject
     assert 'lians-bridge = "lians_easy.cli:main"' in pyproject
     assert 'lians-easy = "lians_easy.cli:main"' in pyproject
@@ -123,34 +127,103 @@ def test_stable_release_signs_and_verifies_windows_installer_before_upload() -> 
     )[0]
 
     assert "vars.PUBLISH_SIGNED_LIANS_DESKTOP == 'true'" in desktop_job
-    assert "WINDOWS_SIGNING_CERT_PFX_BASE64" in desktop_job
-    assert "WINDOWS_SIGNING_CERT_PASSWORD" in desktop_job
-    assert "WINDOWS_SIGNING_CERT_SHA1" in desktop_job
-    assert "signtool.exe" in desktop_job
-    assert "dist/LiansMemory.exe" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_CLIENT_ID" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_TENANT_ID" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_SUBSCRIPTION_ID" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_ENDPOINT" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_ACCOUNT" in desktop_job
+    assert "AZURE_ARTIFACT_SIGNING_PROFILE" in desktop_job
+    assert "WINDOWS_SIGNING_SUBJECT" in desktop_job
+    assert "azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5" in desktop_job
+    assert (
+        "Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82"
+        in desktop_job
+    )
+    assert "timestamp-rfc3161:" in desktop_job
+    assert "dist/windows-companion/Lians.exe" in desktop_job
+    assert "dist/windows-companion/LiansApp/Lians.exe" in desktop_job
+    assert "dist/windows-companion/LiansApp/LiansMemory.exe" in desktop_job
+    assert "build_windows_companion.ps1" in desktop_job
+    assert "uv==0.11.26" in desktop_job
+    assert "uv sync --project packages/lians-easy --frozen --group build --python $buildPython" in desktop_job
     assert "build_windows_installer.ps1" in desktop_job
     assert "artifact_windows_installer_smoke.py" in desktop_job
     assert "--rollback-fixture" in desktop_job
-    assert "--expected-signer-thumbprint" in desktop_job
+    assert "--expected-signer-subject" in desktop_job
     assert "Lians-Setup-*.exe" in desktop_job
     assert "Get-AuthenticodeSignature" in desktop_job
     assert "signature.Status -ne 'Valid'" in desktop_job
-    assert "SignerCertificate.Thumbprint" in desktop_job
-    assert desktop_job.index("Sign and verify the Windows installer") < desktop_job.index(
-        "gh release upload"
-    )
+    assert "SignerCertificate.Subject" in desktop_job
+    assert "Attest signed Windows installer build provenance" in desktop_job
+    assert "gh attestation verify" in desktop_job
+    assert "Refusing to overwrite existing release asset" in desktop_job
+    assert "--clobber" not in desktop_job
+    assert desktop_job.index(
+        "Sign the Windows installer with Artifact Signing"
+    ) < desktop_job.index("gh release upload")
 
     pull_request_workflow = (
         REPOSITORY_ROOT / ".github" / "workflows" / "build-lians-easy.yml"
     ).read_text(encoding="utf-8")
+    assert "id-token: write" in pull_request_workflow
+    assert "attestations: write" in pull_request_workflow
+    assert "Write SHA-256 checksums for desktop artifacts" in pull_request_workflow
+    assert "Get-FileHash" in pull_request_workflow
+    assert "Generate free GitHub build provenance" in pull_request_workflow
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in (
+        pull_request_workflow
+    )
+    assert "github.actor != 'dependabot[bot]'" in pull_request_workflow
+    assert (
+        "actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8"
+        in pull_request_workflow
+    )
+    assert "subject-path:" in pull_request_workflow
+    assert "dist/installer/*.sha256" in pull_request_workflow
+    assert pull_request_workflow.index(
+        "Generate free GitHub build provenance"
+    ) < pull_request_workflow.index("actions/upload-artifact")
+    assert 'artifact: LiansMemory-windows\n            python_version: "3.12.10"' in (
+        pull_request_workflow
+    )
+    assert "python-version: ${{ matrix.python_version }}" in pull_request_workflow
+    windows_tk_repair = (
+        PACKAGE_ROOT / "scripts" / "repair_windows_build_tk.ps1"
+    ).read_text(encoding="utf-8")
+    companion_builder = (
+        PACKAGE_ROOT / "scripts" / "build_windows_companion.ps1"
+    ).read_text(encoding="utf-8")
     for build_contract in (workflow, pull_request_workflow):
-        assert "--add-data" in build_contract
-        assert "lians_easy/app" in build_contract
+        assert "repair_windows_build_tk.ps1" in build_contract
+        assert "build_windows_companion.ps1" in build_contract
         assert "artifact_portability_smoke.py" in build_contract
-        assert "--icon packages/lians-easy/windows-lians.ico" in build_contract
-        assert "--version-file packages/lians-easy/windows-version-info.txt" in build_contract
         assert "Verify Windows package identity" in build_contract
         assert "artifact_app_smoke.py" in build_contract
+        assert "uv sync --project packages/lians-easy --frozen --group build --python $buildPython" in build_contract
+    assert "https://www.python.org/ftp/python/" in windows_tk_repair
+    assert "55c96ffad69b1c834aa52e11b9ce41637a178ba6ad6607e83956044834276e2a" in (
+        windows_tk_repair
+    )
+    assert "Python Software Foundation" in windows_tk_repair
+    assert "msiexec.exe" in windows_tk_repair
+    assert "tcl8.6/init.tcl" in windows_tk_repair
+    assert "tk8.6\\ttk\\button.tcl" in windows_tk_repair
+    assert "DLLs\\_tkinter.pyd" in windows_tk_repair
+    assert "DLLs\\tcl86t.dll" in windows_tk_repair
+    assert "DLLs\\tk86t.dll" in windows_tk_repair
+    assert "$env:TCL_LIBRARY = $runtimeTclLibrary" in windows_tk_repair
+    assert "$env:TK_LIBRARY = $runtimeTkLibrary" in windows_tk_repair
+    assert "$env:LIANS_BUILD_PYTHON = $runtimePython" in windows_tk_repair
+    assert "& $runtimePython -c 'import tkinter as tk" in windows_tk_repair
+    for build_contract in (workflow, pull_request_workflow):
+        assert "-EnvironmentFile $env:GITHUB_ENV" in build_contract
+        assert "-PathFile $env:GITHUB_PATH" in build_contract
+    assert "pathlib.Path(sys.executable).resolve()" in pull_request_workflow
+    assert "os.environ['LIANS_BUILD_PYTHON']" in pull_request_workflow
+    assert "--add-data" in companion_builder
+    assert "lians_easy/app" in companion_builder
+    assert "windows-lians.ico" in companion_builder
+    assert "windows-version-info.txt" in companion_builder
 
 
 def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
@@ -165,6 +238,9 @@ def test_native_macos_packages_are_exercised_on_both_architectures() -> None:
     assert "build_macos_dmg.sh" in workflow
     assert "artifact_macos_dmg_smoke.py" in workflow
     assert "dist/installer/Lians-*.dmg" in workflow
+    assert "OPENSSL_STATIC=1" in workflow
+    assert "--no-binary cryptography" in workflow
+    assert "cryptography==50.0.0" in workflow
 
 
 def test_install_free_linux_package_is_built_exercised_and_attested() -> None:
@@ -258,6 +334,9 @@ def test_stable_macos_release_requires_developer_id_and_notarization() -> None:
     assert "APPLE_NOTARY_KEY_ID" in macos_job
     assert "APPLE_NOTARY_ISSUER_ID" in macos_job
     assert '--codesign-identity "$MACOS_SIGNING_IDENTITY"' in macos_job
+    assert "OPENSSL_STATIC=1" in macos_job
+    assert "--no-binary cryptography" in macos_job
+    assert "cryptography==50.0.0" in macos_job
     assert "artifact_macos_dmg_smoke.py" in macos_job
     assert "--expected-signing-identity" in macos_job
     assert "--expected-team-id" in macos_job
@@ -279,15 +358,20 @@ def test_windows_installer_is_per_user_and_separates_app_removal_from_erasure() 
     script = (PACKAGE_ROOT / "windows-installer.nsi").read_text(encoding="utf-8")
 
     assert 'RequestExecutionLevel user' in script
-    assert 'InstallDir "$LOCALAPPDATA\\Lians"' in script
+    assert 'InstallDir "$LOCALAPPDATA\\Programs\\Lians"' in script
     assert "MUI_PAGE_DIRECTORY" not in script
     assert 'MUI_FINISHPAGE_RUN_TEXT "Open Lians"' in script
     assert 'CreateShortcut "$SMPROGRAMS\\Lians\\Lians.lnk"' in script
     assert "uninstall --clients all --yes" in script
-    assert "IfSilent KeepEncryptedMemory" in script
+    assert 'ReadEnvStr $8 "LIANS_EASY_HOME"' in script
+    assert 'Delete "$8\\${PRODUCT_RUNTIME}"' in script
+    assert 'DeleteRegValue HKCU "${PRODUCT_STARTUP_KEY}" "Lians"' in script
+    assert "IfSilent UninstallFinished" in script
     assert "Permanently erase all encrypted Lians memories" in script
-    assert 'StrCmp "$INSTDIR" "$LOCALAPPDATA\\Lians" 0 RefuseUnsafeErase' in script
-    assert script.index("IfSilent KeepEncryptedMemory") < script.index('RMDir /r "$INSTDIR"')
+    assert 'RMDir /r "$LOCALAPPDATA\\Lians"' in script
+    assert script.index("IfSilent UninstallFinished") < script.index(
+        'RMDir /r "$LOCALAPPDATA\\Lians"'
+    )
 
 
 def test_windows_installer_health_checks_upgrades_and_restores_failed_candidates() -> None:
@@ -297,14 +381,16 @@ def test_windows_installer_health_checks_upgrades_and_restores_failed_candidates
     ).read_text(encoding="utf-8")
 
     assert "PRODUCT_SHUTDOWN_EVENT" in script
-    assert "PRODUCT_RUNTIME_BACKUP" in script
-    assert "CopyFiles /SILENT" in script
+    assert "PRODUCT_CANDIDATE_APP" in script
+    assert "PRODUCT_PREVIOUS_APP" in script
+    assert "PRODUCT_PREVIOUS_LAUNCHER" in script
+    assert 'File /r "${LIANS_APP_BUNDLE}\\*"' in script
     assert "doctor --json" in script
-    assert "Rename \"$INSTDIR\\${PRODUCT_RUNTIME_BACKUP}\"" in script
+    assert 'Rename "$INSTDIR\\${PRODUCT_PREVIOUS_APP}" "$INSTDIR\\${PRODUCT_APP_DIR}"' in script
     assert script.index("doctor --json") < script.index("WriteUninstaller")
     assert "SetErrorLevel 1603" in script
     assert "--rollback-fixture" in workflow
-    assert "packages/lians-easy/README.md" in workflow
+    assert "-RuntimeOverride packages/lians-easy/README.md" in workflow
 
 
 def test_packaged_control_center_is_source_pinned_and_bounded() -> None:

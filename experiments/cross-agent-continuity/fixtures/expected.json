@@ -1,0 +1,31 @@
+{
+  "completed": [
+    "Migrate the orders API implementation to /v2/orders.",
+    "Update the orders API tests."
+  ],
+  "unfinished": [
+    "Update the orders API documentation."
+  ],
+  "project_truth": [
+    "Tests use pytest.",
+    "Production uses PostgreSQL."
+  ],
+  "decisions": [
+    "Keep pytest rather than replacing it with unittest."
+  ],
+  "constraints": [
+    "Do not replace pytest with unittest."
+  ],
+  "do_not_repeat": [
+    "Do not redo the completed orders API migration."
+  ],
+  "current_facts": [
+    "The current orders route is /v2/orders."
+  ],
+  "stale_facts": [
+    "The current orders route is /v1/orders."
+  ],
+  "next_actions": [
+    "Update the orders API documentation before touching unrelated UI."
+  ]
+}

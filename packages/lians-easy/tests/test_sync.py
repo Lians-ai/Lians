@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from lians_easy.state_integrity import StateIntegrityService
 from lians_easy.store import MemoryStore
 from lians_easy.sync import (
     DeviceIdentity,
@@ -110,6 +111,49 @@ def test_two_devices_share_encrypted_memory_and_propagate_forgetting(tmp_path):
     assert forgotten["content"] is None
     assert forgotten["content_sha256"] is None
     assert reports[-1]["updated"]["memories"] == 1
+
+
+def test_two_devices_preserve_state_invalidations_without_cloud_plaintext(tmp_path):
+    first_store, first_identity = _device(tmp_path, "Main state PC")
+    first_state = SyncState.create(first_identity)
+    cloud = OpaqueRevisionLog()
+    cloud.create_workspace(first_state)
+    integrity = StateIntegrityService(first_store)
+    current = first_store.set_current(
+        "research/cohort",
+        "Analyze college students.",
+        project_id="research",
+    )
+    integrity.link(
+        current["id"],
+        "reports/student-demand.md",
+        dependent_type="artifact",
+        project_id="research",
+        label="Student demand report",
+    )
+    first_store.set_current(
+        "research/cohort",
+        "Analyze independent professionals.",
+        project_id="research",
+        reason="The target cohort changed",
+    )
+    revision = _push(first_store, first_identity, first_state, cloud)
+    encoded = json.dumps(revision).encode()
+    assert b"reports/student-demand.md" not in encoded
+    assert b"The target cohort changed" not in encoded
+
+    second_store, _, second_state, _, _ = _enroll_second_device(
+        tmp_path, first_state, first_identity, cloud
+    )
+    reports = _pull(second_store, second_state, cloud)
+    invalidations = StateIntegrityService(second_store).invalidations(project_id="research")
+    assert len(invalidations) == 1
+    assert invalidations[0]["dependent_ref"] == "reports/student-demand.md"
+    assert invalidations[0]["reason"] == "The target cohort changed"
+    assert reports[-1]["state_integrity"]["imported"] == {
+        "dependencies": 1,
+        "invalidations": 1,
+    }
 
 
 def test_state_is_local_key_protected_signed_and_bound_to_device(tmp_path):

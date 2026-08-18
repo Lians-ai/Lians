@@ -21,10 +21,12 @@ from stat import S_IMODE
 from typing import Any
 
 from . import __version__
+from .diagnostics import recent_crash_summaries
 
 MANAGED_START = "# >>> Lians Memory (managed by Lians Easy)"
 MANAGED_END = "# <<< Lians Memory (managed by Lians Easy)"
 HOOK_STATUS = "Recalling Lians memory"
+SESSION_HOOK_STATUS = "Lians is saving project continuity"
 LIANS_HOOK_NAME = "lians-memory-recall"
 ANTIGRAVITY_PLUGIN_NAME = "lians-memory"
 
@@ -86,12 +88,7 @@ def user_data_dir() -> Path:
 def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
     home = home or Path.home()
     antigravity_config = (
-        home
-        / ".gemini"
-        / "config"
-        / "plugins"
-        / ANTIGRAVITY_PLUGIN_NAME
-        / "mcp_config.json"
+        home / ".gemini" / "config" / "plugins" / ANTIGRAVITY_PLUGIN_NAME / "mcp_config.json"
     )
     cline_config = home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
     config_root = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
@@ -145,14 +142,20 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
         }
     targets: dict[str, ClientTarget] = {}
     for key, (label, path) in paths.items():
+        try:
+            path_exists = path.exists()
+            parent_exists = path.parent.exists()
+        except OSError:
+            path_exists = False
+            parent_exists = False
         if key == "antigravity":
-            detected = path.exists() or shutil.which("agy") is not None
+            detected = path_exists or shutil.which("agy") is not None
         elif key == "gemini":
-            detected = path.exists() or shutil.which("gemini") is not None
+            detected = path_exists or shutil.which("gemini") is not None
         else:
-            detected = path.exists() or path.parent.exists()
+            detected = path_exists or parent_exists
         configured = False
-        if path.exists():
+        if path_exists:
             try:
                 if key == "codex":
                     configured = MANAGED_START in path.read_text(encoding="utf-8")
@@ -168,7 +171,7 @@ def client_targets(home: Path | None = None) -> dict[str, ClientTarget]:
                     )
                     if key == "antigravity" and configured:
                         configured = _antigravity_plugin_registered(home, path.parent.parent)
-            except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
+            except (AttributeError, json.JSONDecodeError, OSError, UnicodeDecodeError):
                 configured = False
         targets[key] = ClientTarget(
             key=key,
@@ -221,9 +224,7 @@ def _hook_path(client: str, home: Path) -> Path:
     raise ValueError(f"{client} does not support a Lians prompt hook")
 
 
-def _backup(
-    path: Path, *, on_created: Callable[[Path], None] | None = None
-) -> Path | None:
+def _backup(path: Path, *, on_created: Callable[[Path], None] | None = None) -> Path | None:
     if not path.exists():
         return None
     # datetime.UTC is unavailable on the package's supported Python 3.10.
@@ -380,9 +381,8 @@ class SetupJournal:
         matches = []
         for entry in self.entries:
             target = Path(entry["path"])
-            if (
-                _path_key(backup.parent) == _path_key(target.parent)
-                and backup.name.startswith(f"{target.name}.lians-backup-")
+            if _path_key(backup.parent) == _path_key(target.parent) and backup.name.startswith(
+                f"{target.name}.lians-backup-"
             ):
                 matches.append(entry)
         if len(matches) != 1:
@@ -446,6 +446,12 @@ def _install_runtime() -> Path | None:
     target_dir.mkdir(parents=True, exist_ok=True)
     destination = target_dir / ("LiansMemory.exe" if sys.platform == "win32" else "lians-memory")
     source = Path(sys.executable).resolve()
+    bundled_runtime = source.with_name("LiansMemory.exe")
+    if sys.platform == "win32" and bundled_runtime.is_file():
+        # The desktop app is a windowed executable. Its sibling remains a
+        # console-subsystem binary so MCP keeps real stdin/stdout pipes without
+        # ever exposing a console during a human app launch.
+        source = bundled_runtime
     if source != destination.resolve():
         _write_bytes(
             destination,
@@ -481,7 +487,7 @@ def _json_config(
     return backup
 
 
-def _lians_hook_group(client: str) -> dict[str, Any]:
+def _lians_hook_group(client: str, *, event_name: str | None = None) -> dict[str, Any]:
     argv = _runtime_argv("hook", "--client", client)
     if client == "gemini":
         return {
@@ -497,12 +503,18 @@ def _lians_hook_group(client: str) -> dict[str, Any]:
                 }
             ],
         }
+    # Claude Code launches command hooks through Bash on Windows. POSIX quoting
+    # preserves Windows path backslashes there; list2cmdline does not.
+    windows_command = sys.platform == "win32" and client != "claude"
     hook: dict[str, Any] = {
         "type": "command",
-        "command": _shell_command(argv, windows=sys.platform == "win32"),
+        "command": _shell_command(argv, windows=windows_command),
         "timeout": 8,
         "statusMessage": HOOK_STATUS,
     }
+    if client == "claude" and event_name == "SessionEnd":
+        hook["statusMessage"] = SESSION_HOOK_STATUS
+        hook["timeout"] = 12
     if client == "codex":
         hook["commandWindows"] = _shell_command(argv, windows=True)
         hook["additionalContextLimit"] = 2048
@@ -515,7 +527,7 @@ def _is_lians_hook_group(value: Any) -> bool:
     return any(
         isinstance(hook, dict)
         and (
-            hook.get("statusMessage") == HOOK_STATUS
+            hook.get("statusMessage") in {HOOK_STATUS, SESSION_HOOK_STATUS}
             or hook.get("name") == LIANS_HOOK_NAME
         )
         for hook in value["hooks"]
@@ -541,15 +553,18 @@ def _hook_config(
     hooks = document.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise TypeError(f"hooks must be an object in {path}")
-    event_name = "BeforeAgent" if client == "gemini" else "UserPromptSubmit"
-    prompt_hooks = hooks.setdefault(event_name, [])
-    if not isinstance(prompt_hooks, list):
-        raise TypeError(f"hooks.{event_name} must be an array in {path}")
-    prompt_hooks[:] = [group for group in prompt_hooks if not _is_lians_hook_group(group)]
-    if not remove:
-        prompt_hooks.append(_lians_hook_group(client))
-    if remove and not prompt_hooks:
-        hooks.pop(event_name, None)
+    event_names = ["BeforeAgent" if client == "gemini" else "UserPromptSubmit"]
+    if client == "claude":
+        event_names.append("SessionEnd")
+    for event_name in event_names:
+        prompt_hooks = hooks.setdefault(event_name, [])
+        if not isinstance(prompt_hooks, list):
+            raise TypeError(f"hooks.{event_name} must be an array in {path}")
+        prompt_hooks[:] = [group for group in prompt_hooks if not _is_lians_hook_group(group)]
+        if not remove:
+            prompt_hooks.append(_lians_hook_group(client, event_name=event_name))
+        if remove and not prompt_hooks:
+            hooks.pop(event_name, None)
     if remove and not hooks:
         document.pop("hooks", None)
     backup = _backup(path, on_created=on_backup)
@@ -645,9 +660,7 @@ def _antigravity_plugin_config(
 ) -> list[Path]:
     """Install through Antigravity's plugin loader, which exposes MCP tools to agents."""
 
-    plugin_dir = (
-        home / ".gemini" / "config" / "plugins" / ANTIGRAVITY_PLUGIN_NAME
-    )
+    plugin_dir = home / ".gemini" / "config" / "plugins" / ANTIGRAVITY_PLUGIN_NAME
     manifest_path = plugin_dir / "plugin.json"
     mcp_path = plugin_dir / "mcp_config.json"
     registry_path = _antigravity_registry_path(home)
@@ -665,9 +678,7 @@ def _antigravity_plugin_config(
         raise TypeError(f"entries must be an array in {registry_path}")
     plugin_root = str(plugin_dir.parent.resolve()).replace("\\", "/")
     matching = [
-        entry
-        for entry in entries
-        if isinstance(entry, dict) and entry.get("path") == plugin_root
+        entry for entry in entries if isinstance(entry, dict) and entry.get("path") == plugin_root
     ]
     if matching:
         entry = matching[0]
@@ -680,9 +691,7 @@ def _antigravity_plugin_config(
             if ANTIGRAVITY_PLUGIN_NAME not in include_only:
                 include_only.append(ANTIGRAVITY_PLUGIN_NAME)
     else:
-        entries.append(
-            {"path": plugin_root, "include_only": [ANTIGRAVITY_PLUGIN_NAME]}
-        )
+        entries.append({"path": plugin_root, "include_only": [ANTIGRAVITY_PLUGIN_NAME]})
 
     backups = [
         candidate
@@ -700,9 +709,7 @@ def _antigravity_plugin_config(
 
 
 def _remove_antigravity_plugin(home: Path) -> list[Path]:
-    plugin_dir = (
-        home / ".gemini" / "config" / "plugins" / ANTIGRAVITY_PLUGIN_NAME
-    )
+    plugin_dir = home / ".gemini" / "config" / "plugins" / ANTIGRAVITY_PLUGIN_NAME
     manifest_path = plugin_dir / "plugin.json"
     mcp_path = plugin_dir / "mcp_config.json"
     registry_path = _antigravity_registry_path(home)
@@ -773,9 +780,7 @@ def _remove_antigravity_plugin(home: Path) -> list[Path]:
                 isinstance(value, str) for value in include_only
             ):
                 raise TypeError(f"include_only must be a string array in {registry_path}")
-            remaining = [
-                value for value in include_only if value != ANTIGRAVITY_PLUGIN_NAME
-            ]
+            remaining = [value for value in include_only if value != ANTIGRAVITY_PLUGIN_NAME]
             if remaining:
                 updated = dict(entry)
                 updated["include_only"] = remaining
@@ -881,9 +886,7 @@ def _client_paths(key: str, target: ClientTarget, home: Path) -> list[Path]:
     return list(dict.fromkeys(paths))
 
 
-def _validated_journal_entries(
-    journal: SetupJournal, *, home: Path
-) -> list[dict[str, Any]]:
+def _validated_journal_entries(journal: SetupJournal, *, home: Path) -> list[dict[str, Any]]:
     targets = client_targets(home)
     if journal.client not in targets:
         raise ValueError("An interrupted Lians setup report names an unknown AI app")
@@ -918,9 +921,8 @@ def _validated_journal_entries(
         backups: list[Path] = []
         for raw_backup in transaction_backups:
             backup = Path(raw_backup)
-            if (
-                _path_key(backup.parent) != _path_key(target.parent)
-                or not backup.name.startswith(f"{target.name}.lians-backup-")
+            if _path_key(backup.parent) != _path_key(target.parent) or not backup.name.startswith(
+                f"{target.name}.lians-backup-"
             ):
                 raise ValueError("An interrupted Lians setup report has an unsafe backup")
             backups.append(backup)
@@ -998,6 +1000,11 @@ def _verify_client(key: str, *, home: Path) -> None:
         hooks = document.get("hooks", {})
         groups = hooks.get(event_name, []) if isinstance(hooks, dict) else []
         verified = isinstance(groups, list) and any(_is_lians_hook_group(group) for group in groups)
+        if verified and key == "claude":
+            session_groups = hooks.get("SessionEnd", []) if isinstance(hooks, dict) else []
+            verified = isinstance(session_groups, list) and any(
+                _is_lians_hook_group(group) for group in session_groups
+            )
     if not verified:
         raise RuntimeError(f"Lians could not verify automatic recall for {target.label}")
 
@@ -1012,23 +1019,15 @@ def _install_client(
     on_backup: Callable[[Path], None],
 ) -> dict[str, Any]:
     if key == "opencode":
-        backup = _opencode_config(
-            target.config_path, command, args, on_backup=on_backup
-        )
+        backup = _opencode_config(target.config_path, command, args, on_backup=on_backup)
         backups = [backup] if backup else []
     elif target.kind == "toml":
-        backup = _toml_config(
-            target.config_path, command, args, on_backup=on_backup
-        )
+        backup = _toml_config(target.config_path, command, args, on_backup=on_backup)
         backups = [backup] if backup else []
     elif target.kind == "antigravity_plugin":
-        backups = _antigravity_plugin_config(
-            home, command, args, on_backup=on_backup
-        )
+        backups = _antigravity_plugin_config(home, command, args, on_backup=on_backup)
     else:
-        backup = _json_config(
-            target.config_path, command, args, on_backup=on_backup
-        )
+        backup = _json_config(target.config_path, command, args, on_backup=on_backup)
         backups = [backup] if backup else []
     item = {
         "client": key,
@@ -1076,9 +1075,7 @@ def _cleanup_backups(backups: list[Path]) -> list[str]:
     return errors
 
 
-def _record_setup_backup(
-    path: Path, *, backups: list[Path], journal: SetupJournal
-) -> None:
+def _record_setup_backup(path: Path, *, backups: list[Path], journal: SetupJournal) -> None:
     backups.append(path)
     journal.record_backup(path)
 
@@ -1138,9 +1135,7 @@ def _install_unlocked(
                 home=home,
                 command=command,
                 args=args,
-                on_backup=partial(
-                    _record_setup_backup, backups=backups, journal=journal
-                ),
+                on_backup=partial(_record_setup_backup, backups=backups, journal=journal),
             )
             journal.finish()
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
@@ -1152,9 +1147,7 @@ def _install_unlocked(
                 except OSError as journal_error:
                     journal_errors.append(f"{journal.path}: {journal_error}")
             cleanup_errors = (
-                _cleanup_backups(backups)
-                if not restore_errors and not journal_errors
-                else []
+                _cleanup_backups(backups) if not restore_errors and not journal_errors else []
             )
             item = {
                 "client": key,
@@ -1222,9 +1215,7 @@ def uninstall(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
         return _uninstall_unlocked(keys, home=home)
 
 
-def _uninstall_unlocked(
-    keys: list[str], *, home: Path | None = None
-) -> dict[str, Any]:
+def _uninstall_unlocked(keys: list[str], *, home: Path | None = None) -> dict[str, Any]:
     home = home or Path.home()
     targets = client_targets(home)
     unknown = sorted(set(keys) - set(targets))
@@ -1345,10 +1336,11 @@ def support_report(
         },
         "setup_recovery": {
             "pending_transactions": (
-                len(list(_transaction_dir().glob("*.json")))
-                if _transaction_dir().is_dir()
-                else 0
+                len(list(_transaction_dir().glob("*.json"))) if _transaction_dir().is_dir() else 0
             )
+        },
+        "application_errors": {
+            "recent": recent_crash_summaries(limit=5),
         },
         "clients": [
             {
@@ -1381,9 +1373,7 @@ def support_report(
                 if isinstance(item, dict)
             ],
             "retry_clients": [
-                value
-                for value in setup_result.get("retry_clients", [])
-                if isinstance(value, str)
+                value for value in setup_result.get("retry_clients", []) if isinstance(value, str)
             ],
         }
     return report

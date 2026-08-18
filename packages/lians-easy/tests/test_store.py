@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 from lians_easy.crypto import LocalCipher
-from lians_easy.store import MemoryStore
+from lians_easy.store import ConcurrentUpdateError, MemoryStore
 
 
 def test_remember_recall_correct_and_confirmed_forget(tmp_path):
@@ -141,6 +141,105 @@ def test_existing_receipt_table_is_upgraded_for_efficiency_measurement(tmp_path)
         columns = {row[1] for row in db.execute("PRAGMA table_info(context_receipts)")}
     assert "available_memory_token_estimate" in columns
     assert "avoided_memory_token_estimate" in columns
+
+
+def test_current_state_compare_and_swap_rejects_a_stale_writer(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    first = store.set_current(
+        "task/release/state",
+        "The release is being tested.",
+        project_id="release",
+        expected_current_id=None,
+    )
+    second = store.set_current(
+        "task/release/state",
+        "The release passed its smoke test.",
+        project_id="release",
+        expected_current_id=first["id"],
+    )
+
+    with pytest.raises(ConcurrentUpdateError, match="reload and retry"):
+        store.set_current(
+            "task/release/state",
+            "A stale agent tried to replace the state.",
+            project_id="release",
+            expected_current_id=first["id"],
+        )
+
+    current = store.memory_history(
+        "task/release/state",
+        project_id="release",
+    )[-1]
+    assert current["id"] == second["id"]
+    assert current["content"] == "The release passed its smoke test."
+
+
+def test_private_search_finds_relevant_memory_beyond_recent_window(tmp_path):
+    database = tmp_path / "memory.sqlite3"
+    store = MemoryStore(database)
+    target = store.remember(
+        "The zirconium rendezvous code is BLUE-ORCHID.",
+        scope="project",
+        project_id="research",
+    )
+    for index in range(300):
+        store.remember(
+            f"Routine market research batch {index} is complete.",
+            scope="project",
+            project_id="research",
+        )
+
+    recalled = store.recall(
+        "What is the zirconium rendezvous code?",
+        project_id="research",
+    )
+
+    assert [item["id"] for item in recalled] == [target["id"]]
+    with sqlite3.connect(database) as db:
+        stored_terms = " ".join(
+            row[0] for row in db.execute("SELECT term_hash FROM memory_terms").fetchall()
+        )
+    assert "zirconium" not in stored_terms
+    assert "rendezvous" not in stored_terms
+
+
+def test_legacy_memory_table_is_upgraded_before_modern_indexes_are_created(tmp_path):
+    data = tmp_path / "memory.sqlite3"
+    with sqlite3.connect(data) as db:
+        db.execute(
+            """CREATE TABLE memories (
+               id TEXT PRIMARY KEY,
+               profile TEXT NOT NULL,
+               content TEXT,
+               source TEXT NOT NULL,
+               topic TEXT,
+               metadata_json TEXT NOT NULL DEFAULT '{}',
+               created_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL,
+               supersedes_id TEXT,
+               superseded_by_id TEXT,
+               forgotten_at TEXT
+            )"""
+        )
+        db.execute(
+            """INSERT INTO memories
+               (id, profile, content, source, created_at, updated_at)
+               VALUES ('legacy-memory', 'personal', 'Use FastAPI.', 'user',
+                       '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"""
+        )
+
+    store = MemoryStore(data)
+
+    assert store.recall("Use FastAPI")[0]["content"] == "Use FastAPI."
+    with sqlite3.connect(data) as db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(memories)")}
+        indexes = {row[1] for row in db.execute("PRAGMA index_list(memories)")}
+        plaintext = db.execute(
+            "SELECT content FROM memories WHERE id = 'legacy-memory'"
+        ).fetchone()[0]
+    assert {"project_id", "scope", "paused_at", "content_cipher"} <= columns
+    assert {"idx_memories_profile_state", "idx_memories_project"} <= indexes
+    assert plaintext is None
 
 
 def test_confirmed_profile_erasure_clears_history_and_keeps_store_usable(tmp_path):

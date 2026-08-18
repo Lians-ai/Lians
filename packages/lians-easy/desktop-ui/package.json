@@ -1,0 +1,16 @@
+{
+  "name": "lians-desktop-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=chrome120 --outfile=../lians_easy/desktop/web/app.js"
+  },
+  "dependencies": {
+    "animejs": "4.5.0",
+    "motion": "13.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

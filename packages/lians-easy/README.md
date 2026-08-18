@@ -1,20 +1,98 @@
-# Lians desktop runtime (technical preview)
+# Lians Continuity (beta candidate)
 
-**Use less context. Get more AI.**
+**Context windows end. Your work does not.**
 
-This is the local runtime behind the guided Lians installer. It detects the AI
-apps already on a device, connects the selected apps, and gives later tasks a
-small set of relevant saved context instead of replaying the full history. The
-same package carries the encrypted local control center; users do not install a
-separate dashboard or hand Lians their Claude, Cursor, or Codex credentials.
+Lians is the local control and intelligence layer for the AI agents people
+already use. It detects supported apps, connects through their native MCP,
+hook, or rule surfaces, and helps the user observe, guide, or protect agentic
+work without replacing Claude, Codex, Cursor, Gemini, or another client with a
+Lians chat wrapper. The same package carries the encrypted local control
+center; users do not hand Lians their AI account credentials or provider API
+keys.
 
-The product surface is intentionally small:
+The local Understanding layer now reads the current request alongside a
+bounded set of relevant memories, identifies the intended kind of work, and
+returns an inspectable brief with at most three useful questions. A connected
+agent is instructed to ask only when one missing answer blocks a reliable next
+action. Clear requests proceed immediately. Prompt text is not persisted and
+no second model is called. The desktop **Understand** view exposes the same
+behavior before a user starts a task, plus a read-only memory health score.
 
-1. Open Lians and choose the AI apps to optimize.
-2. Keep using those apps normally. Say `Remember that...` when a detail should
-   survive the current chat.
-3. Run `lians status` to see connected apps and the estimated repeated memory
-   context left out of later tasks.
+Memory is organized into four visible layers: identity, current work, episodic
+handoffs, and knowledge. Small context packs reserve room for current work and
+evidence instead of allowing preference records to consume the entire budget.
+The `memory_health` tool reports duplicate, overly broad, oversized, stale, or
+unversioned records without silently rewriting or deleting them.
+
+The beta control surface has three user-owned modes:
+
+- **Observe** records content-free agent activity for the Work Graph and does
+  not inject Lians context.
+- **Guide** supplies the smallest useful current state, task contract, and
+  recovery context under a configurable token budget.
+- **Protect** adds explicit approval requirements for selected high-impact
+  actions. Lians reports when a host lacks the native action hook required for
+  technical enforcement.
+
+The interactive 3D Work Graph visualizes projects, tasks, agents, sessions,
+memories, decisions, evidence, blockers, and provenance. Verified relationships
+remain distinct from optional inferred relationships. Users can inspect the
+origin and state of a node and pause or resume selected memory directly from
+the graph.
+
+The first reliability problem Lians owns is lost working state. A long-running
+task carries one encrypted continuity contract across Claude, Codex, Cursor,
+and every other connected MCP client: its goal, success criteria, checkpoint,
+verified work, constraints, decisions, open questions, next action, sources,
+and blockers. Lians keeps the completion gate closed when proof is missing, a
+constraint failed, or a stale agent tries to replace newer progress. Another
+agent can continue from a bounded signed brief without rereading the transcript.
+
+The second is stale working state. Agents can declare which memories, files,
+tests, documents, analyses, and outputs depend on a current fact or decision.
+When that state changes, Lians blocks invalidated memories from normal recall,
+shows the transitive blast radius in the Work Graph, and supplies a bounded
+repair brief containing the verified replacement plus only the affected work.
+Unrelated work remains untouched. Dependency references, labels, reasons, and
+repair evidence stay encrypted locally.
+
+The third is unverified completion. For repository work, Lians can bind a task
+contract to approved paths, map each changed file to a success criterion, scan
+the real Git diff for scope violations, whitespace errors, credential patterns,
+and selected risky constructs, then combine that with task evidence and current
+state. The result is an encrypted, Ed25519-signed verification receipt tied to
+the base commit and exact diff hash. It never runs arbitrary project commands;
+test evidence supplied by an agent is explicitly caller-attested. A clean
+receipt means ready for human ship review, not formally proven correctness or
+autonomous approval.
+
+For critical bounded behavior, a verification policy can reference one or more
+`finite-model-v1` manifests. Lians exhaustively checks every satisfying
+assignment, rejects vacuous assumptions, and includes either a proof or a
+counterexample in the signed receipt. The Work Graph labels a clean result as a
+proof-backed ship review. Source files are hash-bound to the proof, but source
+to model equivalence is not yet proven, so Lians does not claim general
+implementation correctness.
+
+The `python-finite-function-v1` backend can instead parse one restricted pure
+Python function and prove postconditions against that actual function for every
+declared bounded input. It never imports or executes the file. This closes the
+source-to-model gap for the supported function, but remains a bounded proof and
+does not establish correctness for the rest of an application.
+
+The ordinary product surface remains intentionally small:
+
+1. Open Lians and choose the AI apps to optimize. Use **Understand** when the
+   goal is still fuzzy.
+2. Choose Observe, Guide, or Protect, then keep using those apps normally. Say `Remember that...` when a detail should
+   survive the current chat. For substantial work, let the agent create a Lians
+   Task Contract before it begins.
+3. For repository changes, let the agent configure an approved scope and call
+   `verify_work` before it claims completion. Review the signed receipt and the
+   underlying diff yourself before shipping.
+4. Run `lians continue` or use the **Active work** card to resume from the last
+   verified checkpoint. Use the Work Graph to inspect provenance and risk. Run
+   `lians status` for connected apps and measured context reuse.
 
 Memory controls, receipts, backup, cloud-sync preview, and deployment options
 remain available as progressive technical disclosure.
@@ -32,6 +110,70 @@ python -m lians_easy doctor --json
 python -m lians_easy app
 ```
 
+To test the product hypothesis before changing the desktop experience, build
+the offline Claude comparison plan. A live run is a separate, explicit action
+and refuses API-key or cloud-provider authentication:
+
+```bash
+python -m lians_easy experiment claude
+python -m lians_easy experiment claude --run --output claude-context-report.json
+```
+
+The paired synthetic test checks exact answer quality and Claude-reported input
+usage for full replay versus bounded Lians context. It does not claim to extend
+the ordinary interactive Claude Pro allowance. See the
+[method and claim boundary](../../docs/benchmarks/claude-code-baseline.md).
+
+The larger research-history gate is available explicitly:
+
+```bash
+python -m lians_easy experiment claude --scenario market-research \
+  --max-context-tokens 2048 --repetitions 2 --run \
+  --output claude-market-research-report.json
+```
+
+For a large post export or browser-work ledger, compile the raw local history
+into one bounded AI-ready brief:
+
+```bash
+lians brief research posts.jsonl --output research-brief.json
+lians brief browser browser-events.jsonl --output browser-brief.json
+```
+
+This command makes no Claude, Codex, Cursor, or hosted Lians request. It accepts
+a JSON array or JSON Lines file, removes repeated research text or superseded
+browser history locally, preserves representative evidence and a hash receipt,
+and refuses credential-like records. See the
+[large-workload method and measured boundary](../../docs/benchmarks/work-per-token-2026-08-16.md).
+
+The synthetic capacity gate is also offline by default. A live run requires
+subscription-backed sign-in, and raw paired replay is separately explicit and
+safety-capped:
+
+```bash
+lians experiment stretch --workload social-research
+lians experiment stretch --workload social-research --records 1000 \
+  --run --provider claude --paired --output report.json
+```
+
+For video research at corpus scale, import completed analysis outputs from any
+vision or transcription provider as JSON Lines. Lians encrypts each result,
+commits in resumable batches, skips exact replays, and keeps the large corpus
+outside latency-sensitive agent memory:
+
+```bash
+lians video ingest --input video-analysis.jsonl --run-id research-2026-08
+lians video search "onboarding friction" --limit 10
+lians video summarize --remember
+```
+
+Each line needs an `external_id` plus a `summary` or `findings`; optional fields
+include `title`, `source_uri`, `tags`, `provider`, `model`, `occurred_at`, and
+`metadata`. `summarize --remember` promotes one bounded deterministic
+consolidation, not 10,000 raw records, into cross-agent memory. This pipeline
+does not claim to make video-model inference faster: it scales the encrypted
+ingestion, recovery, search, and consolidation of completed provider outputs.
+
 ## Developer package
 
 The public Python distribution is named `lians-bridge`. It is built as a
@@ -48,6 +190,7 @@ lians --version
 lians optimize --clients detected --plan --json
 lians optimize --clients detected --yes --json
 lians status --json
+lians continue
 lians app
 ```
 
@@ -69,7 +212,7 @@ npx @anthropic-ai/mcpb validate packages/lians-easy
 npx @anthropic-ai/mcpb pack packages/lians-easy lians-memory.mcpb
 ```
 
-The bundle metadata, runtime version, five advertised tools, and stdio
+The bundle metadata, runtime version, fifteen advertised tools, and stdio
 initialization contract are covered by `tests/test_mcpb.py`.
 
 `lians-bridge` and the older `lians-easy` executable are compatibility aliases
@@ -91,16 +234,52 @@ Open the executable without arguments for guided setup. Its final action opens
 the bundled control center through the loopback-only Bridge. Once at least one
 AI client is connected, later launches return to that control center directly.
 
-The Windows build workflow also wraps the frozen runtime in a per-user
+The Windows build workflow packages the native windowed companion, its quiet
+launcher, and its console-only MCP sidecar in a per-user
 `Lians-Setup-<version>.exe`. It creates Start-menu entries, does not request
 administrator access, and is exercised through install, launch, and uninstall
-on a fresh runner. On an upgrade, Setup asks the existing Bridge to release the
-runtime, keeps a hidden previous-runtime copy, runs a local health check on the
-candidate, and commits only after it passes. A failed candidate restores the
-working runtime without changing memory or AI-client configuration. Silent
-removal preserves encrypted memory; interactive removal asks separately before
-erasure. Pull-request installers are unsigned technical fixtures until the
-publisher-gated release job signs both the runtime and setup executable.
+on a fresh runner. Application files live under the user's Programs directory;
+encrypted memories remain in a separate private data directory. On an upgrade,
+Setup asks every Lians process to exit, stages and health-checks the complete
+candidate bundle, and atomically swaps it only after it passes. A failed
+candidate restores the prior launcher and app directory without changing
+memory or AI-client configuration. Silent removal preserves encrypted memory;
+interactive removal asks separately before erasure. Pull-request installers
+are unsigned technical fixtures until the publisher-gated release job signs
+the launcher, windowed app, MCP sidecar, and setup executable. The free build
+path still writes a SHA-256 checksum beside every desktop artifact and records
+GitHub OIDC build provenance for same-repository pull requests and manual
+builds. After downloading an artifact, verify its origin with:
+
+```bash
+gh attestation verify PATH_TO_ARTIFACT --repo Lians-ai/Lians
+```
+
+This proves that the file was built by the public Lians repository at a named
+commit. It does not create a Windows publisher signature or Apple Developer ID,
+so unsigned Windows and macOS previews can still show operating-system trust
+warnings. Use these builds for transparent closed testing, not as a substitute
+for a future signed public release.
+
+The desktop footer can save a **Help report** directly to Downloads. The report
+contains version, platform, client connection state, recovery state, and a
+bounded list of structural crash fingerprints. It never includes prompts,
+memory contents, exception messages, API keys, settings, or absolute user
+paths. Stable Windows installers also receive GitHub OIDC build provenance;
+the release workflow refuses to overwrite an existing desktop asset.
+
+Public Windows releases use Microsoft Azure Artifact Signing with GitHub OIDC,
+so no exportable publisher private key is stored in GitHub. After Microsoft
+approves the Public Trust identity and its certificate profile has the
+**Artifact Signing Certificate Profile Signer** role, configure these repository
+variables: `AZURE_ARTIFACT_SIGNING_CLIENT_ID`,
+`AZURE_ARTIFACT_SIGNING_TENANT_ID`,
+`AZURE_ARTIFACT_SIGNING_SUBSCRIPTION_ID`,
+`AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`,
+`AZURE_ARTIFACT_SIGNING_PROFILE`, and the exact certificate subject in
+`WINDOWS_SIGNING_SUBJECT`. Finally set `PUBLISH_SIGNED_LIANS_DESKTOP=true`.
+The stable job refuses to publish if any variable, signature, subject match,
+fresh-runner lifecycle test, checksum, or provenance verification is missing.
 
 The macOS workflow builds separate native Apple-silicon and Intel
 `Lians-<version>-macos-<architecture>.dmg` images. Each has a conventional
@@ -164,6 +343,8 @@ Import verifies the AES-GCM envelope, fixed scrypt parameters, record hashes,
 lineage, and every Ed25519 receipt before opening one database transaction. It
 re-encrypts memory with the destination device's local key, skips equivalent
 IDs, and rejects the entire import if any existing ID has different history.
+Backup format v3 also carries the encrypted dependency and invalidation graph,
+so moved memory cannot silently forget which downstream work requires review.
 The passphrase is never accepted as a command-line argument, where process-list
 tools could expose it. Keep the passphrase separately; Lians cannot recover it.
 
@@ -182,6 +363,9 @@ AES-GCM, and signs the device grant. Profile revisions are encrypted before
 upload, signed, hash-chained, and accepted by the opaque reference service only
 when they extend the current head. Permanent forgetting wins over stale content
 on another device; divergent corrections fail atomically for human review.
+The same opaque revision now preserves dependency edges, open invalidations,
+and monotonic repair resolutions without exposing references or reasons to the
+cloud service.
 
 The Bridge now includes a public native OAuth client with system-browser PKCE,
 an OS-root-encrypted rotating-token vault, and automatic encrypted pull before

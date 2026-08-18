@@ -32,6 +32,19 @@ def _run(argv: list[str], *, environment: dict[str, str], timeout: int = 120):
     )
 
 
+def _pe_subsystem(path: Path) -> int:
+    """Read the PE optional-header subsystem without external SDK tools."""
+
+    payload = path.read_bytes()
+    if payload[:2] != b"MZ" or len(payload) < 0x40:
+        raise AssertionError(f"Not a Windows PE executable: {path}")
+    pe_offset = int.from_bytes(payload[0x3C:0x40], "little")
+    optional_header = pe_offset + 4 + 20
+    if payload[pe_offset : pe_offset + 4] != b"PE\0\0":
+        raise AssertionError(f"Invalid PE signature: {path}")
+    return int.from_bytes(payload[optional_header + 68 : optional_header + 70], "little")
+
+
 def _uninstall_registration_exists() -> bool:
     try:
         key = winreg.OpenKey(
@@ -46,21 +59,40 @@ def _uninstall_registration_exists() -> bool:
 
 
 def _verify_authenticode(
-    path: Path, thumbprint: str, *, environment: dict[str, str]
+    path: Path,
+    *,
+    environment: dict[str, str],
+    thumbprint: str | None = None,
+    subject: str | None = None,
 ) -> None:
     powershell = shutil.which("pwsh") or shutil.which("powershell")
     if powershell is None:
         raise RuntimeError("PowerShell is required to verify Authenticode")
     script = (
         "$signature = Get-AuthenticodeSignature -LiteralPath $args[0]; "
-        "$expected = $args[1].Replace(' ', '').ToUpperInvariant(); "
-        "if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate -or "
-        "$signature.SignerCertificate.Thumbprint.ToUpperInvariant() -ne $expected) { "
-        "Write-Error 'Installed runtime signature is invalid or has the wrong publisher'; "
+        "$expectedThumbprint = $args[1].Replace(' ', '').ToUpperInvariant(); "
+        "$expectedSubject = $args[2]; "
+        "if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) { "
+        "Write-Error 'Installed runtime signature is invalid'; exit 1 }; "
+        "$invalidThumbprint = $expectedThumbprint -and "
+        "$signature.SignerCertificate.Thumbprint.ToUpperInvariant() -ne $expectedThumbprint; "
+        "$invalidSubject = $expectedSubject -and "
+        "$signature.SignerCertificate.Subject -ne $expectedSubject; "
+        "if ($invalidThumbprint -or $invalidSubject) { "
+        "Write-Error 'Installed runtime has the wrong publisher'; "
         "exit 1 }"
     )
     verified = _run(
-        [powershell, "-NoProfile", "-NonInteractive", "-Command", script, str(path), thumbprint],
+        [
+            powershell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            script,
+            str(path),
+            thumbprint or "",
+            subject or "",
+        ],
         environment=environment,
         timeout=60,
     )
@@ -163,6 +195,7 @@ def main() -> None:
     parser.add_argument("--rollback-fixture", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--expected-signer-thumbprint")
+    parser.add_argument("--expected-signer-subject")
     arguments = parser.parse_args()
     installer = arguments.installer.resolve()
     rollback_fixture = arguments.rollback_fixture.resolve()
@@ -177,10 +210,11 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="lians-windows-package-") as directory:
         fixture = Path(directory)
-        install_root = fixture / "Lians"
+        local = fixture / "local"
+        install_root = local / "Programs" / "Lians"
+        data_root = local / "Lians"
         home = fixture / "home"
         roaming = fixture / "roaming"
-        local = fixture / "local"
         environment = os.environ.copy()
         environment.update(
             {
@@ -188,14 +222,16 @@ def main() -> None:
                 "HOME": str(home),
                 "APPDATA": str(roaming),
                 "LOCALAPPDATA": str(local),
-                "LIANS_EASY_HOME": str(install_root),
+                "LIANS_EASY_HOME": str(data_root),
             }
         )
         home.mkdir()
         roaming.mkdir()
         local.mkdir()
 
-        binary = install_root / "LiansMemory.exe"
+        launcher = install_root / "Lians.exe"
+        windowed_app = install_root / "LiansApp" / "Lians.exe"
+        binary = install_root / "LiansApp" / "LiansMemory.exe"
         uninstaller = install_root / "Uninstall Lians.exe"
         running_bridge: subprocess.Popen[bytes] | None = None
         try:
@@ -204,14 +240,24 @@ def main() -> None:
                 environment=environment,
             )
             assert installed.returncode == 0, (installed.stdout, installed.stderr)
+            assert launcher.is_file()
+            assert windowed_app.is_file()
             assert binary.is_file()
             assert uninstaller.is_file()
-            if arguments.expected_signer_thumbprint:
-                _verify_authenticode(
-                    binary,
-                    arguments.expected_signer_thumbprint,
-                    environment=environment,
-                )
+            assert _pe_subsystem(launcher) == 2
+            assert _pe_subsystem(windowed_app) == 2
+            assert _pe_subsystem(binary) == 3
+            if (
+                arguments.expected_signer_thumbprint
+                or arguments.expected_signer_subject
+            ):
+                for executable in (launcher, windowed_app, binary):
+                    _verify_authenticode(
+                        executable,
+                        environment=environment,
+                        thumbprint=arguments.expected_signer_thumbprint,
+                        subject=arguments.expected_signer_subject,
+                    )
 
             with winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
@@ -235,10 +281,13 @@ def main() -> None:
             assert doctor.returncode == 0, (doctor.stdout, doctor.stderr)
             report = json.loads(doctor.stdout)
             assert report["runtime"]["standalone"] is True
-            assert Path(report["runtime"]["command"]).resolve() == binary.resolve()
-            assert report["runtime"]["installed"] is True
+            assert Path(report["runtime"]["running_from"]).resolve() == binary.resolve()
+            assert Path(report["runtime"]["command"]).resolve() == (
+                data_root / "LiansMemory.exe"
+            ).resolve()
+            assert report["runtime"]["installed"] is False
 
-            preserved = install_root / "memory.sqlite3"
+            preserved = data_root / "memory.sqlite3"
             memory_content = "Upgrade smoke preference: always preserve this encrypted memory."
             port = _available_port()
             origin = f"http://127.0.0.1:{port}"
@@ -260,6 +309,8 @@ def main() -> None:
             cookie = _wait_for_bridge(origin, running_bridge)
             _remember(origin, cookie, memory_content)
 
+            original_launcher = launcher.read_bytes()
+            original_windowed_app = windowed_app.read_bytes()
             original_runtime = binary.read_bytes()
             upgraded = _run(
                 [str(installer), "/S", f"/D={install_root}"],
@@ -268,8 +319,11 @@ def main() -> None:
             assert upgraded.returncode == 0, (upgraded.stdout, upgraded.stderr)
             running_bridge.wait(timeout=15)
             assert running_bridge.returncode == 0
+            assert launcher.read_bytes() == original_launcher
+            assert windowed_app.read_bytes() == original_windowed_app
             assert binary.read_bytes() == original_runtime
-            assert not (install_root / ".lians-previous-runtime.exe").exists()
+            assert not (install_root / ".lians-previous-app").exists()
+            assert not (install_root / ".lians-previous-launcher.exe").exists()
             _recall_memory(binary, preserved, memory_content, environment=environment)
 
             rejected = _run(
@@ -277,8 +331,11 @@ def main() -> None:
                 environment=environment,
             )
             assert rejected.returncode != 0, (rejected.stdout, rejected.stderr)
+            assert launcher.read_bytes() == original_launcher
+            assert windowed_app.read_bytes() == original_windowed_app
             assert binary.read_bytes() == original_runtime
-            assert not (install_root / ".lians-previous-runtime.exe").exists()
+            assert not (install_root / ".lians-previous-app").exists()
+            assert not (install_root / ".lians-previous-launcher.exe").exists()
             _recall_memory(binary, preserved, memory_content, environment=environment)
 
             with winreg.OpenKey(
@@ -302,17 +359,40 @@ def main() -> None:
             )
             assert app_smoke.returncode == 0, (app_smoke.stdout, app_smoke.stderr)
 
+            configured = _run(
+                [
+                    str(binary),
+                    "optimize",
+                    "--clients",
+                    "codex",
+                    "--yes",
+                    "--json",
+                ],
+                environment=environment,
+            )
+            assert configured.returncode == 0, (configured.stdout, configured.stderr)
+            configured_report = json.loads(configured.stdout)
+            assert configured_report["status"] == "installed"
+            data_runtime = data_root / "LiansMemory.exe"
+            assert data_runtime.is_file()
+            codex_config = home / ".codex" / "config.toml"
+            assert "# >>> Lians Memory" in codex_config.read_text(encoding="utf-8")
+
             preserved_files = {
                 path: path.read_bytes()
-                for path in install_root.iterdir()
+                for path in data_root.iterdir()
                 if path.is_file() and path.name.startswith("memory")
             }
             assert preserved in preserved_files
             removed = _run([str(uninstaller), "/S"], environment=environment)
             assert removed.returncode == 0, (removed.stdout, removed.stderr)
             _wait_for_uninstall(binary, uninstaller)
+            assert not launcher.exists()
+            assert not windowed_app.exists()
             assert not binary.exists()
             assert not uninstaller.exists()
+            assert not data_runtime.exists()
+            assert "# >>> Lians Memory" not in codex_config.read_text(encoding="utf-8")
             for path, content in preserved_files.items():
                 assert path.read_bytes() == content
             assert not _uninstall_registration_exists()
@@ -321,7 +401,9 @@ def main() -> None:
                 json.dumps(
                     {
                         "app_opened_from_installed_binary": True,
+                        "companion_bundle_installed": True,
                         "expected_version": arguments.expected_version,
+                        "human_executables_are_windowed": True,
                         "per_user_install": True,
                         "running_bridge_stopped_for_upgrade": True,
                         "runtime_detected": True,
@@ -329,7 +411,9 @@ def main() -> None:
                         "runtime_rollback_verified": True,
                         "runtime_signature_verified": bool(
                             arguments.expected_signer_thumbprint
+                            or arguments.expected_signer_subject
                         ),
+                        "separate_app_and_data_roots": True,
                         "successful_upgrade_preserved_memory": True,
                         "silent_uninstall_preserved_memory": True,
                         "uninstaller_removed_runtime": True,
