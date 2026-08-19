@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-14",
+  "updatedAt": "2026-08-18",
   "source": {
     "repository": "Lians-ai/Lians",
     "branch": "master"
   },
   "product": {
     "name": "Lians",
-    "category": "AI efficiency for the tools you already use",
-    "summary": "Lians helps Claude, Cursor, Codex, and other AI tools avoid rereading the same project context. Connect an existing app, keep working normally, and Lians reuses a small amount of relevant saved context while leaving the rest out. Local mode is free, encrypted on the device, and does not require an AI account password or provider API key.",
+    "category": "Persistent project memory for AI coding tools",
+    "summary": "Lians gives Claude Code, Codex, Cursor, and other compatible AI tools current project memory across sessions. Save a useful fact, decision, constraint, or work state once; Lians recalls a small relevant subset later and keeps superseded facts out of current-state answers. Local mode is free and does not require an AI account password or provider API key.",
     "workflow": [
       {
-        "label": "Optimize",
-        "detail": "Lians detects supported AI apps and adds its local context connection without replacing the user's model, editor, or workflow."
+        "label": "Connect",
+        "detail": "Connect Lians to a supported AI coding tool without replacing the user's model, editor, or workflow."
       },
       {
         "label": "Work normally",
         "detail": "The user saves a useful preference, fact, constraint, or decision once and continues working in the AI tools they already use."
       },
       {
-        "label": "Reuse less",
-        "detail": "For a later task, Lians selects a bounded set of relevant current context instead of replaying the full saved history."
+        "label": "Continue",
+        "detail": "In a later session or compatible AI tool, Lians selects a bounded set of relevant current project context instead of replaying the full history."
       },
       {
         "label": "See the proof",
