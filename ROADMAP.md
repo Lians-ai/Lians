@@ -1,23 +1,25 @@
 # Lians product roadmap
 
-Lians is the memory tool for any AI agent. The near-term product goal is simple:
-a normal person should be able to install it, understand what was remembered,
-and carry useful context between supported AI clients.
+Lians provides persistent project memory for AI coding tools. The near-term
+product goal is simple: a developer should be able to install it in minutes,
+understand what was remembered, and carry current project context between
+supported AI clients.
 
 This roadmap communicates priorities, not contractual release dates.
 
 ## Now
 
-- Ship the guided Lians Easy installer for Windows, macOS, and Linux.
+- Make the Codex, Claude Code, and Cursor quickstarts reliable on clean machines.
+- Ship signed and notarized Lians Easy installers for Windows and macOS.
 - Keep `remember`, `recall`, `list`, `correct`, and confirmed `forget`
   consistent across the desktop runtime, MCP, HTTP, Python, and TypeScript.
 - Prove that two different AI clients can use one local memory profile.
-- Make the README, demos, package metadata, and release artifacts tell one
-  product story.
+- Keep the README, demos, package metadata, and releases focused on persistent
+  project memory before introducing advanced capabilities.
 
 ## Next
 
-- Add a visual memory manager for people who do not want to ask an agent to
+- Add a visual memory manager for developers who do not want to ask an agent to
   inspect or correct saved information.
 - Publish a hosted connector for clients such as ChatGPT and for multi-device
   continuity.
