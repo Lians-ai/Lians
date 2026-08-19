@@ -1,0 +1,50 @@
+name: First-run feedback
+description: Tell us where installation or the first memory test became unclear.
+title: "first run: "
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for trying Lians. Do not include project secrets, credentials, personal data, or confidential memory values.
+  - type: dropdown
+    id: client
+    attributes:
+      label: AI tool
+      options:
+        - Codex
+        - Claude Code
+        - Cursor
+        - Another MCP client
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What were you trying to do?
+      placeholder: Install Lians, save one test fact, and recall it in a fresh chat.
+    validations:
+      required: true
+  - type: textarea
+    id: blocker
+    attributes:
+      label: Where did you get stuck?
+      description: Include the step, what you expected, and what happened instead. Use synthetic values in examples.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Lians version or commit
+      placeholder: Package version or commit SHA, if known
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS, Windows, or Linux; AI tool version if known
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, and confidential project information.
+          required: true
