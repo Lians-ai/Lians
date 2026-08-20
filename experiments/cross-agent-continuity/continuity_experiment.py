@@ -684,7 +684,16 @@ def main(argv: list[str] | None = None) -> int:
     service = ContinuityExperiment(store)
     if args.command == "capture":
         result = service.capture(_read_json(args.session), project=project, client=args.client)
-        print(json.dumps(result, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "memories_captured_or_confirmed": len(result.get("memory_ids") or []),
+                    "status": "captured",
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return 0
     handoff = service.handoff(
         project=project,
