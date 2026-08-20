@@ -1,6 +1,6 @@
-name: First-run feedback
-description: Tell us whether installation and the first fresh-session recall worked.
-title: "first run: "
+name: Lians Check feedback
+description: Tell us whether setup and your first evidence-backed check worked.
+title: "lians check: "
 labels: [documentation]
 body:
   - type: markdown
@@ -14,7 +14,7 @@ body:
         - Codex
         - Claude Code
         - Cursor
-        - Another MCP client
+        - Another coding agent
     validations:
       required: true
   - type: dropdown
@@ -22,9 +22,10 @@ body:
     attributes:
       label: First-run outcome
       options:
-        - Fresh-session recall worked
-        - Connected, but recall did not work
-        - Installation or connection did not finish
+        - READY TO REVIEW
+        - NEEDS WORK correctly identified a failure
+        - Lians could not detect the right checks
+        - Installation or setup did not finish
         - I am not sure
     validations:
       required: true
@@ -32,7 +33,7 @@ body:
     id: goal
     attributes:
       label: What were you trying to do?
-      placeholder: Install Lians, save one test fact, and recall it in a fresh chat.
+      placeholder: Set up Lians Check and verify AI-generated work in a Git repository.
     validations:
       required: true
   - type: textarea

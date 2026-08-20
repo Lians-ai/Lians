@@ -640,7 +640,6 @@ class LiansCheckService:
         if configured["policy"].get("check_config_sha256") != config_digest:
             raise CheckConfigError("The authorized Lians Check policy digest does not match.")
 
-        before = workspace_snapshot(root)
         before_content = _workspace_content_digest(root)
         results = []
         for spec in checks:

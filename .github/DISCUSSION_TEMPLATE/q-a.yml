@@ -21,6 +21,7 @@ body:
     attributes:
       label: Lians path
       options:
+        - Lians Check
         - Lians Easy desktop installer
         - MCP package setup
         - Local Python SDK

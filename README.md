@@ -94,6 +94,19 @@ PASS  Build  8.11s
 Next: Review the current changes.
 ```
 
+## Help pressure test Lians Check
+
+Try Lians Check on a real, non-confidential repository, then share what happened
+through the [first-run feedback form](https://github.com/Lians-ai/Lians/issues/new?template=first_run_feedback.yml).
+Failures and confusing moments are as useful as successful checks. Never post
+credentials, private source code, or customer data.
+
+Lians is also recruiting three AI-native teams for a 30-day paid design-partner
+pilot. The working offer is $1,000 for up to five developers and three
+repositories, with direct setup support and an agreed measurement of false
+completion claims or review rework. Teams can [start a public, non-confidential
+conversation](https://github.com/Lians-ai/Lians/discussions/new?category=q-a).
+
 The trust model remains deliberately strict. The local runner creates
 `measured_local` evidence. Agent summaries stay `agent_attested` and cannot open
 the review gate. Trusted CI evidence requires an exact GitHub attestation and
