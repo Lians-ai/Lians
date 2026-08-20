@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "agentmem-backtest-check"
 version = "0.1.0"
-description = "Standalone lookahead-bias detector for AI agent memory — no database required"
+description = "Standalone lookahead-bias detector for AI agent memory - no database required"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"

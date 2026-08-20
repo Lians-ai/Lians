@@ -127,7 +127,7 @@ class OpenAIProvider(EmbeddingProvider):
 
 class SentenceTransformerProvider(EmbeddingProvider):
     """
-    Fully self-hosted embeddings — no data leaves the machine.
+    Fully self-hosted embeddings - no data leaves the machine.
 
     Uses sentence-transformers running in a thread-pool executor so inference
     does not block the async event loop.  The model is loaded lazily on first
@@ -163,7 +163,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
         # Cap the sequence length: long-context models (arctic: 8192) accept
         # pasted-document-sized inputs whose attention buffers OOM commodity
         # machines (one 8k-token text = ~1GB). 512 tokens is the standard
-        # retrieval cap — embeddings truncate; stored content is unaffected.
+        # retrieval cap - embeddings truncate; stored content is unaffected.
         msl = getattr(model, "max_seq_length", None)
         if isinstance(msl, int) and msl > 512:
             model.max_seq_length = 512
@@ -382,7 +382,7 @@ class BgeOnnxProvider(EmbeddingProvider):
 
 
 class LocalProvider(EmbeddingProvider):
-    """Deterministic word-projection for tests — zero API calls.
+    """Deterministic word-projection for tests - zero API calls.
 
     Each token maps deterministically to a random unit vector; the text
     embedding is the L2-normalized sum of its token vectors.  Two texts
@@ -425,11 +425,11 @@ def get_provider() -> EmbeddingProvider:
             return BgeOnnxProvider()
         case _:
             # "local" is a deterministic token-hash stub for unit tests. On
-            # LOCOMO it retrieves at 24% vs the real model's 82% — production
+            # LOCOMO it retrieves at 24% vs the real model's 82% - production
             # data behind it is silently getting test-grade recall, so say so
             # every time it is constructed.
             logging.getLogger("agentmem.embeddings").warning(
-                "EMBEDDING_PROVIDER='local' is the deterministic TEST STUB — "
+                "EMBEDDING_PROVIDER='local' is the deterministic TEST STUB - "
                 "semantic recall will be test-grade (24% vs 82% evidence "
                 "retrieval on LOCOMO). Install lians-sdk[local] and set "
                 "EMBEDDING_PROVIDER=sentence-transformers for real recall."

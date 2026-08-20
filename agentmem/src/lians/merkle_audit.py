@@ -1,5 +1,5 @@
 """
-Windowed Merkle batching for the audit chain — Change 8 of the performance roadmap.
+Windowed Merkle batching for the audit chain - Change 8 of the performance roadmap.
 
 Replaces the strict serial SHA-256 chain for write-heavy namespaces.
 
@@ -122,7 +122,7 @@ class MerkleWindow:
         return r, ids, leaves
 
 
-# Per-namespace windows — one per running process
+# Per-namespace windows - one per running process
 _windows: dict[str, MerkleWindow] = {}
 _window_lock = asyncio.Lock()
 

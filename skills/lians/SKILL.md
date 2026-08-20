@@ -1,6 +1,6 @@
 ---
 name: lians
-description: Use Lians financial-grade agent memory — store and recall facts with a bitemporal model so stale revisions never contaminate context. Use whenever an agent needs persistent memory in finance, healthcare, or legal work, or when a task asks "what did we know on/before <date>", needs an audit trail, or must erase a data subject.
+description: Use Lians financial-grade agent memory - store and recall facts with a bitemporal model so stale revisions never contaminate context. Use whenever an agent needs persistent memory in finance, healthcare, or legal work, or when a task asks "what did we know on/before <date>", needs an audit trail, or must erase a data subject.
 ---
 
 # Lians Memory
@@ -9,10 +9,10 @@ Lians is a memory layer for AI agents built for regulated environments. Unlike a
 plain vector store, it uses a **bitemporal** model: every fact carries the
 business time it became true (`event_time`) and the system time it was known
 (`valid_from`/`valid_to`). When a new fact supersedes an old one, the old one is
-excluded from recall automatically — but remains reconstructable for any past date.
+excluded from recall automatically - but remains reconstructable for any past date.
 
 Use Lians when the agent works with facts that **change over time**: guidance
-revisions, dosage changes, matter status, prior decisions — and when those changes
+revisions, dosage changes, matter status, prior decisions - and when those changes
 must be auditable.
 
 ## Setup
@@ -28,9 +28,9 @@ Get a free key at api.lians.dev. Local mode needs none.
 ## Clients (same API surface)
 
 ```python
-from lians import LiansClient        # sync HTTP — scripts, CLIs
-from lians import AsyncLiansClient   # async HTTP — FastAPI, async frameworks
-from lians import LocalLiansClient   # local SQLite — prototyping, CI, notebooks
+from lians import LiansClient        # sync HTTP - scripts, CLIs
+from lians import AsyncLiansClient   # async HTTP - FastAPI, async frameworks
+from lians import LocalLiansClient   # local SQLite - prototyping, CI, notebooks
 ```
 
 ## Core operations
@@ -39,17 +39,17 @@ from lians import LocalLiansClient   # local SQLite — prototyping, CI, noteboo
 from datetime import datetime, timezone
 mem = LiansClient(base_url=os.environ["LIANS_URL"], api_key=os.environ["LIANS_API_KEY"])
 
-# Store — event_time is the BUSINESS time the fact became true, not now
+# Store - event_time is the BUSINESS time the fact became true, not now
 mem.add(agent_id="desk", content="NVDA guidance raised to $40B",
         event_time=datetime(2025, 11, 19, tzinfo=timezone.utc),
         metadata={"ticker": "NVDA", "metric": "revenue_guidance"})
 
-# Recall — current, non-stale facts only
+# Recall - current, non-stale facts only
 res = mem.recall(agent_id="desk", query="NVDA guidance", k=5)
 for m in res["memories"]:
     print(m["event_time"], m["content"])
 
-# Point-in-time — what did we know on a past date?
+# Point-in-time - what did we know on a past date?
 mem.recall_at(agent_id="desk", query="NVDA guidance",
               as_of=datetime(2025, 9, 1, tzinfo=timezone.utc))
 
@@ -58,7 +58,7 @@ mem.add_from_messages(agent_id="desk",
     messages=[{"role": "assistant", "content": "TSLA Q4 deliveries hit 495k"}])
 ```
 
-## Drop-in agent loop — the harness
+## Drop-in agent loop - the harness
 
 For a turn-based agent, the harness handles recall-before / remember-after for you:
 
@@ -96,10 +96,10 @@ harness = LiansMemoryHarness(mem, agent_id="care-3",
 - `event_time` = when the fact became true (business time), **not** now. Store the
   precision you were given; never fabricate a timestamp.
 - For any "what did we know on/before <date>" question, use `recall_at` /
-  `snapshot` — never present-state `recall`.
+  `snapshot` - never present-state `recall`.
 - Report audit/snapshot output literally; do not paraphrase evidentiary results.
-- If a recalled fact's `content` is `null`, it was crypto-shredded — say so.
-- `erase()` is irreversible and needs a request reference — confirm before running.
+- If a recalled fact's `content` is `null`, it was crypto-shredded - say so.
+- `erase()` is irreversible and needs a request reference - confirm before running.
 
 ## Domain metadata (enables keyed supersession)
 

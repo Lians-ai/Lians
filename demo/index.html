@@ -134,15 +134,15 @@
   </div>
 
   <!-- Row 1: Stale-fact suppression -->
-  <div class="section-title">Benchmark 1 — Stale-fact suppression</div>
+  <div class="section-title">Benchmark 1 - Stale-fact suppression</div>
   <div class="grid">
 
     <div class="card">
       <div class="card-extra"><span class="tag tag-stale">pure cosine · mem0-style</span></div>
-      <div class="card-title">NVDA Guidance — No Supersession</div>
+      <div class="card-title">NVDA Guidance - No Supersession</div>
       <div class="card-desc">
         Retrieves the top-5 results with no validity filter. All 5 revisions
-        ($28B → $40B) are returned — the LLM context is contaminated with stale data.
+        ($28B → $40B) are returned - the LLM context is contaminated with stale data.
       </div>
       <button onclick="queryRaw()">Query without supersession</button>
       <div id="result-raw" class="result"></div>
@@ -150,7 +150,7 @@
 
     <div class="card">
       <div class="card-extra"><span class="tag tag-stale" style="background:#14532d;color:#86efac">AgentMem hybrid</span></div>
-      <div class="card-title">NVDA Guidance — With Supersession</div>
+      <div class="card-title">NVDA Guidance - With Supersession</div>
       <div class="card-desc">
         Present-time recall filters <code>valid_to IS NULL</code> before scoring.
         Only the current revision ($40B) reaches the LLM. 0 stale facts in top-5.
@@ -162,7 +162,7 @@
   </div>
 
   <!-- Row 2: Point-in-time -->
-  <div class="section-title">Benchmark 2 — Point-in-time recall</div>
+  <div class="section-title">Benchmark 2 - Point-in-time recall</div>
   <div class="grid">
 
     <div class="card">
@@ -181,7 +181,7 @@
 
     <div class="card">
       <div class="card-extra"><span class="tag tag-time">quarterly series</span></div>
-      <div class="card-title">TSLA Deliveries — Any Quarter</div>
+      <div class="card-title">TSLA Deliveries - Any Quarter</div>
       <div class="card-desc">
         4 quarters of delivery numbers. Pick a date to see which quarterly
         figure was the current record at that point in time.
@@ -195,7 +195,7 @@
 
     <div class="card">
       <div class="card-extra"><span class="tag tag-macro">macro</span></div>
-      <div class="card-title">Fed Funds Rate — Any Date</div>
+      <div class="card-title">Fed Funds Rate - Any Date</div>
       <div class="card-desc">
         6 FOMC decisions spanning Sep 2024 → May 2025. Query what the target
         rate was on any date in that window.
@@ -212,10 +212,10 @@
       <div class="card-title">Knowledge Snapshot</div>
       <div class="card-desc">
         <strong>The compliance demo that closes deals.</strong> Returns
-        <em>every</em> fact the agent held at a given timestamp — exhaustive,
+        <em>every</em> fact the agent held at a given timestamp - exhaustive,
         no relevance filter. SEC/FINRA examiners use this to verify the agent's
         exact knowledge at any date. Backed by a tamper-evident SHA-256 hash chain,
-        GDPR crypto-shred, and PostgreSQL RLS information barriers — features absent
+        GDPR crypto-shred, and PostgreSQL RLS information barriers - features absent
         from mem0 and Graphiti/Zep.
       </div>
       <div class="card-extra">
@@ -228,7 +228,7 @@
   </div>
 
   <!-- Row 3: Backtest contamination -->
-  <div class="section-title">Benchmark 3 — Backtest contamination detection</div>
+  <div class="section-title">Benchmark 3 - Backtest contamination detection</div>
   <div class="grid">
 
     <div class="card">
@@ -236,7 +236,7 @@
       <div class="card-title">Detect Future-Data Contamination</div>
       <div class="card-desc">
         Pick a simulated backtest date. AgentMem flags every memory the agent
-        couldn't have known at that date — either because the event hadn't
+        couldn't have known at that date - either because the event hadn't
         happened yet (<em>future_event</em>) or because the data was ingested
         too late (<em>late_revision</em>). Quants viscerally fear lookahead
         bias; no other memory layer can detect it.
@@ -255,7 +255,7 @@
         Query a date <em>after</em> all seed data was ingested to see a
         contamination-free report. In production, real-time ingestion keeps
         <code>ingestion_time ≈ event_time</code> so backtests stay clean
-        automatically — this demo shows how you'd verify it.
+        automatically - this demo shows how you'd verify it.
       </div>
       <div class="card-extra">
         <input class="date-input" id="backtest-clean-as-of" type="date" value="2026-06-01" />
@@ -267,7 +267,7 @@
   </div>
 
   <!-- Row 4: Compliance -->
-  <div class="section-title">Benchmark 4 — Compliance auditability</div>
+  <div class="section-title">Benchmark 4 - Compliance auditability</div>
   <div class="grid">
 
     <div class="card">
@@ -290,7 +290,7 @@
       <div class="card-title">Health Check (DB + Redis)</div>
       <div class="card-desc">
         Deep health check that probes Postgres and Redis connectivity. Returns
-        503 if either dependency is unhealthy — suitable for load-balancer probes.
+        503 if either dependency is unhealthy - suitable for load-balancer probes.
       </div>
       <button onclick="checkHealth()">Check health</button>
       <div id="result-health" class="result"></div>
@@ -302,7 +302,7 @@
     <p>
       <a href="../BENCHMARK.md">Benchmark vs mem0 &amp; Zep</a> ·
       <a href="https://github.com/ebeirne/AI_Memory_Software_lotus">GitHub</a> ·
-      AgentMem — financial-grade agent memory
+      AgentMem - financial-grade agent memory
     </p>
   </footer>
 
@@ -342,7 +342,7 @@
         showResult(resultId, "No memories returned.", "error"); return;
       }
       const lines = data.memories.map(fmtMemory).join("\n");
-      showResult(resultId, `${data.memories.length} result(s) — as_of: ${data.as_of || "present"}\n\n${lines}`, "ok");
+      showResult(resultId, `${data.memories.length} result(s) - as_of: ${data.as_of || "present"}\n\n${lines}`, "ok");
     } catch (e) {
       showResult(resultId, "Request failed: " + e.message + "\n\nIs the API running at " + apiUrl() + "?", "error");
     }
@@ -432,7 +432,7 @@
       if (!r.ok) { showResult("result-snapshot", JSON.stringify(data, null, 2), "error"); return; }
       const lines = [
         `Complete knowledge state as of ${d}`,
-        `${data.total} fact(s) — every memory valid at this timestamp:\n`,
+        `${data.total} fact(s) - every memory valid at this timestamp:\n`,
       ];
       for (const m of (data.items || [])) {
         const date = (m.event_time || "").slice(0, 10);
@@ -463,7 +463,7 @@
       const data = await r.json();
       if (!r.ok) { showResult(resultId, JSON.stringify(data, null, 2), "error"); return; }
       const rate = ((data.contamination_rate || 0) * 100).toFixed(1);
-      const status = data.is_clean ? "✓ CLEAN — no lookahead bias detected" : `✗ CONTAMINATED — ${rate}% of memories are future data`;
+      const status = data.is_clean ? "✓ CLEAN - no lookahead bias detected" : `✗ CONTAMINATED - ${rate}% of memories are future data`;
       const lines = [
         `Simulation as of: ${date}`,
         `Memories checked: ${data.memories_checked}`,

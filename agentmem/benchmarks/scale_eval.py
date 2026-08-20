@@ -1,17 +1,17 @@
 """
-Scale eval — retention, closure, and latency under long-term load.
+Scale eval - retention, closure, and latency under long-term load.
 
 Simulates months of heavy use: thousands of interleaved "noise" turns plus a
 set of core keyed preferences that are each revised several times. After every
 checkpoint it measures the three things a memory backbone must hold at scale:
 
-  1. **Latent recall** — is each core preference's *current* value still in the
+  1. **Latent recall** - is each core preference's *current* value still in the
      top-k, buried under thousands of unrelated turns, with every superseded
      revision excluded?
-  2. **Closure (pruning)** — the lifecycle analogue of decay: every revised
+  2. **Closure (pruning)** - the lifecycle analogue of decay: every revised
      fact's old versions must have their validity window closed, so the live
      set stays compact. Reported as live/total ratio and revised-fact closure.
-  3. **Latency** — median and p95 recall time as the corpus grows.
+  3. **Latency** - median and p95 recall time as the corpus grows.
 
 Deterministic (seeded), judge-free. Run::
 
@@ -37,7 +37,7 @@ _RESULTS = _REPO / "results" / "lifecycle"
 DEFAULT_MODEL = "Snowflake/snowflake-arctic-embed-l-v2.0"
 _START = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
-# Core keyed preferences: (field, [v1, v2, v3]) — v3 is current after 2 revisions.
+# Core keyed preferences: (field, [v1, v2, v3]) - v3 is current after 2 revisions.
 CORE_FACTS = [
     ("diet", ["User diet: strictly vegan.", "User diet: pescatarian now.", "User diet: pescatarian, but allergic to salmon."]),
     ("home_city", ["User lives in Chicago.", "User relocated to Denver.", "User settled in Boulder."]),
@@ -142,7 +142,7 @@ def main() -> None:
 
     os.environ["EMBEDDING_PROVIDER"] = "sentence-transformers"
     os.environ["SENTENCE_TRANSFORMER_MODEL"] = args.model
-    # No Redis in local mode — each cache attempt costs ~2s in connect timeouts.
+    # No Redis in local mode - each cache attempt costs ~2s in connect timeouts.
     os.environ.setdefault("RECALL_CACHE_ENABLED", "false")
 
     sys.path.insert(0, str(_REPO / "sdk" / "python"))

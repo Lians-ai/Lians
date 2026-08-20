@@ -72,7 +72,7 @@ def _execute_each(sql: str) -> None:
 
     asyncpg (the migration driver) rejects multiple commands in a single
     prepared statement, so each ``;``-separated statement must be executed
-    individually — matching the one-statement-per-execute pattern in 0004.
+    individually - matching the one-statement-per-execute pattern in 0004.
     """
     for statement in (s.strip() for s in sql.split(";")):
         if statement:

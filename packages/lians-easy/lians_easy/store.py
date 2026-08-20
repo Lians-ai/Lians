@@ -1724,7 +1724,8 @@ class MemoryStore:
                           COALESCE(SUM(token_estimate), 0),
                           COALESCE(SUM(available_memory_token_estimate), 0),
                           COALESCE(SUM(avoided_memory_token_estimate), 0),
-                          COUNT(DISTINCT client)
+                          COUNT(DISTINCT client),
+                          COALESCE(SUM(CASE WHEN memory_count > 0 THEN 1 ELSE 0 END), 0)
                    FROM context_receipts WHERE profile = ?""",
                 (self.profile,),
             ).fetchone()
@@ -1745,6 +1746,7 @@ class MemoryStore:
                 "available_memory_tokens_estimate": efficiency[3] or 0,
                 "repeated_memory_tokens_avoided_estimate": efficiency[4] or 0,
                 "clients_used": efficiency[5] or 0,
+                "successful_context_events": efficiency[6] or 0,
                 "basis": "active in-scope memory content compared with full replay",
             },
         }

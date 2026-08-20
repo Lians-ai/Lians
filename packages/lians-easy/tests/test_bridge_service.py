@@ -370,6 +370,30 @@ def test_claude_session_end_hook_captures_without_prompt_output(tmp_path, monkey
     assert output.getvalue() == ""
 
 
+def test_claude_precompact_hook_captures_before_context_is_rewritten(
+    tmp_path, monkeypatch
+):
+    event = {
+        "hook_event_name": "PreCompact",
+        "session_id": "session-1",
+        "transcript_path": str(tmp_path / "session.jsonl"),
+        "cwd": str(tmp_path),
+        "trigger": "auto",
+    }
+    captured = []
+    monkeypatch.setattr(sys, "stdin", StringIO(json.dumps(event)))
+    output = StringIO()
+    monkeypatch.setattr(sys, "stdout", output)
+    monkeypatch.setattr(
+        "lians_easy.bridge.capture_claude_session_end",
+        lambda received, *, store: captured.append((received, store.path)),
+    )
+
+    assert run_hook(client="claude", data_path=tmp_path / "bridge.sqlite3") == 0
+    assert captured[0][0] == event
+    assert output.getvalue() == ""
+
+
 def test_gemini_before_agent_hook_injects_bounded_context(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".git").mkdir(parents=True)
@@ -581,27 +605,43 @@ def test_loopback_app_uses_http_only_session_and_blocks_cross_origin_writes(tmp_
                 "task_id": "bridge-task",
                 "summary": "Endpoint test passed",
                 "evidence": [
-                    {"criterion_id": "criterion-1", "evidence": "HTTP 200 response"}
+                    {
+                        "criterion_id": "criterion-1",
+                        "evidence": "HTTP 200 response",
+                        "trust_class": "measured_local",
+                        "source": "loopback integration test",
+                    }
                 ],
                 "constraint_checks": [
                     {
                         "constraint_id": "constraint-1",
                         "status": "passed",
                         "evidence": "Loopback-only service",
+                        "trust_class": "measured_local",
+                        "source": "loopback binding inspection",
                     }
                 ],
                 "cwd": str(tmp_path),
             },
         )
         assert status == 200
-        assert checkpoint["assessment"]["status"] == "ready_for_review"
+        assert checkpoint["assessment"]["status"] == "active"
+        assert checkpoint["assessment"]["untrusted_criteria"] == ["criterion-1"]
 
         status, task_status = _json_request(
             f"{app.origin}/v1/task-status?task_id=bridge-task",
             cookie=cookie,
         )
         assert status == 200
-        assert task_status["assessment"]["may_claim_completion"] is True
+        assert task_status["assessment"]["may_claim_completion"] is False
+
+        status, report = _json_request(
+            f"{app.origin}/v1/guard-report?cwd={tmp_path}",
+            cookie=cookie,
+        )
+        assert status == 200
+        assert report["tasks"]["total"] == 1
+        assert report["criteria"]["untrusted_with_evidence"] == 1
 
         with pytest.raises(HTTPError) as error:
             _json_request(

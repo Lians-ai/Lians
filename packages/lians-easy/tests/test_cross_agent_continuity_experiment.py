@@ -249,7 +249,7 @@ def test_bounded_handoff_and_offline_acceptance_metrics(tmp_path: Path) -> None:
     service.capture(_session(), project=project)
     handoff = service.handoff(project=project, max_tokens=500, max_items=12)
     expected = {
-        "completed": ["Migrate the authentication middleware."],
+        "reported_completed": ["Migrate the authentication middleware."],
         "unfinished": ["Fix the OAuth callback integration test."],
         "project_truth": ["Tests use pytest."],
         "decisions": ["Keep PKCE."],

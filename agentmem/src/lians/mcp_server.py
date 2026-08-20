@@ -4,13 +4,13 @@ AgentMem MCP (Model Context Protocol) server.
 Exposes remember / recall / recall_at / reconstruct as native MCP tools so
 any MCP-compatible in-house LLM can call AgentMem without a custom SDK adapter.
 This is the integration path for financial firms running self-hosted models via
-LiteLLM, vLLM, or similar — configure once in the model server, no per-agent
+LiteLLM, vLLM, or similar - configure once in the model server, no per-agent
 SDK code required.
 
 Install:
     pip install mcp httpx
 
-Run (stdio transport — standard for local LLM integration):
+Run (stdio transport - standard for local LLM integration):
     python -m agentmem.mcp_server
 
 Environment variables:
@@ -83,7 +83,7 @@ def _build_server() -> Any:
                 description=(
                     "Store a financial fact, observation, or decision in persistent memory. "
                     "Always provide event_time_iso as when the event occurred, not now. "
-                    "Add ticker/metric/entity metadata for precise supersession detection — "
+                    "Add ticker/metric/entity metadata for precise supersession detection - "
                     "this is what lets AgentMem automatically replace stale guidance numbers."
                 ),
                 inputSchema={
@@ -110,7 +110,7 @@ def _build_server() -> Any:
                 name="recall",
                 description=(
                     "Retrieve the most relevant CURRENT memories for a query. "
-                    "Returns only presently-valid facts — superseded facts are excluded. "
+                    "Returns only presently-valid facts - superseded facts are excluded. "
                     "Call this before answering any question that may be in memory. "
                     "Use filters={ticker: NVDA} to narrow to a specific instrument."
                 ),
@@ -132,7 +132,7 @@ def _build_server() -> Any:
                 description=(
                     "Retrieve memories that were valid at a specific past point in time. "
                     "Use for compliance and audit: 'What guidance did we have on 2026-03-01?' "
-                    "Later superseding updates are excluded — this is true point-in-time recall. "
+                    "Later superseding updates are excluded - this is true point-in-time recall. "
                     "mem0 has no bitemporal model. Graphiti/Zep has temporal graph queries but "
                     "no compliance audit stack (hash chain, crypto-shred, information barriers)."
                 ),
@@ -172,7 +172,7 @@ def _build_server() -> Any:
             Tool(
                 name="list_conflicts",
                 description=(
-                    "List open conflict flags — cases where two sources reported different values "
+                    "List open conflict flags - cases where two sources reported different values "
                     "for the same fact at the same event_time.  Use this to surface data quality "
                     "issues before they affect trading decisions.  Returns up to 20 open conflicts "
                     "with both memory contents so a human or LLM can decide which source to trust."
@@ -192,7 +192,7 @@ def _build_server() -> Any:
             Tool(
                 name="memory_lineage",
                 description=(
-                    "Return the full supersession history of a memory — every prior version "
+                    "Return the full supersession history of a memory - every prior version "
                     "of the same fact and the chain of updates that led to the current value. "
                     "Use when a trader asks 'how did this guidance number evolve over time?' "
                     "or when investigating why a memory was replaced."
@@ -212,7 +212,7 @@ def _build_server() -> Any:
                 name="fact_history",
                 description=(
                     "Return every recorded version of a structured fact ordered by event_time. "
-                    "Query by ticker + metric instead of a memory_id — ideal for time-series views "
+                    "Query by ticker + metric instead of a memory_id - ideal for time-series views "
                     "like 'show me how AAPL EPS evolved over the last four quarters'. "
                     "Superseded versions are included so you can see the full revision history. "
                     "Entity normalization is automatic: 'Apple Inc.', ISIN 'US0378331005', and "
@@ -241,7 +241,7 @@ def _build_server() -> Any:
                     "Scans the agent's memory store and flags every fact that the agent "
                     "couldn't have known at the given simulation date. "
                     "Returns two contamination types: FUTURE_EVENT (event_time is after the "
-                    "simulation checkpoint — clear lookahead) and LATE_REVISION (the event is "
+                    "simulation checkpoint - clear lookahead) and LATE_REVISION (the event is "
                     "historical but the revised figure hadn't been published yet). "
                     "A clean report (is_clean=true) is the proof a risk committee needs."
                 ),
@@ -308,7 +308,7 @@ def _build_server() -> Any:
                 memories = result.get("memories", [])
                 trail = result.get("event_trail", [])
                 lines = [
-                    f"State as of {arguments['as_of_iso'][:10]} — {len(memories)} memories:",
+                    f"State as of {arguments['as_of_iso'][:10]} - {len(memories)} memories:",
                     _fmt_memories(memories),
                     f"\nAudit trail: {len(trail)} events",
                 ]
@@ -386,10 +386,10 @@ def _build_server() -> Any:
                 if is_clean:
                     return [TextContent(
                         type="text",
-                        text=f"✓ CLEAN — {checked} memories checked, no lookahead bias detected.",
+                        text=f"✓ CLEAN - {checked} memories checked, no lookahead bias detected.",
                     )]
                 lines = [
-                    f" CONTAMINATED — {len(flags)} flag(s) out of {checked} memories "
+                    f" CONTAMINATED - {len(flags)} flag(s) out of {checked} memories "
                     f"({rate:.1%} contamination rate):",
                 ]
                 for flag in flags:

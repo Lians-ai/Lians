@@ -1,5 +1,5 @@
 """
-AgentMem Python SDK — Pydantic v2 type definitions.
+AgentMem Python SDK - Pydantic v2 type definitions.
 
 Mirrors the REST API schemas.  All datetime fields are UTC-aware.
 """

@@ -1,10 +1,10 @@
 """
-Audit log hash chain — tamper-evidence for SEC 17a-4 / FINRA 4511 compliance.
+Audit log hash chain - tamper-evidence for SEC 17a-4 / FINRA 4511 compliance.
 
 Each event_log row stores:
-  prev_hash — row_hash of the most recently committed EventLog row in this
+  prev_hash - row_hash of the most recently committed EventLog row in this
                namespace at the time of insert (or GENESIS_HASH for the first row)
-  row_hash  — SHA-256 of the versioned canonical string:
+  row_hash - SHA-256 of the versioned canonical string:
                prev_hash | id | namespace | agent_id | op | memory_id |
                content_hash | created_at (UTC, no timezone suffix)
 
@@ -18,11 +18,11 @@ legacy v1 format does not.
 
 Concurrent inserts by different agents in the same namespace may produce forks
 (two rows with the same prev_hash).  Forks are legitimate and do NOT indicate
-tampering — they are caused by parallel writes and are reported separately.
+tampering - they are caused by parallel writes and are reported separately.
 
 Timezone normalisation note
 ───────────────────────────
-chain_log() computes the hash using datetime.now(timezone.utc) — a timezone-aware
+chain_log() computes the hash using datetime.now(timezone.utc) - a timezone-aware
 datetime whose .isoformat() includes "+00:00".  SQLite stores datetimes without
 timezone and returns them as naive datetimes whose .isoformat() has no suffix.
 PostgreSQL returns timezone-aware UTC datetimes.  _fmt_dt() converts all three
@@ -106,7 +106,7 @@ def _canonical_payload(payload: Optional[dict]) -> str:
 def compute_row_hash(row: EventLog, prev_hash: str) -> str:
     """Recompute the hash for *row* using *prev_hash* as the chain predecessor.
 
-    Safe to call on rows loaded from any DB backend — _fmt_dt() normalises the
+    Safe to call on rows loaded from any DB backend - _fmt_dt() normalises the
     created_at representation before hashing.
     """
     version = int(getattr(row, "hash_version", 1) or 1)
@@ -158,16 +158,16 @@ async def chain_log(
     The hash is computed from:
       - the Python-generated UUID (row.id, stable before flush)
       - the captured `now` datetime formatted via _fmt_dt() (stable, no timezone
-        suffix — matches what verify_chain() sees after SQLite/PG round-trip)
+        suffix - matches what verify_chain() sees after SQLite/PG round-trip)
       - all other row fields (namespace, agent_id, op, memory_id, content_hash)
 
     The row is added to the session and flushed so that subsequent chain_log
     calls within the same transaction see it as the new chain tip.  Callers
-    must NOT call db.add() on the returned row — it is already in the session.
+    must NOT call db.add() on the returned row - it is already in the session.
     The enclosing transaction's db.commit() persists everything atomically.
 
     The UUID is pre-generated in Python (not left to the DB default) so the
-    row_hash can be computed BEFORE the flush — at flush time row.id would still
+    row_hash can be computed BEFORE the flush - at flush time row.id would still
     be None because SQLAlchemy invokes Python-side column defaults during the
     INSERT, not when the object is instantiated.
     """
@@ -212,7 +212,7 @@ async def chain_log(
             from .degradation import record_degradation
             record_degradation("merkle_audit", "batch_failed")
 
-    # Fire-and-forget SIEM streaming — never blocks or fails the write path.
+    # Fire-and-forget SIEM streaming - never blocks or fails the write path.
     try:
         from .durable_jobs import enqueue_job
         from .siem import siem_enabled
@@ -263,9 +263,9 @@ async def verify_chain(
     Walk the event_log chain for *namespace* and return a verification report.
 
     Detected violations:
-      hash_mismatch   — row_hash stored on disk does not match recomputed value
+      hash_mismatch - row_hash stored on disk does not match recomputed value
                         (indicates the row was modified after insert)
-      orphaned_parent — prev_hash does not match any row's row_hash in the set
+      orphaned_parent - prev_hash does not match any row's row_hash in the set
                         (indicates a row was deleted from the middle of the chain)
 
     Returns::
@@ -302,9 +302,9 @@ async def verify_chain(
         row_id = str(row.id)
 
         if row.row_hash is None or row.prev_hash is None:
-            continue  # pre-chain rows (before migration 0006) — skip
+            continue  # pre-chain rows (before migration 0006) - skip
 
-        # 1. Detect deleted predecessor — prev_hash must point to an existing row
+        # 1. Detect deleted predecessor - prev_hash must point to an existing row
         if row.prev_hash not in all_row_hashes:
             violations.append(ChainViolation(
                 row_id=row_id,
@@ -315,7 +315,7 @@ async def verify_chain(
                 ),
             ))
 
-        # 2. Detect content modification — recompute hash from DB-loaded values
+        # 2. Detect content modification - recompute hash from DB-loaded values
         recomputed = compute_row_hash(row, row.prev_hash)
         if recomputed != row.row_hash:
             violations.append(ChainViolation(
@@ -371,7 +371,7 @@ async def export_audit_log(
     to_dt:
         Upper bound on created_at (inclusive).  None = latest row.
     limit:
-        Maximum number of rows returned (hard cap — add pagination via
+        Maximum number of rows returned (hard cap - add pagination via
         from_dt/to_dt if you need more).
     include_chain_status:
         When True, also runs verify_chain() and includes the result.

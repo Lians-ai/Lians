@@ -1,5 +1,5 @@
 ﻿/**
- * AgentMem TypeScript SDK — unit tests
+ * AgentMem TypeScript SDK - unit tests
  *
  * All tests use a mock fetch so no real API is needed.  The mock validates that:
  *   1. The client sends the correct HTTP method, path, and body.

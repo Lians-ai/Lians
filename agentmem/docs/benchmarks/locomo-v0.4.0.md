@@ -1,4 +1,4 @@
-# LOCOMO benchmark report — Lians v0.4.0
+# LOCOMO benchmark report - Lians v0.4.0
 
 **Date:** 2026-07-07 · **Engine:** Lians v0.4.0, `LocalLiansClient` (embedded SQLite) · **Embeddings:** BAAI/bge-large-en-v1.5 (CPU) · **Protocol:** judge-free evidence retrieval · **Raw data:** `results/locomo/` (per-conversation reports + `aggregate.json`, per-question detail included)
 
@@ -29,15 +29,15 @@ aggregate is stable, not driven by any single conversation.
   event-timed memory (session timestamp + per-turn second offsets; photo turns
   include the BLIP caption). A question scores a hit if any gold-evidence turn
   appears in `recall(query=question, k=10)`; `evidence_all` requires all of
-  them. Deterministic — no LLM judge, no generation step.
+  them. Deterministic - no LLM judge, no generation step.
 - **What is NOT scored.** This is not the LLM-judge QA accuracy that Mem0
   (66.9%) and Zep (75.14% / disputed) report on LOCOMO. Those numbers grade a
-  generated answer; ours isolates the retrieval half — the part a memory layer
-  is responsible for — and is not comparable to theirs. A judged run is
+  generated answer; ours isolates the retrieval half - the part a memory layer
+  is responsible for - and is not comparable to theirs. A judged run is
   planned (phase 2), as are competitor runs through this same harness via the
   existing `benchmarks/adapters/` (phase 3).
-- **Exclusions.** Category 5 (adversarial/unanswerable) tests refusal — a
-  generation property — and is excluded from the headline but reported. The 4
+- **Exclusions.** Category 5 (adversarial/unanswerable) tests refusal - a
+  generation property - and is excluded from the headline but reported. The 4
   questions without evidence annotations are skipped.
 - **Settings.** Default engine ranking (W_SEM .50 / W_LEX .20 / W_REC .15 /
   W_IMP .15, ANN prefetch 20×k), default admission control, k=10,
@@ -54,7 +54,7 @@ Running a public benchmark honestly means reporting what it found in us:
 
 1. **Local mode's default embedding provider is a test stub.**
    `LocalLiansClient(embedding_provider='local')` resolves to
-   `LocalProvider` — deterministic token-hash vectors documented as "for
+   `LocalProvider` - deterministic token-hash vectors documented as "for
    tests". On this benchmark it scores **24.0%** vs bge's **68.7%**
    (conversation 1). Any `lians-sdk[local]` user who never sets a provider is
    silently getting test-grade semantic recall. → v0.4.1: change the default
@@ -62,7 +62,7 @@ Running a public benchmark honestly means reporting what it found in us:
 2. **`as_of` recall does not re-anchor recency decay.** `_recency_decay`
    (ranking.py) always measures age from wall-clock now, even under
    point-in-time queries. Measured impact here: none (decay is uniformly ~0 on
-   a 3-year-old corpus, so ordering is unaffected — confirmed by an A/B trial
+   a 3-year-old corpus, so ordering is unaffected - confirmed by an A/B trial
    that scored identically). But it is semantically wrong for point-in-time
    recall and should decay relative to the pinned time. → v0.4.1 candidate.
 
@@ -80,7 +80,7 @@ Running a public benchmark honestly means reporting what it found in us:
 
 Questions needing 4–5 specific turns to co-occupy half the top-10 never
 succeed. Partial evidence is retrieved increasingly often (hit_any rises with
-evidence count — more targets), but full assembly fails. This is a ranking
+evidence count - more targets), but full assembly fails. This is a ranking
 *diversity* problem as much as a quality one.
 
 **2. Short, underspecified questions fail disproportionately.**
@@ -91,12 +91,12 @@ first-person paraphrase sharing no vocabulary ("I'm transgender…").
 
 **3. Open-domain questions are often inference, not retrieval.**
 The worst headline category (45.7%) includes questions like "What would
-Caroline's political leaning likely be?" — the gold evidence is a turn the
+Caroline's political leaning likely be?" - the gold evidence is a turn the
 answer must be *inferred from*, not one that *states* it. Retrieval-only
 protocols undercount here by design; worth noting rather than fixing.
 
 **4. No temporal-position bias.** Evidence in early/mid/late thirds of a
-conversation hits at 70.6% / 70.7% / 73.0% — recall is not biased toward
+conversation hits at 70.6% / 70.7% / 73.0% - recall is not biased toward
 recent sessions on this corpus.
 
 ## Improvement plan (ranked by expected value ÷ effort)
@@ -117,7 +117,7 @@ recent sessions on this corpus.
 3. **Query expansion for short queries.** Deterministic option: append agent
    profile terms / expand entities from the relationship graph. LLM option
    (HyDE-style hypothetical statement) works but forfeits the "deterministic,
-   judge-free" property of the default path — if added, keep it opt-in.
+   judge-free" property of the default path - if added, keep it opt-in.
 4. **Batch embeddings at ingest.** Ingest runs ~1.2–1.5s/turn because each
    `add` embeds singly. Batching (and optionally bge-small for dev) is a
    10–20× ingest speedup, and is the gate to running LongMemEval (whose
@@ -131,11 +131,11 @@ recent sessions on this corpus.
 
 ## Phases 2 and 3
 
-- **Phase 2 — judged protocol:** generate answers from top-k memories and
+- **Phase 2 - judged protocol:** generate answers from top-k memories and
   grade with an LLM judge, mirroring Mem0's published eval for comparability.
   Produces the number that sits next to Mem0's 66.9% / Zep's 75.14%.
   ~half-day build; ~$10–30 API cost per system per run.
-- **Phase 3 — competitors through this harness:** ingest locomo10 through
+- **Phase 3 - competitors through this harness:** ingest locomo10 through
   `benchmarks/adapters/` (Mem0, Zep, Letta, Hindsight, Supermemory) and score
   the identical evidence-retrieval metric. Real-SDK adapters are the
   methodological high ground in the current benchmark disputes: same data,

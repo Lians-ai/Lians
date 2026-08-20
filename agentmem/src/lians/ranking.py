@@ -56,7 +56,7 @@ W_REC = 0.15
 W_IMP = 0.15
 
 # Maximal-marginal-relevance selection over the candidate pool. λ trades
-# relevance against novelty: 1.0 = pure relevance (MMR off, the default —
+# relevance against novelty: 1.0 = pure relevance (MMR off, the default -
 # measured a wash-to-negative on evidence retrieval: diversity evicts the
 # second gold turn of multi-fact questions more often than it rescues one),
 # 0.0 = pure diversity. Deterministic either way.
@@ -257,12 +257,12 @@ async def rerank_cross_encoder_async(
 CONTEXT_SMOOTHING = float(os.getenv("RECALL_CONTEXT_SMOOTHING", "0.3"))
 CONTEXT_SMOOTHING_MAX_GAP_S = float(os.getenv("RECALL_CONTEXT_SMOOTHING_MAX_GAP_S", "3600"))
 
-# Entity matching: a third retrieval signal alongside semantic and lexical —
+# Entity matching: a third retrieval signal alongside semantic and lexical -
 # proper nouns and quoted spans in the query anchor memories that mention
 # them. Deterministic (regex extraction, word-boundary matching), no model.
 #
 # DEFAULT OFF: measured on LOCOMO raw dialogue it is a small net negative
-# (79.0% hit@10 without vs 78.6-78.8% with, even document-frequency-gated) —
+# (79.0% hit@10 without vs 78.6-78.8% with, even document-frequency-gated) -
 # speaker-prefixed turns make names indiscriminate. It exists for fact-shaped
 # corpora (distilled facts, tickets, CRM rows) where entities are sparse and
 # discriminative; enable via RECALL_ENTITY_MATCH_BONUS there.
@@ -334,7 +334,7 @@ def _entity_bonus(contents: list[Optional[str]], entities: list[str]) -> list[fl
 # month ("what did she mention on 3 June, 2023?"), memories whose event_time
 # falls inside that window get an additive bonus. Embeddings are nearly blind
 # to dates, so without this a date-pinned query ranks purely on topic and
-# retrieves the wrong instance. Deterministic — regex date parse, no model.
+# retrieves the wrong instance. Deterministic - regex date parse, no model.
 TEMPORAL_GROUNDING_BONUS = float(os.getenv("RECALL_TEMPORAL_GROUNDING_BONUS", "0.1"))
 
 # Stale-clause demotion: a turn whose extracted interjection clause was later
@@ -398,7 +398,7 @@ RECENCY_HALF_LIFE_DAYS = 30.0
 # Materiality-weighted decay: a fact's retrieval half-life scales with its
 # stated materiality, so a client instruction or compliance flag stays
 # retrievable long after a passing preference has faded. This is a *ranking*
-# policy only — storage is never decayed; facts persist until superseded or
+# policy only - storage is never decayed; facts persist until superseded or
 # provably erased. The tag is deterministic caller/adapter metadata
 # (``metadata.materiality``), never model-inferred at recall time, so the same
 # query over the same corpus always ranks the same way.
@@ -429,7 +429,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
     # on local SQLite (~2ms per 1024-dim pair; ~30x faster under numpy).
     #
     # Length guard: degraded recall (embedding provider down) passes an empty
-    # query vector — the python zip loop silently returned 0.0 there, but
+    # query vector - the python zip loop silently returned 0.0 there, but
     # numpy matmul raises on the shape mismatch and crashed the very outage
     # path that exists to keep recall alive.
     if len(a) != len(b) or not a:
@@ -455,7 +455,7 @@ def mmr_rerank(
     Greedily picks the item maximizing ``λ·relevance − (1−λ)·max_similarity_to_
     already_selected``, where relevance is the existing fusion score and
     similarity is cosine over the candidates' embeddings. This keeps the top-k
-    from being dominated by near-duplicate restatements of the same fact —
+    from being dominated by near-duplicate restatements of the same fact -
     higher diversity at a small relevance cost. ``λ=1`` is pure relevance,
     ``λ=0`` is pure diversity.
 
@@ -526,7 +526,7 @@ _MAX_BM25_TOKENS = 1_024
 # Scripts written without spaces between words (Han, Hiragana, Katakana,
 # Hangul, Thai, Lao, Myanmar, Khmer). A whitespace tokenizer sees a whole
 # sentence as one "word" there, so no query can ever match; index character
-# bigrams instead — the standard dependency-free segmentation fallback.
+# bigrams instead - the standard dependency-free segmentation fallback.
 _BM25_UNSEG_SPAN = re.compile(
     "["
     "฀-๿"  # Thai
@@ -545,7 +545,7 @@ _BM25_UNSEG_SPAN = re.compile(
 def _light_stem(token: str) -> str:
     """Suffix-strip English inflections so query and content conjugations
     meet at one form ("attended"/"attending"/"attends" → "attend"). Rule-based
-    and deliberately conservative — short tokens and non-Latin scripts pass
+    and deliberately conservative - short tokens and non-Latin scripts pass
     through untouched, so the CJK bigram path is unaffected."""
     if len(token) <= 4 or not token.isascii():
         return token
@@ -615,7 +615,7 @@ def _recency_decay(
 ) -> float:
     """``anchor`` re-bases the decay clock for point-in-time recall: under
     ``as_of``, "recent" means recent *relative to the pinned moment*, not to
-    wall-clock now — otherwise every as_of query sees uniformly stale scores
+    wall-clock now - otherwise every as_of query sees uniformly stale scores
     and the recency term deadens."""
     now = anchor or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -638,13 +638,13 @@ async def _fetch_live_candidates(
     k: int,
     reference_time: datetime,
 ) -> list[LiveFact]:
-    """Fetch from live_facts — the compact present-time projection."""
+    """Fetch from live_facts - the compact present-time projection."""
     conditions = [
         LiveFact.namespace == namespace,
         LiveFact.agent_id == agent_id,
         LiveFact.event_time <= reference_time,
     ]
-    # Change 4: barrier filter is structural — only the agent's partition is scanned
+    # Change 4: barrier filter is structural - only the agent's partition is scanned
     if barrier_group is not None:
         conditions.append(
             or_(LiveFact.barrier_group == barrier_group, LiveFact.barrier_group.is_(None))
@@ -793,10 +793,10 @@ def _score_components(
 class _ScoringPack:
     """Precomputed per-agent scoring artifacts (Change 7 extension).
 
-    Everything about the pool that does not depend on the query — decrypted
+    Everything about the pool that does not depend on the query - decrypted
     plaintext samples, an embedding matrix with row norms, BM25 term frequencies,
     event timestamps, materiality half-lives, stale-clause marks, temporal
-    neighbor indices — computed once per working set and reused until the
+    neighbor indices - computed once per working set and reused until the
     next write invalidates it. Recall scoring then reduces to one matrix
     product plus vectorized arithmetic: measured 380ms -> ~15ms per recall
     at ~700 memories.
@@ -954,7 +954,7 @@ def _stale_clause_penalty(meta: Optional[dict], cutoff: datetime) -> float:
 def _collapse_derived(
     scored: list[tuple[Any, float, Optional[str]]],
 ) -> list[tuple[Any, float, Optional[str]]]:
-    """Drop a derived clause when its parent turn is already selected — the
+    """Drop a derived clause when its parent turn is already selected - the
     clause is a substring of the parent, so it adds nothing to the result set.
     The parent is never dropped in favor of a clause: a clause is a lossy
     fragment of a multi-fact turn, and evicting the parent can evict the very
@@ -1024,12 +1024,12 @@ async def hybrid_recall(
 ) -> list[tuple[Any, float, Optional[str]]]:
     """Return list of (row, score, decrypted_content).
 
-    present-time (no as_of): queries ``live_facts`` — compact, fast, no
+    present-time (no as_of): queries ``live_facts`` - compact, fast, no
     temporal predicates.  ``live_facts_override`` allows the session cache
     (Change 7) to supply pre-fetched rows without a DB round-trip.
 
     point-in-time (as_of set): queries ``memories`` with the full temporal
-    filter — as_of recall always hits the bitemporal log.
+    filter - as_of recall always hits the bitemporal log.
     """
     subject_keys = subject_keys or {}
     reference = as_of or reference_time or datetime.now(timezone.utc)
@@ -1083,7 +1083,7 @@ async def hybrid_recall(
             )
 
         # Vectorized fast path (Change 7 extension): when the pool is the
-        # agent's whole working set, score against the cached _ScoringPack —
+        # agent's whole working set, score against the cached _ScoringPack -
         # one matrix product instead of per-row python.
         pack = None
         if (
@@ -1118,7 +1118,7 @@ async def hybrid_recall(
             ]
             contents = [p[3] for p in parts]
 
-        # Always return Memory objects for API consistency — fetch the canonical
+        # Always return Memory objects for API consistency - fetch the canonical
         # Memory rows so callers can use .id, .valid_to, .erased_at, etc.
         # Batched (one IN-query per 500), the embedding column deferred (the
         # recall response never carries it, and decoding 685 JSON vectors was

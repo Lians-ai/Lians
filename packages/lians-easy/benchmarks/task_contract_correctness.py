@@ -49,13 +49,53 @@ def run_benchmark(database: str | Path) -> dict[str, Any]:
         rejected_unknown = True
     _record(cases, "unknown criterion rejected", rejected_unknown, str(rejected_unknown))
 
-    all_evidence = service.checkpoint(
-        "release",
-        "Both technical checks passed",
+    service.start(
+        "Reject self-certified completion",
+        ["The agent cannot grant itself measured trust"],
+        task_id="self-promotion",
+        project_id=project_id,
+    )
+    self_promoted = service.checkpoint(
+        "self-promotion",
+        "I measured my own result",
         project_id=project_id,
         evidence=[
-            {"criterion_id": "criterion-1", "evidence": "launcher exit code 0"},
-            {"criterion_id": "criterion-2", "evidence": "runtime tool contract passed"},
+            {
+                "criterion_id": "criterion-1",
+                "evidence": "agent says its local check passed",
+                "trust_class": "measured_local",
+                "source": "agent checkpoint",
+            }
+        ],
+    )
+    promoted_criterion = self_promoted["assessment"]["criteria"][0]
+    _record(
+        cases,
+        "agent cannot self-promote measured evidence",
+        self_promoted["assessment"]["status"] == "active"
+        and promoted_criterion["trust_class"] == "agent_attested"
+        and promoted_criterion["declared_trust_class"] == "measured_local",
+        promoted_criterion["trust_class"],
+    )
+
+    all_evidence = service._checkpoint_trusted(
+        "release",
+        "Both technical checks passed",
+        issuer="local_verification",
+        project_id=project_id,
+        evidence=[
+            {
+                "criterion_id": "criterion-1",
+                "evidence": "launcher exit code 0",
+                "trust_class": "measured_local",
+                "source": "benchmark launcher process",
+            },
+            {
+                "criterion_id": "criterion-2",
+                "evidence": "runtime tool contract passed",
+                "trust_class": "measured_local",
+                "source": "benchmark runtime check",
+            },
         ],
         event_time="2026-08-17T11:00:00Z",
     )
@@ -66,15 +106,18 @@ def run_benchmark(database: str | Path) -> dict[str, Any]:
         all_evidence["assessment"]["status"],
     )
 
-    blocked = service.checkpoint(
+    blocked = service._checkpoint_trusted(
         "release",
         "Signing is unavailable",
+        issuer="local_verification",
         project_id=project_id,
         constraint_checks=[
             {
                 "constraint_id": "constraint-1",
                 "status": "passed",
                 "evidence": "secret scan passed",
+                "trust_class": "measured_local",
+                "source": "benchmark secret scan",
             }
         ],
         blockers=["unsigned executable"],
@@ -87,15 +130,18 @@ def run_benchmark(database: str | Path) -> dict[str, Any]:
         blocked["assessment"]["status"],
     )
 
-    failed = service.checkpoint(
+    failed = service._checkpoint_trusted(
         "release",
         "A secret scanner match appeared",
+        issuer="local_verification",
         project_id=project_id,
         constraint_checks=[
             {
                 "constraint_id": "constraint-1",
                 "status": "failed",
                 "evidence": "scanner matched packaged.log",
+                "trust_class": "measured_local",
+                "source": "benchmark secret scan",
             }
         ],
         blockers=[],
@@ -108,15 +154,18 @@ def run_benchmark(database: str | Path) -> dict[str, Any]:
         failed["assessment"]["status"],
     )
 
-    ready = service.checkpoint(
+    ready = service._checkpoint_trusted(
         "release",
         "The package and scanner now pass",
+        issuer="local_verification",
         project_id=project_id,
         constraint_checks=[
             {
                 "constraint_id": "constraint-1",
                 "status": "passed",
                 "evidence": "clean rebuild scan passed",
+                "trust_class": "measured_local",
+                "source": "benchmark rebuild scan",
             }
         ],
         event_time="2026-08-17T14:00:00Z",
@@ -124,7 +173,7 @@ def run_benchmark(database: str | Path) -> dict[str, Any]:
     _record(
         cases,
         "complete evidence opens review gate",
-        ready["assessment"]["status"] == "ready_for_review"
+        ready["assessment"]["status"] == "ready_for_human_review"
         and ready["assessment"]["may_claim_completion"],
         ready["assessment"]["status"],
     )

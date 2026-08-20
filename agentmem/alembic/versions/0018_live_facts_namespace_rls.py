@@ -22,7 +22,7 @@ Fix
 Add the same permissive namespace policy used on memories (rls_memories_namespace,
 migration 0004). The permissive policy GRANTS namespace-scoped access (and the
 INSERT WITH CHECK), and the restrictive ``barrier_isolation`` policy from 0013
-then AND-narrows it by information barrier — exactly how memories already works.
+then AND-narrows it by information barrier - exactly how memories already works.
 """
 from alembic import op
 

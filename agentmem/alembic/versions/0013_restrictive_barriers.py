@@ -10,12 +10,12 @@ The barrier_isolation policies added in 0011 (memories, live_facts) and 0012
 (relationships) were PERMISSIVE. PostgreSQL combines multiple permissive policies
 on a table with OR, so a row was visible if EITHER the namespace policy (0004) OR
 the barrier policy permitted it. Because the namespace policy permits every row in
-the caller's namespace, the barrier was effectively defeated within a namespace —
+the caller's namespace, the barrier was effectively defeated within a namespace -
 isolation was actually being enforced only at the application layer.
 
 This migration recreates the barrier policies AS RESTRICTIVE. Restrictive policies
 are AND-ed with the permissive policies, so a row is visible only when the
-namespace policy permits it AND the barrier policy permits it — i.e. genuine
+namespace policy permits it AND the barrier policy permits it - i.e. genuine
 Chinese-wall isolation at the database layer.
 
 The USING clause is unchanged: a caller with no ``agentmem.barrier_group`` set

@@ -43,7 +43,7 @@ data.
    [Codex](../integrations/codex).
 2. Ask everyone to install [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
    before the session unless they use Cursor's one-click installer.
-3. Tell participants to use a harmless test fact—not a password, API key,
+3. Tell participants to use a harmless test fact - not a password, API key,
    private research record, personal identifier, or graded answer.
 4. Check the course or event's AI-use policy. Lians does not override academic
    integrity, research ethics, privacy, or acceptable-use rules.
@@ -198,7 +198,7 @@ it. Local mode uses SQLite and needs no Lians account or API key.
 Challenge: https://github.com/Lians-ai/Lians/discussions/122
 Repository: https://github.com/Lians-ai/Lians
 
-Use a test fact only—never a password, API key, private record, or graded answer.
+Use a test fact only - never a password, API key, private record, or graded answer.
 ```
 
 ## Pricing and age-appropriate promotion

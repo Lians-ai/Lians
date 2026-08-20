@@ -1,5 +1,5 @@
 """
-Agent memory harness demo — a complete, runnable memory-augmented agent loop.
+Agent memory harness demo - a complete, runnable memory-augmented agent loop.
 
 Run it::
 
@@ -63,7 +63,7 @@ def main() -> None:
         )
         print(f"\nmodel -> {answer}")
 
-        # Present recall shows only the current ($40B) figure — the $36B fact was
+        # Present recall shows only the current ($40B) figure - the $36B fact was
         # superseded and is excluded at the database layer.
         print("\n========== PRESENT RECALL ==========")
         for m in harness.recall("NVDA revenue guidance"):

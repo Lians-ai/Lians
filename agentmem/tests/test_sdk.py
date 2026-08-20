@@ -1,10 +1,10 @@
 ﻿"""
 SDK tests.
 
-LocalLiansClient: real in-memory SQLite — proves the zero-setup path works
+LocalLiansClient: real in-memory SQLite - proves the zero-setup path works
 end-to-end with no server and no mocking.
 
-LiansClient (sync HTTP): httpx MockTransport — proves the sync wrapper
+LiansClient (sync HTTP): httpx MockTransport - proves the sync wrapper
 drives the async client correctly without needing a live server.
 """
 import json
@@ -288,7 +288,7 @@ class TestLocalClient:
 
 
 # ===========================================================================
-# LiansClient (sync HTTP — mocked transport)
+# LiansClient (sync HTTP - mocked transport)
 # ===========================================================================
 
 class TestSyncHTTPClient:

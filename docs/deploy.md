@@ -1,4 +1,4 @@
-﻿# Lians — Production Deploy Checklist
+﻿# Lians - Production Deploy Checklist
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ Copy `agentmem/.env.example` to `agentmem/.env` and fill every value:
 ```env
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/Lians
 MASTER_ENCRYPTION_KEY=<base64-encoded 32-byte key>
-ADMIN_SECRET=<long random string — never expose in client traffic or the public website>
+ADMIN_SECRET=<long random string - never expose in client traffic or the public website>
 PROVISIONING_SECRET=<different long random string for the website provisioning broker>
 ANTHROPIC_API_KEY=<required when SUPERSESSION_LLM_STAGE=true>
 VOYAGE_API_KEY=<required when EMBEDDING_PROVIDER=voyage>
@@ -31,7 +31,7 @@ VOYAGE_API_KEY=<required when EMBEDDING_PROVIDER=voyage>
 ## 2. Database bootstrap
 
 ```bash
-# Run migrations — idempotent, safe to repeat
+# Run migrations - idempotent, safe to repeat
 alembic upgrade head
 
 # Verify schema version
@@ -147,7 +147,7 @@ scrape_configs:
 ## 6. Security hardening
 
 ### Authentication
-- [ ] All `api_keys` rows use scoped permissions — no wildcard `*` scopes in production
+- [ ] All `api_keys` rows use scoped permissions - no wildcard `*` scopes in production
 - [ ] `ADMIN_SECRET` is ≥ 32 chars, rotated every 90 days
 - [ ] TLS termination at the load balancer; plain HTTP never exposed externally
 
@@ -159,7 +159,7 @@ scrape_configs:
 ### Network
 - [ ] Database not reachable from public internet
 - [ ] `GET /metrics` firewalled to internal monitoring network only
-- [ ] `GET /v1/admin/*` firewalled — requires `X-Admin-Secret`, but defense-in-depth
+- [ ] `GET /v1/admin/*` firewalled - requires `X-Admin-Secret`, but defense-in-depth
 
 ### Audit chain
 - [ ] `/v1/admin/audit/verify` run weekly and on every major release to confirm chain integrity

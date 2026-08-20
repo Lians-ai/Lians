@@ -1,10 +1,10 @@
 """
-LOCOMO token-efficiency analysis — answer-context cost per question.
+LOCOMO token-efficiency analysis - answer-context cost per question.
 
 For each of the 1,986 LOCOMO questions, compares the tokens an answerer must
 read under Lians retrieval (top-k memories, as dumped for the judged run) vs
 stuffing the full conversation into context. Judge-free, pure accounting over
-the artifacts of the judged run — no model calls, no ingest, no embeddings.
+the artifacts of the judged run - no model calls, no ingest, no embeddings.
 
 Token counts are exact (tiktoken o200k_base, the GPT-4o/gpt-5 tokenizer);
 memory lines are rendered "[created_at] text" to mirror the harness's answer

@@ -1,15 +1,15 @@
 """
-Regulated memory eval — the benchmark only a compliance-grade memory layer passes.
+Regulated memory eval - the benchmark only a compliance-grade memory layer passes.
 
 General memory benchmarks (LoCoMo, LongMemEval) measure conversational recall. They
 do not measure the things a regulated buyer must guarantee, and an accumulate-
 everything store *fails* them by design:
 
-  1. stale-revision suppression   — a superseded fact must NOT be retrieved
-  2. point-in-time reconstruction — recall as-of a past date returns what was known then
-  3. erasure proof                — erased content is unrecoverable
-  4. lookahead-contamination      — facts unknowable at the simulation date are flagged
-  5. audit state reconstruction   — the full knowledge state at any past T is reproducible
+  1. stale-revision suppression - a superseded fact must NOT be retrieved
+  2. point-in-time reconstruction - recall as-of a past date returns what was known then
+  3. erasure proof - erased content is unrecoverable
+  4. lookahead-contamination - facts unknowable at the simulation date are flagged
+  5. audit state reconstruction - the full knowledge state at any past T is reproducible
 
 Each check is a hard invariant (pass/fail), run against any Lians client. Run the
 *same* harness against mem0 / Zep adapters and watch them fail items 1, 3, and 4.
@@ -37,7 +37,7 @@ def _any_match(pattern: str, texts: list[str]) -> bool:
     """
     Regex match instead of literal substring: LLM-managed stores (mem0,
     Graphiti) rewrite facts on ingestion ("40B" -> "40 billion dollars"), and
-    a check must not miss the value because of paraphrase — that would record
+    a check must not miss the value because of paraphrase - that would record
     the wrong failure reason.
     """
     rx = re.compile(pattern, re.IGNORECASE)
@@ -75,7 +75,7 @@ def run_regulated_eval(client, agent: str = "reg-eval") -> dict[str, Any]:
     def stale_revision_suppression():
         # The fact pair is deliberately entity-to-entity ("Moody's rates ACME")
         # so every architecture can represent it: graph stores need two
-        # entities to form an edge — a single-entity scalar fact ("guidance is
+        # entities to form an edge - a single-entity scalar fact ("guidance is
         # 36B") extracts no edge at all and would fail them on sentence shape
         # rather than on supersession behavior. Baa2/Baa1 are also distinctive
         # tokens that survive LLM paraphrase on ingestion.
@@ -96,7 +96,7 @@ def run_regulated_eval(client, agent: str = "reg-eval") -> dict[str, Any]:
         # but flagged invalid by the store" (partial): systems that correctly
         # invalidate a superseded fact yet still hand it to the caller by
         # default (e.g. Graphiti's invalid_at) have the capability without
-        # turnkey suppression — the caller must filter it out themselves.
+        # turnkey suppression - the caller must filter it out themselves.
         if current and stale_hits and all(m.get("invalidated") for m in stale_hits):
             detail["stale_returned_but_marked_invalid"] = True
             return "partial", detail
@@ -115,7 +115,7 @@ def run_regulated_eval(client, agent: str = "reg-eval") -> dict[str, Any]:
     def erasure_proof():
         # Full pass requires BOTH: content unrecoverable AND a proof artifact
         # (erasure certificate / request reference). Behavioral deletion with
-        # no proof is "partial" — a bare delete_all() must not score as
+        # no proof is "partial" - a bare delete_all() must not score as
         # "provable erasure" just because retrieval stops returning the row.
         a = f"{agent}-erase"
         client.add(a, "patient record SSN 123-45-6789", _dt(2026, 1, 1), subject_id="subj-erase-1")

@@ -14,7 +14,7 @@ Capability map (each cell justified against the public API):
 
   stale_revision_suppression   PARTIAL  the agent can rewrite core-memory blocks
                                         (memory_replace / rethink) so a revision
-                                        can displace an old value — but it is
+                                        can displace an old value - but it is
                                         LLM-decided and archival passages simply
                                         accumulate; no keyed guarantee the stale
                                         revision is excluded from search.

@@ -1,6 +1,7 @@
-# Lians Memory - Codex Instructions
+# Lians Guard - Codex Instructions
 
-This project uses Lians to keep useful memory across Codex sessions.
+This project uses Lians to recover current work, reject stale task state, and
+keep unsupported completion claims out of human review.
 
 ## Use memory when it helps
 
@@ -17,6 +18,20 @@ This project uses Lians to keep useful memory across Codex sessions.
 
 - `remember`: save one durable fact with a useful project or topic label.
 - `recall`: retrieve a small set of relevant current memories.
+- `start_task`: record the current goal, success criteria, and constraints.
+- `checkpoint_task`: record progress and agent-reported evidence. Declared
+  trusted labels remain agent attestations until an authorized verifier accepts
+  them.
+- `task_status`: inspect missing, untrusted, failed, unknown, or blocked work.
+- `continue_work`: recover the current task in a fresh supported session.
+
+For substantial work, establish a task contract before implementation and check
+its status before reporting completion. Never assign your own evidence
+`measured_local`, `measured_ci`, or `human_confirmed`; use `agent_attested`.
+Trusted evidence comes from a Lians-owned verifier, an attested CI import, or an
+interactive human confirmation. Treat agent summaries and touched files as
+useful activity, not proof. `ready_for_human_review` means the configured gate
+passed; it does not mean the work is approved or safe to ship.
 
 Example prompts:
 
@@ -34,5 +49,5 @@ Copy `integrations/codex/config.example.toml` into your Codex configuration.
 The default setup runs locally through MCP, stores memory in
 `~/.lians/mcp.db`, and needs no Lians account or API key.
 
-Advanced Lians tools can reconstruct past state, inspect memory lineage, and
-surface conflicts. Enable them only when the task needs that larger surface.
+Advanced Lians tools can inspect state impact, verification receipts, temporal
+history, and memory lineage. Enable them only when the task needs that surface.

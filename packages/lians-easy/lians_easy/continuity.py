@@ -195,10 +195,18 @@ def build_continuity_graph(
         checks = state.get("constraint_checks") or {}
         criteria = list(contract.get("success_criteria") or [])
         constraints = list(contract.get("constraints") or [])
-        missing_count = sum(
-            not bool(str(evidence.get(str(item.get("id") or "")) or "").strip())
-            for item in criteria
-        )
+        trusted_evidence = {"measured_local", "measured_ci", "human_confirmed"}
+        missing_count = 0
+        for item in criteria:
+            record = evidence.get(str(item.get("id") or "")) or {}
+            if not isinstance(record, dict):
+                missing_count += 1
+                continue
+            if not str(record.get("evidence") or "").strip():
+                missing_count += 1
+                continue
+            if str(record.get("trust_class") or "") not in trusted_evidence:
+                missing_count += 1
         failed_count = sum(
             str((checks.get(str(item.get("id") or "")) or {}).get("status") or "unknown")
             == "failed"
@@ -215,7 +223,7 @@ def build_continuity_graph(
             if blockers
             else "at_risk"
             if failed_count
-            else "ready_for_review"
+            else "ready_for_human_review"
             if not missing_count and not unknown_count
             else "active"
         )

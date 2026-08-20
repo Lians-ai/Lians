@@ -1,16 +1,16 @@
 """
-Relationship graph service — the bitemporal knowledge-graph layer.
+Relationship graph service - the bitemporal knowledge-graph layer.
 
 Stores directed ``src --rel_type--> dst`` edges with the same temporal, audit, and
 information-barrier guarantees as memories, and answers the relational compliance
 questions atomic facts can't:
 
-    neighbors(entity)      — who/what is connected to this entity (N hops)
-    path(src, dst)         — is there a connection, and through what? (COI /
+    neighbors(entity) - who/what is connected to this entity (N hops)
+    path(src, dst) - is there a connection, and through what? (COI /
                              related-party / referral reachability)
 
-All reads accept ``as_of`` for point-in-time traversal — "who was connected on the
-day of the trade?" — the same temporal guarantee Lians gives for facts, now for
+All reads accept ``as_of`` for point-in-time traversal - "who was connected on the
+day of the trade?" - the same temporal guarantee Lians gives for facts, now for
 relationships. Traversal runs in-process over the namespace's edges (no graph DB);
 for very large graphs this can move to recursive SQL later without an API change.
 """
@@ -92,7 +92,7 @@ async def relate(
 
     Idempotent: re-asserting an identical live triplet returns the existing edge.
     When ``exclusive`` is set, asserting ``src --rel_type--> X`` invalidates any
-    other live ``src --rel_type--> Y`` (Y != X) — the deterministic equivalent of
+    other live ``src --rel_type--> Y`` (Y != X) - the deterministic equivalent of
     Graphiti's contradiction-driven invalidation, e.g. a person's current employer.
     """
     from .memory_service import _get_barrier_group
@@ -185,7 +185,7 @@ async def unrelate(
     barrier_override: Optional[str] = None,
 ) -> int:
     """
-    Invalidate a live edge (set ``valid_to``) — Graphiti's ``invalid_at``.
+    Invalidate a live edge (set ``valid_to``) - Graphiti's ``invalid_at``.
 
     The edge is preserved for point-in-time traversal and audit; it simply drops
     out of present-time queries. Returns the number of edges invalidated (0 or 1).
@@ -296,7 +296,7 @@ async def neighbors(
     Return entities reachable from ``entity`` within ``depth`` hops.
 
     ``direction``: ``out`` follows src→dst, ``in`` follows dst→src, ``any`` (default)
-    treats edges as undirected — the right default for COI / related-party reach.
+    treats edges as undirected - the right default for COI / related-party reach.
     Each neighbor is returned with its shortest hop distance; the edges traversed
     at the first hop are included for context.
     """
@@ -347,7 +347,7 @@ async def path(
     barrier_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    Shortest connection between two entities — the conflict-of-interest /
+    Shortest connection between two entities - the conflict-of-interest /
     related-party query. Returns the chain of edges linking ``src`` to ``dst``
     (empty when unconnected within ``max_depth``). Treats edges as undirected.
     """

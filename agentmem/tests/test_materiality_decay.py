@@ -1,7 +1,7 @@
 """
 Materiality-weighted retrieval decay.
 
-A fact's retrieval half-life scales with ``metadata.materiality`` — a client
+A fact's retrieval half-life scales with ``metadata.materiality`` - a client
 instruction or compliance flag stays retrievable long after a passing
 preference has faded. Ranking-only: storage never decays, the tag is
 deterministic caller metadata, and untagged facts keep the default half-life

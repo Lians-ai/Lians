@@ -389,7 +389,7 @@ class SetupApp:
 
         self._label(
             self.shell,
-            "Use less context. Get more AI.",
+            "Recover the task. Guard what done means.",
             foreground=TEXT,
             font=("Segoe UI", 22, "bold"),
             anchor="w",
@@ -397,9 +397,8 @@ class SetupApp:
         self._label(
             self.shell,
             (
-                "Lians gives each new task only the useful context it needs, so your AI apps "
-                "do not have to reread everything. Keep using them normally. No AI account "
-                "password or API key required."
+                "Lians restores current work, detects stale checkpoints, and separates measured "
+                "evidence from an agent's own claims. No AI account password or API key required."
             ),
             foreground=MUTED,
             font=("Segoe UI", 11),
@@ -422,7 +421,7 @@ class SetupApp:
         detected_text = (
             f"We found {len(detected)} AI app{'s' if len(detected) != 1 else ''}"
             if detected
-            else "Choose the AI apps you want to optimize"
+            else "Choose the AI coding apps you want to connect"
         )
         self._label(
             self.card,
@@ -500,8 +499,8 @@ class SetupApp:
         self.progress_bar.pack(fill="x", pady=(0, 12))
         steps = (
             ("protecting", "Protect your existing settings"),
-            ("connecting", "Optimize your AI apps"),
-            ("verifying", "Check that Lians is ready"),
+            ("connecting", "Connect Lians Guard"),
+            ("verifying", "Check that recovery is ready"),
         )
         for key, copy in steps:
             label = self._label(
@@ -514,7 +513,7 @@ class SetupApp:
             label.pack(fill="x", pady=2)
             self.step_labels[key] = label
 
-        self.status = tk.StringVar(value="Ready to optimize")
+        self.status = tk.StringVar(value="Ready to connect")
         self.status_label = self._label(
             self.card,
             textvariable=self.status,
@@ -528,7 +527,7 @@ class SetupApp:
         actions.pack(fill="x")
         self.install_button = tk.Button(
             actions,
-            text="Optimize my AI apps",
+            text="Connect Lians Guard",
             command=self._start_install,
             background=BLUE,
             foreground="white",
@@ -775,7 +774,7 @@ class SetupApp:
         connected = ", ".join(self.connected_labels)
         self._label(
             self.card,
-            "Your AI apps are optimized.",
+            "Lians Guard is connected.",
             background=PANEL,
             foreground=GREEN,
             font=("Segoe UI", 22, "bold"),
@@ -783,7 +782,7 @@ class SetupApp:
         ).pack(fill="x")
         self._label(
             self.card,
-            f"Lians is active in {connected}. Keep using the apps normally.",
+            f"Recovery is active in {connected}. Keep using the apps normally.",
             background=PANEL,
             foreground=TEXT,
             font=("Segoe UI", 11),
@@ -795,7 +794,7 @@ class SetupApp:
         try_card.pack(fill="x")
         self._label(
             try_card,
-            "Try it in two chats",
+            "Try recovery in two chats",
             background=BLUE_SOFT,
             foreground=TEXT,
             font=("Segoe UI", 12, "bold"),
@@ -1316,7 +1315,7 @@ class CompanionApp:
         self._render_connection_identity()
         self._label(
             hero_left,
-            "Agent lifeline",
+            "Current-state guard",
             background=self.colors["background"],
             foreground=self.colors["text"],
             font=self._display(32, "bold"),
@@ -1324,7 +1323,7 @@ class CompanionApp:
         ).pack(fill="x")
         self._label(
             hero_left,
-            "Extended usage. Better memory.",
+            "Recover work. See what is stale. Know what still has to pass.",
             background=self.colors["background"],
             foreground=self.colors["muted"],
             font=self._font(11),
@@ -1828,7 +1827,7 @@ class CompanionApp:
             self.notice.set(self._bridge_error)
             self.open_button.configure(state="disabled")
         elif self.bridge.running:
-            self.status.set("Lians is running")
+            self.status.set("Lians Guard is running")
             self.open_button.configure(state="normal")
             try:
                 snapshot = lifeline_snapshot(self.bridge.store, limit=3)

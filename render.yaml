@@ -28,7 +28,7 @@ services:
       - key: EMBEDDING_PROVIDER
         value: local
       - key: MASTER_ENCRYPTION_KEY
-        generateValue: true  # base64 256-bit — decodes to 32 bytes; pinned forever
+        generateValue: true  # base64 256-bit - decodes to 32 bytes; pinned forever
       - key: ADMIN_SECRET
         sync: false          # full administrative control; never share with the website
       - key: PROVISIONING_SECRET
@@ -97,7 +97,7 @@ services:
     ipAllowList: []          # empty = internal-only (no public access)
 
 databases:
-  # Postgres plan slugs are basic-256mb / basic-1gb / pro-* — NOT "standard".
+  # Postgres plan slugs are basic-256mb / basic-1gb / pro-* - NOT "standard".
   - name: agentmem-pg
     plan: basic-256mb
     region: oregon

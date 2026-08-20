@@ -27,7 +27,7 @@ GRANT  INSERT, SELECT             ON event_log     TO lians_app;
 GRANT  INSERT, SELECT             ON merkle_anchors TO lians_app;
 ```
 
-Run the app as `lians_app` (a **non-superuser, non-BYPASSRLS** role — the same role
+Run the app as `lians_app` (a **non-superuser, non-BYPASSRLS** role - the same role
 RLS isolation requires). Now even a compromised app cannot rewrite history.
 
 ## 2. Object-locked backups & exports
@@ -35,7 +35,7 @@ RLS isolation requires). Now even a compromised app cannot rewrite history.
 Send audit exports (`/v1/admin/audit/export`) and database backups to storage with
 **immutability enabled**:
 
-- **AWS S3 Object Lock — Compliance mode** with a retention period ≥ your
+- **AWS S3 Object Lock - Compliance mode** with a retention period ≥ your
   regulatory window (17a-4 is typically 6 years; the first 2 years readily
   accessible). Compliance mode cannot be shortened or bypassed, even by the root
   account.
@@ -62,7 +62,7 @@ curl -H "X-API-Key: $KEY" https://lians.internal/v1/compliance/worm
 #     remain operator responsibilities (docs/worm-storage.md)" }
 ```
 
-Set `WORM_MODE=true` only after §1 and §2 are actually in place — the flag asserts
+Set `WORM_MODE=true` only after §1 and §2 are actually in place - the flag asserts
 the physical control to examiners; it does not create it.
 
 ## 17a-4(f) mapping

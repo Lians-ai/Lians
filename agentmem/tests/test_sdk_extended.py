@@ -46,7 +46,7 @@ T2 = datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 
 # ===========================================================================
-# LocalLiansClient — batch_add
+# LocalLiansClient - batch_add
 # ===========================================================================
 
 class TestLocalBatchAdd:
@@ -108,7 +108,7 @@ class TestLocalBatchAdd:
 
 
 # ===========================================================================
-# LocalLiansClient — recall_at
+# LocalLiansClient - recall_at
 # ===========================================================================
 
 class TestLocalRecallAt:
@@ -152,7 +152,7 @@ class TestLocalRecallAt:
 
 
 # ===========================================================================
-# LocalLiansClient — supersession review / confirm / reject
+# LocalLiansClient - supersession review / confirm / reject
 # ===========================================================================
 
 class TestLocalSupersessionReview:
@@ -264,7 +264,7 @@ class TestLocalSupersessionReview:
 
 
 # ===========================================================================
-# LiansClient (sync HTTP) — new method delegation
+# LiansClient (sync HTTP) - new method delegation
 # ===========================================================================
 
 class TestSyncHTTPClientExtended:

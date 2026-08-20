@@ -1,7 +1,7 @@
 """
 Subject identification and PII tagging.
 
-Layer 1: explicit subject_id on write (preferred — caller knows).
+Layer 1: explicit subject_id on write (preferred - caller knows).
 Layer 2: hook for future PII detection (stub for now).
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ async def destroy_subject_key(
 
 def detect_pii(content: str) -> Optional[str]:
     """
-    Stub PII detector — returns a suggested subject_id prefix if personal data
+    Stub PII detector - returns a suggested subject_id prefix if personal data
     is detected, None otherwise.  Replace with a real detector (Presidio, etc.)
     before handling actual PII.
     """

@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.4",
   "name": "lians-memory",
-  "display_name": "Lians",
+  "display_name": "Lians Guard",
   "version": "0.5.0",
-  "description": "Deeper understanding, compact memory, and user-owned control inside the agents you already use.",
-  "long_description": "Lians is a local understanding, memory, control, and verification layer for AI agents. It turns vague requests into bounded working briefs, asks only questions that materially change the work, and supplies relevant current state without replaying an entire history. Observe mode maps content-free activity without changing agent context. Guide mode supplies bounded understanding, current state, tasks, and recovery context. Protect mode adds explicit approval boundaries and reports where a host cannot technically enforce them. Repository verification binds frozen intent and the actual Git diff into a signed receipt, with optional exhaustive proofs over declared finite models. The local 3D Work Graph makes projects, agents, decisions, evidence, blockers, and provenance inspectable without requiring an AI account password, provider API key, hosted prompt proxy, or replacement chat interface.",
+  "description": "Recover current agent work, reject stale state, and gate readiness with typed evidence.",
+  "long_description": "Lians Guard is a local current-state and completion guard for AI coding agents. It recovers a bounded current task across supported sessions, records local Git workspace fingerprints, and keeps the completion gate closed while criteria are missing or constraints are failed, unknown, or blocked. Agent-facing tools cannot grant themselves measured or human-confirmed trust. Trusted local evidence requires a Lians-owned verifier, GitHub Actions evidence requires an exact attestation and commit match plus interactive authorization of its criterion mapping, and human evidence requires interactive confirmation. READY FOR HUMAN REVIEW means the configured evidence gate passed and human review is required. Free local memory and recovery work without an AI account password, provider API key, hosted prompt proxy, or replacement chat interface. Automatic requirement-level invalidation and shared team Guard workflows remain preview or planned capabilities and must not be represented as generally available.",
   "author": {
     "name": "Lians",
     "email": "info@lians.ai",
@@ -82,15 +82,15 @@
     },
     {
       "name": "start_task",
-      "description": "Create a durable goal, definition of done, and constraints shared by every agent."
+      "description": "Create a durable current task with success criteria and constraints shared by supported agents."
     },
     {
       "name": "checkpoint_task",
-      "description": "Record task progress, evidence, constraints, blockers, and current action."
+      "description": "Record task progress, declared evidence, constraints, blockers, current action, and local workspace fingerprint. Self-declared trusted labels remain agent attestations."
     },
     {
       "name": "task_status",
-      "description": "Verify completion evidence and detect blockers or drift before an agent stops."
+      "description": "Show missing or untrusted criteria, failed or unknown constraints, blockers, drift, and readiness for human review."
     },
     {
       "name": "task_context",
@@ -124,14 +124,13 @@
   "tools_generated": false,
   "keywords": [
     "ai",
-    "agent-memory",
+    "task-recovery",
     "agent-reliability",
-    "agent-control",
-    "agent-observability",
-    "agent-understanding",
-    "formal-verification",
+    "completion-gate",
+    "stale-state",
+    "typed-evidence",
+    "human-review",
     "context-engineering",
-    "task-orchestration",
     "local-first",
     "encrypted",
     "cursor",

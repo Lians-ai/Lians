@@ -1,4 +1,4 @@
-# LOCOMO judged benchmark — Lians 92.9% (vs Mem0's published 91.6)
+# LOCOMO judged benchmark - Lians 92.9% (vs Mem0's published 91.6)
 
 **Date:** 2026-07-09 · **Protocol:** LLM-judged QA accuracy ("J-score"), measured by the
 **unmodified [mem0ai/memory-benchmarks](https://github.com/mem0ai/memory-benchmarks) harness**
@@ -9,7 +9,7 @@
 
 ## Headline
 
-On the LLM-judged LOCOMO protocol — the metric on which Mem0 publishes **91.6** —
+On the LLM-judged LOCOMO protocol - the metric on which Mem0 publishes **91.6** -
 Lians scores **92.9%** at the same top-200 retrieval cutoff, evaluated by Mem0's own
 open-source harness with zero modifications: their answer-generation prompt, their
 judge prompt and rubric, their metrics code, their default models. The only Lians
@@ -51,7 +51,7 @@ The mem0 harness separates retrieval from judging. We used exactly that seam:
   with **temporal-context smoothing** (a memory inherits 0.3× its strongest
   temporally-adjacent neighbor's semantic score, ≤1 h gap) and **temporal query
   grounding** (+0.1 for memories inside a calendar window named in the query).
-  No MMR, no reranker, no LLM anywhere in the retrieval path — recall is
+  No MMR, no reranker, no LLM anywhere in the retrieval path - recall is
   deterministic.
 - **Memory contents:** raw dialogue turns (speaker-prefixed, photo captions included).
   No LLM fact extraction was used for this run.
@@ -61,7 +61,7 @@ The mem0 harness separates retrieval from judging. We used exactly that seam:
 ### Token note
 
 Lians memories are raw turns (~25 tokens each), so the top-200 payload is ≈5–6k
-tokens per question — in the same band as Mem0's "under 7,000 tokens per retrieval
+tokens per question - in the same band as Mem0's "under 7,000 tokens per retrieval
 call" claim for their 91.6.
 
 ## Disclosures
@@ -70,11 +70,11 @@ call" claim for their 91.6.
   Ours was produced by running their published harness ourselves (single run;
   gpt-5 answerer/judge introduce some run-to-run variance, historically ±0.5pt on
   samples this size). The right head-to-head is both systems through this harness in
-  one sitting — that run (their OSS backend vs ours, same models, same day) is the
+  one sitting - that run (their OSS backend vs ours, same models, same day) is the
   planned follow-up.
 - **What differs between systems is memory content by design.** Mem0 stores
   LLM-extracted facts; Lians (this run) stores raw turns. The harness judges
-  whatever the memory system returns — that asymmetry is the product comparison,
+  whatever the memory system returns - that asymmetry is the product comparison,
   not a protocol flaw.
 - **Category 5 (adversarial, 446 questions) is excluded by the harness itself**
   (`CATEGORIES_TO_EVALUATE = [1,2,3,4]`), matching Mem0's published methodology.
@@ -103,13 +103,13 @@ python -m benchmarks.locomo.run --project-name lians_arctic --evaluate-only \
 were present in the retrieved 200:
 
 - **90 answer-side** (evidence retrieved, answer still wrong): aggregation questions
-  ("what activities has X done?" — items scattered across many turns), counting,
+  ("what activities has X done?" - items scattered across many turns), counting,
   wrong-instance selection between similar events, and specificity mismatches
   against the gold phrasing.
 - **20 retrieval-side**: mostly date-pinned or low-vocabulary queries.
 
 Follow-up work in progress targets both: opt-in **LLM fact distillation at ingest**
-(`src/lians/enrichment.py` — derived, dated, attributed fact memories stored
+(`src/lians/enrichment.py` - derived, dated, attributed fact memories stored
 alongside raw turns; the answer-side failures are largely aggregation over raw
 dialogue) and the temporal grounding above (which took evidence_hit@10 from 82.4%
 to 84.3% and is already included in this run's retrieval).

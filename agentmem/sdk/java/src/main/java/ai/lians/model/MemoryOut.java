@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
  * A single memory returned by recall, snapshot, or fact-history.
  *
  * <p>{@code content} is {@code null} when the memory was crypto-shredded
- * (GDPR/HIPAA erasure) — its existence and metadata survive, the content does not.
+ * (GDPR/HIPAA erasure) - its existence and metadata survive, the content does not.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class MemoryOut {

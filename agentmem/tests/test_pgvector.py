@@ -312,7 +312,7 @@ class TestRLSInformationBarriers:
 
     async def test_barrier_group_isolation(self, pg_engine):
         """
-        A session scoped to barrier group A must not see memories tagged B —
+        A session scoped to barrier group A must not see memories tagged B -
         enforced at the database layer, not the application.
 
         The CI/postgres-image login is a superuser, and superusers bypass RLS
@@ -361,14 +361,14 @@ class TestRLSInformationBarriers:
                 visible = {str(r[0]) for r in rows}
             finally:
                 await db.execute(text("RESET ROLE"))
-                # Roll back everything — the inserts, CREATE ROLE, and GRANT are all
+                # Roll back everything - the inserts, CREATE ROLE, and GRANT are all
                 # transactional, so nothing (including the role) persists. This also
                 # avoids DROP ROLE failing while the role still holds the GRANT.
                 await db.rollback()
 
         assert id_a in visible, "group_a must see its own memory"
         assert id_b not in visible, (
-            "RLS FAILED: group_a read a group_b memory — the barrier_isolation "
+            "RLS FAILED: group_a read a group_b memory - the barrier_isolation "
             "policy is not RESTRICTIVE, or the barrier session var was not set"
         )
 

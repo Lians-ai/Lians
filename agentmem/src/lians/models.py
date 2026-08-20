@@ -68,10 +68,10 @@ class _FlexVector(sa_types.TypeDecorator):
             # Fallback: raw string (no result processor ran, e.g. direct text
             # SQL query bypassing the ORM type system).
             return [float(x) for x in value.strip("[]").split(",")]
-        return value  # numpy ndarray or list — both are iterable as floats
+        return value  # numpy ndarray or list - both are iterable as floats
 
 
-EMBED_DIM = get_settings().embedding_dim  # 1024 — locked before first migration
+EMBED_DIM = get_settings().embedding_dim  # 1024 - locked before first migration
 
 
 def _now():
@@ -80,7 +80,7 @@ def _now():
 
 
 class Memory(Base):
-    """Content store — encrypted, erasable."""
+    """Content store - encrypted, erasable."""
 
     __tablename__ = "memories"
 
@@ -103,7 +103,7 @@ class Memory(Base):
     superseded_by = Column(UUID(as_uuid=True), ForeignKey("memories.id"), nullable=True)
     supersession_confidence = Column(Float, nullable=True)
 
-    # Information barrier group — only agents in the same group can recall this memory.
+    # Information barrier group - only agents in the same group can recall this memory.
     # NULL means the memory is untagged (visible to all agents in the namespace, including
     # those with no barrier group assignment such as compliance officers).
     barrier_group = Column(String, nullable=True, index=True)
@@ -115,7 +115,7 @@ class Memory(Base):
 
     __table_args__ = (
         Index("ix_memories_ns_agent_event", "namespace", "agent_id", "event_time"),
-        # HNSW index — PostgreSQL/pgvector only; ignored on other dialects
+        # HNSW index - PostgreSQL/pgvector only; ignored on other dialects
         Index(
             "ix_memories_embedding_hnsw",
             "embedding",
@@ -214,7 +214,7 @@ class ReflectionProposal(Base):
 
 
 class SubjectKey(Base):
-    """Per-subject encryption keys — destroy to crypto-shred all their data.
+    """Per-subject encryption keys - destroy to crypto-shred all their data.
 
     Keyed by (namespace, subject_id): subject_id is only unique *within* a
     tenant, so a bare subject_id PK would let two tenants share one DEK and let
@@ -231,7 +231,7 @@ class SubjectKey(Base):
 
 
 class EventLog(Base):
-    """Append-only audit trail — never updated, never deleted."""
+    """Append-only audit trail - never updated, never deleted."""
 
     __tablename__ = "event_log"
 
@@ -465,7 +465,7 @@ class AgentBarrierGroup(Base):
     OR memories with no barrier_group (public within the namespace).  Agents with
     no assignment (e.g. compliance officers) see everything in the namespace.
 
-    Walls are enforced at recall time by hybrid_recall — they are NOT enforced at
+    Walls are enforced at recall time by hybrid_recall - they are NOT enforced at
     write time so that a memory can be tagged with any group by any writer.
     """
 
@@ -689,9 +689,9 @@ class ConflictFlag(Base):
 
     Both memories remain valid and visible until a human resolves the conflict.
     Resolution options:
-      accept_a — memory_a is authoritative; memory_b is invalidated
-      accept_b — memory_b is authoritative; memory_a is invalidated
-      dismiss   — both memories are left live (sources legitimately differ)
+      accept_a - memory_a is authoritative; memory_b is invalidated
+      accept_b - memory_b is authoritative; memory_a is invalidated
+      dismiss - both memories are left live (sources legitimately differ)
 
     A "conflict_detected" audit event is written at detection time.
     A "conflict_resolved" audit event is written at resolution time.
@@ -728,10 +728,10 @@ class WebhookEndpoint(Base):
     receivers can verify authenticity without trusting the network.
 
     Supported event types:
-      memory.superseded       — a memory was invalidated by a newer fact
-      memory.conflict         — a same-time contradiction was detected
-      memory.erased           — a subject's DEK was destroyed (GDPR Art. 17)
-      supersession.rejected   — a human reviewer rejected a supersession
+      memory.superseded - a memory was invalidated by a newer fact
+      memory.conflict - a same-time contradiction was detected
+      memory.erased - a subject's DEK was destroyed (GDPR Art. 17)
+      supersession.rejected - a human reviewer rejected a supersession
     """
 
     __tablename__ = "webhook_endpoints"
@@ -801,11 +801,11 @@ class NamespacePolicy(Base):
     """
     Per-namespace retention and compliance policy.
 
-    content_ttl_days  — days after ingestion_time before memory content is pruned.
+    content_ttl_days - days after ingestion_time before memory content is pruned.
                         NULL means retain forever.
-    audit_retention_days — minimum days to keep event_log rows (SEC 17a-4 / CFTC default 5yr).
-    legal_hold        — when True, prune is blocked regardless of ttl settings.
-    stripe_customer_id — Stripe Customer ID for usage metering.  NULL = not billed.
+    audit_retention_days - minimum days to keep event_log rows (SEC 17a-4 / CFTC default 5yr).
+    legal_hold - when True, prune is blocked regardless of ttl settings.
+    stripe_customer_id - Stripe Customer ID for usage metering.  NULL = not billed.
     """
 
     __tablename__ = "namespace_policies"
@@ -868,23 +868,23 @@ class IdempotencyKey(Base):
 
 class Relationship(Base):
     """
-    Bitemporal relationship edge between two entities — the knowledge-graph layer.
+    Bitemporal relationship edge between two entities - the knowledge-graph layer.
 
     A directed triplet ``src_entity --rel_type--> dst_entity`` that inherits the
     same temporal, audit, and information-barrier machinery as ``memories``:
 
-      valid_from / valid_to   — system-time window the edge was believed (Graphiti's
+      valid_from / valid_to - system-time window the edge was believed (Graphiti's
                                 valid_at / invalid_at). NULL valid_to = currently live.
-      event_time              — business time the relationship became true.
-      invalidated_by          — the edge that superseded this one (exclusive rels).
-      barrier_group           — RLS information-barrier tag, identical semantics to
+      event_time - business time the relationship became true.
+      invalidated_by - the edge that superseded this one (exclusive rels).
+      barrier_group - RLS information-barrier tag, identical semantics to
                                 memories: an edge in another barrier is invisible.
-      subject_id              — optional data-subject link so crypto-shred reaches edges.
+      subject_id - optional data-subject link so crypto-shred reaches edges.
 
     Powers compliance graph queries that are inherently relational:
-      legal      — conflict-of-interest reachability (ABA 1.7/1.9)
-      finance    — related-party / beneficial-ownership within N hops (SEC, AML/KYC)
-      healthcare — care-network and referral-pattern traversal (anti-kickback)
+      legal - conflict-of-interest reachability (ABA 1.7/1.9)
+      finance - related-party / beneficial-ownership within N hops (SEC, AML/KYC)
+      healthcare - care-network and referral-pattern traversal (anti-kickback)
     """
 
     __tablename__ = "relationships"

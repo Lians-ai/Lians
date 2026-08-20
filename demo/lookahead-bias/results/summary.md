@@ -2,9 +2,9 @@
 
 | run | retrieval | total return | Sharpe | max drawdown |
 |---|---|---:|---:|---:|
-| **Contaminated** | `recall()` — present-time, full history visible | +41.3% | **3.9** | -4.3% |
+| **Contaminated** | `recall()` - present-time, full history visible | +41.3% | **3.9** | -4.3% |
 | **Honest** | `recall_at(as_of=decision_time)` | -0.9% | -0.1 | -10.1% |
-| Buy & hold | — | +1.4% | 0.4 | -5.4% |
+| Buy & hold | - | +1.4% | 0.4 | -5.4% |
 
 Contaminated retrievals: **858** (see `receipts.md` / `receipts.csv`).
 
@@ -37,7 +37,7 @@ is_clean           = False
 
 `future_event` flags are the leak this demo trades on: the underlying event
 had not happened yet at the checkpoint. `late_revision` flags mark memories
-whose event is old but whose *ingestion* postdates the checkpoint — in this
+whose event is old but whose *ingestion* postdates the checkpoint - in this
 replayed demo that is every note (we ingested the whole history today), which
 is exactly what a replayed backtest looks like and why the detector treats a
 replay as contaminated until retrieval is pinned with `as_of`.

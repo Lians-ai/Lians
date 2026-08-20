@@ -6,7 +6,7 @@
 
 # Lians C SDK
 
-Financial-grade agent memory for native, low-latency, and embedded systems —
+Financial-grade agent memory for native, low-latency, and embedded systems -
 bitemporal recall, a tamper-evident audit chain, crypto-shred erasure, information
 barriers, and a relationship graph (conflict-of-interest / related-party /
 care-network).
@@ -91,7 +91,7 @@ See [`examples/example.c`](examples/example.c) for a complete program.
 
 Every call returns a `lians_response_t { long status; char *body; }`:
 - `status` is the HTTP status code, or `< 0` if the request never completed.
-- `body` is a malloc'd JSON string — release it with `lians_response_free()`.
+- `body` is a malloc'd JSON string - release it with `lians_response_free()`.
 
 ## Memory & threading
 
@@ -102,7 +102,7 @@ Every call returns a `lians_response_t { long status; char *body; }`:
 
 ## Why C + Lians
 
-mem0 ships Python/TypeScript only; Zep adds Go. Neither offers a C SDK — yet the
+mem0 ships Python/TypeScript only; Zep adds Go. Neither offers a C SDK - yet the
 lowest-latency and most regulated systems (HFT, exchange gateways, on-prem medical
 and legal devices) are native. This SDK brings the full compliance memory layer and
 the relationship graph to them. See the

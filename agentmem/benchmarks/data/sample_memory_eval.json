@@ -15,7 +15,7 @@
         {
           "date": "2026-03-15",
           "turns": [
-            {"speaker": "user", "text": "Big news this week — I got a raise."},
+            {"speaker": "user", "text": "Big news this week - I got a raise."},
             {"speaker": "user", "text": "My salary at Acme is now 140000 dollars per year.",
              "metadata": {"ticker": "USER_SALARY", "metric": "amount"}},
             {"speaker": "user", "text": "I also moved over to the analytics team at Acme."}

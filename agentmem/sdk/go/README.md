@@ -6,12 +6,12 @@
 
 # Lians Go SDK
 
-Financial-grade agent memory for Go — bitemporal recall, a tamper-evident audit chain,
+Financial-grade agent memory for Go - bitemporal recall, a tamper-evident audit chain,
 crypto-shred erasure, information barriers, and a relationship graph for
 conflict-of-interest / related-party / care-network queries.
 
 Standard library only (`net/http` + `encoding/json`), `context`-aware, and safe
-for concurrent use. This puts Lians on parity with Zep's Go SDK — while Lians also
+for concurrent use. This puts Lians on parity with Zep's Go SDK - while Lians also
 ships Java and C, which neither mem0 nor Zep offers.
 
 ## Install
@@ -59,7 +59,7 @@ func main() {
 		fmt.Println(m.EventTime, *m.Content)
 	}
 
-	// Point-in-time — what did we know on a past date?
+	// Point-in-time - what did we know on a past date?
 	past, _ := c.RecallAt(ctx, "equity-desk", "NVDA guidance",
 		time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC), 5)
 	_ = past
@@ -79,7 +79,7 @@ c.BacktestCheck(ctx, "equity-desk", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 c.EraseSubject(ctx, "MRN-00042", "GDPR-REQ-2026-001")
 c.VerifyChain(ctx, "your-namespace") // requires admin secret
 
-// Relationship graph — conflict-of-interest reachability
+// Relationship graph - conflict-of-interest reachability
 c.Relate(ctx, lians.RelateRequest{AgentID: "matter-7", SrcEntity: "Attorney",
 	RelType: "represented", DstEntity: "ClientX", EventTime: t})
 c.Relate(ctx, lians.RelateRequest{AgentID: "matter-7", SrcEntity: "ClientX",
@@ -104,7 +104,7 @@ c.RecallNear(ctx, "equity-desk", "earnings", "FundA", "ticker", 5)
 
 ```bash
 cd agentmem/sdk/go
-go test ./...   # runs against an in-process httptest server — no live Lians needed
+go test ./...   # runs against an in-process httptest server - no live Lians needed
 ```
 
 See the [mem0](../../../docs/compare-mem0.md) and [Zep/Graphiti](../../../docs/compare-zep.md)

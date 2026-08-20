@@ -1,5 +1,5 @@
 """
-Healthcare domain adapter — patient ID, condition, medication normalization.
+Healthcare domain adapter - patient ID, condition, medication normalization.
 
 This adapter is the ONLY place in AgentMem where healthcare-specific concepts
 (patient identifiers, ICD-10 codes, NPI numbers, medication names) exist.
@@ -7,15 +7,15 @@ This adapter is the ONLY place in AgentMem where healthcare-specific concepts
 PHI scope
 ---------
 The following structured keys frequently contain PHI under HIPAA:
-  patient_id   — maps to MRN, member ID, beneficiary ID
-  encounter_id — hospital visit / admission reference
-  provider_id  — NPI-formatted clinician identifier
+  patient_id - maps to MRN, member ID, beneficiary ID
+  encounter_id - hospital visit / admission reference
+  provider_id - NPI-formatted clinician identifier
 
 AgentMem's per-subject AES-256-GCM encryption and crypto-shred erasure
 (POST /v1/erase with subject_id=<patient_id>) satisfy:
-  HIPAA §164.312(a)(2)(iv) — Encryption
-  HIPAA §164.312(c)(1)     — Integrity (hash chain; content cannot be altered)
-  HIPAA §164.312(e)(2)(ii) — Encryption in transit (enforced at the TLS layer)
+  HIPAA §164.312(a)(2)(iv) - Encryption
+  HIPAA §164.312(c)(1) - Integrity (hash chain; content cannot be altered)
+  HIPAA §164.312(e)(2)(ii) - Encryption in transit (enforced at the TLS layer)
 
 Information barriers (RLS) enforce access controls per HIPAA §164.312(a)(1)
 (Access Control) when barrier_group is set to a care-team or department identifier.
@@ -158,17 +158,17 @@ class HealthcareAdapter:
     Healthcare domain adapter: patient/encounter/provider normalization.
 
     Enables keyed supersession on patient-condition pairs, encounter chains,
-    and medication changes — the same temporal correctness engine used for
+    and medication changes - the same temporal correctness engine used for
     financial guidance revisions, applied to clinical fact updates.
 
     Example supersession chains this enables:
-      patient_id=MRN-001, condition=E11.9 (Type 2 DM) — tracks glycemic control
+      patient_id=MRN-001, condition=E11.9 (Type 2 DM) - tracks glycemic control
         updates across encounters with correct event_time ordering
-      patient_id=MRN-001, medication=metformin — tracks dose titration chain
+      patient_id=MRN-001, medication=metformin - tracks dose titration chain
         so the agent always recalls the current dosage, not the starting one
 
     Point-in-time recall (as_of) answers: "What did the care agent know about
-    this patient at 3am on the night of admission?" — a clinical and legal question
+    this patient at 3am on the night of admission?" - a clinical and legal question
     that no other memory layer can answer correctly under out-of-order ingestion.
     """
 
@@ -220,7 +220,7 @@ class HealthcareAdapter:
         patient_id:
             MRN, member ID, or any identifier that maps to the patient_id key.
         condition:
-            ICD-10 code or description — normalized to canonical ICD-10 format.
+            ICD-10 code or description - normalized to canonical ICD-10 format.
         """
         from ...memory_service import get_structured_fact_history
 

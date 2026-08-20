@@ -29,6 +29,16 @@ body:
     attributes:
       label: Relevant documentation
       description: Link to the framework's official integration or contribution documentation.
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Adapter acceptance path
+      description: Check what you can verify with a synthetic project. See docs/integration-adapter-guide.md.
+      options:
+        - label: Connect without collecting the user's AI account password
+        - label: Recall one saved decision in a fresh task
+        - label: Correct the decision and exclude the stale value from current recall
+        - label: Confirm deletion and document uninstall
   - type: dropdown
     id: contribution
     attributes:

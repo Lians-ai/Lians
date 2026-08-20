@@ -1,6 +1,6 @@
 # Lians Agent Memory MCPB
 
-This directory packages Lians—the memory tool for any AI agent—as a local MCP
+This directory packages Lians - the memory tool for any AI agent - as a local MCP
 bundle. It gives a compatible host durable remember, recall, inspect, correct,
 and confirmed-forget tools.
 

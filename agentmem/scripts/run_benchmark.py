@@ -42,7 +42,7 @@ _BOLD   = "\033[1m"
 _RESET  = "\033[0m"
 
 def _ok(s):  return f"{_GREEN}âœ“{_RESET} {s}"
-def _fail(s): return f"{_RED}âœ—{_RESET} {s}"
+def _fail(s): return f"{_RED}âœ - {_RESET} {s}"
 def _hdr(s):  return f"\n{_BOLD}{s}{_RESET}"
 
 

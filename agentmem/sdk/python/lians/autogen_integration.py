@@ -10,7 +10,7 @@ Install::
     pip install lians[autogen]
     # or: pip install autogen-agentchat autogen-core
 
-Usage — AssistantAgent with function tools (AutoGen v0.4 async)::
+Usage - AssistantAgent with function tools (AutoGen v0.4 async)::
 
     from autogen_agentchat.agents import AssistantAgent
     from autogen_ext.models import OpenAIChatCompletionClient
@@ -28,7 +28,7 @@ Usage — AssistantAgent with function tools (AutoGen v0.4 async)::
         system_message="You are an equity analyst with persistent compliance-grade memory.",
     )
 
-Usage — ConversableAgent (AutoGen v0.2 / classic)::
+Usage - ConversableAgent (AutoGen v0.2 / classic)::
 
     from autogen import ConversableAgent
     from lians import LocalLiansClient
@@ -45,13 +45,13 @@ Usage — ConversableAgent (AutoGen v0.2 / classic)::
 
 Four tools are returned by build_autogen_tools():
 
-- ``agentmem_remember``    — store a fact with event timestamp and metadata
-- ``agentmem_recall``      — retrieve current facts by semantic search
-- ``agentmem_recall_at``   — retrieve facts valid at a specific past date (compliance)
-- ``agentmem_flush``       — batch-persist durable facts before context compaction
+- ``agentmem_remember`` - store a fact with event timestamp and metadata
+- ``agentmem_recall`` - retrieve current facts by semantic search
+- ``agentmem_recall_at`` - retrieve facts valid at a specific past date (compliance)
+- ``agentmem_flush`` - batch-persist durable facts before context compaction
 
 The ``agentmem_recall_at`` tool supports AutoGen multi-agent compliance workflows:
-"What did the risk-assessment agent know before the trade was placed?" — with a
+"What did the risk-assessment agent know before the trade was placed?" - with a
 tamper-evident SHA-256 audit chain, not a probabilistic reconstruction.
 """
 from __future__ import annotations
@@ -69,7 +69,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
     Parameters
     ----------
     client:
-        Any Lians client — ``LocalLiansClient``, ``LiansClient``, or
+        Any Lians client - ``LocalLiansClient``, ``LiansClient``, or
         ``AsyncLiansClient``.  Async clients are detected automatically.
     agent_id:
         The agent namespace to read/write memories under.
@@ -124,7 +124,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
 
         Facts are AES-256-GCM encrypted at rest, written to a SHA-256 audit chain,
         and automatically superseded when a newer value for the same entity+attribute
-        arrives — so recall always returns the current truth.
+        arrives - so recall always returns the current truth.
 
         :param content: The fact or observation to store.
         :param event_time_iso: ISO 8601 timestamp of when the event occurred.
@@ -154,7 +154,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
         Retrieve current relevant facts from Lians.
 
         Superseded facts are excluded at the DB layer. Only the most recent
-        valid value for each fact is returned — your agent never sees stale context.
+        valid value for each fact is returned - your agent never sees stale context.
 
         :param query: Natural-language query. Example: 'NVDA guidance FY2026'
         :param k: Number of memories to return (1–20). Default 5.
@@ -173,7 +173,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
         """
         Retrieve facts valid at a specific point in time (compliance/audit path).
 
-        Returns the exact knowledge state at the given timestamp — supports
+        Returns the exact knowledge state at the given timestamp - supports
         out-of-order ingestion correctly. Use in multi-agent workflows where one
         agent must reconstruct what another agent knew before a decision.
 
@@ -193,7 +193,7 @@ def build_autogen_tools(client: Any, agent_id: str) -> list:
         """
         Persist a batch of durable facts NOW, before context compaction.
 
-        Call when the conversation is about to be summarized or truncated —
+        Call when the conversation is about to be summarized or truncated -
         anything not written here may be lost when older turns are compacted
         away. Extract the facts worth keeping (decisions, constraints, client
         instructions, corrections, commitments), not chit-chat. Each write is

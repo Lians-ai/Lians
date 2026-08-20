@@ -1,4 +1,4 @@
-# Lian Memory Governor — Integration Plan
+# Lian Memory Governor - Integration Plan
 
 Last reviewed: 2026-07-01.
 
@@ -7,7 +7,7 @@ This document is the alignment artifact for folding the **Lian Memory Governor**
 so both maintainers can react to one page before any code moves.
 
 The goal is a single decision: **the Governor becomes the governance/review
-*surface* of Lians, backed by the Lians engine — not a second product with a
+*surface* of Lians, backed by the Lians engine - not a second product with a
 second engine.**
 
 ## TL;DR
@@ -37,7 +37,7 @@ The Governor and the Lians engine do substantially the same job:
 | Capability | Governor (MVP) | Lians engine | Verdict |
 |---|---|---|---|
 | Admission / quarantine | `governor.decide()` + `policy.py` (rule-based) | `admission.py` + `admission_service.py` review queue (PII/PHI/MNPI/injection, blocked sources, audit-logged) | Lians ahead |
-| Supersession / conflict | validity windows in `memory.commit_proposals()` | `supersession.py` — `CONFIRMS / SUPERSEDES / CONTRADICTS_SAME_TIME` + LLM adjudication | Lians ahead |
+| Supersession / conflict | validity windows in `memory.commit_proposals()` | `supersession.py` - `CONFIRMS / SUPERSEDES / CONTRADICTS_SAME_TIME` + LLM adjudication | Lians ahead |
 | Point-in-time recall | `recall_at()` | `recall_at` (MCP tool, cache key, audit reconstruction) | Both have it |
 | Audit chain | SHA-256 append-only chain (`audit.py`) | `audit_chain.py` + `merkle_audit.py` | Lians ahead |
 | Storage | SQLite | Postgres/pgvector, RLS, KMS/DEK encryption | Lians ahead |
@@ -50,7 +50,7 @@ Two consequences:
    no encryption, no tenant isolation, rule-based only) and duplicates
    maintenance.
 2. **A two-person team cannot run two products or two go-to-markets.** Lians'
-   positioning is "regulated AI memory" — institutional, examiner-grade. A
+   positioning is "regulated AI memory" - institutional, examiner-grade. A
    human-in-the-loop review workflow for what enters agent memory *amplifies*
    that story; a developer-facing embeddable SDK is a different buyer and a
    distraction. So we lead with the governance surface and keep local-first as
@@ -71,10 +71,10 @@ One governance layer, one contract, a pluggable store with two backends:
            dev / demo / OSS     supersession classifier · recall_at
 ```
 
-- **Local-first tier** — today's SQLite engine. Zero infra, runs on a laptop or
+- **Local-first tier** - today's SQLite engine. Zero infra, runs on a laptop or
   at the edge. Role: dev/demo/test harness and OSS on-ramp that lands users
   before they graduate to hosted Lians.
-- **Governed production tier** — same Governor API, contract, and review
+- **Governed production tier** - same Governor API, contract, and review
   workflow; `LiansStore` delegates storage, crypto, tenancy, supersession, and
   recall to the Lians engine. A project graduates local → production without
   changing a line of Governor-facing code.
@@ -92,7 +92,7 @@ Methods `Memory` currently calls on the store:
 - `list_memories(namespace, user_id, agent_id)`
 - `save_proposal(proposal)` / `get_proposal(id)` / `update_proposal(proposal)`
 - `get_memory(id)` / `update_memory(memory)` / `save_memory(memory)`
-- `connection.execute(...)` — used once in `_episode_event_time`
+- `connection.execute(...)` - used once in `_episode_event_time`
 
 **One cleanup required:** `Memory._episode_event_time` reaches into
 `store.connection.execute(...)`, which leaks SQLite specifics into the engine.
@@ -109,35 +109,35 @@ engine rather than duplicating them:
 |---|---|---|
 | `similarity()` (Jaccard) | embeddings + ranking/MMR | Route matching through Lians on the Lians backend |
 | `decide()` ADD/CONFIRM/SUPERSEDE | `supersession` relations `CONFIRMS`/`SUPERSEDES`/`CONTRADICTS_SAME_TIME` | Align action vocabulary so proposals ↔ relations are interoperable |
-| `REFINE` (narrowing) | *(gap — Lians has no explicit narrowing relation)* | Harvest into Lians supersession as a first-class relation |
+| `REFINE` (narrowing) | *(gap - Lians has no explicit narrowing relation)* | Harvest into Lians supersession as a first-class relation |
 | `IGNORE` (too vague) | *(pre-admission filter Lians may lack)* | Add vagueness pre-filter as an admission reason |
 | SHA-256 chain | `audit_chain` + `merkle_audit` | Governor emits proposal events into the Lians audit chain |
 | Quarantine policy | `admission.py` enforce mode | Governor quarantine defers to Lians admission on the Lians backend |
 
 Net new to Lians from this work: the **REFINE relation**, the **vagueness
-pre-filter**, and — the real prize — the **Memory-PR review surface**.
+pre-filter**, and - the real prize - the **Memory-PR review surface**.
 
 ## Plan of record
 
-**Phase 0 — align (this doc).** Agree the Governor is a layer on Lians, not a
+**Phase 0 - align (this doc).** Agree the Governor is a layer on Lians, not a
 second product. Confirm the primary surface is the governance/review console.
 
-**Phase 1 — pluggable store (first PR).** Extract the `MemoryStore` protocol;
+**Phase 1 - pluggable store (first PR).** Extract the `MemoryStore` protocol;
 fix the `_episode_event_time` leak; `SQLiteStore` conforms unchanged; full test
 suite stays green. Low-risk, reversible, unblocks everything.
 
-**Phase 2 — `LiansStore` bridge.** Implement the protocol against the Lians
+**Phase 2 - `LiansStore` bridge.** Implement the protocol against the Lians
 engine. Stand up the Governor's existing HTTP/MCP surface against real Lians
 data as a demo. This is the artifact to react to together.
 
-**Phase 3 — vocabulary + matching alignment.** Map proposal actions to Lians
+**Phase 3 - vocabulary + matching alignment.** Map proposal actions to Lians
 supersession relations; add `REFINE`; on the Lians backend route `similarity()`
 through embeddings + adjudication instead of Jaccard.
 
-**Phase 4 — the Memory-PR review console.** The differentiated product surface,
+**Phase 4 - the Memory-PR review console.** The differentiated product surface,
 and the compliance-native selling point. Neither codebase has a UI today.
 
-**Phase 5 — harden the service API.** Auth on the HTTP surface (even local
+**Phase 5 - harden the service API.** Auth on the HTTP surface (even local
 shouldn't ship unauthenticated), contract versioning, make the JSON contract the
 public shape for both tiers.
 
@@ -156,9 +156,9 @@ public shape for both tiers.
 
 ## Risks
 
-- **Drift** if both engines keep their own storage — the whole plan exists to
+- **Drift** if both engines keep their own storage - the whole plan exists to
   kill this; do not let the SQLite engine grow production features in parallel.
-- **Contract skew** between tiers — one versioned JSON contract, tested against
+- **Contract skew** between tiers - one versioned JSON contract, tested against
   both backends, is mandatory.
-- **Scope creep** into a second go-to-market — local-first stays top-of-funnel,
+- **Scope creep** into a second go-to-market - local-first stays top-of-funnel,
   not a sold product, until the governance surface is proven.

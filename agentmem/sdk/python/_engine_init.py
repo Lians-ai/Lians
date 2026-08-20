@@ -1,5 +1,5 @@
 """
-lians_engine — the Lians service engine, vendored into the lians-sdk wheel.
+lians_engine - the Lians service engine, vendored into the lians-sdk wheel.
 
 This package exists so ``LocalLiansClient`` (zero-setup local mode) works from
 a plain ``pip install lians-sdk[local]``, outside the monorepo. It is the

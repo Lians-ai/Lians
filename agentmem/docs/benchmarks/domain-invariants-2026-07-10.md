@@ -1,4 +1,4 @@
-# Domain Invariant Evals — Supersession Classifier & Financial Point-in-Time Recall
+# Domain Invariant Evals - Supersession Classifier & Financial Point-in-Time Recall
 
 **Date:** 2026-07-10 · **Scoring:** deterministic (exact relation match / substring), no LLM judge · **Harnesses:** `benchmarks/supersession_eval.py`, `benchmarks/finance_bench.py`
 
@@ -6,7 +6,7 @@ Where LOCOMO/LongMemEval score ranked recall and the lifecycle suite scores stat
 
 ## Supersession classifier (`supersession_eval.py`)
 
-12 fact-pair cases over guidance revisions, restatements, rating changes, price-target moves, confirmations, and additive facts — each labeled with the expected relation (`SUPERSEDES` / `CONFIRMS` / `ADDS` / `CONTRADICTS_SAME_TIME`).
+12 fact-pair cases over guidance revisions, restatements, rating changes, price-target moves, confirmations, and additive facts - each labeled with the expected relation (`SUPERSEDES` / `CONFIRMS` / `ADDS` / `CONTRADICTS_SAME_TIME`).
 
 | Metric | Result |
 |---|---|
@@ -24,7 +24,7 @@ A year of financial facts with real supersession chains (NVDA guidance revised t
 |---|---|
 | Point-in-time accuracy | **1.00** (8/8) |
 
-Each probe requires the top result to be the value in force *at the as-of date* — before the first revision, between revisions, and after the last — including the control that an unrelated metric (AAPL services revenue) is untouched by a sibling metric's update.
+Each probe requires the top result to be the value in force *at the as-of date* - before the first revision, between revisions, and after the last - including the control that an unrelated metric (AAPL services revenue) is untouched by a sibling metric's update.
 
 ## Context
 

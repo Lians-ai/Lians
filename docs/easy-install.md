@@ -78,7 +78,7 @@ Python wheel removes the repository checkout for developers; it does not
 replace Authenticode, Developer ID, notarization, or clean-device testing for
 the consumer desktop packages.
 
-Choose the clients to configure, select **Optimize my AI apps**, restart those
+Choose the clients to configure, select **Connect Lians Guard**, restart those
 clients, then ask any connected app to remember a useful project rule. Start a
 new task in the same or another connected app and inspect how much saved context
 was reused and left out.
@@ -251,5 +251,5 @@ This disconnects supported clients and preserves the encrypted memory store.
 | Shared team server and HTTP SDKs | No | Yes |
 | Governance, barriers, receipts, and audit workflows | No | Yes |
 
-Start with Lians Bridge. Move to the full engine when the deployment—not the
-first-run setup—actually requires those capabilities.
+Start with Lians Bridge. Move to the full engine when the deployment - not the
+first-run setup - actually requires those capabilities.

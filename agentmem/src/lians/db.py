@@ -91,7 +91,7 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 # ── Row-Level Security namespace, re-applied on every transaction ─────────────
 # get_auth() records the caller's namespace here. The begin listener below then
 # re-applies it as the transaction-local ``app.current_namespace`` GUC at the
-# start of EVERY transaction — crucially including ones autobegun after a
+# start of EVERY transaction - crucially including ones autobegun after a
 # mid-request ``commit()``. Without this, commit() clears the is_local GUC and
 # the next query (e.g. ``db.refresh`` / metering after a write) runs with no
 # namespace set, so RLS hides the just-written row and the request 500s even
@@ -162,5 +162,5 @@ async def get_db_with_barrier(barrier_group: Optional[str]) -> AsyncSession:
                     {"bg": barrier_group},
                 )
             else:
-                pass  # non-PG backend — RLS not available
+                pass  # non-PG backend - RLS not available
         yield session

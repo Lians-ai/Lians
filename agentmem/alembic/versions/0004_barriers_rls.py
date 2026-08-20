@@ -4,10 +4,10 @@ Two changes in one migration because both are part of the same security
 hardening sprint and RLS policies reference the new barrier_group column.
 
 Changes:
-  1. memories.barrier_group — nullable text, indexed; tags each memory with the
+  1. memories.barrier_group - nullable text, indexed; tags each memory with the
      barrier group of the writing agent so recall can enforce Chinese walls.
 
-  2. agent_barrier_groups table — maps (agent_id, namespace) → group_name.
+  2. agent_barrier_groups table - maps (agent_id, namespace) → group_name.
      Assignments are managed via POST /v1/admin/barriers.
 
   3. Postgres Row-Level Security on memories, event_log, subject_keys.
@@ -107,7 +107,7 @@ def upgrade() -> None:
         )
     """))
 
-    # agent_barrier_groups — admin-only table; RLS keeps it namespace-scoped too
+    # agent_barrier_groups - admin-only table; RLS keeps it namespace-scoped too
     op.execute(sa.text("ALTER TABLE agent_barrier_groups ENABLE ROW LEVEL SECURITY"))
     op.execute(sa.text("""
         CREATE POLICY rls_agent_barrier_groups_namespace ON agent_barrier_groups

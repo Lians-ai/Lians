@@ -5,26 +5,35 @@ repository.
 
 ## What Lians is
 
-Lians is a local-first, provider-neutral memory tool for AI agents. Its core
-product loop is deliberately small:
+Lians Guard is a local-first, provider-neutral current-state and completion guard
+for AI coding agents. Its core product loop is deliberately small:
 
-1. `remember` one durable fact, preference, constraint, or decision; and
-2. `recall` a bounded set of relevant current memories in a later session.
+1. recover the current task in a later supported session;
+2. reject task or evidence state that no longer matches the workspace; and
+3. keep the completion gate closed until every configured criterion has trusted
+   evidence and every constraint is known and passing.
 
-MCP is the default integration surface for existing AI clients. The Python
-local client is the default application surface. Both can run with SQLite and
-no Lians account or API key.
+Free local `remember` and `recall` remain the recovery and distribution wedge.
+MCP is the default integration surface for existing AI clients. The Python local
+client is the default application surface. Both can run with SQLite and no Lians
+account or API key.
 
-Lians also has advanced temporal, audit, erasure, isolation, and reconstruction
-capabilities. Preserve those capabilities, but do not make them a prerequisite
-for the basic memory experience or the first explanation of the product.
+Lians also has broader memory, temporal, audit, erasure, isolation, research,
+and reconstruction capabilities. Preserve working capabilities, but do not lead
+the product, onboarding, or marketing with them.
 
 ## Product principles
 
 - Keep the default setup local and model-provider neutral.
-- Make `remember` and `recall` work before exposing advanced tools.
+- Make recovery work before exposing advanced tools.
 - Return small, task-relevant context instead of replaying full conversations.
 - Exclude superseded facts from current recall.
+- Treat agent prose and touched files as untrusted activity, not completion.
+- Only measured local, measured CI, or human-confirmed evidence can satisfy a
+  completion criterion.
+- Use `ready_for_human_review` as the strongest automated readiness state.
+- Never imply that the gate proves correctness, approval, merge safety, or
+  deployment safety.
 - Require explicit confirmation whenever an integration exposes irreversible
   deletion.
 - Keep sources, timestamps, and lineage available for users who need them.
@@ -78,14 +87,18 @@ See `agentmem/.env.example` for the complete reference.
    same service-layer behavior without requiring the HTTP service.
 2. **MCP is the universal adapter.** `lians-mcp` exposes memory tools to any
    compatible host. Keep its starter schema and errors easy to understand.
-3. **Supersession protects current recall.** Metadata overlap and deterministic
+3. **Task evidence is typed.** Agent-attested and inferred activity are useful
+   recovery context but cannot open the human-review gate.
+4. **Workspace state is part of the checkpoint.** Bind task evidence to local
+   Git identity, commit, dirty state, and changed-path digest when available.
+5. **Supersession protects current recall.** Metadata overlap and deterministic
    rules identify revisions; an optional model stage can adjudicate paraphrases.
-4. **Embeddings are provider-agnostic.** Add a provider through the factory in
+6. **Embeddings are provider-agnostic.** Add a provider through the factory in
    `agentmem/src/lians/embeddings.py`.
-5. **The audit chain is append-only.** Never update or delete `event_log` rows.
-6. **Information barriers are enforced in PostgreSQL.** Production deployments
+7. **The audit chain is append-only.** Never update or delete `event_log` rows.
+8. **Information barriers are enforced in PostgreSQL.** Production deployments
    must use a non-superuser role for row-level security to be effective.
-7. **Erasure destroys per-subject keys.** Content becomes unrecoverable while
+9. **Erasure destroys per-subject keys.** Content becomes unrecoverable while
    non-content audit structure can remain verifiable.
 
 ## Common tasks
@@ -101,6 +114,14 @@ See `agentmem/.env.example` for the complete reference.
 - Edit `agentmem/sdk/python/lians/mcp_server.py`.
 - Keep `remember` and `recall` backward compatible.
 - Run `agentmem/tests/test_mcp_local.py`.
+
+**Change the Guard task contract:**
+
+- Start in `packages/lians-easy/lians_easy/task_contract.py`.
+- Preserve the five evidence trust classes, trusted-issuer provenance, and the
+  human-review boundary. Agent-facing callers must not promote their own
+  evidence into a satisfying trust class.
+- Run the task-contract, session-capture, bridge, MCP, and verification tests.
 
 **Add a framework or agent integration:**
 

@@ -160,7 +160,7 @@ async def _http_post(url: str, body: bytes, signature: str) -> tuple[int, str]:
     try:
         import httpx
     except ImportError:
-        return 0, "httpx not installed — pip install httpx to enable webhook delivery"
+        return 0, "httpx not installed - pip install httpx to enable webhook delivery"
 
     try:
         async with httpx.AsyncClient(

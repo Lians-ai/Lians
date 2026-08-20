@@ -1,5 +1,5 @@
 """
-Background retention scheduler — runs prune_expired_content for every namespace
+Background retention scheduler - runs prune_expired_content for every namespace
 with an active content_ttl_days policy on a configurable interval.
 
 Started as an asyncio.Task inside the FastAPI lifespan.  Cancelled on shutdown.

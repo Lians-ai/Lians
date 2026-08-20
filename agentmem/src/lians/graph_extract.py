@@ -1,5 +1,5 @@
 """
-Relationship extraction — turn unstructured text into graph edges.
+Relationship extraction - turn unstructured text into graph edges.
 
 Graphiti (Zep) auto-builds its knowledge graph by having an LLM extract entities
 and relationships from every message. Lians offers the same convenience, but
@@ -83,7 +83,7 @@ async def extract_llm(text: str) -> list[tuple[str, str, str]]:
 
 
 async def extract_relationships(text: str, *, use_llm: bool = False) -> list[tuple[str, str, str]]:
-    """Extract ``(src, rel, dst)`` triplets — rule-based by default, LLM if asked + configured."""
+    """Extract ``(src, rel, dst)`` triplets - rule-based by default, LLM if asked + configured."""
     if use_llm:
         return await extract_llm(text)
     return extract_rule_based(text)

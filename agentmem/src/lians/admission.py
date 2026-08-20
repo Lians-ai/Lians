@@ -1,5 +1,5 @@
 """
-Memory admission control — govern what is *allowed into* memory, not just what is
+Memory admission control - govern what is *allowed into* memory, not just what is
 stored. No other agent-memory layer does this; it is the core of the "regulated
 memory control plane" posture: before a fact is written, classify it (PII / PHI /
 MNPI), score the source, and quarantine prompt-injection attempts, then admit,
@@ -10,9 +10,9 @@ reproducible and auditable. Swap in Presidio / a classifier later behind the sam
 ``evaluate`` interface.
 
 Modes (config ``admission_mode``):
-  off      — no evaluation
-  monitor  — evaluate, tag the memory + audit, but always admit (observe first)
-  enforce  — reject prompt-injection / blocked-source writes; hold high-risk
+  off - no evaluation
+  monitor - evaluate, tag the memory + audit, but always admit (observe first)
+  enforce - reject prompt-injection / blocked-source writes; hold high-risk
              (PII/PHI/MNPI) writes for review
 """
 from __future__ import annotations

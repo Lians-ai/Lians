@@ -19,7 +19,7 @@ _bearer_header = HTTPBearer(auto_error=False)
 
 # Named roles → scope sets (RBAC). A key's `role`, when set, is merged with any
 # explicit `scopes`. "compliance" gets read + admin (audit verify/export/erase)
-# but not write — it inspects and certifies, it does not author memories.
+# but not write - it inspects and certifies, it does not author memories.
 ROLE_SCOPES: dict[str, list[str]] = {
     "owner":      ["read", "write", "sync", "admin"],
     "analyst":    ["read", "write"],
@@ -67,7 +67,7 @@ async def _set_rls_context(
     """
     Set the PostgreSQL session variable used by Row-Level Security policies.
 
-    SET LOCAL is transaction-scoped — it resets when the transaction ends,
+    SET LOCAL is transaction-scoped - it resets when the transaction ends,
     so there is no risk of a connection-pool reuse leaking one tenant's
     namespace into another tenant's query.
 
@@ -75,7 +75,7 @@ async def _set_rls_context(
     by application-level WHERE clauses in that environment.
 
     Uses ``set_config(..., is_local => true)`` rather than ``SET LOCAL ... = :ns``
-    because PostgreSQL's ``SET`` does not accept bind parameters — under asyncpg a
+    because PostgreSQL's ``SET`` does not accept bind parameters - under asyncpg a
     parameterized ``SET LOCAL`` raises a syntax error, which previously meant the
     namespace variable was never set and namespace RLS silently never engaged for
     non-superuser roles. ``set_config`` is the parameterizable equivalent.
@@ -92,7 +92,7 @@ async def _set_rls_context(
             {"bg": barrier_group or ""},
         )
     else:
-        pass  # SQLite or pre-transaction context — application-layer isolation applies
+        pass  # SQLite or pre-transaction context - application-layer isolation applies
 
 
 async def _authenticate_api_key(raw_key: str, db: AsyncSession) -> AuthContext:
@@ -109,7 +109,7 @@ async def _authenticate_api_key(raw_key: str, db: AsyncSession) -> AuthContext:
     if key_row is None:
         raise HTTPException(status_code=401, detail="Invalid or revoked API key")
 
-    # Enforce namespace isolation at the Postgres layer — any query that runs
+    # Enforce namespace isolation at the Postgres layer - any query that runs
     # on this session after this point can only see rows matching the namespace.
     # _set_rls_namespace covers the current (already-open) transaction;
     # set_current_namespace lets the db "begin" listener re-apply it to any

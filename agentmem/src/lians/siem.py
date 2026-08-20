@@ -1,9 +1,9 @@
 """
-SIEM audit streaming — forward every tamper-evident audit event to an external
+SIEM audit streaming - forward every tamper-evident audit event to an external
 collector (Splunk HEC, Datadog, Elastic, a generic HTTP intake) in real time.
 
 Export (``/v1/admin/audit/export``) gives examiners the chain on demand; this
-gives the security team a live feed for alerting and retention in their SIEM —
+gives the security team a live feed for alerting and retention in their SIEM -
 without granting them database access. Forwarding is fire-and-forget and never
 blocks or fails the write path: a SIEM outage cannot stop memory writes (the
 tamper-evident chain in Postgres remains the source of truth).
@@ -26,7 +26,7 @@ async def stream_event(event: dict[str, Any]) -> bool:
     """
     POST a single audit event to the configured SIEM collector.
 
-    Returns True if delivered (2xx), False otherwise. Never raises — a SIEM
+    Returns True if delivered (2xx), False otherwise. Never raises - a SIEM
     failure must not affect the request that produced the event.
     """
     settings = get_settings()

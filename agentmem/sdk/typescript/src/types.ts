@@ -1,4 +1,4 @@
-﻿// AgentMem TypeScript SDK — type definitions
+﻿// AgentMem TypeScript SDK - type definitions
 // Mirrors the Pydantic schemas in src/lians/schemas.py
 
 // ── Write ────────────────────────────────────────────────────────────────────
@@ -6,7 +6,7 @@
 export interface MemoryAdd {
   agent_id: string;
   content: string;
-  /** ISO-8601 timestamp of when this event occurred in the world — NOT ingestion time */
+  /** ISO-8601 timestamp of when this event occurred in the world - NOT ingestion time */
   event_time: string;
   source?: string;
   subject_id?: string;
@@ -155,7 +155,7 @@ export interface RecallRequest {
   agent_id: string;
   query: string;
   k?: number;
-  /** ISO 8601 — point-in-time recall; omit for current valid memories */
+  /** ISO 8601 - point-in-time recall; omit for current valid memories */
   as_of?: string;
   filters?: Record<string, unknown>;
   include_context?: boolean;
@@ -655,7 +655,7 @@ export interface WebhookRegisterRequest {
 
 export interface WebhookRegisterResult {
   endpoint: WebhookEndpoint;
-  /** The HMAC secret — returned ONCE at registration; store it securely */
+  /** The HMAC secret - returned ONCE at registration; store it securely */
   secret: string;
 }
 
@@ -707,7 +707,7 @@ export interface FactHistoryResult {
 
 /**
  * Complete knowledge state of an agent at a given point in time.
- * Returned by GET /v1/snapshot — the one-call compliance demo.
+ * Returned by GET /v1/snapshot - the one-call compliance demo.
  */
 export interface KnowledgeSnapshot {
   agent_id: string;

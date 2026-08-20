@@ -1,5 +1,5 @@
 """
-SIEM audit streaming forwarder — delivers events to a collector, disabled by
+SIEM audit streaming forwarder - delivers events to a collector, disabled by
 default, and never raises on failure.
 """
 import threading
@@ -59,7 +59,7 @@ async def test_stream_event_disabled_returns_false(monkeypatch):
 
 
 async def test_stream_event_swallows_errors(monkeypatch):
-    # Unroutable URL — must return False, never raise.
+    # Unroutable URL - must return False, never raise.
     monkeypatch.setattr(
         "src.lians.siem.get_settings",
         lambda: SimpleNamespace(siem_url="http://127.0.0.1:1/down", siem_token=""),

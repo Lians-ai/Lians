@@ -51,8 +51,8 @@ Recall and context responses now contain two complementary artifacts:
 2. `receipt_view` is an authorized, human-readable
    `lians.memory-receipt-view.v1` projection. It includes a plain-language
    headline, the selected memory content and source, event and validity times,
-   ranking reasons, integrity and degradation status, token estimate, and—when
-   context is assembled—the records excluded by the context budget or policy.
+   ranking reasons, integrity and degradation status, token estimate, and - when
+   context is assembled - the records excluded by the context budget or policy.
 
 The human view is deliberately outside the canonical hash. That keeps the
 verification contract stable and privacy-minimal while allowing an authorized

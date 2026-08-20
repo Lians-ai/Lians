@@ -1,4 +1,4 @@
-"""Automatic, bounded project-continuity capture for agent session-end hooks.
+"""Automatic, bounded project-continuity capture for Claude lifecycle hooks.
 
 The transcript is evidence, not memory.  This adapter reads only a bounded tail,
 derives a small checkpoint from explicit session language and tool activity, and
@@ -16,7 +16,7 @@ from typing import Any
 
 from .project import detect_project
 from .store import MemoryStore
-from .task_contract import TaskContractService
+from .task_contract import TaskContractService, workspace_snapshot
 
 MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024
 MAX_TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024
@@ -136,10 +136,11 @@ def _tool_files(content: Any) -> list[str]:
 def read_claude_transcript(path: str | Path) -> dict[str, Any]:
     """Read a safe tail of a Claude JSONL transcript without retaining it."""
 
+    rendered_tail = _bounded_tail(Path(path))
     messages: list[dict[str, str]] = []
     files: list[str] = []
     timestamps: list[str] = []
-    for raw_line in _bounded_tail(Path(path)).splitlines():
+    for raw_line in rendered_tail.splitlines():
         try:
             row = json.loads(raw_line)
         except json.JSONDecodeError:
@@ -163,6 +164,7 @@ def read_claude_transcript(path: str | Path) -> dict[str, Any]:
         "messages": messages[-MAX_MESSAGES:],
         "files_touched": _unique(files, limit=50),
         "event_time": timestamps[-1] if timestamps else _now(),
+        "tail_sha256": hashlib.sha256(rendered_tail.encode("utf-8")).hexdigest(),
     }
 
 
@@ -201,8 +203,6 @@ def extract_continuity(transcript: dict[str, Any]) -> dict[str, Any]:
     blocked = sections["blocked"]
     next_actions = sections["next_actions"]
     files = _unique(list(transcript.get("files_touched") or []), limit=50)
-    if not completed and files:
-        completed = [f"Updated {path}" for path in files[:10]]
     if not unfinished and next_actions:
         unfinished = list(next_actions)
 
@@ -254,7 +254,7 @@ def extract_continuity(transcript: dict[str, Any]) -> dict[str, Any]:
         "next_actions": next_actions,
         "files_touched": files,
         "summary": _clean(" ".join(summary_parts), maximum=1_500)
-        or "Claude session ended with explicit project activity.",
+        or "Claude lifecycle checkpoint contained explicit project activity.",
         "event_time": transcript.get("event_time") or _now(),
     }
 
@@ -265,8 +265,11 @@ def _task_id(session_id: str) -> str:
 
 
 def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> dict[str, Any]:
-    """Capture a Claude ``SessionEnd`` hook into existing Lians primitives."""
+    """Capture a Claude ``PreCompact`` or ``SessionEnd`` lifecycle event."""
 
+    lifecycle_event = str(event.get("hook_event_name") or "SessionEnd")
+    if lifecycle_event not in {"PreCompact", "SessionEnd"}:
+        return {"status": "ignored", "reason": "unsupported lifecycle event"}
     session_id = _clean(event.get("session_id"), maximum=160)
     transcript_path = event.get("transcript_path")
     cwd = event.get("cwd")
@@ -276,7 +279,10 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
         return {"status": "ignored", "reason": "missing project directory"}
 
     project = detect_project(Path(cwd))
-    marker_key = f"sessions/claude/{session_id}/capture"
+    transcript = read_claude_transcript(transcript_path)
+    marker_key = (
+        f"sessions/claude/{session_id}/captures/{transcript['tail_sha256'][:24]}"
+    )
     existing = store.memory_history(
         marker_key,
         scope="project",
@@ -291,7 +297,7 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
             "task_id": _task_id(session_id),
         }
 
-    extracted = extract_continuity(read_claude_transcript(transcript_path))
+    extracted = extract_continuity(transcript)
     criteria = _unique(
         [*extracted["completed"], *extracted["unfinished"], *extracted["blocked"]]
     )
@@ -300,7 +306,7 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
 
     task_id = _task_id(session_id)
     tasks = TaskContractService(store)
-    source_ref = f"claude-session:{session_id}"
+    source_ref = f"claude-session:{session_id}:{lifecycle_event.casefold()}"
     constraints = _unique([*extracted["constraints"], *extracted["do_not_repeat"]])
     try:
         status = tasks.status(task_id, project_id=project.id)
@@ -323,6 +329,8 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
         {
             "criterion_id": criterion_ids[item],
             "evidence": f"Claude reported this complete in {source_ref}",
+            "trust_class": "agent_attested",
+            "source": source_ref,
         }
         for item in extracted["completed"]
         if item in criterion_ids
@@ -359,12 +367,13 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
         client="claude",
         source_ref=source_ref,
         event_time=extracted["event_time"],
+        workspace=workspace_snapshot(project.trusted_root),
     )
 
     common = {
         "scope": "project",
         "project_id": project.id,
-        "source": "claude-session-end",
+        "source": "claude-lifecycle",
         "source_client": "claude",
         "source_ref": source_ref,
         "event_time": extracted["event_time"],
@@ -388,7 +397,7 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
                     "source_index": index,
                 },
                 kind="handoff" if category == "do_not_repeat" else "decision",
-                reason=f"explicit {category} captured at Claude session end",
+                reason=f"explicit {category} captured at Claude {lifecycle_event}",
                 **common,
             )
             captured += 1
@@ -408,7 +417,7 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
                 "source_index": index,
             },
             kind="decision",
-            reason="current value captured at Claude session end",
+            reason=f"current value captured at Claude {lifecycle_event}",
             **common,
         )
         captured += 1
@@ -421,6 +430,7 @@ def capture_claude_session_end(event: dict[str, Any], *, store: MemoryStore) -> 
                 "task_id": task_id,
                 "captured_items": captured,
                 "transcript_retained": False,
+                "lifecycle_event": lifecycle_event,
             },
             sort_keys=True,
         ),

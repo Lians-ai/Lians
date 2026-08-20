@@ -2,7 +2,7 @@
 Tests for the Lians agent memory harness.
 
 Covers the recall-before / remember-after loop, compliance scoping, point-in-time
-recall, and the combined turn helpers — exercised against the real
+recall, and the combined turn helpers - exercised against the real
 LocalLiansClient (in-memory SQLite) so the full service path runs.
 """
 import sys

@@ -1,6 +1,6 @@
 # Migrate from Zep to Lians
 
-In September 2024, Zep shut down its Community Edition — the free, self-hosted open-source server. If you were running Zep CE, your options were to pay for Zep Cloud or find a replacement.
+In September 2024, Zep shut down its Community Edition - the free, self-hosted open-source server. If you were running Zep CE, your options were to pay for Zep Cloud or find a replacement.
 
 Lians is a fully open-source, self-hostable alternative. It runs on the same Postgres + pgvector stack and adds capabilities Zep CE never had: bitemporal memory, tamper-evident audit chains, GDPR crypto-shred, and information barriers.
 
@@ -28,14 +28,14 @@ Lians is a fully open-source, self-hostable alternative. It runs on the same Pos
 | Memory search | `mem.recall(agent_id, query)` |
 | Add message | `mem.add(agent_id, content, event_time)` |
 | Message history | `mem.add_from_messages(agent_id, messages)` |
-| Session summary | Not needed — supersession handles this automatically |
+| Session summary | Not needed - supersession handles this automatically |
 | Knowledge graph | Domain adapters (finance, healthcare, legal) |
 
 ## Installation
 
 ```bash
 # Lians SDK
-pip install lians-sdk[local]     # local SQLite mode — instant start
+pip install lians-sdk[local]     # local SQLite mode - instant start
 pip install lians-sdk            # connects to a Lians server
 
 # TypeScript
@@ -125,9 +125,9 @@ Lians is listed on the [official MCP Registry](https://registry.modelcontextprot
 
 Beyond what Zep CE offered, Lians adds:
 
-- **Bitemporal facts** — stale facts are suppressed at the database layer, not the application layer
-- **Point-in-time recall** — `mem.recall_at(agent_id, query, as_of=datetime(...))` answers "what did we know on date X?"
-- **Backtest check** — `mem.backtest_check(agent_id, simulation_as_of=...)` detects lookahead bias
-- **Audit chain** — every write is recorded in a SHA-256 Merkle chain; exportable for regulators
-- **GDPR erasure** — `mem.erase(subject_id, request_ref)` crypto-shreds all content while the audit trail survives
-- **Information barriers** — `barrier_group` column with PostgreSQL RLS prevents one agent from seeing another's data, enforced at the database layer
+- **Bitemporal facts** - stale facts are suppressed at the database layer, not the application layer
+- **Point-in-time recall** - `mem.recall_at(agent_id, query, as_of=datetime(...))` answers "what did we know on date X?"
+- **Backtest check** - `mem.backtest_check(agent_id, simulation_as_of=...)` detects lookahead bias
+- **Audit chain** - every write is recorded in a SHA-256 Merkle chain; exportable for regulators
+- **GDPR erasure** - `mem.erase(subject_id, request_ref)` crypto-shreds all content while the audit trail survives
+- **Information barriers** - `barrier_group` column with PostgreSQL RLS prevents one agent from seeing another's data, enforced at the database layer

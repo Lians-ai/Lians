@@ -27,7 +27,7 @@ async def reconstruct(
 ) -> AuditReconstructResult:
     """
     Returns the memory state visible at as_of, plus the event log entries
-    up to that point — the complete evidentiary trail.
+    up to that point - the complete evidentiary trail.
     """
     # Memories valid at as_of
     if query:

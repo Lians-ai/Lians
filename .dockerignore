@@ -13,7 +13,7 @@ integrations/
 .env
 agentmem/tests/
 agentmem/benchmarks/
-# benchmark artifacts (checkpoint DBs, embedding caches, datasets) — 2.9GB+
+# benchmark artifacts (checkpoint DBs, embedding caches, datasets) - 2.9GB+
 # that breached Fly's 8GB unpacked-image limit when swept in by COPY agentmem/
 agentmem/results/
 memory-benchmarks/

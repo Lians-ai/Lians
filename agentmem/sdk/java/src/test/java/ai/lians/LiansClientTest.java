@@ -18,7 +18,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests the client against Java's built-in HttpServer — exercises request
+ * Tests the client against Java's built-in HttpServer - exercises request
  * construction (headers, JSON body, query params) and response parsing with no
  * external dependency or live Lians server.
  */

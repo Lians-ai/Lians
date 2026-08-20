@@ -3,7 +3,7 @@ name: Publish lians to PyPI
 on:
   push:
     tags:
-      - "v*"         # unified release tag — one `vX.Y.Z` ships every language
+      - "v*"         # unified release tag - one `vX.Y.Z` ships every language
       - "lians-v*"   # Python-only tag (kept for back-compat)
 
 jobs:

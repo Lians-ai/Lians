@@ -9,7 +9,7 @@ Then set in .env:
     OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4317
 
 If the otel packages are not installed or OTEL_EXPORTER_OTLP_ENDPOINT is
-empty, this module silently provides no-op stubs — no code changes needed
+empty, this module silently provides no-op stubs - no code changes needed
 in callers.
 
 Usage in service functions:

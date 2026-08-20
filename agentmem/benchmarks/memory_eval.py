@@ -1,13 +1,13 @@
 """
-Memory evaluation harness — the LoCoMo / LongMemEval protocol, judge-free.
+Memory evaluation harness - the LoCoMo / LongMemEval protocol, judge-free.
 
 The standard long-term-memory benchmarks (LoCoMo, LongMemEval) feed a model a
 multi-session conversation, then ask questions whose answers depend on
-remembering — and correctly *updating* — facts across sessions. They score the
+remembering - and correctly *updating* - facts across sessions. They score the
 model's generated answer with an LLM judge.
 
 This harness measures the part a memory layer is actually responsible for:
-**evidence retrieval** — does recall surface the memory that contains the answer?
+**evidence retrieval** - does recall surface the memory that contains the answer?
 That's a deterministic, judge-free proxy (``answer_recall@k``) that isolates the
 memory system from the downstream LLM, and it directly exercises the property
 Lians is built for: a *superseded* fact must NOT be retrieved, and its current
@@ -105,7 +105,7 @@ def main() -> None:
     ap.add_argument("--k", type=int, default=5)
     args = ap.parse_args()
 
-    # Local SQLite client — zero setup, no API keys.
+    # Local SQLite client - zero setup, no API keys.
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sdk" / "python"))
     from lians import LocalLiansClient

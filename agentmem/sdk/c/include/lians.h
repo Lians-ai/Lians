@@ -1,12 +1,12 @@
 /*
- * Lians C SDK — financial-grade agent memory over the REST API.
+ * Lians C SDK - financial-grade agent memory over the REST API.
  *
  * A thin libcurl-based client for the Lians memory layer: bitemporal recall,
  * SEC 17a-4 audit chain, GDPR/HIPAA crypto-shred, information barriers, and a
  * relationship graph (conflict-of-interest / related-party / care-network).
  *
- * Built for the native, low-latency, and embedded world — HFT, market-data
- * gateways, and on-prem systems in finance, healthcare, and legal — where Python
+ * Built for the native, low-latency, and embedded world - HFT, market-data
+ * gateways, and on-prem systems in finance, healthcare, and legal - where Python
  * and JVM SDKs don't reach. Responses are returned as raw JSON strings; pair with
  * your JSON parser of choice.
  *
@@ -114,7 +114,7 @@ lians_response_t lians_neighbors(lians_client_t *client, const char *agent_id,
                                  const char *entity, int depth,
                                  const char *direction, const char *as_of);
 
-/* Shortest connection between two entities — the conflict-of-interest /
+/* Shortest connection between two entities - the conflict-of-interest /
  * related-party reachability query. as_of may be NULL. */
 lians_response_t lians_path(lians_client_t *client, const char *agent_id,
                             const char *src_entity, const char *dst_entity,

@@ -1,5 +1,5 @@
 ﻿"""
-lians — Python client for Lians, the financial-grade AI memory layer.
+lians - Python client for Lians, the financial-grade AI memory layer.
 
 Install::
 
@@ -27,7 +27,7 @@ Quick start::
             # Recall with semantic search
             result = await client.recall(agent_id="equity-desk", query="Apple earnings")
 
-            # Audit reconstruction — complete knowledge state at T
+            # Audit reconstruction - complete knowledge state at T
             snapshot = await client.knowledge_snapshot(
                 agent_id="equity-desk",
                 as_of="2026-03-01T00:00:00Z",

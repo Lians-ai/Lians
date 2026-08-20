@@ -3,8 +3,8 @@ Degraded-retrieval mode.
 
 An unavailable embedding provider must not take recall down with it: the
 query proceeds lexical-only (BM25 + recency + importance) and the degradation
-is explicit — on the result (``retrieval_degraded``), on the /v1/context
-block, and in the recall audit event — so a decision made under degraded
+is explicit - on the result (``retrieval_degraded``), on the /v1/context
+block, and in the recall audit event - so a decision made under degraded
 recall is reconstructable as such.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ class _BrokenProvider:
 
 @pytest.fixture
 def break_embeddings(monkeypatch):
-    """Returns a callable that breaks the provider — call it AFTER seeding."""
+    """Returns a callable that breaks the provider - call it AFTER seeding."""
     def _break():
         import src.lians.memory_service as ms
         monkeypatch.setattr(ms, "get_embedding_provider", lambda: _BrokenProvider())
@@ -60,7 +60,7 @@ async def test_recall_survives_embedding_outage(db, break_embeddings):
     ))
 
     assert result.retrieval_degraded is True
-    # BM25 still surfaces the fact — the outage degrades quality, not availability.
+    # BM25 still surfaces the fact - the outage degrades quality, not availability.
     assert [m.id for m in result.memories] == [mem.id]
 
 

@@ -9,7 +9,7 @@ metadata:
   labels:
     app.kubernetes.io/name: agentmem
   annotations:
-    # TLS certificate — issued and renewed automatically by cert-manager.
+    # TLS certificate - issued and renewed automatically by cert-manager.
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 
     # NGINX: enforce HTTPS and add security headers appropriate for financial APIs.
@@ -24,7 +24,7 @@ metadata:
     # Maximum request body size (memories can include long text).
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
 
-    # Timeouts — embedding calls can take 2-3 s; set headroom.
+    # Timeouts - embedding calls can take 2-3 s; set headroom.
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
 

@@ -1,7 +1,7 @@
 # SSO Integration
 
 Lians authenticates API calls with namespace-scoped API keys. For human access and
-enterprise identity, put SSO at the **gateway** in front of Lians — the standard,
+enterprise identity, put SSO at the **gateway** in front of Lians - the standard,
 low-coupling pattern that works with any IdP (Okta, Entra ID, Auth0, Ping, Google)
 over OIDC or SAML, and keeps the memory layer focused on data, not identity.
 
@@ -17,7 +17,7 @@ User ─▶ Reverse proxy / API gateway ──(OIDC/SAML)──▶ IdP
 1. The gateway (NGINX `auth_request`, Envoy ext_authz, oauth2-proxy, Cloudflare
    Access, AWS ALB OIDC, etc.) authenticates the user against your IdP.
 2. On success it forwards the request to Lians with a Lians **API key** chosen for
-   the user's team/role — or injects the identity headers your edge maps to one.
+   the user's team/role - or injects the identity headers your edge maps to one.
 3. Lians enforces namespace + scope/role from that key.
 
 This means **no IdP code in Lians**, SSO works with every provider, and revocation
@@ -34,14 +34,14 @@ have the gateway select it from the authenticated group claim.
 |-----------|-----------|---------------|---------------|
 | `acme-equity-research` | `acme` | `analyst` → read, write | `research` |
 | `acme-equity-trading` | `acme` | `analyst` → read, write | `trading` |
-| `acme-compliance` | `acme` | `compliance` → read, admin | _(none — sees all)_ |
+| `acme-compliance` | `acme` | `compliance` → read, admin | _(none - sees all)_ |
 | `acme-viewers` | `acme` | `readonly` → read | `research` |
 
 When a key has a `barrier_group`, **every read and write under it is scoped to
 that wall at the database layer** (PostgreSQL RLS, migration 0013): a write is
 tagged with the barrier and a read can only see that barrier's rows plus shared
 (NULL-barrier) rows. So `acme-equity-research` and `acme-equity-trading` cannot see
-each other's memories even though they share a namespace — the Chinese wall is
+each other's memories even though they share a namespace - the Chinese wall is
 enforced below the application, driven entirely by the IdP group. A key with no
 `barrier_group` (compliance) sees everything in its namespace.
 

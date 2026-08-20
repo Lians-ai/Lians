@@ -1,10 +1,10 @@
-# Right-of-Reply Emails — Final Copy (send 2026-07-03)
+# Right-of-Reply Emails - Final Copy (send 2026-07-03)
 
 *Ready to send. Fill only the recipient address (verify on their site/GitHub;
 a GitHub issue on their repo is the documented public fallback). Reply window:
 **end of day Friday, July 17, 2026** (10 business days from July 3).
 Send from your personal address, signed with your name. After sending, log
-date + channel in `vendor-right-of-reply.md` — the log is part of the
+date + channel in `vendor-right-of-reply.md` - the log is part of the
 published methodology.*
 
 Common links (already public on master):
@@ -16,14 +16,14 @@ Common links (already public on master):
 
 ## 1. Mem0
 
-**To:** (verify — founders@mem0.ai / GitHub) · **Subject:** `Fact-check request: how we scored mem0 in an open compliance benchmark`
+**To:** (verify - founders@mem0.ai / GitHub) · **Subject:** `Fact-check request: how we scored mem0 in an open compliance benchmark`
 
 > Hi Mem0 team,
 >
-> I'm Ethan, the author of Lians — an open-source agent-memory layer aimed at
+> I'm Ethan, the author of Lians - an open-source agent-memory layer aimed at
 > regulated deployments (finance/healthcare/legal). Honest context first: your
 > ecosystem is the reason "agent memory" is a category a buyer can search for
-> at all — our own comparison docs say so explicitly, and our migration guide
+> at all - our own comparison docs say so explicitly, and our migration guide
 > assumes people start with mem0 for good reasons.
 >
 > We're publishing an evaluation that scores memory systems on five
@@ -32,7 +32,7 @@ Common links (already public on master):
 > lookahead/backtest guards, and audit-state reconstruction. Lians is scored
 > by the same harness, same knife.
 >
-> Your column was **executed live** — mem0 OSS 2.0.11 in its default
+> Your column was **executed live** - mem0 OSS 2.0.11 in its default
 > configuration (OpenAI LLM + embeddings), not scored from docs. Two things
 > from that run you should see before anyone else does:
 >
@@ -43,20 +43,20 @@ Common links (already public on master):
 > 2. While setting up the run we hit a bug in the OSS defaults (default model
 >    resolves to gpt-5-mini, which rejects the default temperature=0.1, so
 >    default-config add() silently stores nothing). We filed it with a repro
->    and workaround: https://github.com/mem0ai/mem0/issues/6085 — and pinned
+>    and workaround: https://github.com/mem0ai/mem0/issues/6085 - and pinned
 >    gpt-4o-mini in our run so your column wasn't scored on a broken default.
 >
 > Two asks, both optional:
 >
-> - If any cell is wrong — an API we missed, a configuration that changes the
->   outcome — tell me and I'll fix it before wider publication and credit the
+> - If any cell is wrong - an API we missed, a configuration that changes the
+>   outcome - tell me and I'll fix it before wider publication and credit the
 >   correction to your team by name.
 > - If you'd rather run the harness yourselves, the adapter interface is six
 >   methods; PRs against your own adapter are welcome and will be merged.
 >
 > If I don't hear back by **Friday, July 17**, we'll publish with the column
 > as-is and a note that you were offered review on July 3. Either way the
-> harness stays open and your column stays re-runnable — corrections are
+> harness stays open and your column stays re-runnable - corrections are
 > welcome after publication too.
 >
 > Respect for what you've built,
@@ -67,13 +67,13 @@ Common links (already public on master):
 
 ## 2. Zep
 
-**To:** (verify — founders@getzep.com / GitHub) · **Subject:** `Fact-check request: how we scored Graphiti in an open compliance benchmark`
+**To:** (verify - founders@getzep.com / GitHub) · **Subject:** `Fact-check request: how we scored Graphiti in an open compliance benchmark`
 
 > Hi Zep team,
 >
-> I'm Ethan, the author of Lians — an open-source agent-memory layer aimed at
+> I'm Ethan, the author of Lians - an open-source agent-memory layer aimed at
 > regulated deployments. Honest context first: Graphiti's bitemporal edge
-> model is genuinely good engineering — our own relationship graph credits it
+> model is genuinely good engineering - our own relationship graph credits it
 > as the direct inspiration, in our docs, by name.
 >
 > We're publishing an evaluation that scores memory systems on five
@@ -82,8 +82,8 @@ Common links (already public on master):
 > lookahead/backtest guards, and audit-state reconstruction. Lians is scored
 > by the same harness, same knife.
 >
-> Your column was **executed live** — Graphiti OSS 0.29.2 in its default
-> OpenAI configuration on embedded Kuzu — and I want to flag that the run
+> Your column was **executed live** - Graphiti OSS 0.29.2 in its default
+> OpenAI configuration on embedded Kuzu - and I want to flag that the run
 > *confirmed* your documented strengths rather than discounting them: your
 > contradiction invalidation fired and correctly backdated `invalid_at` to
 > the revision's reference time, which we credit in print. The gap we scored
@@ -101,8 +101,8 @@ Common links (already public on master):
 >
 > Two asks, both optional:
 >
-> - If any cell is wrong — an API we missed, a search configuration that
->   filters invalidated edges by default, anything — tell me and I'll fix it
+> - If any cell is wrong - an API we missed, a search configuration that
+>   filters invalidated edges by default, anything - tell me and I'll fix it
 >   before wider publication and credit the correction to your team by name.
 >   I'd particularly value your read on whether we've drawn the line between
 >   validity windows and two-axis point-in-time recall fairly.
@@ -121,14 +121,14 @@ Common links (already public on master):
 
 ## 3. Letta
 
-**To:** (verify — contact@letta.com / GitHub) · **Subject:** `Fact-check request: how we scored Letta in an open compliance benchmark`
+**To:** (verify - contact@letta.com / GitHub) · **Subject:** `Fact-check request: how we scored Letta in an open compliance benchmark`
 
 > Hi Letta team,
 >
-> I'm Ethan, the author of Lians — an open-source agent-memory layer aimed at
+> I'm Ethan, the author of Lians - an open-source agent-memory layer aimed at
 > regulated deployments. The MemGPT lineage is the most original architecture
 > in this space, and I want to be upfront that our eval necessarily scores
-> *turnkey compliance primitives* rather than agent-managed memory — if that
+> *turnkey compliance primitives* rather than agent-managed memory - if that
 > framing misrepresents what Letta is for, I'd rather hear it from you than
 > from your users after publication.
 >
@@ -145,7 +145,7 @@ Common links (already public on master):
 > credit your team by name. If you'd rather run it live, export LETTA_API_KEY
 > and the harness executes your column; adapter PRs are welcome and will be
 > merged. If I don't hear back by **Friday, July 17**, we'll publish with a
-> note that you were offered review on July 3 — corrections stay welcome
+> note that you were offered review on July 3 - corrections stay welcome
 > after publication too.
 >
 > Respect for what you've built,
@@ -160,7 +160,7 @@ Common links (already public on master):
 
 > Hi Hindsight team,
 >
-> I'm Ethan, the author of Lians — an open-source agent-memory layer aimed at
+> I'm Ethan, the author of Lians - an open-source agent-memory layer aimed at
 > regulated deployments. Your temporal retrieval work is the closest in
 > spirit to ours in this category, which is exactly why I want your column
 > checked before anyone else sees it.
@@ -174,7 +174,7 @@ Common links (already public on master):
 > https://github.com/Lians-ai/Lians/blob/master/agentmem/benchmarks/adapters/hindsight_adapter.py
 >
 > The one cell I most want checked: **erasure**. As of our review we found no
-> deletion API at all, so that cell is scored absent rather than partial — if
+> deletion API at all, so that cell is scored absent rather than partial - if
 > that's wrong or has changed, I'd genuinely rather fix it than publish it.
 >
 > If any cell is wrong, I'll correct it before wider publication and credit
@@ -194,14 +194,14 @@ Common links (already public on master):
 
 > Hi Supermemory team,
 >
-> I'm Ethan, the author of Lians — an open-source agent-memory layer aimed at
+> I'm Ethan, the author of Lians - an open-source agent-memory layer aimed at
 > regulated deployments. We're publishing an evaluation that scores memory
 > systems on five compliance invariants (stale-revision suppression,
 > point-in-time recall, provable erasure, lookahead guards, audit-state
 > reconstruction) across six systems, ourselves included, same harness for
 > everyone.
 >
-> Your column is capability-assessed from your public API surface — your
+> Your column is capability-assessed from your public API surface - your
 > profile consolidation earned the supersession partial-credit cell; the
 > other cells are structural API checks, each with a one-line justification:
 >

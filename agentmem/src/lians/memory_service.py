@@ -1,13 +1,13 @@
 """
-Core memory service: add, recall, recall(as_of) — used by API routes.
+Core memory service: add, recall, recall(as_of) - used by API routes.
 
 Performance roadmap changes wired here:
-  Change 1  — recall queries live_facts (compact read model), not memories.
-  Change 2  — keyed-vs-semantic router: keyed queries skip embed + ANN entirely.
-  Change 3  — supersession fast path (keyed deterministic); async LLM worker.
-  Change 6  — DEK cache: subject keys unwrapped once, cached in-process.
-  Change 7  — session cache: working set prefetched and served from memory.
-  Change 10 — recall instrumented as sub-spans: embed/search/decrypt/assemble.
+  Change 1 - recall queries live_facts (compact read model), not memories.
+  Change 2 - keyed-vs-semantic router: keyed queries skip embed + ANN entirely.
+  Change 3 - supersession fast path (keyed deterministic); async LLM worker.
+  Change 6 - DEK cache: subject keys unwrapped once, cached in-process.
+  Change 7 - session cache: working set prefetched and served from memory.
+  Change 10 - recall instrumented as sub-spans: embed/search/decrypt/assemble.
 """
 from __future__ import annotations
 
@@ -581,7 +581,7 @@ async def _get_barrier_group(
 ) -> Optional[str]:
     if override is not None:
         # The calling API key is barrier-scoped (SSO gateway picked it from the
-        # caller's IdP group) — the key's barrier is authoritative, no lookup.
+        # caller's IdP group) - the key's barrier is authoritative, no lookup.
         group: Optional[str] = override
     else:
         stmt = select(AgentBarrierGroup).where(
@@ -595,7 +595,7 @@ async def _get_barrier_group(
     # RESTRICTIVE barrier_isolation policy reads (migration 0013). An unbarriered
     # agent sets '' and sees every row in its namespace (compliance-officer view);
     # a group-scoped agent sees only NULL-barrier (shared) and same-group rows.
-    # No-op on SQLite (no set_config) — those tests rely on app-layer filtering.
+    # No-op on SQLite (no set_config) - those tests rely on app-layer filtering.
     # PostgreSQL errors propagate so a broken RLS context fails closed.
     if db.get_bind().dialect.name == "postgresql":
         await db.execute(
@@ -710,7 +710,7 @@ async def _mark_parent_stale(
 ) -> None:
     """When a derived clause closes, its parent turn still contains the stale
     text. Record the closure on the parent (metadata._stale_clauses, a list of
-    closure timestamps — never clause text, which may be subject-encrypted) so
+    closure timestamps - never clause text, which may be subject-encrypted) so
     ranking can demote it; the raw content is untouched."""
     parent_ref = (dict(closed_mem.metadata_ or {})).get("_parent")
     if not parent_ref:
@@ -751,7 +751,7 @@ async def _ingest_derived_clause(
 
     Same event_time/subject/barrier as the parent; structured keys are dropped
     so a clause can never trip keyed supersession against its own parent. Runs
-    the full supersession funnel — this is where a cued revision clause closes
+    the full supersession funnel - this is where a cued revision clause closes
     its predecessor clause. Caller holds the agent write lock.
     """
     from .adapters import get_adapter
@@ -774,7 +774,7 @@ async def _ingest_derived_clause(
     import uuid as _uuid
     new_id = _uuid.uuid4()
     # The clause inherits the parent turn's revision-cue status: the cue words
-    # ("wait —", "actually", "now") usually stay in the surrounding chatter
+    # ("wait - ", "actually", "now") usually stay in the surrounding chatter
     # while the extracted clause is the revision payload itself.
     from .supersession import _REVISION_CUE_RE
     parent_cued = bool(_REVISION_CUE_RE.search(req.content or ""))
@@ -905,7 +905,7 @@ async def add_memory(
         # structured keys, derive them from the content so the deterministic
         # keyed-supersession fast path can fire on a plain-text write. Opt-in
         # (auto_metadata_enabled); caller keys are never overridden; provenance
-        # is tagged under metadata._auto_meta. Fail-open — never blocks the write.
+        # is tagged under metadata._auto_meta. Fail-open - never blocks the write.
         settings = get_settings()
         if settings.auto_metadata_enabled and not _audit_privacy_minimal:
             try:
@@ -951,7 +951,7 @@ async def add_memory(
                     vectors = await get_embedding_provider().embed(clauses)
                     derived_clauses = list(zip(clauses, vectors))
             except Exception:
-                logger.warning("interjection extraction failed — storing raw turn only", exc_info=True)
+                logger.warning("interjection extraction failed - storing raw turn only", exc_info=True)
 
         # Change 6: DEK resolved through cache
         subject_key: Optional[bytes] = None
@@ -1100,7 +1100,7 @@ async def add_memory(
                     await _mark_parent_stale(db, namespace, req.agent_id, old, req.event_time)
 
             # Out-of-order ingestion: a live fact with a LATER event_time already
-            # covers this key/topic, so the incoming memory arrives historical —
+            # covers this key/topic, so the incoming memory arrives historical -
             # its validity window closes at the successor's event_time. It stays
             # queryable via as_of/snapshot for its own era but never pollutes the
             # current view.
@@ -1186,7 +1186,7 @@ async def add_memory(
                         db, namespace, req, mem, clause_text, clause_vec, subject_key,
                     )
                 except Exception:
-                    logger.warning("derived-clause ingest failed — raw turn unaffected", exc_info=True)
+                    logger.warning("derived-clause ingest failed - raw turn unaffected", exc_info=True)
 
             # Fan out webhook events for the write outcome. dispatch_event is a
             # no-op when no endpoint subscribes, so this is safe on every write.
@@ -1265,7 +1265,7 @@ async def add_memory_idempotent(
     Idempotent wrapper around :func:`add_memory`.
 
     When ``idempotency_key`` is supplied, a previously-seen key (in this
-    namespace) returns the original memory instead of inserting a duplicate —
+    namespace) returns the original memory instead of inserting a duplicate -
     giving exactly-once semantics for a retried write. Without a key, behaves
     exactly like ``add_memory``.
 
@@ -1310,7 +1310,7 @@ async def add_memory_idempotent(
             _audit_hmac_secret=_audit_hmac_secret,
         )
     except IntegrityError:
-        # Lost a race with a concurrent identical request — return the winner's row.
+        # Lost a race with a concurrent identical request - return the winner's row.
         await db.rollback()
         existing = await db.get(IdempotencyKey, (idempotency_key, namespace))
         if existing is not None:
@@ -1332,7 +1332,7 @@ async def add_memory_idempotent(
 
 
 def _estimate_tokens(text: str) -> int:
-    """Cheap token estimate (~4 chars/token) — good enough for budgeting."""
+    """Cheap token estimate (~4 chars/token) - good enough for budgeting."""
     return max(1, len(text) // 4)
 
 
@@ -1354,7 +1354,7 @@ async def _attach_context(
     """Populate ``context_before``/``context_after`` on recall hits.
 
     For each hit, the nearest same-agent memory strictly before/after it in
-    event time (within CONTEXT_GAP_S) — the other half of a dialogue exchange
+    event time (within CONTEXT_GAP_S) - the other half of a dialogue exchange
     or event burst. Two indexed LIMIT-2 queries per hit use
     ix_memories_ns_agent_event; erased rows never surface, and event time,
     ingestion time, and the validity interval must all admit the neighbor at
@@ -1531,7 +1531,7 @@ async def _assemble_context_legacy(
 ) -> "ContextResult":
     """
     Recall the relevant facts and assemble them into a token-budgeted, ready-to-
-    inject context block — the one-call "memory context" surface (Zep parity),
+    inject context block - the one-call "memory context" surface (Zep parity),
     backed by Lians' bitemporal recall so the block never contains stale facts.
 
     Facts are included in relevance order until ``max_tokens`` is reached; each
@@ -1539,7 +1539,7 @@ async def _assemble_context_legacy(
     provenance. Erased (crypto-shredded) facts are skipped.
 
     Active resurfacing: open conflicts for this agent push to the top of the
-    block (oldest first — they cannot silently age out) until a human
+    block (oldest first - they cannot silently age out) until a human
     adjudicates them, so the model treats contested facts as contested rather
     than confidently using whichever version recall happened to rank higher.
     """
@@ -1564,7 +1564,7 @@ async def _assemble_context_legacy(
             db, namespace, req.agent_id, req.max_conflicts
         )
     if open_conflicts:
-        banner = "⚠ UNRESOLVED MEMORY CONFLICTS — contested facts, pending adjudication:"
+        banner = "⚠ UNRESOLVED MEMORY CONFLICTS - contested facts, pending adjudication:"
         lines.append(banner)
         used += _estimate_tokens(banner)
         for c in open_conflicts:
@@ -1586,7 +1586,7 @@ async def _assemble_context_legacy(
     truncated = False
     for m in result.memories:
         if not m.content:
-            continue  # erased — content unrecoverable
+            continue  # erased - content unrecoverable
         stamp = m.event_time.isoformat()[:16].replace("T", " ") if m.event_time else "undated"
         prov = f" [{m.source}]" if m.source else ""
         line = f"- ({stamp}){prov} {m.content}"
@@ -2084,7 +2084,7 @@ async def recall_memories(
                     return cached_result
         span.set_attribute("cache_hit", False)
 
-        # Change 2: keyed router — exact lookup if filters resolve to a known predicate
+        # Change 2: keyed router - exact lookup if filters resolve to a known predicate
         if not req.as_of and request_filters:
             predicate_key = compute_predicate_key(request_filters)
             if predicate_key:
@@ -2215,7 +2215,7 @@ async def recall_memories(
         #
         # Degraded-retrieval mode: an unavailable embedding provider must not
         # take recall down with it. On embed failure the query proceeds
-        # lexical-only (BM25 + recency + importance — semantic weight scores 0)
+        # lexical-only (BM25 + recency + importance - semantic weight scores 0)
         # and the degradation is carried on the result AND into the audit
         # chain: a decision made under degraded recall is a fact an examiner
         # needs, not something to silently absorb. Keyed lookups above never
@@ -2239,7 +2239,7 @@ async def recall_memories(
                 retrieval_degraded = True
                 embed_span.set_attribute("retrieval_degraded", True)
                 logger.warning(
-                    "embedding provider failed (%s: %s) — recall degrading to lexical-only",
+                    "embedding provider failed (%s: %s) - recall degrading to lexical-only",
                     type(exc).__name__, exc,
                 )
         span.set_attribute("retrieval_degraded", retrieval_degraded)
@@ -2461,7 +2461,7 @@ async def recall_memories(
             ),
         )
 
-        # Never cache a degraded result — it would keep serving lexical-only
+        # Never cache a degraded result - it would keep serving lexical-only
         # recall after the embedding provider recovers.
         cache_barrier = (
             await has_pending_recall_invalidation(db, namespace, req.agent_id)
@@ -2512,7 +2512,7 @@ async def _rerank_by_proximity(
     Each result's entity is read from metadata[``near_key``]; its hop-distance to
     the anchor in the relationship graph yields an additive proximity bonus
     (1/(1+distance)), so closely-connected facts rise without displacing strong
-    semantic matches. Unreachable entities get no bonus — pure semantic order.
+    semantic matches. Unreachable entities get no bonus - pure semantic order.
     """
     from .graph_service import entity_distances, canon_entity
 
@@ -2575,7 +2575,7 @@ async def batch_add_memories(
     reqs: list[MemoryAdd],
     barrier_override: Optional[str] = None,
 ) -> MemoryBatchResult:
-    """Add multiple memories sequentially — later items can supersede earlier ones."""
+    """Add multiple memories sequentially - later items can supersede earlier ones."""
     out: list[MemoryOut] = []
     for req in reqs:
         out.append(await add_memory(db, namespace, req, barrier_override=barrier_override))
@@ -2780,7 +2780,7 @@ async def prune_expired_content(db: AsyncSession, namespace: str) -> RetentionPr
         from fastapi import HTTPException
         raise HTTPException(
             status_code=409,
-            detail=f"Namespace '{namespace}' is under legal hold — pruning is blocked.",
+            detail=f"Namespace '{namespace}' is under legal hold - pruning is blocked.",
         )
 
     now = datetime.now(timezone.utc)
@@ -3114,7 +3114,7 @@ async def erase_subject(
         mem.content_encrypted = None
         # The embedding is derived from the content (inversion attacks can
         # approximate the original text) and metadata routinely carries
-        # personal identifiers — GDPR erasure must shred both, not just the
+        # personal identifiers - GDPR erasure must shred both, not just the
         # ciphertext.
         mem.embedding = None
         mem.metadata_ = {}
@@ -3181,12 +3181,12 @@ async def get_knowledge_snapshot(
     barrier_override: Optional[str] = None,
 ) -> list[MemoryOut]:
     """
-    Exhaustive point-in-time knowledge state — every memory valid at *as_of*.
+    Exhaustive point-in-time knowledge state - every memory valid at *as_of*.
 
     Unlike :func:`recall_memories` (vector search → top-k), this returns *all*
     memories whose validity window contains ``as_of``
     (``valid_from <= as_of < valid_to``) and whose ``event_time <= as_of``,
-    ordered by ``event_time`` ascending. No relevance filter is applied —
+    ordered by ``event_time`` ascending. No relevance filter is applied -
     regulators want the complete state, not the most relevant slice.
 
     Content is decrypted where the per-subject key is still live; memories whose
@@ -3204,7 +3204,7 @@ async def get_knowledge_snapshot(
                 or_(Memory.valid_to.is_(None), Memory.valid_to > as_of),
                 Memory.event_time <= as_of,
                 # No erased_at filter: crypto-shredded memories appear as
-                # tombstones (content=None, existence + hash preserved) — an
+                # tombstones (content=None, existence + hash preserved) - an
                 # examiner must see that a fact existed even after erasure.
             )
         )
@@ -3255,7 +3255,7 @@ async def get_memory_lineage(
     Walks the ``superseded_by`` pointers forward (to the current tip) and backward
     (to the oldest ancestor), then returns every version oldest-first with the
     supersession edges connecting them. The queried memory may sit anywhere in the
-    chain — root, tip, or middle.
+    chain - root, tip, or middle.
 
     Edge metadata (relation, confidence, rationale, adjudication stage) is read
     from the tamper-evident ``supersede`` event-log rows, so the lineage is
@@ -3391,7 +3391,7 @@ async def get_structured_fact_history(
 
     # For each requested (canonical) key, accept any of its metadata aliases.
     # e.g. for finance, 'ticker' is satisfied by metadata 'ticker' | 'entity' |
-    # 'isin' | 'cusip' — all normalized to the same canonical value.
+    # 'isin' | 'cusip' - all normalized to the same canonical value.
     alias_map = {c: adapter.key_aliases(c) for c in key_values}
 
     matched: list[Memory] = []
@@ -3585,8 +3585,8 @@ async def get_erasure_certificate(
     """
     Build a proof-of-erasure certificate for a crypto-shredded data subject.
 
-    Reads the ``erase`` event-log rows for the subject — their content was
-    destroyed but the SHA-256 ``content_hash`` of each survives — and reports the
+    Reads the ``erase`` event-log rows for the subject - their content was
+    destroyed but the SHA-256 ``content_hash`` of each survives - and reports the
     preserved hashes plus the current audit-chain status. Returns ``None`` when no
     erasure has been recorded for the subject (the route turns that into a 404).
     """

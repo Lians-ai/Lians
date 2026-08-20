@@ -1,10 +1,10 @@
 """
-Finance domain adapter — wraps the entity normalizer for the DomainAdapter protocol.
+Finance domain adapter - wraps the entity normalizer for the DomainAdapter protocol.
 
 This module is the only place in the codebase where finance-specific concepts
 (tickers, ISINs, CUSIPs, equity name aliases) are permitted to exist.
 
-The core engine imports only from adapters.get_adapter() — never directly from
+The core engine imports only from adapters.get_adapter() - never directly from
 here or from entity_normalizer.  That boundary is what lets the same core engine
 serve healthcare, legal, or any other regulated vertical without modification.
 """
@@ -32,9 +32,9 @@ _KEY_ALIASES: dict[str, list[str]] = {
 # Turns free-text like "AAPL price target raised to $250" into the structured
 # keys {"ticker": "AAPL", "metric": "price_target"} so the core's keyed
 # supersession fast path can fire on plain-text writes.  Pure, rule-based, and
-# reproducible — no model, no network — mirroring graph_extract's posture.
+# reproducible - no model, no network - mirroring graph_extract's posture.
 
-# $CASHTAG — an explicit ticker signal (1-5 letters, no leading digit).
+# $CASHTAG - an explicit ticker signal (1-5 letters, no leading digit).
 _CASHTAG_RE = re.compile(r"\$([A-Za-z]{1,5})\b")
 # A bare all-caps token that could be a ticker; only accepted if the normalizer
 # already knows it (guards against "EPS", "CEO", "USD", "Q3", …).
@@ -71,7 +71,7 @@ def _alias_pattern() -> Optional[re.Pattern]:
 
 
 def _detect_ticker(content: str) -> Optional[str]:
-    # 1. Cashtag — explicit, accept even if the symbol is unknown.
+    # 1. Cashtag - explicit, accept even if the symbol is unknown.
     m = _CASHTAG_RE.search(content)
     if m:
         return cached_normalize("ticker", m.group(1))
@@ -100,7 +100,7 @@ def _detect_metric(content: str) -> Optional[str]:
 def extract_finance_keys(content: str) -> dict[str, str]:
     """Best-effort structured keys from free text: {ticker?, metric?}.
 
-    May return {}, a partial set, or a full {ticker, metric} — the core decides
+    May return {}, a partial set, or a full {ticker, metric} - the core decides
     what to do with it.  A full set unlocks deterministic keyed supersession.
     """
     out: dict[str, str] = {}
@@ -118,9 +118,9 @@ class FinanceAdapter:
     Finance domain adapter: ticker/ISIN/CUSIP normalization + financial structured keys.
 
     Structured keys are the metadata fields that identify a financial fact:
-      ticker / entity / isin / cusip — what instrument
-      metric / field                 — what attribute (eps, price_target, revenue, …)
-      instrument                     — instrument type (equity, bond, option, …)
+      ticker / entity / isin / cusip - what instrument
+      metric / field - what attribute (eps, price_target, revenue, …)
+      instrument - instrument type (equity, bond, option, …)
 
     normalize() maps any of: company name, ISIN, CUSIP, or ticker alias → canonical ticker.
     key_aliases() tells the core which metadata fields are synonymous for a given key.

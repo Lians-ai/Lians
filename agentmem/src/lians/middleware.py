@@ -1,9 +1,9 @@
 """
 Production middleware: request IDs, structured JSON access logging, rate limiting.
 
-RequestIDMiddleware   — assigns X-Request-ID to every request; propagates via ContextVar
-AccessLogMiddleware   — logs one JSON line per request with method/path/status/duration_ms
-RateLimitMiddleware   — Redis-backed limit with a bounded local fallback
+RequestIDMiddleware - assigns X-Request-ID to every request; propagates via ContextVar
+AccessLogMiddleware - logs one JSON line per request with method/path/status/duration_ms
+RateLimitMiddleware - Redis-backed limit with a bounded local fallback
 
 All three are registered in main.py before any route middleware so they wrap
 every request uniformly, including 4xx/5xx responses from FastAPI's own validation.
@@ -36,7 +36,7 @@ _access_log = logging.getLogger("agentmem.access")
 # ── JSON log formatter ───────────────────────────────────────────────────────
 
 class _JSONFormatter(logging.Formatter):
-    """Emit one JSON object per log record — compatible with Datadog, Splunk, CloudWatch."""
+    """Emit one JSON object per log record - compatible with Datadog, Splunk, CloudWatch."""
 
     _EXTRA_FIELDS = (
         "request_id", "method", "path", "status",
@@ -79,7 +79,7 @@ def setup_logging(level: str = "INFO", json_logs: bool = True) -> None:
     root.addHandler(handler)
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
 
-    # Suppress uvicorn's built-in access log — our middleware replaces it
+    # Suppress uvicorn's built-in access log - our middleware replaces it
     logging.getLogger("uvicorn.access").handlers.clear()
     logging.getLogger("uvicorn.access").propagate = False
 
@@ -276,7 +276,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Health checks are exempt — LB probes must never be rate-limited
+        # Health checks are exempt - LB probes must never be rate-limited
         if request.url.path == "/health":
             return await call_next(request)
 

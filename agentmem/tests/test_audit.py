@@ -95,7 +95,7 @@ async def test_event_trail_included_in_reconstruction(db):
     )
 
     # The event trail filters on created_at (wall-clock ingestion time), so the
-    # as_of must be in the *real* future — a fixed date is a time bomb that
+    # as_of must be in the *real* future - a fixed date is a time bomb that
     # starts failing the day the calendar catches up with it (it did: 2026-07-01).
     result = await reconstruct(db, NS, AGENT,
                                as_of=datetime.now(timezone.utc) + timedelta(days=1))

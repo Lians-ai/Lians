@@ -1,4 +1,4 @@
-# Database migration Job — run BEFORE applying deployment.yaml on a new install
+# Database migration Job - run BEFORE applying deployment.yaml on a new install
 # or before upgrading to a new image version.
 #
 # Usage:
@@ -8,7 +8,7 @@
 # # If the job fails:
 # kubectl logs -n agentmem -l job-name=agentmem-migrate
 #
-# The job is idempotent — alembic upgrade head is safe to run multiple times.
+# The job is idempotent - alembic upgrade head is safe to run multiple times.
 # Delete the job after confirming success:
 # kubectl delete job agentmem-migrate -n agentmem
 apiVersion: batch/v1

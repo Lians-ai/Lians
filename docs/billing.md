@@ -22,7 +22,7 @@ How Clerk plans map to lians features, how to provision API keys per tier, how t
 | Pro | $199/mo | 2,000,000 | 1,000,000 |
 | Enterprise | Custom | Unlimited | Unlimited |
 
-Overage on paid tiers is billed via Stripe usage metering (writes + recalls) — the metering worker in `agentmem/src/lians/metering.py` already handles this.
+Overage on paid tiers is billed via Stripe usage metering (writes + recalls) - the metering worker in `agentmem/src/lians/metering.py` already handles this.
 
 ---
 
@@ -73,7 +73,7 @@ export const TIER_QUOTAS: Record<string, { writes: number; recalls: number }> = 
 
 ---
 
-## Step 1 — Clerk Webhook: Provision Key on Signup
+## Step 1 - Clerk Webhook: Provision Key on Signup
 
 Clerk fires `user.created` after checkout. Read the plan slug from `publicMetadata` (Clerk sets this when a user subscribes), derive the scopes, provision the key, and wire the Stripe customer ID for usage metering.
 
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
   if (event.type === "user.created") {
     const clerkUserId: string = event.data.id
 
-    // Clerk sets plan slug on publicMetadata after checkout — default to "free"
+    // Clerk sets plan slug on publicMetadata after checkout - default to "free"
     const tier: string = event.data.public_metadata?.plan ?? "free"
     const stripeCustomerId: string | undefined = event.data.private_metadata?.stripe_customer_id
 
@@ -142,7 +142,7 @@ export async function POST(req: Request) {
 
 ---
 
-## Step 2 — Dashboard: Reveal Key Once
+## Step 2 - Dashboard: Reveal Key Once
 
 The plaintext key is stored in Clerk private metadata and cleared on first read. After that, only the key ID is available (for rotate/revoke).
 
@@ -158,7 +158,7 @@ export async function GET() {
   const pending = user.privateMetadata?.pendingApiKey as string | undefined
 
   if (pending) {
-    // Clear immediately — never show again
+    // Clear immediately - never show again
     await clerkClient.users.updateUserMetadata(userId, {
       privateMetadata: { ...user.privateMetadata, pendingApiKey: null },
     })
@@ -187,7 +187,7 @@ export function ApiKeyPanel() {
     <div>
       {data.fresh ? (
         <div className="rounded border border-yellow-400 bg-yellow-50 p-4">
-          <p className="font-semibold">Copy your API key — it will not be shown again.</p>
+          <p className="font-semibold">Copy your API key - it will not be shown again.</p>
           <code className="block mt-2 break-all">{data.key}</code>
           <button onClick={() => navigator.clipboard.writeText(data.key!)}>
             Copy
@@ -210,7 +210,7 @@ async function rotateKey() {
 
 ---
 
-## Step 3 — Key Rotation
+## Step 3 - Key Rotation
 
 ```ts
 // app/api/user/api-key/rotate/route.ts
@@ -235,14 +235,14 @@ export async function POST() {
     privateMetadata: { ...user.privateMetadata, liansKeyId: newKeyId },
   })
 
-  // Return directly — this response is the one-time reveal
+  // Return directly - this response is the one-time reveal
   return Response.json({ key })
 }
 ```
 
 ---
 
-## Step 4 — Handle Plan Upgrades and Downgrades
+## Step 4 - Handle Plan Upgrades and Downgrades
 
 Clerk fires `user.updated` when a subscription changes. Read the new plan, derive the new scopes, rotate the key so the new scopes take effect immediately.
 
@@ -262,7 +262,7 @@ if (event.type === "user.updated") {
 
   const keyId = user.privateMetadata?.liansKeyId as string
 
-  // Rotate the key — old key is revoked, new key carries updated scopes
+  // Rotate the key - old key is revoked, new key carries updated scopes
   // Note: rotation preserves namespace and label but we need to re-provision
   // with the new scopes. Rotate then update scopes via a new key.
   await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys/${keyId}/rotate`, {
@@ -270,7 +270,7 @@ if (event.type === "user.updated") {
     headers: { "X-Admin-Secret": process.env.LIANS_ADMIN_SECRET! },
   })
 
-  // Rotation copies old scopes — re-provision a fresh key with correct scopes instead
+  // Rotation copies old scopes - re-provision a fresh key with correct scopes instead
   const keyRes = await fetch(`${process.env.LIANS_API_URL}/v1/admin/api-keys`, {
     method: "POST",
     headers: {
@@ -297,11 +297,11 @@ if (event.type === "user.updated") {
 }
 ```
 
-The user will see the "copy your new key" banner next time they visit the dashboard — the same one-time reveal flow as signup.
+The user will see the "copy your new key" banner next time they visit the dashboard - the same one-time reveal flow as signup.
 
 ---
 
-## Step 5 — Frontend Feature Gating
+## Step 5 - Frontend Feature Gating
 
 Use Clerk's `has()` helper to show or hide UI sections based on the features you defined per plan in the Clerk dashboard.
 
@@ -366,7 +366,7 @@ The feature names here must exactly match what you named them in the Clerk dashb
 
 ---
 
-## Step 6 — Backend Route Protection via Scopes
+## Step 6 - Backend Route Protection via Scopes
 
 Lians already checks scopes via `AuthContext.require()` in `agentmem/src/lians/api/deps.py`. Add scope checks to the relevant routes so a downgraded or free-tier key gets a `403` if it tries to use a feature above its tier.
 
@@ -386,7 +386,7 @@ Routes to protect and their required scope:
 | `GET /v1/admin/barriers` | `barriers` |
 | `GET /metrics` | `metrics` |
 
-Example — adding scope check to a route that doesn't have one yet:
+Example - adding scope check to a route that doesn't have one yet:
 
 ```python
 # In any route that should be Growth+ only
@@ -400,7 +400,7 @@ async def list_conflicts(auth: AuthContext = Depends(get_auth), ...):
 
 ---
 
-## Step 7 — Quota Enforcement (Future)
+## Step 7 - Quota Enforcement (Future)
 
 The metering worker reports usage to Stripe but does not currently block requests when a free-tier user hits their monthly limit. To enforce quotas you need to:
 
@@ -408,7 +408,7 @@ The metering worker reports usage to Stripe but does not currently block request
 2. Add a `writes_this_month` / `recalls_this_month` counter, reset on the 1st of each month by the scheduler (`agentmem/src/lians/scheduler.py`).
 3. In `memory_service.py`, before writing or recalling, check the counter against `TIER_QUOTAS[tier]` and return `HTTP 429` with a `Retry-After` header when exceeded.
 
-This is not implemented yet — the metering layer handles overage billing for paid tiers, so quota enforcement is only critical for the Free tier to prevent abuse.
+This is not implemented yet - the metering layer handles overage billing for paid tiers, so quota enforcement is only critical for the Free tier to prevent abuse.
 
 ---
 

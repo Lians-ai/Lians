@@ -1,0 +1,92 @@
+name: Lians Guard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+
+permissions:
+  contents: read
+
+jobs:
+  clean-install:
+    name: Clean install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Build, install, and launch in an isolated environment
+        run: python .github/scripts/clean-install-lians-easy.py
+
+  guard:
+    name: Guard trust, lifecycle, and report contracts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Guard test tooling
+        run: python -m pip install -e packages/lians-easy pytest ruff==0.16.3
+      - name: Check the Guard release surface
+        run: >-
+          python -m ruff check
+          packages/lians-easy/lians_easy
+          packages/lians-easy/tests
+          --select E4,E7,E9,F
+      - name: Check repository correctness baseline
+        run: python -m ruff check .
+      - name: Run the complete headless Guard suite
+        run: >-
+          python -m pytest packages/lians-easy/tests -q
+          --ignore=packages/lians-easy/tests/test_gui_launch.py
+      - name: Emit bounded CI evidence
+        if: github.event_name != 'pull_request'
+        run: >-
+          python -m lians_easy.cli ci-evidence emit
+          --output lians-guard-evidence.json
+          --check guard-lint
+          --check guard-tests
+      - name: Upload CI evidence
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lians-guard-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: lians-guard-evidence.json
+      - name: Attest CI evidence provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: lians-guard-evidence.json
+
+  desktop-gui:
+    name: Desktop GUI launch (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install desktop test tooling
+        run: python -m pip install -e packages/lians-easy pytest
+      - name: Verify the native launcher contract
+        run: python -m pytest packages/lians-easy/tests/test_gui_launch.py -q

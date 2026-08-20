@@ -4,7 +4,7 @@ Revision ID: 0012_relationships
 Revises: 0011_rls_barriers
 Create Date: 2026-06-29
 
-Adds the ``relationships`` table — a bitemporal knowledge-graph edge store that
+Adds the ``relationships`` table - a bitemporal knowledge-graph edge store that
 mirrors the temporal/audit/barrier columns of ``memories``. Enables compliance
 graph queries (conflict-of-interest, related-party, care-network) without a
 separate graph database: N-hop traversal runs over Postgres.

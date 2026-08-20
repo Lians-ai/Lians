@@ -182,6 +182,8 @@ class ContinuityExperiment:
                         field="completed.evidence",
                         maximum=4_000,
                     ),
+                    "trust_class": "agent_attested",
+                    "source": source_ref,
                 }
             )
 
@@ -248,7 +250,14 @@ class ContinuityExperiment:
             for value in payload.get("open_questions") or []
         ]
         proposed_evidence = {
-            item["criterion_id"]: item["evidence"] for item in evidence
+            item["criterion_id"]: {
+                "evidence": item["evidence"],
+                "trust_class": item["trust_class"],
+                "source": item["source"],
+                "declared_trust_class": None,
+                "trust_provenance": None,
+            }
+            for item in evidence
         }
         same_checkpoint = bool(existing_state) and all(
             (
@@ -414,8 +423,15 @@ class ContinuityExperiment:
         state = status.get("state") or {}
         assessment = status["assessment"]
         completed = [item["description"] for item in assessment["criteria"] if item["satisfied"]]
+        reported_completed = [
+            item["description"]
+            for item in assessment["criteria"]
+            if item.get("evidence") and not item["satisfied"]
+        ]
         unfinished = [
-            item["description"] for item in assessment["criteria"] if not item["satisfied"]
+            item["description"]
+            for item in assessment["criteria"]
+            if not item["satisfied"] and not item.get("evidence")
         ]
         current_memories = self.store.list(
             state="current",
@@ -467,7 +483,8 @@ class ContinuityExperiment:
             )
 
         sections: list[tuple[str, list[str]]] = [
-            ("Completed", completed),
+            ("Verified complete", completed),
+            ("Reported complete; verify", reported_completed),
             ("Still open", unfinished),
             ("Blocked", list(assessment["blockers"])),
             ("Project truth", [item["content"] for item in project_truth]),
@@ -556,6 +573,7 @@ class ContinuityExperiment:
             "receipt": receipt,
             "state": {
                 "completed": completed,
+                "reported_completed": reported_completed,
                 "unfinished": unfinished,
                 "blocked": list(assessment["blockers"]),
                 "project_truth": [item["content"] for item in project_truth],
@@ -599,6 +617,7 @@ def evaluate(handoff: dict[str, Any], expected: dict[str, Any]) -> dict[str, Any
             checks.append({"field": field, "expected": rendered, "passed": passed})
 
     compare("completed", list(state.get("completed") or []))
+    compare("reported_completed", list(state.get("reported_completed") or []))
     compare("unfinished", list(state.get("unfinished") or []))
     compare("project_truth", list(state.get("project_truth") or []))
     compare("decisions", list(state.get("decisions") or []))

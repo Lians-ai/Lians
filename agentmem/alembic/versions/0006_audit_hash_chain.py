@@ -1,9 +1,9 @@
 """Add prev_hash and row_hash to event_log for SEC 17a-4 tamper-evidence
 
 Each event_log row now stores:
-  prev_hash — SHA-256 of the previous row in the same namespace (or 64 zeros
-               for the first row — the "genesis" sentinel).
-  row_hash  — SHA-256(prev_hash || id || namespace || agent_id || op ||
+  prev_hash - SHA-256 of the previous row in the same namespace (or 64 zeros
+               for the first row - the "genesis" sentinel).
+  row_hash - SHA-256(prev_hash || id || namespace || agent_id || op ||
                memory_id || content_hash || created_at ISO-8601).
 
 Any modification of a historical row breaks the chain from that point forward,

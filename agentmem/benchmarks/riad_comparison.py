@@ -175,7 +175,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         for key, label in CHECKS:
             cell = cells[key]
             lines.append(
-                f"- **{label} — {GLYPH[cell['status']]} ({cell['mode']}):** "
+                f"- **{label} - {GLYPH[cell['status']]} ({cell['mode']}):** "
                 f"{cell['evidence']} [Source]({cell['source']})"
             )
         lines.append("")

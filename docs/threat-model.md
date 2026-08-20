@@ -37,11 +37,11 @@ authn/z; the database is a second boundary enforcing RLS.
 ## Key residual risks & assumptions
 
 1. **Run as a non-superuser DB role.** Superusers and `BYPASSRLS` roles bypass all
-   RLS — the single most important deployment control. Enforced/asserted in CI.
+   RLS - the single most important deployment control. Enforced/asserted in CI.
 2. **KMS protects the master key.** Compromise of the master key compromises all
    DEKs; use a real KMS (AWS/Azure/Vault) and rotate.
 3. **Optional LLM stages** (supersession Stage-3, graph extraction with `use_llm`)
-   send text to a model provider — disabled in air-gap mode; rule-based defaults
+   send text to a model provider - disabled in air-gap mode; rule-based defaults
    keep the core deterministic and in-perimeter.
 4. **SIEM / webhook receivers** are trusted endpoints; deliveries are HMAC-signed
    (webhooks) and best-effort (never block the write path).

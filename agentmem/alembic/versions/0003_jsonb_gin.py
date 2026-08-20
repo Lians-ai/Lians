@@ -45,14 +45,14 @@ def upgrade() -> None:
         "ALTER TABLE event_log ALTER COLUMN payload TYPE JSONB USING payload::JSONB"
     ))
 
-    # GIN index on memories.metadata — accelerates ticker/metric/entity filters
+    # GIN index on memories.metadata - accelerates ticker/metric/entity filters
     # Uses jsonb_path_ops for faster containment (@>) queries.
     op.execute(sa.text(
         "CREATE INDEX IF NOT EXISTS ix_memories_metadata_gin "
         "ON memories USING GIN (metadata jsonb_path_ops)"
     ))
 
-    # GIN index on event_log.payload — accelerates audit queries by op + payload fields
+    # GIN index on event_log.payload - accelerates audit queries by op + payload fields
     op.execute(sa.text(
         "CREATE INDEX IF NOT EXISTS ix_event_log_payload_gin "
         "ON event_log USING GIN (payload jsonb_path_ops)"

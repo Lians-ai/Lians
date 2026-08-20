@@ -36,7 +36,7 @@ async def erasure_certificate(
 
     The certificate proves:
     - N memories had their encrypted content permanently destroyed (DEK shredded).
-    - The SHA-256 content_hashes are preserved — the erasure is auditable but
+    - The SHA-256 content_hashes are preserved - the erasure is auditable but
       the content is cryptographically unrecoverable.
     - The audit chain remains intact after the erasure (SEC 17a-4 compliant).
     - A unique `certificate_id` is generated for filing with a supervisory

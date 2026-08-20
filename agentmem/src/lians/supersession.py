@@ -1,22 +1,22 @@
 """
-Supersession engine — decides what a new memory supersedes.
+Supersession engine - decides what a new memory supersedes.
 
 Phase 1: Stage 1 (candidate generation) + Stage 2 (rule-based classification).
 Phase 2 adds: Stage 3 (LLM adjudication) for ambiguous pairs.
 
 Change 3 (performance roadmap): keyed facts supersede deterministically by
-event_time — no model call, no candidate scoring, no latency.  LLM adjudication
+event_time - no model call, no candidate scoring, no latency.  LLM adjudication
 for unkeyed free-text is moved to an async worker (off the write path) when
 ``config.llm_adjudication_async`` is True.
 
 Relations:
-  SUPERSEDES           — same entity+attribute, newer event_time, values differ
-  REFINES              — new fact narrows the old (contains everything the old
+  SUPERSEDES - same entity+attribute, newer event_time, values differ
+  REFINES - new fact narrows the old (contains everything the old
                          said, plus detail); old validity closes like SUPERSEDES
                          but the audit trail records a narrowing, not a stale value
-  CONFIRMS             — same entity+attribute, same value
-  ADDS                 — related topic, distinct attribute
-  CONTRADICTS_SAME_TIME — conflicting values, no clear temporal ordering
+  CONFIRMS - same entity+attribute, same value
+  ADDS - related topic, distinct attribute
+  CONTRADICTS_SAME_TIME - conflicting values, no clear temporal ordering
 
 REFINES is harvested from the Memory Governor's proposal vocabulary
 (docs/governor-integration.md Phase 3) so Governor proposals and engine
@@ -54,7 +54,7 @@ _SIM_THRESHOLD = 0.82
 _CUE_SIM_THRESHOLD = 0.60
 
 def _get_structured_keys() -> frozenset[str]:
-    """Read structured keys from the active domain adapter — never hardcoded."""
+    """Read structured keys from the active domain adapter - never hardcoded."""
     from .adapters import get_adapter
     return get_adapter().structured_keys
 
@@ -178,7 +178,7 @@ async def run_llm_adjudication_worker(session_factory) -> None:
         try:
             relation, confidence, rationale = await llm_adjudicate(old_content, new_content, meta)
             if relation == "CONFIRMS":
-                # Verdict: paraphrase — restore the superseded memory
+                # Verdict: paraphrase - restore the superseded memory
                 async with session_factory() as db:
                     old_mem = await db.get(Memory, old_id)
                     if old_mem and old_mem.valid_to is not None:
@@ -225,7 +225,7 @@ def _norm_meta(meta: dict) -> dict[str, str]:
 def _has_structured_key(meta: dict) -> bool:
     """True if *meta* carries any of the domain adapter's structured keys.
 
-    Distinguishes keyed facts (ticker/metric/entity/…) — which may supersede —
+    Distinguishes keyed facts (ticker/metric/entity/…) - which may supersede -
     from unkeyed free text (chat turns, notes), which never auto-supersedes.
     """
     from .adapters import get_adapter
@@ -267,11 +267,11 @@ def _narrows(old_content: Optional[str], new_content: str) -> bool:
 
 # Deterministic revision-cue lexicon for unkeyed free text. Without structured
 # keys, two differing statements are DISTINCT by default (see classify_relation's
-# guard) — but a statement that *announces itself* as a revision ("I eat fish
+# guard) - but a statement that *announces itself* as a revision ("I eat fish
 # now", "switched to Pacific Time", "rate adjusted to $175") is the one case
 # where free text can supersede: high Stage-1 similarity (same topic) plus an
 # explicit change marker plus a later event_time. Rule-based, reproducible, no
-# model call — and the verdict lands at moderate confidence so it is visible in
+# model call - and the verdict lands at moderate confidence so it is visible in
 # review_supersessions and eligible for Stage-3 LLM adjudication when enabled.
 import re as _re_mod
 
@@ -281,7 +281,7 @@ _REVISION_CUE_RE = _re_mod.compile(
     # "now" as a trailing state marker ("I eat fish now"), not the fillers that
     # saturate casual dialogue: "what now?", "right now", discourse-initial "Now,".
     r"(?<!what )(?<!right )(?<!for )(?<![.!?] )now|instead|"
-    # self-correction comma forms only — bare "wait"/"actually" fire on
+    # self-correction comma forms only - bare "wait"/"actually" fire on
     # "can't wait" / "actually really fun" constantly in chat. Lookahead for
     # the comma: inside a group that ends in \b, a literal "wait," could never
     # match ("," then space has no word boundary).
@@ -299,7 +299,7 @@ _REVISION_CUE_RE = _re_mod.compile(
 # A revision announces itself compactly ("I eat fish now", "my day rate went up
 # to $1100"); a reminiscence rambles. LOCOMO forensics (2026-07-11): 527 of
 # 5,882 raw dialogue turns (9%) were falsely closed by the cue path, and the
-# closers were overwhelmingly long chatty turns with an incidental cue word —
+# closers were overwhelmingly long chatty turns with an incidental cue word -
 # the length gate plus the lexicon tightening above prevents 81% of those
 # closures while every calibrated true-revision utterance still qualifies.
 _CUE_MAX_LEN = int(_os.getenv("SUPERSESSION_CUE_MAX_LEN", "160"))
@@ -352,7 +352,7 @@ def _is_full_structured_match(old_meta: dict, new_meta: dict) -> bool:
 def _candidate_content(mem: Memory, subject_key: Optional[bytes]) -> Optional[str]:
     """Best-effort plaintext of a candidate memory (same rules as the slow path):
     subject-keyed rows decrypt with the caller's DEK, unkeyed rows are raw bytes.
-    Returns None when the content is unavailable — callers must degrade safely."""
+    Returns None when the content is unavailable - callers must degrade safely."""
     if mem.content_encrypted is None:
         return None
     if mem.subject_id:
@@ -386,10 +386,10 @@ async def _keyed_supersession(
 
     The relation label is still classified, deterministically: an identical
     value re-stated later is CONFIRMS (duplicate ingestion, nothing to close),
-    a later value that restates the old and adds detail is REFINES (0.8 — same
+    a later value that restates the old and adds detail is REFINES (0.8 - same
     window-close as SUPERSEDES, different audit label), and only a genuinely
     changed value is SUPERSEDES (1.0). Without this, REFINES/CONFIRMS were
-    unreachable for keyed facts — every keyed rewrite audited as a 1.0
+    unreachable for keyed facts - every keyed rewrite audited as a 1.0
     supersession even when nothing changed.
     """
     stmt = select(Memory).where(
@@ -421,7 +421,7 @@ async def _keyed_supersession(
         if old_et < new_et:
             # Identical value observed again later: a re-confirmation. The new
             # observation becomes the live copy (old window closes at the new
-            # event_time — validity is continuous since the value is unchanged),
+            # event_time - validity is continuous since the value is unchanged),
             # but the audit label must say CONFIRMS, not SUPERSEDES: nothing
             # actually changed.
             if new_content_hash and mem.content_hash and new_content_hash == mem.content_hash:
@@ -433,7 +433,7 @@ async def _keyed_supersession(
         elif old_et == new_et:
             # Same structured key, same point in time.
             # If the content hashes match it's the same fact from a different source
-            # (CONFIRMS) — a duplicate ingestion, not a conflict; closing the old
+            # (CONFIRMS) - a duplicate ingestion, not a conflict; closing the old
             # window here would create a zero-width validity window, so both stay.
             # Only flag as CONTRADICTS_SAME_TIME when the values are demonstrably
             # different.
@@ -442,7 +442,7 @@ async def _keyed_supersession(
             else:
                 conflict_ids.append(mem.id)
         else:
-            # old_et > new_et: a newer same-key fact already exists — out-of-order
+            # old_et > new_et: a newer same-key fact already exists - out-of-order
             # ingestion. The incoming memory is historical on arrival: it must not
             # stay live alongside the newer value. Track the IMMEDIATE successor
             # (smallest event_time > new_et) so the incoming validity window
@@ -451,8 +451,8 @@ async def _keyed_supersession(
             # Closure demands FULL metadata equivalence, not just structured-key
             # match: {ticker, metric} alone would let a Q2 figure close a
             # late-arriving Q1 *correction* (period is a discriminating key even
-            # though it isn't structured). Forward supersession stays coarse —
-            # its behavior is long-established — but closing an incoming fact is
+            # though it isn't structured). Forward supersession stays coarse -
+            # its behavior is long-established - but closing an incoming fact is
             # only safe when nothing distinguishes the two.
             if _non_structured_meta(old_meta) == _non_structured_meta(new_meta):
                 if newer_existing is None or _utc(mem.event_time) < _utc(newer_existing.event_time):
@@ -514,7 +514,7 @@ async def find_supersession_candidates(
     """Stage 1: find prior valid memories sharing structured keys + high cosine sim.
 
     Keyed facts require structured-key overlap. Unkeyed (free-text) facts fall
-    back to pure embedding similarity — without this, free-text memories could
+    back to pure embedding similarity - without this, free-text memories could
     never supersede or refine each other, because run_supersession only routes
     here when the new fact has no structured keys.
     """
@@ -592,7 +592,7 @@ def classify_relation(
     if same_value:
         return "CONFIRMS", 0.9
     # Narrowing: the new fact restates the old and adds detail. Not a stale
-    # value (SUPERSEDES) and not a disagreement (CONTRADICTS) — the Governor's
+    # value (SUPERSEDES) and not a disagreement (CONTRADICTS) - the Governor's
     # REFINE, now first-class here. Only when the new fact isn't older: an
     # earlier narrowing can't refine the current state.
     if temporal_order != "old_is_later" and _narrows(old_content, new_content):
@@ -630,8 +630,8 @@ async def run_supersession(
     """Full supersession funnel.
 
     ``cue_hint``: treat the new content as a cued revision even if it carries
-    no cue word itself — used by derived interjection clauses, whose revision
-    cue often stays in the surrounding parent-turn chatter ("Oh wait — tell
+    no cue word itself - used by derived interjection clauses, whose revision
+    cue often stays in the surrounding parent-turn chatter ("Oh wait - tell
     the caterer ...": the extracted clause is the payload, the cue was the
     lead-in).
 
@@ -648,7 +648,7 @@ async def run_supersession(
     """
     settings = get_settings()
 
-    # Change 3: keyed fast path — structured keys from domain adapter, not hardcoded
+    # Change 3: keyed fast path - structured keys from domain adapter, not hardcoded
     import hashlib as _hl
     new_content_hash = content_hash_override or _hl.sha256(new_content.encode()).hexdigest()
     from .adapters import get_adapter as _get_adapter
@@ -674,7 +674,7 @@ async def run_supersession(
     best_confidence = 1.0
     best_rationale: Optional[str] = None
     # Unkeyed revision handling (see _REVISION_CUE_RE): a cued update supersedes
-    # only its single most-similar candidate — real revisions target one fact,
+    # only its single most-similar candidate - real revisions target one fact,
     # and top-1 keeps a multi-fact utterance from mowing down its whole topic.
     cue_candidates: list[tuple[float, Any, str]] = []   # (sim, candidate, old_content)
     newer_closer: Optional[Any] = None                  # live newer revision → closes incoming
@@ -725,13 +725,13 @@ async def run_supersession(
             and old_content is not None
         ):
             if settings.llm_adjudication_async and new_memory_id is not None:
-                # Change 3: enqueue — don't block the write path
+                # Change 3: enqueue - don't block the write path
                 try:
                     await _enqueue_adjudication(
                         db, namespace, candidate.id, new_memory_id,
                     )
                 except asyncio.QueueFull:
-                    logger.warning("LLM adjudication queue full — skipping async Stage 3")
+                    logger.warning("LLM adjudication queue full - skipping async Stage 3")
                 # Proceed with Stage-2 SUPERSEDES verdict; worker may later refine
             else:
                 # Synchronous Stage 3 (legacy / llm_adjudication_async=False)
@@ -775,7 +775,7 @@ async def run_supersession(
                             db, namespace, chosen.id, new_memory_id,
                         )
                     except asyncio.QueueFull:
-                        logger.warning("LLM adjudication queue full — skipping async Stage 3")
+                        logger.warning("LLM adjudication queue full - skipping async Stage 3")
                     superseded_ids.append(chosen.id)
                     if best_relation not in ("SUPERSEDES",):
                         best_relation, best_confidence = "SUPERSEDES", 0.7

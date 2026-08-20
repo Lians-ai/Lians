@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lians"
 version = "0.2.0"
-description = "Financial-grade AI memory — bitemporal facts, SEC 17a-4 audit chain, GDPR crypto-shred"
+description = "Financial-grade AI memory - bitemporal facts, SEC 17a-4 audit chain, GDPR crypto-shred"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 keywords = [

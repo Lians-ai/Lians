@@ -1,8 +1,8 @@
 """
-Current-facts projection — Change 1 of the performance roadmap.
+Current-facts projection - Change 1 of the performance roadmap.
 
 Maintains ``live_facts`` as a compact, always-current view of memories:
-  • One row per keyed (namespace, agent_id, predicate_key) — the latest
+  • One row per keyed (namespace, agent_id, predicate_key) - the latest
     non-superseded fact for each entity+attribute combination.
   • One row per unkeyed memory while it remains live.
 
@@ -30,7 +30,7 @@ def _get_structured_keys() -> frozenset[str]:
     return get_adapter().structured_keys
 
 
-# Cached fallback — same default as the finance adapter so behaviour is unchanged
+# Cached fallback - same default as the finance adapter so behaviour is unchanged
 # when DOMAIN_ADAPTER=finance (the default).  current_facts.py is called on
 # every write; the per-call adapter lookup is O(1) dict access after first load.
 _STRUCTURED_KEYS: frozenset[str] = frozenset({"ticker", "metric", "entity", "instrument", "cusip", "isin", "field"})
@@ -59,7 +59,7 @@ async def upsert_live_fact(
     """Insert a new live fact entry for *mem*.
 
     Removals of superseded entries are handled exclusively by
-    ``remove_live_facts(superseded_ids)`` — which is called with the
+    ``remove_live_facts(superseded_ids)`` - which is called with the
     supersession engine's verdict before this function.  Inserting here
     without a pre-delete means same-predicate-key facts that were *not*
     superseded (e.g. same event_time or ADDS relation) correctly coexist
@@ -97,7 +97,7 @@ async def keyed_lookup(
     barrier_group: Optional[str],
     reference_time: Optional[datetime] = None,
 ) -> Optional[LiveFact]:
-    """Exact-match lookup for a keyed fact — no embedding, no ANN.
+    """Exact-match lookup for a keyed fact - no embedding, no ANN.
 
     Returns the live fact if it exists and passes the barrier check, otherwise
     None (caller falls through to the vector-search branch).  Sub-millisecond
@@ -130,7 +130,7 @@ async def fetch_working_set(
     barrier_group: Optional[str],
     reference_time: Optional[datetime] = None,
 ) -> list[LiveFact]:
-    """Load all live facts for an agent — used to warm the in-process cache."""
+    """Load all live facts for an agent - used to warm the in-process cache."""
     conditions = [
         LiveFact.namespace == namespace,
         LiveFact.agent_id == agent_id,

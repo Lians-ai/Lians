@@ -1,54 +1,43 @@
-# Lians Continuity (beta candidate)
+# Lians Guard (developer preview)
 
-**Context windows end. Your work does not.**
+**Recover the task. Reject stale state. Block unsupported done.**
 
-Lians is the local control and intelligence layer for the AI agents people
-already use. It detects supported apps, connects through their native MCP,
-hook, or rule surfaces, and helps the user observe, guide, or protect agentic
-work without replacing Claude, Codex, Cursor, Gemini, or another client with a
-Lians chat wrapper. The same package carries the encrypted local control
-center; users do not hand Lians their AI account credentials or provider API
-keys.
+Lians Guard is the local current-state and completion guard for AI coding
+agents. It recovers interrupted work, checks whether a saved checkpoint still
+matches the repository, and keeps `done` behind an evidence-backed human-review
+gate. It connects through supported MCP, hook, and rule surfaces without
+replacing Claude Code, Codex, Git, CI, or the user's editor. Users do not give
+Lians their AI account credentials or provider API keys.
 
-The local Understanding layer now reads the current request alongside a
-bounded set of relevant memories, identifies the intended kind of work, and
-returns an inspectable brief with at most three useful questions. A connected
-agent is instructed to ask only when one missing answer blocks a reliable next
-action. Clear requests proceed immediately. Prompt text is not persisted and
-no second model is called. The desktop **Understand** view exposes the same
-behavior before a user starts a task, plus a read-only memory health score.
+Free local memory remains the recovery wedge. A connected agent can resume a
+bounded current task without replaying a full transcript. The broader Guard
+workflow adds task contracts, typed evidence, workspace fingerprints, stale
+state, and an explicit readiness gate.
 
-Memory is organized into four visible layers: identity, current work, episodic
-handoffs, and knowledge. Small context packs reserve room for current work and
-evidence instead of allowing preference records to consume the entire budget.
-The `memory_health` tool reports duplicate, overly broad, oversized, stale, or
-unversioned records without silently rewriting or deleting them.
+Positive evidence has one of three trusted classes: `measured_local`,
+`measured_ci`, or `human_confirmed`. Agent summaries use `agent_attested`, and
+file activity uses `inferred_activity`; both remain useful recovery context but
+cannot satisfy a completion criterion. Agent-facing tools cannot promote their
+own evidence to a trusted class. Trusted local evidence comes from a Lians-owned
+verifier, attested CI evidence must match the exact workflow and commit, and
+its check-to-criterion mapping must be interactively authorized. Human
+confirmation is also interactive.
 
-The beta control surface has three user-owned modes:
+The user-facing state is deliberately small:
 
-- **Observe** records content-free agent activity for the Work Graph and does
-  not inject Lians context.
-- **Guide** supplies the smallest useful current state, task contract, and
-  recovery context under a configurable token budget.
-- **Protect** adds explicit approval requirements for selected high-impact
-  actions. Lians reports when a host lacks the native action hook required for
-  technical enforcement.
+- `RECOVERED`: the bounded current task was restored;
+- `STALE`: the saved checkpoint no longer matches current workspace state;
+- `BLOCKED`: a criterion, constraint, or dependency prevents review; and
+- `READY FOR HUMAN REVIEW`: the configured evidence gate passed and a person
+  must review the work.
 
-The interactive 3D Work Graph visualizes projects, tasks, agents, sessions,
-memories, decisions, evidence, blockers, and provenance. Verified relationships
-remain distinct from optional inferred relationships. Users can inspect the
-origin and state of a node and pause or resume selected memory directly from
-the graph.
+The first supported path centers on Claude Code, Codex, local Git, and GitHub
+Actions. A long-running task carries an encrypted continuity contract with its
+goal, success criteria, checkpoint, evidence, constraints, decisions, questions,
+next action, sources, and blockers. Another supported agent can continue from a
+bounded signed brief without rereading the transcript.
 
-The first reliability problem Lians owns is lost working state. A long-running
-task carries one encrypted continuity contract across Claude, Codex, Cursor,
-and every other connected MCP client: its goal, success criteria, checkpoint,
-verified work, constraints, decisions, open questions, next action, sources,
-and blockers. Lians keeps the completion gate closed when proof is missing, a
-constraint failed, or a stale agent tries to replace newer progress. Another
-agent can continue from a bounded signed brief without rereading the transcript.
-
-The second is stale working state. Agents can declare which memories, files,
+A related reliability problem is stale working state. Agents can declare which memories, files,
 tests, documents, analyses, and outputs depend on a current fact or decision.
 When that state changes, Lians blocks invalidated memories from normal recall,
 shows the transitive blast radius in the Work Graph, and supplies a bounded
@@ -56,46 +45,32 @@ repair brief containing the verified replacement plus only the affected work.
 Unrelated work remains untouched. Dependency references, labels, reasons, and
 repair evidence stay encrypted locally.
 
-The third is unverified completion. For repository work, Lians can bind a task
-contract to approved paths, map each changed file to a success criterion, scan
+The next reliability problem is unverified completion. For repository work,
+Lians can bind a task contract to approved paths, map each changed file to a
+success criterion, scan
 the real Git diff for scope violations, whitespace errors, credential patterns,
 and selected risky constructs, then combine that with task evidence and current
 state. The result is an encrypted, Ed25519-signed verification receipt tied to
 the base commit and exact diff hash. It never runs arbitrary project commands;
 test evidence supplied by an agent is explicitly caller-attested. A clean
-receipt means ready for human ship review, not formally proven correctness or
-autonomous approval.
+receipt means ready for human review, not proven correctness, autonomous
+approval, merge approval, or deployment safety.
 
-For critical bounded behavior, a verification policy can reference one or more
-`finite-model-v1` manifests. Lians exhaustively checks every satisfying
-assignment, rejects vacuous assumptions, and includes either a proof or a
-counterexample in the signed receipt. The Work Graph labels a clean result as a
-proof-backed ship review. Source files are hash-bound to the proof, but source
-to model equivalence is not yet proven, so Lians does not claim general
-implementation correctness.
-
-The `python-finite-function-v1` backend can instead parse one restricted pure
-Python function and prove postconditions against that actual function for every
-declared bounded input. It never imports or executes the file. This closes the
-source-to-model gap for the supported function, but remains a bounded proof and
-does not establish correctness for the rest of an application.
+Advanced state graphs, control modes, research tools, video ingestion, temporal
+reconstruction, and bounded proof backends remain in the repository behind
+progressive disclosure. They are not the launch story or requirements for the
+Guard activation loop.
 
 The ordinary product surface remains intentionally small:
 
-1. Open Lians and choose the AI apps to optimize. Use **Understand** when the
-   goal is still fuzzy.
-2. Choose Observe, Guide, or Protect, then keep using those apps normally. Say `Remember that...` when a detail should
-   survive the current chat. For substantial work, let the agent create a Lians
-   Task Contract before it begins.
-3. For repository changes, let the agent configure an approved scope and call
-   `verify_work` before it claims completion. Review the signed receipt and the
-   underlying diff yourself before shipping.
-4. Run `lians continue` or use the **Active work** card to resume from the last
-   verified checkpoint. Use the Work Graph to inspect provenance and risk. Run
-   `lians status` for connected apps and measured context reuse.
+1. Connect Lians Guard to a supported AI coding app.
+2. Start a task contract with a goal, success criteria, and constraints.
+3. Record checkpoints with typed evidence and a local workspace fingerprint.
+4. Resume with `lians continue`, repair any `STALE` or `BLOCKED` state, and
+   review the underlying work when the gate says `READY FOR HUMAN REVIEW`.
 
-Memory controls, receipts, backup, cloud-sync preview, and deployment options
-remain available as progressive technical disclosure.
+Memory controls, receipts, backup, cloud-sync preview, graphs, modes, and
+deployment options remain available as progressive technical disclosure.
 
 The current desktop artifacts are development builds and are not yet published
 with trusted operating-system signatures. Context receipts are Ed25519-signed,
@@ -109,6 +84,9 @@ python -m lians_easy status
 python -m lians_easy doctor --json
 python -m lians_easy app
 ```
+
+<details>
+<summary><strong>Advanced experiments and research utilities</strong></summary>
 
 To test the product hypothesis before changing the desktop experience, build
 the offline Claude comparison plan. A live run is a separate, explicit action
@@ -173,6 +151,8 @@ include `title`, `source_uri`, `tags`, `provider`, `model`, `occurred_at`, and
 consolidation, not 10,000 raw records, into cross-agent memory. This pipeline
 does not claim to make video-model inference faster: it scales the encrypted
 ingestion, recovery, search, and consolidation of completed provider outputs.
+
+</details>
 
 ## Developer package
 

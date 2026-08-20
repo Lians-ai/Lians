@@ -25,6 +25,27 @@ def _start(service: TaskContractService, **overrides):
     return service.start(**values)
 
 
+def _measured(criterion_id: str, evidence: str) -> dict[str, str]:
+    return {
+        "criterion_id": criterion_id,
+        "evidence": evidence,
+        "trust_class": "measured_local",
+        "source": "pytest fixture",
+    }
+
+
+def _measured_check(
+    constraint_id: str, status: str, evidence: str
+) -> dict[str, str]:
+    return {
+        "constraint_id": constraint_id,
+        "status": status,
+        "evidence": evidence,
+        "trust_class": "measured_local",
+        "source": "pytest fixture",
+    }
+
+
 def test_task_stays_active_until_every_criterion_and_constraint_has_evidence(tmp_path):
     service = _service(tmp_path)
     started = _start(service)
@@ -34,18 +55,17 @@ def test_task_stays_active_until_every_criterion_and_constraint_has_evidence(tmp
     assert started["assessment"]["unknown_constraints"] == ["constraint-1"]
     assert started["assessment"]["may_claim_completion"] is False
 
-    partial = service.checkpoint(
+    partial = service._checkpoint_trusted(
         "release-test",
         "The launcher smoke test passed",
+        issuer="local_verification",
         project_id="project-1",
         current_action="Inspect the MCP tool list",
-        evidence=[{"criterion_id": "criterion-1", "evidence": "Process test exit code 0"}],
+        evidence=[_measured("criterion-1", "Process test exit code 0")],
         constraint_checks=[
-            {
-                "constraint_id": "constraint-1",
-                "status": "passed",
-                "evidence": "Credential scanner found zero values",
-            }
+            _measured_check(
+                "constraint-1", "passed", "Credential scanner found zero values"
+            )
         ],
         client="claude",
     )
@@ -53,35 +73,35 @@ def test_task_stays_active_until_every_criterion_and_constraint_has_evidence(tmp
     assert partial["assessment"]["status"] == "active"
     assert partial["assessment"]["missing_criteria"] == ["criterion-2"]
 
-    complete = service.checkpoint(
+    complete = service._checkpoint_trusted(
         "release-test",
         "The runtime exposed the complete supported tool set",
+        issuer="local_verification",
         project_id="project-1",
-        evidence=[{"criterion_id": "criterion-2", "evidence": "tools/list returned 12 tools"}],
+        evidence=[_measured("criterion-2", "tools/list returned 12 tools")],
         client="cursor",
     )
 
-    assert complete["assessment"]["status"] == "ready_for_review"
+    assert complete["assessment"]["status"] == "ready_for_human_review"
     assert complete["assessment"]["missing_criteria"] == []
     assert complete["assessment"]["may_claim_completion"] is True
     assert complete["state"]["client"] == "cursor"
-    assert complete["state"]["evidence"]["criterion-1"] == "Process test exit code 0"
+    assert complete["state"]["evidence"]["criterion-1"]["evidence"] == (
+        "Process test exit code 0"
+    )
+    assert complete["state"]["evidence"]["criterion-1"]["trust_class"] == (
+        "measured_local"
+    )
 
 
 def test_blockers_and_failed_constraints_prevent_completion(tmp_path):
     service = _service(tmp_path)
     _start(service)
     evidence = [
-        {"criterion_id": "criterion-1", "evidence": "Launch test passed"},
-        {"criterion_id": "criterion-2", "evidence": "Tool contract test passed"},
+        _measured("criterion-1", "Launch test passed"),
+        _measured("criterion-2", "Tool contract test passed"),
     ]
-    check = [
-        {
-            "constraint_id": "constraint-1",
-            "status": "passed",
-            "evidence": "Secret scan passed",
-        }
-    ]
+    check = [_measured_check("constraint-1", "passed", "Secret scan passed")]
 
     blocked = service.checkpoint(
         "release-test",
@@ -99,11 +119,11 @@ def test_blockers_and_failed_constraints_prevent_completion(tmp_path):
         "A credential appeared in the packaged logs",
         project_id="project-1",
         constraint_checks=[
-            {
-                "constraint_id": "constraint-1",
-                "status": "failed",
-                "evidence": "Scanner matched a credential in verbose.log",
-            }
+            _measured_check(
+                "constraint-1",
+                "failed",
+                "Scanner matched a credential in verbose.log",
+            )
         ],
         blockers=[],
     )
@@ -120,7 +140,13 @@ def test_checkpoint_rejects_unsupported_claims_and_stale_agents(tmp_path):
             "release-test",
             "Everything is done",
             project_id="project-1",
-            evidence=[{"criterion_id": "criterion-99", "evidence": "Trust me"}],
+            evidence=[
+                {
+                    "criterion_id": "criterion-99",
+                    "evidence": "Trust me",
+                    "trust_class": "agent_attested",
+                }
+            ],
         )
 
     service.checkpoint(
@@ -146,7 +172,7 @@ def test_task_context_is_bounded_signed_and_cross_agent(tmp_path):
         "release-test",
         "Launcher validation is complete",
         project_id="project-1",
-        evidence=[{"criterion_id": "criterion-1", "evidence": "Launch test passed"}],
+        evidence=[_measured("criterion-1", "Launch test passed")],
         current_action="Verify the MCP runtime",
         decisions=[
             {
@@ -219,6 +245,117 @@ def test_drift_is_a_visible_signal_not_a_semantic_verdict(tmp_path):
     assert "not a semantic judgment" in status["assessment"]["drift"]["basis"]
 
 
+def test_agent_attested_and_inferred_activity_do_not_satisfy_criteria(tmp_path):
+    service = _service(tmp_path)
+    _start(service)
+
+    result = service.checkpoint(
+        "release-test",
+        "The agent says the launcher and tool contract are complete",
+        project_id="project-1",
+        evidence=[
+            {
+                "criterion_id": "criterion-1",
+                "evidence": "The agent reported that the launch test passed",
+                "trust_class": "agent_attested",
+                "source": "assistant final answer",
+            },
+            {
+                "criterion_id": "criterion-2",
+                "evidence": "mcp.py was touched",
+                "trust_class": "inferred_activity",
+                "source": "changed-file observation",
+            },
+        ],
+    )
+
+    assert result["assessment"]["status"] == "active"
+    assert result["assessment"]["missing_criteria"] == ["criterion-1", "criterion-2"]
+    assert result["assessment"]["untrusted_criteria"] == ["criterion-1", "criterion-2"]
+    assert result["assessment"]["may_claim_ready_for_review"] is False
+
+
+def test_agent_cannot_self_declare_measured_or_human_evidence(tmp_path):
+    service = _service(tmp_path)
+    _start(service)
+
+    result = service.checkpoint(
+        "release-test",
+        "The agent attempted to assign its own trust labels",
+        project_id="project-1",
+        evidence=[
+            _measured("criterion-1", "Agent supplied a claimed local measurement"),
+            {
+                "criterion_id": "criterion-2",
+                "evidence": "Agent supplied a claimed human approval",
+                "trust_class": "human_confirmed",
+                "source": "agent request",
+            },
+        ],
+    )
+
+    assert result["assessment"]["status"] == "active"
+    assert result["assessment"]["missing_criteria"] == [
+        "criterion-1",
+        "criterion-2",
+    ]
+    assert result["state"]["evidence"]["criterion-1"]["trust_class"] == (
+        "agent_attested"
+    )
+    assert result["state"]["evidence"]["criterion-1"]["declared_trust_class"] == (
+        "measured_local"
+    )
+    assert result["state"]["evidence"]["criterion-2"]["declared_trust_class"] == (
+        "human_confirmed"
+    )
+
+
+def test_workspace_change_marks_ready_checkpoint_stale(tmp_path):
+    service = _service(tmp_path)
+    service.start(
+        "Ship the launcher",
+        ["The launcher passes"],
+        project_id="project-1",
+        task_id="launcher",
+    )
+    saved_workspace = {
+        "status": "measured_local",
+        "repository_sha256": "repo-a",
+        "head": "abc123",
+        "dirty": True,
+        "changes_sha256": "changes-a",
+    }
+    ready = service._checkpoint_trusted(
+        "launcher",
+        "The local launcher check passed",
+        issuer="local_verification",
+        project_id="project-1",
+        evidence=[_measured("criterion-1", "launcher exit code 0")],
+        workspace=saved_workspace,
+    )
+    assert ready["assessment"]["status"] == "ready_for_human_review"
+
+    fresh = service.status(
+        "launcher",
+        project_id="project-1",
+        workspace=saved_workspace,
+    )
+    assert fresh["assessment"]["workspace"]["status"] == "fresh"
+
+    changed_workspace = {**saved_workspace, "head": "def456", "dirty": False}
+    stale = service.status(
+        "launcher",
+        project_id="project-1",
+        workspace=changed_workspace,
+    )
+    assert stale["assessment"]["status"] == "stale"
+    assert stale["assessment"]["may_claim_completion"] is False
+    assert stale["assessment"]["stale_reasons"] == [
+        "Git HEAD changed",
+        "working-tree clean or dirty state changed",
+    ]
+
+
 def test_contract_content_is_encrypted_and_credential_like_values_are_rejected(tmp_path):
     database = tmp_path / "memory.sqlite3"
     service = TaskContractService(MemoryStore(database))
@@ -234,3 +371,28 @@ def test_contract_content_is_encrypted_and_credential_like_values_are_rejected(t
             project_id="project-1",
             task_id="unsafe-task",
         )
+
+
+def test_guard_report_counts_status_and_untrusted_claims_without_claiming_roi(tmp_path):
+    service = _service(tmp_path)
+    _start(service)
+    service.checkpoint(
+        "release-test",
+        "The agent reported one criterion complete",
+        project_id="project-1",
+        evidence=[
+            {
+                "criterion_id": "criterion-1",
+                "evidence": "The agent says the launcher passes",
+                "trust_class": "agent_attested",
+            }
+        ],
+    )
+
+    report = service.report(project_id="project-1")
+
+    assert report["tasks"]["total"] == 1
+    assert report["tasks"]["by_status"]["active"] == 1
+    assert report["criteria"]["untrusted_with_evidence"] == 1
+    assert report["criteria"]["satisfied"] == 0
+    assert "does not establish time saved" in report["claim_boundary"]

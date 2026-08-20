@@ -23,7 +23,7 @@ def test_public_python_package_has_product_aligned_commands() -> None:
     assert 'requires = ["hatchling==1.32.0"]' in pyproject
     assert 'name = "lians-bridge"' in pyproject
     assert (
-        'description = "Local control, continuity, and observability for the AI agents you already use"'
+        'description = "Current-state recovery and completion guard for AI coding agents"'
         in pyproject
     )
     assert '"Development Status :: 4 - Beta"' in pyproject

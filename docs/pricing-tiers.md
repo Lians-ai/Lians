@@ -71,7 +71,7 @@ limit until its enforcement and entitlements operate in that environment.
 
 Code already published under Apache 2.0 remains under that license. Commercial
 value comes from hosted operation, managed capacity, organizational controls,
-deployment assurance, support, and contractual commitments—not from pretending
+deployment assurance, support, and contractual commitments - not from pretending
 the public code requires a new license.
 
 See the [Community and commercial boundary](community-cloud-boundary.md) and

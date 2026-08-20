@@ -1,12 +1,12 @@
 """
-LongMemEval offline retrieval lab — judge-free iteration on cached embeddings.
+LongMemEval offline retrieval lab - judge-free iteration on cached embeddings.
 
-Metric: evidence-session coverage@k — do the sessions listed in
+Metric: evidence-session coverage@k - do the sessions listed in
 ``answer_session_ids`` appear among the sessions of the top-k retrieved
 messages? Computable offline from results/longmemeval_cache/*.npz, so
 retrieval variants iterate in seconds instead of $40 judged runs.
 
-Abstention questions (*_abs) have no answer sessions and are skipped here —
+Abstention questions (*_abs) have no answer sessions and are skipped here -
 their score is a generation property.
 
 Usage (from agentmem root):
@@ -164,7 +164,7 @@ def main() -> None:
 
     if args.analyze:
         stats = run(dataset, lambda q: np.argsort(-q.base_scores(), kind="stable"))
-        print("current config — evidence-session coverage by type (any/all @50):")
+        print("current config - evidence-session coverage by type (any/all @50):")
         for t, s in sorted(stats.items()):
             print(f"  {t:<28} n={s[50][0]:<4} any@10={s[10][1]/s[10][0]:.1%} "
                   f"any@50={s[50][1]/s[50][0]:.1%} all@50={s[50][2]/s[50][0]:.1%} "

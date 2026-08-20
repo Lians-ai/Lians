@@ -1,5 +1,5 @@
 """
-LOCOMO retrieval eval — the real snap-research/locomo dataset, judge-free.
+LOCOMO retrieval eval - the real snap-research/locomo dataset, judge-free.
 
 Runs the LOCOMO long-conversation benchmark (10 multi-session conversations,
 ~1,986 questions) against a memory system and scores **evidence retrieval**:
@@ -13,9 +13,9 @@ part a memory layer is responsible for. Both numbers can be reported side by
 side once the judged protocol is added.
 
 Scoring:
-  - Primary:   evidence_hit@k  — any gold-evidence dia_id appears in top-k
-  - Strict:    evidence_all@k  — all gold-evidence dia_ids appear in top-k
-  - Secondary: answer_sub@k    — gold answer string appears verbatim in a
+  - Primary:   evidence_hit@k - any gold-evidence dia_id appears in top-k
+  - Strict:    evidence_all@k - all gold-evidence dia_ids appear in top-k
+  - Secondary: answer_sub@k - gold answer string appears verbatim in a
                                  retrieved memory (weak for temporal answers,
                                  reported for continuity with memory_eval)
 
@@ -199,7 +199,7 @@ def iter_sessions(conv: dict[str, Any]):
 def ingest_conversation(client, agent_id: str, conv: dict[str, Any]) -> int:
     """Add every turn as an event-timed memory; returns turn count.
 
-    One ``add_batch`` per session — contents are embedded in a single model
+    One ``add_batch`` per session - contents are embedded in a single model
     pass, which is the difference between ~25 min and ~2 min per conversation
     on a CPU-only local model."""
     n = 0
@@ -399,7 +399,7 @@ def main() -> None:
     dataset = json.loads(Path(args.dataset).read_text(encoding="utf-8"))
     if args.conv is not None:
         dataset = [dataset[args.conv]]
-    from lians import LocalLiansClient  # noqa: deferred so --help stays fast
+    from lians import LocalLiansClient  # Deferred so --help stays fast.
 
     kwargs: dict[str, Any] = {"embedding_provider": args.embeddings}
     if args.db:

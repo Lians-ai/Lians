@@ -1,5 +1,5 @@
 """
-Memory evaluation harness — runs the bundled sample through LocalLiansClient and
+Memory evaluation harness - runs the bundled sample through LocalLiansClient and
 checks that the mechanism works, including the supersession invariant (the stale
 value must be excluded, the current one retrieved).
 """

@@ -1,5 +1,5 @@
 ﻿"""
-AgentMem Python SDK — webhook signature verification.
+AgentMem Python SDK - webhook signature verification.
 
 Every AgentMem webhook delivery is HMAC-SHA256-signed.
 The signature is in the ``X-AgentMem-Signature`` header as ``sha256=<hex>``.

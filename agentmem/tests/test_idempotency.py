@@ -58,7 +58,7 @@ async def test_same_idempotency_key_returns_original(client):
     r1 = await client.post("/v1/memories", headers=_h({"Idempotency-Key": "abc-123"}),
                            json=_body("NVDA EPS $6.20"))
     assert r1.status_code == 200, r1.text
-    # Retry with the SAME key but even a different body — must return the original.
+    # Retry with the SAME key but even a different body - must return the original.
     r2 = await client.post("/v1/memories", headers=_h({"Idempotency-Key": "abc-123"}),
                            json=_body("NVDA EPS $9.99"))
     assert r2.status_code == 200

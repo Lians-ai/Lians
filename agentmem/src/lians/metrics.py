@@ -8,11 +8,11 @@ Install the optional extra to activate real metrics:
 
     pip install agentmem[metrics]      # pulls in prometheus-client>=0.19
 
-Without the extra every helper is a no-op — zero overhead, zero import errors.
+Without the extra every helper is a no-op - zero overhead, zero import errors.
 
 Scraped by:
 
-    GET /metrics     (text/plain; version=0.0.4 — Prometheus exposition format)
+    GET /metrics     (text/plain; version=0.0.4 - Prometheus exposition format)
 
 Grafana dashboard template: see k8s/grafana/agentmem-dashboard.json
 """
@@ -61,7 +61,7 @@ _NOOP = _Noop()
 # ── Registry and metric objects ───────────────────────────────────────────────
 
 if _PROM_AVAILABLE:
-    # Isolated registry — avoids polluting the default REGISTRY and prevents
+    # Isolated registry - avoids polluting the default REGISTRY and prevents
     # double-registration errors when tests reload modules.
     REGISTRY = CollectorRegistry()
 
@@ -166,7 +166,7 @@ def record_recall(namespace: str, router: str, cache_hit: bool) -> None:
     Increment the recall counter.
 
     *router* is one of ``"cache"``, ``"keyed"``, ``"semantic"``,
-    ``"semantic_degraded"`` (embedding provider down — lexical-only recall;
+    ``"semantic_degraded"`` (embedding provider down - lexical-only recall;
     alert on this label).
     *cache_hit* is True when the Redis cache was hit (router=="cache").
     """

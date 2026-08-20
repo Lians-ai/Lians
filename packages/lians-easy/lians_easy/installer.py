@@ -512,7 +512,7 @@ def _lians_hook_group(client: str, *, event_name: str | None = None) -> dict[str
         "timeout": 8,
         "statusMessage": HOOK_STATUS,
     }
-    if client == "claude" and event_name == "SessionEnd":
+    if client == "claude" and event_name in {"PreCompact", "SessionEnd"}:
         hook["statusMessage"] = SESSION_HOOK_STATUS
         hook["timeout"] = 12
     if client == "codex":
@@ -555,7 +555,7 @@ def _hook_config(
         raise TypeError(f"hooks must be an object in {path}")
     event_names = ["BeforeAgent" if client == "gemini" else "UserPromptSubmit"]
     if client == "claude":
-        event_names.append("SessionEnd")
+        event_names.extend(("PreCompact", "SessionEnd"))
     for event_name in event_names:
         prompt_hooks = hooks.setdefault(event_name, [])
         if not isinstance(prompt_hooks, list):
@@ -1001,9 +1001,14 @@ def _verify_client(key: str, *, home: Path) -> None:
         groups = hooks.get(event_name, []) if isinstance(hooks, dict) else []
         verified = isinstance(groups, list) and any(_is_lians_hook_group(group) for group in groups)
         if verified and key == "claude":
-            session_groups = hooks.get("SessionEnd", []) if isinstance(hooks, dict) else []
-            verified = isinstance(session_groups, list) and any(
-                _is_lians_hook_group(group) for group in session_groups
+            lifecycle_groups = [
+                hooks.get(event_name, []) if isinstance(hooks, dict) else []
+                for event_name in ("PreCompact", "SessionEnd")
+            ]
+            verified = all(
+                isinstance(groups, list)
+                and any(_is_lians_hook_group(group) for group in groups)
+                for groups in lifecycle_groups
             )
     if not verified:
         raise RuntimeError(f"Lians could not verify automatic recall for {target.label}")

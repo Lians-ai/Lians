@@ -27,7 +27,7 @@ Pushing a `vX.Y.Z` tag triggers:
 | `release.yml` → `c-tarball` | Attaches `lians-c-<version>.tar.gz` (the **C** source) to the Release |
 | `release.yml` → `lians-easy` | Attaches standalone Windows, macOS, and Linux **LiansMemory** apps plus SHA-256 checksums |
 | `release.yml` → `go-tag` | Mirrors the tag to `agentmem/sdk/go/vX.Y.Z` so `go get …@vX.Y.Z` resolves |
-| `release.yml` → `maven-central` | Publishes **Java** to Maven Central — only when opted in (below) |
+| `release.yml` → `maven-central` | Publishes **Java** to Maven Central - only when opted in (below) |
 | `publish-mcp-container.yml` | Waits for the exact `lians-sdk` version on PyPI, then publishes normalized GHCR tags (`X.Y.Z`, never `vX.Y.Z`) |
 
 ## Version locations (keep in sync)
@@ -58,7 +58,7 @@ system trust warnings and are not a finished consumer install experience.
 | **PyPI** | Configure a *Trusted Publisher* for `lians-sdk` pointing at `publish-lian.yml` (no token needed). |
 | **npm** | Configure `@lians-ai/lians` trusted publishing for `Lians-ai/Lians`, workflow `publish-lian-npm.yml`, with `npm publish` allowed. |
 | **Maven Central** | Create a [Central Portal](https://central.sonatype.com) account for `ai.lians` (verified via a TXT record on lians.ai); add secrets `OSSRH_USERNAME`, `OSSRH_PASSWORD`, `MAVEN_GPG_KEY` (ASCII-armored private key), `MAVEN_GPG_PASSPHRASE`; set repo **variable** `PUBLISH_MAVEN_CENTRAL=true`. Until then, the jar is attached to the GitHub Release. |
-| **Go / pkg.go.dev** | Nothing — `go-tag` creates the resolvable tag automatically. |
+| **Go / pkg.go.dev** | Nothing - `go-tag` creates the resolvable tag automatically. |
 
 ## After a release
 
@@ -87,7 +87,7 @@ system trust warnings and are not a finished consumer install experience.
 5. Update public install instructions only after both commands pass. If any
    publisher fails, leave the matrix split and record the failure explicitly.
 
-- **Publish to the MCP registry — manual, easy to forget** (0.3.3 and the
+- **Publish to the MCP registry - manual, easy to forget** (0.3.3 and the
   first day of 0.3.4 were missing because this step lives outside the
   tag-triggered pipeline):
 
@@ -100,5 +100,5 @@ system trust warnings and are not a finished consumer install experience.
   ```
 
 - Verify: `pip install lians-sdk==X.Y.Z`, `npm view @lians-ai/lians`, `go get github.com/Lians-ai/Lians/agentmem/sdk/go@vX.Y.Z`, the direct Maven Central metadata, the C release asset, GHCR, and the MCP Registry response.
-- **Verify the wheel outside the monorepo**: `pip install "lians-sdk[local]==X.Y.Z"` in a clean venv and run a `LocalLiansClient` round-trip — the local mode imports the vendored engine, which only a from-scratch install exercises (the 0.3.2 wheel shipped broken because all testing ran inside the repo).
+- **Verify the wheel outside the monorepo**: `pip install "lians-sdk[local]==X.Y.Z"` in a clean venv and run a `LocalLiansClient` round-trip - the local mode imports the vendored engine, which only a from-scratch install exercises (the 0.3.2 wheel shipped broken because all testing ran inside the repo).
 - Update the npm scope decision if `@lians-ai` is not your final choice. It is referenced in `package.json`, `README.md`, `docs/`, and `integrations/lians-plugin/README.md`.

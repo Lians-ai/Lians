@@ -4,14 +4,14 @@ Revision ID: 0009_webhooks
 Revises: 0008_conflict_flags
 Create Date: 2026-06-21
 
-webhook_endpoints  — registered receiver URLs per namespace with HMAC secret
-webhook_deliveries — delivery attempt log (status_code, retry count, errors)
+webhook_endpoints - registered receiver URLs per namespace with HMAC secret
+webhook_deliveries - delivery attempt log (status_code, retry count, errors)
 
 Supported event types:
-  memory.superseded       — a memory was invalidated by a newer fact
-  memory.conflict         — a same-time contradiction was detected
-  memory.erased           — a subject's DEK was destroyed (GDPR Art. 17)
-  supersession.rejected   — a human reviewer rejected a supersession
+  memory.superseded - a memory was invalidated by a newer fact
+  memory.conflict - a same-time contradiction was detected
+  memory.erased - a subject's DEK was destroyed (GDPR Art. 17)
+  supersession.rejected - a human reviewer rejected a supersession
 """
 from alembic import op
 import sqlalchemy as sa

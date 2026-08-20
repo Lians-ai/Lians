@@ -6,12 +6,12 @@ SEC 17a-4 and CFTC swap dealer regulations (minimum 5-year retention).
 A legal_hold flag blocks any automated pruning when True (litigation hold).
 
 Changes:
-  1. namespace_policies table — one row per namespace controlling:
+  1. namespace_policies table - one row per namespace controlling:
      - content_ttl_days: prune memory content after N days (NULL = forever)
      - audit_retention_days: minimum event_log retention (default 1825 / 5yr)
      - legal_hold: block all automated pruning when True
 
-  2. RLS on namespace_policies (PostgreSQL only) — admin-only bypass, same
+  2. RLS on namespace_policies (PostgreSQL only) - admin-only bypass, same
      pattern as other tables.
 
 Revision ID: 0005_retention_policy

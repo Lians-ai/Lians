@@ -1,11 +1,11 @@
 """
-Interjection extraction — sub-turn durable facts (the agent_sim finding).
+Interjection extraction - sub-turn durable facts (the agent_sim finding).
 
 Two layers under test:
-  1. The deterministic clause extractor (pure) — pulls buried durable facts
+  1. The deterministic clause extractor (pure) - pulls buried durable facts
      ("remind me I eat fish now" mid-task) out of long conversational turns,
      and stays silent on single-clause turns, task chatter, and keyed facts.
-  2. The ranking helpers — parent/clause collapse (one fact can't fill two
+  2. The ranking helpers - parent/clause collapse (one fact can't fill two
      result slots) and the time-aware stale-clause demotion.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from src.lians.ranking import STALE_CLAUSE_PENALTY, _collapse_derived, _stale_cl
 # linear scanners; these preserve an executable record of their former regex
 # semantics without applying the expressions to untrusted input.
 _REFERENCE_SEGMENT_SPLIT = re.compile(
-    r"(?<=[.!?…])\s+|\s+[—–]\s*|\s*[—–]\s+|\s+--\s+"
+    r"(?<=[.!?…])\s+|\s+[\u2014\u2013]\s*|\s*[\u2014\u2013]\s+|\s+--\s+"
 )
 _REFERENCE_CLAUSE_SPLIT = re.compile(
     r",\s+(?:so|since|because|but|although|though|anyway)\b\s*|\s+because\s+"
@@ -34,7 +34,7 @@ _REFERENCE_CLAUSE_SPLIT = re.compile(
 
 
 def test_buried_location_fact_extracted():
-    turn = ("User: Ooh that's good. Okay so now activities — I'm thinking we open "
+    turn = ("User: Ooh that's good. Okay so now activities \u2014 I'm thinking we open "
             "with something to get people talking, since I've got their whole team "
             "flying into my studio in Portland and they won't all know each other.")
     out = extract_interjections(turn)
@@ -45,7 +45,7 @@ def test_buried_location_fact_extracted():
 
 def test_aside_marker_trims_to_the_request():
     turn = ("User: Um, discovery is probably like 4 days, UX design maybe 8? Oh and "
-            "I should tell you — the client wants to do a lunch meeting, remind me "
+            "I should tell you \u2014 the client wants to do a lunch meeting, remind me "
             "I eat fish now, I'm not vegetarian anymore.")
     out = extract_interjections(turn)
     assert any(c.endswith("remind me I eat fish now, I'm not vegetarian anymore.") for c in out)
@@ -53,7 +53,7 @@ def test_aside_marker_trims_to_the_request():
 
 def test_trailing_aside_falls_back_to_whole_fact_clause():
     turn = ("User: Oh wait, actually can we do pricing at the same time because my "
-            "brain wants to know the numbers — my day rate is $900 by the way.")
+            "brain wants to know the numbers \u2014 my day rate is $900 by the way.")
     out = extract_interjections(turn)
     assert out == ["User: my day rate is $900 by the way."]
 
@@ -69,7 +69,7 @@ def test_revision_clause_carries_its_cue():
 def test_short_fact_clause_falls_back_to_segment():
     # "my day rate is $900" alone is under the length floor; the segment rescue
     # must keep the fact (second agent_sim run's phrasing).
-    turn = "User: Yes, phases is perfect. Oh — my day rate is $900, so we can build off that for the estimates."
+    turn = "User: Yes, phases is perfect. Oh \u2014 my day rate is $900, so we can build off that for the estimates."
     out = extract_interjections(turn)
     assert len(out) == 1
     assert "$900" in out[0]
@@ -87,7 +87,7 @@ def test_negotiated_revision_extracted():
 def test_reminder_to_myself_and_adverbed_verb():
     # Third agent_sim run's phrasing: aside marker "reminder to myself" and the
     # adverb between subject and verb ("I actually eat").
-    turn = ("User: Yeah let's do it. Oh wait—reminder to myself, I need to tell the "
+    turn = ("User: Yeah let's do it. Oh wait\u2014reminder to myself, I need to tell the "
             "caterer I actually eat fish now, so I'm pescatarian, not full veggie. "
             "Anyway, deliverables!")
     out = extract_interjections(turn)
@@ -95,7 +95,7 @@ def test_reminder_to_myself_and_adverbed_verb():
 
 
 def test_conjunction_buried_fact_splits_off():
-    turn = ("User: Ugh, hold on — remind me to reschedule the client lunch, they "
+    turn = ("User: Ugh, hold on \u2014 remind me to reschedule the client lunch, they "
             "picked a steakhouse and I'm pescatarian now, so I need to find "
             "somewhere with fish.")
     out = extract_interjections(turn)
@@ -103,7 +103,7 @@ def test_conjunction_buried_fact_splits_off():
 
 
 def test_single_clause_turn_not_duplicated():
-    # The whole turn already IS the fact — extraction would just copy it.
+    # The whole turn already IS the fact - extraction would just copy it.
     assert extract_interjections("User: I moved to Boulder.") == []
     assert extract_interjections("NVDA guidance raised to $40B") == []
 
@@ -111,7 +111,7 @@ def test_single_clause_turn_not_duplicated():
 def test_task_chatter_ignored():
     turn = ("User: Perfect, let's build in 2 rounds per phase and then it's like... "
             "$900 a day after that for extra rounds, right? Oh god I also need to "
-            "reschedule my dentist thing but that's a later-me problem — anyway "
+            "reschedule my dentist thing but that's a later-me problem \u2014 anyway "
             "yeah, put the revision clause in.")
     assert extract_interjections(turn) == []
 
@@ -141,11 +141,11 @@ def test_maximum_size_whitespace_run_preserves_connector_semantics():
         "first.   second",
         "first?\tsecond",
         "first…\nsecond",
-        "first   —second",
-        "first—   second",
+        "first   \u2014second",
+        "first\u2014   second",
         "first   –   second",
         "first   --   second",
-        "first—second",
+        "first\u2014second",
         "first-- second",
     ],
 )
@@ -189,10 +189,10 @@ def test_collapse_drops_clause_only_when_parent_already_kept():
     parent = _Row("p1")
     clause = _Row("c1", {"_derived": "interjection", "_parent": "p1"})
     other = _Row("x1")
-    # Parent first: the clause is a substring of it — redundant, dropped.
+    # Parent first: the clause is a substring of it - redundant, dropped.
     scored = [(parent, 0.9, "p"), (clause, 0.8, "c"), (other, 0.7, "o")]
     assert [e[0].id for e in _collapse_derived(scored)] == ["p1", "x1"]
-    # Clause first: the parent may hold facts the clause lost — NEVER evicted.
+    # Clause first: the parent may hold facts the clause lost - NEVER evicted.
     scored = [(clause, 0.9, "c"), (parent, 0.8, "p"), (other, 0.7, "o")]
     assert [e[0].id for e in _collapse_derived(scored)] == ["c1", "p1", "x1"]
 

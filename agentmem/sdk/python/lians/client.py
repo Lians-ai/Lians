@@ -1,5 +1,5 @@
 """
-Lians Python SDK — async HTTP client for the REST API.
+Lians Python SDK - async HTTP client for the REST API.
 """
 from __future__ import annotations
 import asyncio
@@ -73,7 +73,7 @@ class AsyncLiansClient:
                         method, url, headers=headers, json=json, params=clean_params,
                     )
             except httpx.TransportError:
-                # Connection/read/timeout error — safe to retry (writes carry an
+                # Connection/read/timeout error - safe to retry (writes carry an
                 # Idempotency-Key, so a retried POST won't double-write).
                 if attempt >= self._max_retries:
                     raise
@@ -176,7 +176,7 @@ class AsyncLiansClient:
         source:
             Source label for all extracted memories. Defaults to ``"conversation"``.
         subject_id:
-            Data-subject ID (for GDPR crypto-shred targeting — typically the user ID).
+            Data-subject ID (for GDPR crypto-shred targeting - typically the user ID).
         metadata:
             Base metadata dict applied to all extracted memories. Role and message
             index are merged in automatically.
@@ -287,7 +287,7 @@ class AsyncLiansClient:
         """
         Retrieve the most relevant *current* memories for a query.
 
-        Superseded facts are excluded at the database level — only the latest
+        Superseded facts are excluded at the database level - only the latest
         valid value is returned.  Pass ``as_of`` for point-in-time recall.
         """
         return await self._req("POST", "/v1/recall", json={
@@ -323,7 +323,7 @@ class AsyncLiansClient:
         Build a token-budgeted, ready-to-inject context block from recall.
 
         Returns ``{context, memories, token_estimate, truncated}``. The block is
-        bitemporal — never contains stale facts. Pass ``as_of`` for point-in-time
+        bitemporal - never contains stale facts. Pass ``as_of`` for point-in-time
         context and ``mmr=True`` for diversity reranking. Open conflicts ride at
         the top of the block until adjudicated; ``surface_conflicts=False`` opts
         out per call and ``max_conflicts`` bounds them (overflow is an explicit
@@ -499,7 +499,7 @@ class AsyncLiansClient:
         """
         GDPR Art. 17 / CCPA crypto-shred.
 
-        Destroys the data subject's per-subject encryption key — all their
+        Destroys the data subject's per-subject encryption key - all their
         memories become permanently unreadable.  The audit trail (content hashes,
         timestamps) is preserved to prove the erasure occurred.
         """
@@ -518,7 +518,7 @@ class AsyncLiansClient:
         """
         Return supersession events whose confidence is below *threshold*.
 
-        In finance a wrong silent supersession — dropping a real number — is a
+        In finance a wrong silent supersession - dropping a real number - is a
         compliance failure.  Poll this to surface uncertain events for human review
         before treating the old fact as stale.
 
@@ -551,7 +551,7 @@ class AsyncLiansClient:
         reviewer_note: Optional[str] = None,
     ) -> dict:
         """
-        Reject a supersession — the engine was wrong.
+        Reject a supersession - the engine was wrong.
 
         Restores the old memory as currently valid (``valid_to = NULL``) and
         writes an immutable audit event.  Both memories are now additive.
@@ -616,7 +616,7 @@ class AsyncLiansClient:
         Reconstruct the complete knowledge state of *agent_id* at *as_of*.
 
         Returns every memory that was valid (``valid_from ≤ as_of < valid_to``)
-        at the given timestamp — exhaustive, no relevance filter.
+        at the given timestamp - exhaustive, no relevance filter.
 
         This is the "audit reconstruction as a product surface" from SCALE.md §4:
         *"Show me the agent's complete knowledge state as of T. One call."*
@@ -648,13 +648,13 @@ class AsyncLiansClient:
         Scans the agent's memory store and flags every fact it couldn't have
         known at *simulation_as_of*.  Two contamination types:
 
-        - ``future_event``  — ``event_time > simulation_as_of`` (clear lookahead)
-        - ``late_revision`` — ``ingestion_time > simulation_as_of`` but
+        - ``future_event`` - ``event_time > simulation_as_of`` (clear lookahead)
+        - ``late_revision`` - ``ingestion_time > simulation_as_of`` but
           ``event_time <= simulation_as_of`` (the revised figure hadn't arrived yet)
 
         ``is_clean: True`` is the proof a risk committee needs before trusting
         a backtest.  This is the "thin open-sourceable primitive" from SCALE.md §6
-        — a differentiator no other memory store provides.
+ - a differentiator no other memory store provides.
 
         Returns a ContaminationReport dict:
         ``{is_clean, contamination_rate, memories_checked, flags}``.
@@ -732,7 +732,7 @@ class AsyncLiansClient:
         rel_types: Optional[list[str]] = None,
         normalize: bool = False,
     ) -> dict:
-        """Shortest connection between two entities — the COI / related-party query."""
+        """Shortest connection between two entities - the COI / related-party query."""
         return await self._req("GET", "/v1/graph/path", params={
             "src": src_entity, "dst": dst_entity, "agent_id": agent_id,
             "max_depth": max_depth, "normalize": normalize,
@@ -788,9 +788,9 @@ class AsyncLiansClient:
 
         *resolution* must be one of:
 
-        - ``"accept_a"`` — the pre-existing memory (A) is authoritative; B is invalidated
-        - ``"accept_b"`` — the newly-ingested memory (B) is authoritative; A is invalidated
-        - ``"dismiss"``  — both memories remain live (sources legitimately differ)
+        - ``"accept_a"`` - the pre-existing memory (A) is authoritative; B is invalidated
+        - ``"accept_b"`` - the newly-ingested memory (B) is authoritative; A is invalidated
+        - ``"dismiss"`` - both memories remain live (sources legitimately differ)
 
         Every resolution writes an immutable ``conflict_resolved`` event to the
         audit chain.  Returns a ConflictResolveResult dict.
@@ -812,7 +812,7 @@ class AsyncLiansClient:
         """
         Return every recorded version of a structured fact ordered by event_time.
 
-        Query by *ticker* + *metric* instead of a memory_id — ideal for time-series
+        Query by *ticker* + *metric* instead of a memory_id - ideal for time-series
         views such as *"show me how AAPL EPS evolved over the last four quarters"*.
         Superseded versions are included so analysts can see the full revision history.
 
@@ -1026,7 +1026,7 @@ class AsyncLiansClient:
         Retrieve the cryptographic proof-of-erasure certificate for a data subject.
 
         The certificate proves: (1) N memories had their encrypted content
-        permanently destroyed; (2) SHA-256 content_hashes are preserved — the
+        permanently destroyed; (2) SHA-256 content_hashes are preserved - the
         erasure is auditable but the content is irrecoverable; (3) the audit chain
         remained intact after erasure (``chain_status = "ok"``).
 
@@ -1050,14 +1050,14 @@ class AsyncLiansClient:
         Register a webhook endpoint for the caller's namespace.
 
         Every delivery is HMAC-SHA256-signed with the returned *secret*:
-        ``X-AgentMem-Signature: sha256=<hex>``.  Store the secret securely —
+        ``X-AgentMem-Signature: sha256=<hex>``.  Store the secret securely -
         it is returned **exactly once** and cannot be recovered.
 
         Supported event types:
-          ``"memory.superseded"``   — a memory was invalidated by a newer fact
-          ``"memory.conflict"``     — same-time contradiction detected
-          ``"memory.erased"``       — a subject's DEK was destroyed (GDPR Art. 17)
-          ``"supersession.rejected"`` — a human reviewer rejected a supersession
+          ``"memory.superseded"`` - a memory was invalidated by a newer fact
+          ``"memory.conflict"`` - same-time contradiction detected
+          ``"memory.erased"`` - a subject's DEK was destroyed (GDPR Art. 17)
+          ``"supersession.rejected"`` - a human reviewer rejected a supersession
 
         Returns a WebhookRegisterResult dict: ``{endpoint, secret}``.
         """

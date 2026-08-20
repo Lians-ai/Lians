@@ -36,7 +36,7 @@ def test_table_scores_are_consistent():
 
 
 def test_competitors_credited_not_strawmanned():
-    # Capability maps must include at least one PARTIAL each — we credit real strengths.
+    # Capability maps must include at least one PARTIAL each - we credit real strengths.
     from benchmarks.adapters import (
         hindsight_adapter,
         letta_adapter,

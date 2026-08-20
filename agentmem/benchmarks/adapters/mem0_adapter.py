@@ -10,7 +10,7 @@ Capability map (each cell justified against the public API):
 
   stale_revision_suppression   PARTIAL  mem0's LLM may UPDATE/supersede a fact on
                                         add(), but it is content-similarity-based
-                                        and non-deterministic — no keyed guarantee
+                                        and non-deterministic - no keyed guarantee
                                         that the stale revision is excluded.
   point_in_time_reconstruction ABSENT   search() has no `as_of`/valid-time filter;
                                         history() is a change log, not as-of recall.
@@ -42,7 +42,7 @@ CAPABILITIES = {
 def live_adapter():
     """
     Prefer executing mem0 OSS in its default documented configuration
-    (`Memory()` — OpenAI LLM + embeddings, local vector store); that is the
+    (`Memory()` - OpenAI LLM + embeddings, local vector store); that is the
     self-hosted deployment a regulated buyer would evaluate. Fall back to the
     mem0 Platform API when only MEM0_API_KEY is present.
     Returns (adapter_or_None, mode_description).
@@ -62,11 +62,11 @@ class Mem0OSSAdapter:
     mem0 OSS (`from mem0 import Memory`) in its default configuration.
 
     Fairness notes:
-    - add() uses infer=True — mem0's advertised LLM fact-management pipeline,
+    - add() uses infer=True - mem0's advertised LLM fact-management pipeline,
       the mechanism its supersession partial-credit is based on.
     - mem0 2.x exposes `timestamp` / `reference_date` parameters, but its own
       docstring marks them "Platform-only temporal parameter. Not supported
-      in OSS" — so the OSS as-of cell is a structural absence, not a harness
+      in OSS" - so the OSS as-of cell is a structural absence, not a harness
       limitation.
     """
 
@@ -106,7 +106,7 @@ class Mem0OSSAdapter:
             "documented as 'Platform-only temporal parameter. Not supported in OSS'")
 
     def erase(self, subject_id, reason):
-        # Real deletion (delete_all for the mapped user) — but no crypto-shred
+        # Real deletion (delete_all for the mapped user) - but no crypto-shred
         # and no certificate, so at best this scores "partial".
         agent = self._subjects.pop(subject_id, None)
         if agent is None:
@@ -154,7 +154,7 @@ class Mem0Adapter:
         raise CapabilityAbsent("mem0 has no as-of / valid-time recall primitive")
 
     def erase(self, subject_id, reason):
-        # Real deletion where possible — no proof artifact, so "partial" at best.
+        # Real deletion where possible - no proof artifact, so "partial" at best.
         agent = self._subjects.pop(subject_id, None)
         if self._client is None or agent is None:
             raise CapabilityAbsent("mem0 has no subject-level erasure concept")

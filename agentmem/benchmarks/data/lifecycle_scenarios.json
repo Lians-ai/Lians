@@ -5,7 +5,7 @@
       "id": "diet-drift",
       "category": "state_reconstruction",
       "events": [
-        {"date": "2026-01-05", "text": "I'm vegan — no meat, no fish, no dairy.", "keys": {"entity": "user", "field": "diet"}},
+        {"date": "2026-01-05", "text": "I'm vegan - no meat, no fish, no dairy.", "keys": {"entity": "user", "field": "diet"}},
         {"date": "2026-02-10", "text": "Wait, I eat fish now. I'm pescatarian these days.", "keys": {"entity": "user", "field": "diet"}},
         {"date": "2026-03-02", "text": "Actually, I found out I'm allergic to salmon specifically.", "keys": {"entity": "user", "field": "allergy"}},
         {"date": "2026-01-12", "text": "My favorite cuisine is Thai food.", "keys": {"entity": "user", "field": "favorite_cuisine"}}
@@ -62,7 +62,7 @@
       "events": [
         {"date": "2026-02-03", "text": "Best way to reach me is email, I check it constantly.", "keys": {"entity": "user", "field": "contact_channel"}},
         {"date": "2026-02-03", "text": "My birthday is March 14th.", "keys": {"entity": "user", "field": "birthday"}},
-        {"date": "2026-05-19", "text": "Stop emailing me — ping me on Slack instead, email is a black hole now.", "keys": {"entity": "user", "field": "contact_channel"}},
+        {"date": "2026-05-19", "text": "Stop emailing me - ping me on Slack instead, email is a black hole now.", "keys": {"entity": "user", "field": "contact_channel"}},
         {"date": "2026-03-30", "text": "I'm on Eastern Time.", "keys": {"entity": "user", "field": "timezone"}},
         {"date": "2026-06-22", "text": "I switched to Pacific Time after the move.", "keys": {"entity": "user", "field": "timezone"}}
       ],
@@ -111,7 +111,7 @@
     {
       "id": "rate-history-out-of-order",
       "category": "temporal_disambiguation",
-      "comment": "Ingestion order deliberately differs from event order: the 2025 rate arrives last. Correct behavior keys off event_time, not arrival order — a backdated fact must not supersede a newer one.",
+      "comment": "Ingestion order deliberately differs from event order: the 2025 rate arrives last. Correct behavior keys off event_time, not arrival order - a backdated fact must not supersede a newer one.",
       "events": [
         {"date": "2024-03-01", "text": "Consulting agreement with Northwind: rate is $150 per hour.", "keys": {"entity": "northwind", "field": "hourly_rate"}},
         {"date": "2026-01-15", "text": "Northwind renewal signed: rate is now $190 per hour.", "keys": {"entity": "northwind", "field": "hourly_rate"}},
@@ -136,8 +136,8 @@
       "events": [
         {"date": "2026-06-10", "text": "I need to book a flight to Austin for the Fabric conference, June 24th to 27th.", "keys": null},
         {"date": "2026-06-10", "text": "Aisle seat please, and I'd rather not fly before 9am.", "keys": null},
-        {"date": "2026-06-10", "text": "Oh wait, before I forget — my mother's birthday is June 5th, remind me to buy her flowers every year.", "keys": null},
-        {"date": "2026-06-10", "text": "OK back to the flight — Delta or United preferred, I have status on both.", "keys": null},
+        {"date": "2026-06-10", "text": "Oh wait, before I forget - my mother's birthday is June 5th, remind me to buy her flowers every year.", "keys": null},
+        {"date": "2026-06-10", "text": "OK back to the flight - Delta or United preferred, I have status on both.", "keys": null},
         {"date": "2026-06-10", "text": "Book the return for the evening of the 27th so I can make the closing session.", "keys": null}
       ],
       "profile": {
@@ -156,7 +156,7 @@
       "category": "interjection",
       "events": [
         {"date": "2026-05-04", "text": "I'm drafting the Q2 revenue report; the deadline is May 15th and finance wants regional splits this quarter.", "keys": null},
-        {"date": "2026-05-04", "text": "By the way, I changed gyms — I'm at Ironworks on 5th now, mornings before work.", "keys": null},
+        {"date": "2026-05-04", "text": "By the way, I changed gyms - I'm at Ironworks on 5th now, mornings before work.", "keys": null},
         {"date": "2026-05-04", "text": "For the report, use the same template as Q1 but add the EMEA breakdown tab.", "keys": null},
         {"date": "2026-05-11", "text": "Back on the Q2 report: finance moved the deadline up to May 13th.", "keys": null}
       ],
