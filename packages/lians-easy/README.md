@@ -1,13 +1,24 @@
-# Lians Guard (developer preview)
+# Lians Check (developer preview)
 
-**Recover the task. Reject stale state. Block unsupported done.**
+**Your AI says it is done. Lians checks the receipts.**
 
-Lians Guard is the local current-state and completion guard for AI coding
-agents. It recovers interrupted work, checks whether a saved checkpoint still
-matches the repository, and keeps `done` behind an evidence-backed human-review
-gate. It connects through supported MCP, hook, and rule surfaces without
-replacing Claude Code, Codex, Git, CI, or the user's editor. Users do not give
-Lians their AI account credentials or provider API keys.
+Lians Check is the local proof-of-done check for AI coding agents. It runs the
+project's authorized commands itself, binds the result to the current Git
+state, and returns `NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`. It does not
+replace Claude Code, Codex, Cursor, Git, CI, or the user's editor. Users do not
+give Lians their AI account credentials or provider API keys.
+
+```bash
+python -m pip install -e ./packages/lians-easy
+lians init
+lians check
+```
+
+The runner never invokes a shell implicitly. It refuses a changed check policy
+until the user authorizes it again, records bounded output hashes rather than
+full logs, and invalidates old positive evidence on every rerun. A ready result
+means the configured checks passed for the current code and human review is
+required. It does not prove semantic correctness or deployment safety.
 
 Free local memory remains the recovery wedge. A connected agent can resume a
 bounded current task without replaying a full transcript. The broader Guard

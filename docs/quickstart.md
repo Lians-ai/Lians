@@ -1,4 +1,47 @@
-# Lians recovery quickstart
+# Lians Check quickstart
+
+The smallest Lians product answers one question: does the current AI-generated
+work have fresh evidence behind it?
+
+## Check the current work
+
+Install the developer preview from a clone, then initialize the repository once:
+
+```bash
+python -m pip install -e ./packages/lians-easy
+lians init
+```
+
+Lians shows the discovered project commands and asks for an exact confirmation
+before authorizing them. Review and commit `.lians/check.json` if the same policy
+should be shared with a team. After Claude Code, Codex, Cursor, or another agent
+says the work is finished, run:
+
+```bash
+lians check
+```
+
+The result is `NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`. A ready result
+means the authorized commands passed for the current Git state. Human review is
+still required, and Lians does not claim semantic correctness or deployment
+safety.
+
+`lians check --json` exits `0` when ready, `1` when work is needed, and `2` when
+no authorized proof policy is available.
+
+For an already reviewed, noninteractive setup:
+
+```bash
+lians init --yes
+```
+
+To supply a command that discovery did not find:
+
+```bash
+lians init --command "tests=python -m pytest -q" --yes
+```
+
+## Optional cross-agent recovery
 
 Set up the available free recovery layer, give an AI coding tool one safe project
 fact, then confirm that the current fact survives a fresh chat. The local setup

@@ -2,14 +2,13 @@
 
 ## The short answer
 
-Lians Guard is a current-state and completion guard for AI coding agents.
+Lians Check is an evidence-backed proof-of-done check for AI coding agents.
 
-> Recover the task. Reject stale state. Block unsupported `done`.
+> Your AI says it is done. Lians checks the receipts.
 
-Claude Code, Codex, and other agents can already store instructions and recall
-context. Lians is useful when the risk is not forgetting a preference, but
-resuming the wrong task state or accepting a completion claim without current
-evidence.
+Claude Code, Codex, and other agents can already store instructions, recall
+context, and review code. Lians is useful when the risk is accepting a
+completion claim without current measured evidence.
 
 ## The pressure test
 

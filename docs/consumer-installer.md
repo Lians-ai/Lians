@@ -5,7 +5,7 @@ installer for every AI client. The installer places one local Lians Bridge on
 the device, detects compatible AI apps, and lets the user connect any of them
 from one screen.
 
-The consumer promise is **Recover the task. Guard what done means.** Lians gives
+The consumer promise is **Your AI says it is done. Lians checks the receipts.** Lians gives
 supported AI coding tools local recovery across sessions, marks mismatched
 checkpoints stale, and separates trustworthy completion evidence from agent
 claims or touched-file activity. The first available experience should help
@@ -109,7 +109,7 @@ successfully.
 
 The setup sequence has four moments:
 
-1. **Promise and trust.** Lead with **Recover the task. Guard what done means.**
+1. **Promise and trust.** Lead with **Your AI says it is done. Lians checks the receipts.**
    Explain that Lians restores bounded current work and distinguishes measured
    evidence from agent claims. State that saved context is encrypted locally,
    existing settings are backed up, and no AI account password or provider API

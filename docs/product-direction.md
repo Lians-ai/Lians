@@ -2,51 +2,48 @@
 
 ## Product decision
 
-Lians is becoming **Lians Guard, the current-state and completion guard for AI
+Lians is becoming **Lians Check, the evidence-backed proof-of-done check for AI
 coding agents**.
 
 The public promise is:
 
-> Lians recovers interrupted agent work, rejects stale task state, and blocks
-> `done` until the current task is ready for human review.
+> Your AI says it is done. Lians checks the receipts.
 
 In plain language:
 
-> Your agent can forget the chat. It cannot forget what is finished, what
-> changed, or what still has to pass.
+> Run the real checks. Match them to the current code. Know what still needs
+> work before review.
 
-This is a focused reliability product, not a general memory platform. Memory
-and cross-agent handoff remain important because they create recovery. They are
-the free acquisition wedge, not the category Lians should try to own.
+This is a focused verification product, not a general memory platform or
+another AI reviewer. Memory and cross-agent handoff remain useful supporting
+capabilities. They are not the category Lians should try to own.
 
 ## The first customer
 
-The primary customer is an AI-native software agency with 5 to 30 developers
-using Claude Code, Codex, Git, and GitHub Actions across several client
-repositories. These teams feel the cost of interrupted sessions, repeated
-explanations, stale requirements, false completion claims, review rework, and
-missed handoffs every week.
+The first user is a technical founder, vibe coder, or developer using Claude
+Code, Codex, or Cursor to change a real Git repository. The first buyer is an
+AI-native software agency or SaaS team that needs a consistent review gate
+across several developers and repositories.
 
 The secondary customer is an AI-native SaaS team with 5 to 25 engineers.
 Individual developers remain the free user and distribution base.
 
 ## The product loop
 
-1. **Recover.** Lians saves a bounded task checkpoint at a supported lifecycle
-   event and restores it in a later Claude Code or Codex session.
-2. **Check freshness.** The checkpoint is bound to the repository, commit,
-   working-tree state, changed-file digest, task definition, and recorded time.
-3. **Invalidate stale work.** If a requirement, decision, or repository state
-   changes, dependent work is marked stale instead of silently reused.
-4. **Evaluate readiness.** Definition-of-done criteria are evaluated using
-   typed evidence. Agent prose and file activity alone do not satisfy them.
-5. **Show one clear state.** The product reports `RECOVERED`, `STALE`, `BLOCKED`,
-   or `READY FOR HUMAN REVIEW` with the evidence and remaining work visible.
+1. **Initialize once.** `lians init` discovers a short set of high-signal project
+   commands and requires the user to authorize them.
+2. **Measure current work.** `lians check` runs those commands itself without an
+   implicit shell and records bounded evidence.
+3. **Bind the receipt.** The result is tied to the current Git state and the
+   authorized policy. Changed code or commands require fresh proof.
+4. **Show one clear state.** The product reports `NO PROOF`, `NEEDS WORK`, or
+   `READY TO REVIEW`, plus the next useful action.
 
 ## Free and paid layers
 
-### Free local recovery
+### Free local check and recovery
 
+- measured local checks and signed receipts for the current Git state;
 - local, inspectable task save points;
 - bounded resume context across supported Claude Code and Codex sessions;
 - current-state correction and stale-history exclusion;
@@ -95,15 +92,14 @@ current evidence and no known failed, unknown, or blocked constraint.
 
 ## What to build now
 
-1. Make automatic save, resume, stale detection, and the four visible states
-   reliable for Claude Code, Codex, Git, and GitHub Actions.
-2. Bind checkpoints to workspace fingerprints and invalidate evidence when its
-   inputs no longer match.
-3. Make installation and removal predictable on clean macOS, Windows, and Linux
-   environments.
+1. Make `lians init` and `lians check` reliable on clean macOS, Windows, and
+   Linux environments.
+2. Keep the three visible states large, direct, and consistent in the terminal,
+   desktop app, and GitHub checks.
+3. Add the same receipt as an optional required GitHub status check.
 4. Run three paid design-partner pilots before widening the product surface.
-5. Measure recovery success, stale-state detections, blocked unsupported claims,
-   review rework, weekly active repositories, retention, and revenue.
+5. Measure time to first receipt, repeat weekly checks, real unsupported claims
+   caught, weekly active repositories, retention, and revenue.
 
 ## What not to lead with
 

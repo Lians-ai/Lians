@@ -7,7 +7,7 @@ marked separately from customer and revenue evidence.
 
 ## Verdict
 
-Lians has a credible product wedge, but the repository alone cannot make it
+Lians has a credible product wedge in **Lians Check**, but the repository alone cannot make it
 venture-ready or prove product-market fit. The repo can prove a sharper trust
 boundary, current-state checks, installability, and test coverage. Only real
 users can prove activation, retention, willingness to pay, distribution, and
@@ -17,6 +17,43 @@ The current strategic position is:
 
 > Pilot-ready after the clean-install workflow passes on the supported
 > platforms. Not yet market-proven or venture-ready.
+
+## Multichannel demand update
+
+The current and historical market evidence supports verification as a problem,
+but not a broad new review bot:
+
+- YC companies including [Stage](https://www.ycombinator.com/companies/stage),
+  [cubic](https://www.ycombinator.com/companies/cubic), and
+  [Greptile](https://www.ycombinator.com/companies/greptile) validate the review
+  bottleneck. [Canary](https://www.ycombinator.com/companies/canary),
+  [Autosana](https://www.ycombinator.com/companies/autosana), and
+  [TesterArmy](https://www.ycombinator.com/companies/testerarmy) validate demand
+  for testing and QA.
+- Greptile and cubic publish paid team pricing around $30 per developer per
+  month, which demonstrates adjacent willingness to pay. It does not prove that
+  teams will pay Lians.
+- Claude Code issue
+  [63861](https://github.com/anthropics/claude-code/issues/63861) reports an agent
+  claiming work was verified without running the canonical build. Claude Code
+  issue [4462](https://github.com/anthropics/claude-code/issues/4462) reports
+  subagents claiming files were created when they were not.
+- Sonar's 2026 State of Code survey reports that 96 percent of respondents do
+  not fully trust AI-generated code, only 48 percent always verify it, and 38
+  percent say reviewing AI code requires more effort than reviewing human code.
+- Native memory and review from GitHub, Cursor, Claude, and Codex weaken generic
+  memory and generic review as standalone categories.
+- Small open-source proof-gate tools demonstrate repeated founder pain, but
+  their limited adoption means the exact Lians Check package still needs direct
+  retention and payment validation.
+
+The decision from this evidence is to make the consumer surface smaller than
+the underlying Guard system:
+
+> Your AI says it is done. Lians checks the receipts.
+
+The first loop is `lians init`, followed by `lians check`, followed by one of
+`NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`.
 
 ## What the market invalidates
 
@@ -36,7 +73,8 @@ Native and adjacent products already cover much of that surface. See the
 
 ## The wedge that survives
 
-Lians should own the boundary between an agent's claim and a human's review:
+Lians should own the boundary between an agent's claim and a human's review.
+The public product is Lians Check. Guard remains the underlying trust contract:
 
 1. restore one bounded current task;
 2. compare it with the current repository state;
@@ -45,8 +83,7 @@ Lians should own the boundary between an agent's claim and a human's review:
    attested GitHub Actions workflow with an interactively authorized criterion
    mapping, or explicit interactive human confirmation;
 5. mark mismatches stale; and
-6. show one result: `RECOVERED`, `STALE`, `BLOCKED`, or
-   `READY FOR HUMAN REVIEW`.
+6. show one consumer result: `NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`.
 
 That is narrower than memory and more useful than another session recorder.
 
@@ -122,10 +159,10 @@ The following are operating hypotheses. They are not customer results:
 
 1. Interview 30 qualified AI-native teams and identify the same Guard failure
    in at least 15.
-2. Get 60 percent of qualified installs to a first recovery or blocked stale
-   claim within 24 hours.
-3. Get at least 50 percent of active pilot repositories to record a second
-   meaningful Guard event in week two.
+2. Get 70 percent of qualified installs to a first Lians Check receipt within
+   five minutes.
+3. Get at least 50 percent of active pilot repositories to run a second check
+   within seven days.
 4. Close three 30-day paid design-partner pilots at $1,000 or more.
 5. Retain at least 40 percent of pilot teams through week four before widening
    the roadmap.

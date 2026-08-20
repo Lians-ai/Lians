@@ -18,17 +18,17 @@ def test_primary_github_and_desktop_surfaces_share_one_product_promise() -> None
     gui = (PACKAGE_ROOT / "lians_easy" / "gui.py").read_text(encoding="utf-8")
     manifest = json.loads((REPOSITORY_ROOT / "product-manifest.json").read_text())
 
-    assert "Recover the task. Reject stale state. Block unsupported done." in readme
-    assert "current-state and completion guard for AI coding agents" in " ".join(
+    assert "Your AI says it is done. Lians checks the receipts." in readme
+    assert "evidence-backed proof-of-done check for AI coding agents" in " ".join(
         direction.split()
     )
-    assert "Recover the task. Guard what done means." in consumer_contract
-    assert "Recover the task. Guard what done means." in gui
+    assert "Your AI says it is done. Lians checks the receipts." in consumer_contract
+    assert "Your AI says it is done. Lians checks the receipts." in gui
     assert (
         manifest["product"]["category"]
-        == "Current-state and completion guard for AI coding agents"
+        == "Evidence-backed proof-of-done check for AI coding agents"
     )
-    assert "Connect Lians Guard" in gui
+    assert "Connect Lians" in gui
     assert "provider API key" in readme
 
 

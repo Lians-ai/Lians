@@ -1,4 +1,4 @@
-# Lians Guard product contract
+# Lians Check and Guard product contract
 
 This document translates the product demand pressure test into a repository
 contract. Market, pricing, and conversion numbers are hypotheses to validate,
@@ -6,7 +6,12 @@ not established results.
 
 ## Category
 
-**Lians Guard is the current-state and completion guard for AI coding agents.**
+**Lians Check is the evidence-backed proof-of-done check for AI coding agents.**
+
+The consumer surface is deliberately smaller than the underlying Guard trust
+contract. A user authorizes project checks once, runs `lians check`, and sees
+`NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`. Guard remains the internal and
+team policy layer for typed evidence, freshness, CI intake, and shared control.
 
 Lians helps a developer or team answer four questions after an agent session:
 

@@ -6,28 +6,33 @@
     "branch": "master"
   },
   "product": {
-    "name": "Lians Guard",
-    "category": "Current-state and completion guard for AI coding agents",
-    "summary": "Lians recovers interrupted agent work, rejects stale task state, and blocks unsupported completion claims until the configured task is ready for human review. Free local recovery remains available without a Lians account, AI account password, or provider API key. The full team Guard workflow is a developer preview.",
+    "name": "Lians Check",
+    "category": "Evidence-backed proof-of-done check for AI coding agents",
+    "summary": "Lians runs authorized project checks itself, binds the result to current Git state, and returns NO PROOF, NEEDS WORK, or READY TO REVIEW. Local use requires no Lians account, AI account password, or provider API key. Team policy and shared receipts remain a pilot hypothesis.",
     "workflow": [
       {
-        "label": "Recover",
-        "detail": "Restore the bounded current task, decisions, blockers, and next action in a supported Claude Code or Codex session."
+        "label": "Set up",
+        "detail": "Discover a short set of project tests, build, type-check, and lint commands, then require user authorization before Lians may run them."
       },
       {
-        "label": "Check freshness",
-        "detail": "Compare the saved checkpoint with current repository and task state, and mark mismatches stale instead of silently reusing them."
+        "label": "Measure",
+        "detail": "Run the authorized commands without an implicit shell and bind their exit codes and output hashes to the current repository state."
       },
       {
-        "label": "Evaluate evidence",
-        "detail": "Accept evidence only through a Lians-owned verifier, exact attested CI import, or interactive human confirmation while keeping agent attestations and inferred activity outside the completion gate."
+        "label": "Fail closed",
+        "detail": "Reject changed policies, failed or missing checks, workspace mutations during checking, stale state, and agent-reported proof."
       },
       {
         "label": "Hand off to a human",
-        "detail": "Show RECOVERED, STALE, BLOCKED, or READY FOR HUMAN REVIEW with inspectable evidence and remaining work."
+        "detail": "Show NO PROOF, NEEDS WORK, or READY TO REVIEW with the next useful action and an explicit human-review boundary."
       }
     ],
     "surfaces": [
+      {
+        "label": "Local Lians Check",
+        "status": "Developer preview",
+        "detail": "Two commands initialize and run measured proof-of-done checks with signed local receipts for the current Git state."
+      },
       {
         "label": "Free local recovery",
         "status": "Available",

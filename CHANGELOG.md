@@ -13,6 +13,12 @@ install `0.5.0` until the release checklist verifies PyPI, npm, Go, Maven, the C
 asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
 
 ### Added
+- Lians Check, a two-command proof-of-done workflow. `lians init` discovers and
+  authorizes a bounded project policy, and `lians check` runs the commands
+  locally and returns `NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`.
+- Fail-closed local execution with no implicit shell, bounded and redacted
+  output, command timeouts, policy digests, current Git content binding,
+  workspace-mutation detection, and signed measured-local receipts.
 - Lians Guard task contracts with current-work recovery, workspace fingerprints,
   stale-state reporting, typed evidence, and an explicit
   `READY FOR HUMAN REVIEW` gate.
@@ -41,6 +47,10 @@ asset, GitHub Releases, GHCR, and the MCP Registry from clean environments.
   release matrix and live registry verifier.
 
 ### Changed
+- The public product story now leads with Lians Check. Cross-agent memory,
+  recovery, graphs, and broader Guard controls remain supporting capabilities.
+  Top-level command help shows only the two-command loop and essential local
+  app diagnostics while documented advanced commands remain compatible.
 - Agent-facing checkpoint calls can no longer grant themselves measured or
   human-confirmed trust. Self-declared trusted labels remain visible but are
   stored as agent attestations until an authorized evidence path accepts them.

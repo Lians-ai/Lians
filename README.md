@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>Recover the task. Reject stale state. Block unsupported done.</strong></p>
+<p align="center"><strong>Your AI says it is done. Lians checks the receipts.</strong></p>
 
 <p align="center">
   <a href="docs/quickstart.md"><strong>Quickstart</strong></a> ·
@@ -22,60 +22,86 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
 </p>
 
-## Lians Guard
+## Lians Check
 
-**The current-state and completion guard for AI coding agents.**
+**The evidence-backed proof-of-done check for AI coding agents.**
 
-Lians recovers interrupted agent work, rejects stale task state, and blocks
-`done` until the current task is ready for human review.
+Claude Code, Codex, Cursor, and other coding agents can confidently report that
+work is finished without current proof. Lians runs the checks itself, binds the
+result to the current repository state, and gives the person reviewing the work
+one clear answer.
 
-> Your agent can forget the chat. It cannot forget what is finished, what
-> changed, or what still has to pass.
+```text
+NO PROOF
+NEEDS WORK
+READY TO REVIEW
+```
 
-- **Recover.** Resume a bounded current task across supported Claude Code and
-  Codex sessions.
-- **Reject stale state.** Bind checkpoints to current repository and task state
-  so old evidence is not silently reused.
-- **Guard completion.** Separate measured evidence from an agent's own claims
-  and keep the gate closed while work is missing, unknown, failed, or blocked.
-- **Require review.** `READY FOR HUMAN REVIEW` is a handoff to a person, never a
+- **Measure.** Lians runs the project's configured tests, build, type checks,
+  and lint commands without asking an AI to grade itself.
+- **Bind.** Every receipt matches the current Git state. A later change requires
+  fresh evidence.
+- **Fail closed.** Changed check policies, missing proof, failed commands, and
+  checks that modify the workspace cannot produce a ready result.
+- **Require review.** `READY TO REVIEW` is a handoff to a person, never a
   claim that the work is correct, approved, or safe to deploy.
-- **Stay local.** The free recovery path needs no Lians account, AI password, or
+- **Stay local.** The first product path needs no Lians account, AI password, or
   provider API key.
 
 Lians works with your existing AI account and editor. It does not replace your
 model, Git, CI, repository instructions, or human review.
 
-## One clear result after every agent session
+## Check the work in two commands
 
-```text
-RECOVERED
-Task: Fix OAuth callback handling
-Next: Re-run the callback integration test
+The first source preview is intentionally small:
 
-STALE
-Reason: The authentication requirement changed after this checkpoint
-
-BLOCKED
-Missing: OAuth callback integration test
-Untrusted: "tests passed" was reported by the agent, not measured
-
-READY FOR HUMAN REVIEW
-Measured locally: callback tests passed
-Measured by CI: required checks passed
+```bash
+python -m pip install -e ./packages/lians-easy
+lians init
+lians check
 ```
 
-The trust model is deliberately strict. `measured_local`, `measured_ci`, and
-`human_confirmed` evidence can satisfy a criterion. `agent_attested` and
-`inferred_activity` records remain useful context but cannot open the review
-gate. An agent cannot promote its own checkpoint into a trusted class. Trusted
-CI evidence requires an exact GitHub attestation and commit match plus an
-interactive check-to-criterion mapping; human evidence requires interactive
-confirmation. Read [why Lians exists](docs/why-lians.md), the full
+`lians init` discovers a short set of high-signal project commands and asks the
+user to authorize them. `lians check` executes those exact commands without a
+shell, records output hashes, rejects changed policies, and creates a signed
+local receipt for the current code. Review and commit `.lians/check.json` when
+the same policy should be shared with a team.
+
+For automation or an already reviewed setup, use `lians init --yes`. If Lians
+cannot discover the right command, provide one explicitly:
+
+```bash
+lians init --command "tests=python -m pytest -q" --yes
+```
+
+For automation, `lians check --json` exits `0` when ready, `1` when work is
+needed, and `2` when no authorized proof policy is available.
+
+## One clear result after every check
+
+```text
+NO PROOF
+Lians Check is not set up for this project.
+Next: Run lians init.
+
+NEEDS WORK
+FAIL  Tests  4.21s
+Next: Fix Tests and run lians check again.
+
+READY TO REVIEW
+PASS  Tests  3.84s
+PASS  Build  8.11s
+Next: Review the current changes.
+```
+
+The trust model remains deliberately strict. The local runner creates
+`measured_local` evidence. Agent summaries stay `agent_attested` and cannot open
+the review gate. Trusted CI evidence requires an exact GitHub attestation and
+commit match. Read [why Lians exists](docs/why-lians.md), the full
 [Lians Guard product contract](docs/lians-guard.md), and the current [market
 pressure test](docs/market-pressure-test-2026-08.md).
 
-## Try it in two minutes
+## Optional cross-agent recovery
 
 Choose the AI tool you already use:
 
@@ -155,6 +181,9 @@ guarantee that does not exist yet.
 
 | Capability | Status |
 |---|---|
+| `lians init` project check discovery and authorization | Developer preview |
+| `lians check` measured local runner and signed receipt | Developer preview |
+| Fail-closed policy changes and workspace-mutation detection | Developer preview |
 | Local memory through MCP and Python | Available |
 | Codex, Claude Code, and Cursor local recovery setup | Available |
 | Inspect, correct, and confirmed permanent deletion | Available |

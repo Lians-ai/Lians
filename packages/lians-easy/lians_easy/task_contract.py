@@ -441,6 +441,8 @@ class TaskContractService:
         workspace: dict[str, Any] | None = None,
         _trusted_issuer: str | None = None,
         _receipt_sha256: str | None = None,
+        _replace_evidence: bool = False,
+        _replace_constraint_checks: bool = False,
     ) -> dict[str, Any]:
         normalized_id = _normalized_task_id(task_id)
         current = self.status(normalized_id, project_id=project_id)
@@ -449,10 +451,16 @@ class TaskContractService:
         criterion_ids = {item["id"] for item in contract["success_criteria"]}
         constraint_ids = {item["id"] for item in contract["constraints"]}
 
-        merged_evidence = {
-            key: _evidence_record(value)
-            for key, value in dict(previous_state.get("evidence") or {}).items()
-        }
+        if (_replace_evidence or _replace_constraint_checks) and _trusted_issuer is None:
+            raise ValueError("Only a trusted Lians verifier may replace recorded check state")
+        merged_evidence = (
+            {}
+            if _replace_evidence
+            else {
+                key: _evidence_record(value)
+                for key, value in dict(previous_state.get("evidence") or {}).items()
+            }
+        )
         for index, entry in enumerate(evidence or []):
             if not isinstance(entry, dict):
                 raise TypeError(f"evidence[{index}] must be an object")
@@ -497,7 +505,11 @@ class TaskContractService:
                 ),
             }
 
-        merged_checks = dict(previous_state.get("constraint_checks") or {})
+        merged_checks = (
+            {}
+            if _replace_constraint_checks
+            else dict(previous_state.get("constraint_checks") or {})
+        )
         for index, entry in enumerate(constraint_checks or []):
             if not isinstance(entry, dict):
                 raise TypeError(f"constraint_checks[{index}] must be an object")
@@ -869,6 +881,7 @@ class TaskContractService:
             item
             for item in tasks
             if item["assessment"]["status"] in {"active", "blocked", "at_risk", "stale"}
+            and not item["task_id"].startswith("check-")
         ]
         if len(unresolved) == 1:
             selected = unresolved[0]
