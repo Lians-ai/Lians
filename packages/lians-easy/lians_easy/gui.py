@@ -1317,11 +1317,13 @@ class CompanionApp:
         self._render_connection_identity()
         self._label(
             hero_left,
-            "Current-state guard",
+            "Lians Guard",
             background=self.colors["background"],
             foreground=self.colors["text"],
             font=self._display(32, "bold"),
             anchor="w",
+            justify="left",
+            wraplength=360,
         ).pack(fill="x")
         self._label(
             hero_left,
