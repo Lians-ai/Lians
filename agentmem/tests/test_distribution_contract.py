@@ -122,7 +122,7 @@ def test_supported_path_map_separates_current_preview_and_legacy_routes():
     assert '`uvx --from "lians-sdk[mcp]" lians-mcp`' in guide
     assert '`pip install "lians-sdk[local]"`' in guide
     assert "`agentmem/sdk/python/` | **Current and published**" in guide
-    assert "`packages/lians-easy/` | **Technical preview**" in guide
+    assert "`packages/lians-easy/` | **Developer preview**" in guide
     assert "`sdk/python/` | **Legacy**" in guide
     assert "not a signed desktop download" in guide
     assert "not the general local installation path" in guide
