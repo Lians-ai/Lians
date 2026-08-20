@@ -393,6 +393,8 @@ class SetupApp:
             foreground=TEXT,
             font=("Segoe UI", 22, "bold"),
             anchor="w",
+            justify="left",
+            wraplength=640,
         ).pack(fill="x", pady=(16, 6))
         self._label(
             self.shell,
@@ -1296,7 +1298,7 @@ class CompanionApp:
         hero = tk.Frame(self.shell, background=self.colors["background"])
         hero.pack(fill="x", pady=(6, 22))
         hero_left = tk.Frame(hero, background=self.colors["background"])
-        hero_left.pack(side="left", fill="both", expand=True, padx=(22, 32), pady=18)
+        hero_left.pack(side="left", fill="both", expand=True, padx=(12, 20), pady=18)
         state = tk.Frame(hero_left, background=self.colors["background"])
         state.pack(fill="x", pady=(0, 16))
         self.connection_icon_label = self._label(
@@ -1329,17 +1331,17 @@ class CompanionApp:
             font=self._font(11),
             anchor="w",
             justify="left",
-            wraplength=560,
+            wraplength=400,
         ).pack(fill="x", pady=(7, 0))
         self.lifeline_canvas = tk.Canvas(
             hero,
-            width=310,
+            width=260,
             height=170,
             background=self.colors["background"],
             borderwidth=0,
             highlightthickness=0,
         )
-        self.lifeline_canvas.pack(side="right", fill="y", padx=(0, 28))
+        self.lifeline_canvas.pack(side="right", fill="y", padx=(0, 20))
         self.lifeline_canvas.configure(cursor="hand2")
         self._lifeline_lotus_item = None
         self.lifeline_canvas.bind("<Configure>", self._render_lifeline)
