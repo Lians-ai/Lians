@@ -7,7 +7,7 @@ Lookahead-bias demo: the same backtest, run twice against the same memory.
   Run 2 (HONEST)        mem.recall_at(..., as_of=D)    # point-in-time recall,
                                                        # pinned to decision time
 
-That is the entire diff — one parameter. Everything else (data, strategy,
+That is the entire diff - one parameter. Everything else (data, strategy,
 scoring, thresholds) is byte-identical between the runs.
 
 The strategy is deliberately dumb: each morning, for each ticker, ask memory
@@ -219,16 +219,16 @@ def plot(days: list[date], curves: dict[str, list[float]], sharpes: dict[str, fl
     ax.plot(x, curves["benchmark"], lw=1.6, ls=(0, (4, 3)), color=MUTED, zorder=2,
             label="Buy & hold (equal weight)")
     ax.plot(x, curves["honest"], lw=2, color=BLUE, zorder=3,
-            label=f"Honest — as-of recall · Sharpe {sharpes['honest']:.1f}")
+            label=f"Honest - as-of recall · Sharpe {sharpes['honest']:.1f}")
     ax.plot(x, curves["contaminated"], lw=2, color=RED, zorder=4,
-            label=f"Contaminated — naive recall · Sharpe {sharpes['contaminated']:.1f}")
+            label=f"Contaminated - naive recall · Sharpe {sharpes['contaminated']:.1f}")
 
     for key, label in (("contaminated", "contaminated"), ("honest", "honest"),
                        ("benchmark", "buy & hold")):
         ax.annotate(f" {label}", (x[-1], curves[key][-1]), xytext=(4, 0),
                     textcoords="offset points", va="center", fontsize=9, color=INK_2)
 
-    ax.set_title("Same strategy, same data, same memory store — one parameter apart",
+    ax.set_title("Same strategy, same data, same memory store - one parameter apart",
                  loc="left", fontsize=13, color=INK, pad=18, fontweight="bold")
     ax.text(0, 1.02, "Growth of $1 · retrieval pinned to decision time (as_of) vs "
                      "present-time retrieval over the full history",
@@ -264,7 +264,7 @@ def main() -> None:
         n = ingest(mem)
         print(f"  {n} notes ingested")
 
-        print("run 1/2: CONTAMINATED (present-time recall — the naive store) ...")
+        print("run 1/2: CONTAMINATED (present-time recall - the naive store) ...")
         dirty, receipts = run_backtest(mem, days, tickers, returns, honest=False)
         print(f"  {len(receipts)} future-information retrievals recorded")
 
@@ -290,7 +290,7 @@ def main() -> None:
         w.writerows(receipts)
 
     lines = [
-        "# Receipts — future information retrieved during the contaminated run\n",
+        "# Receipts - future information retrieved during the contaminated run\n",
         (
             f"Every row is a memory retrieved at decision time that **did not exist yet**. "
             f"Total: **{len(receipts)}** contaminated retrievals across "
@@ -305,7 +305,7 @@ def main() -> None:
             f"| {r['note_event_time'][:10]} | {r['days_in_future']} "
             f"| {r['position_taken']:+d} | {r['next_day_return'] * 100:+.1f}% |")
     if len(receipts) > 20:
-        lines.append(f"\n…and {len(receipts) - 20} more — see `receipts.csv`.")
+        lines.append(f"\n…and {len(receipts) - 20} more - see `receipts.csv`.")
     (RESULTS / "receipts.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # ── summary ─────────────────────────────────────────────────────────────
@@ -322,9 +322,9 @@ def main() -> None:
 
 | run | retrieval | total return | Sharpe | max drawdown |
 |---|---|---:|---:|---:|
-| **Contaminated** | `recall()` — present-time, full history visible | {total(curves['contaminated'])} | **{sharpes['contaminated']:.1f}** | {max_drawdown(curves['contaminated']) * 100:.1f}% |
+| **Contaminated** | `recall()` - present-time, full history visible | {total(curves['contaminated'])} | **{sharpes['contaminated']:.1f}** | {max_drawdown(curves['contaminated']) * 100:.1f}% |
 | **Honest** | `recall_at(as_of=decision_time)` | {total(curves['honest'])} | {sharpes['honest']:.1f} | {max_drawdown(curves['honest']) * 100:.1f}% |
-| Buy & hold | — | {total(curves['benchmark'])} | {sharpes['benchmark']:.1f} | {max_drawdown(curves['benchmark']) * 100:.1f}% |
+| Buy & hold | - | {total(curves['benchmark'])} | {sharpes['benchmark']:.1f} | {max_drawdown(curves['benchmark']) * 100:.1f}% |
 
 Contaminated retrievals: **{len(receipts)}** (see `receipts.md` / `receipts.csv`).
 
@@ -357,7 +357,7 @@ is_clean           = {report.get('is_clean')}
 
 `future_event` flags are the leak this demo trades on: the underlying event
 had not happened yet at the checkpoint. `late_revision` flags mark memories
-whose event is old but whose *ingestion* postdates the checkpoint — in this
+whose event is old but whose *ingestion* postdates the checkpoint - in this
 replayed demo that is every note (we ingested the whole history today), which
 is exactly what a replayed backtest looks like and why the detector treats a
 replay as contaminated until retrieval is pinned with `as_of`.

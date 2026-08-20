@@ -2,8 +2,8 @@
 Demo: AgentMem + LangChain integration.
 
 Shows two patterns:
-  1. LiansChatHistory — plugs into RunnableWithMessageHistory
-  2. build_tools — three tools for a ReAct agent (no LLM required to run)
+  1. LiansChatHistory - plugs into RunnableWithMessageHistory
+  2. build_tools - three tools for a ReAct agent (no LLM required to run)
 
 Run with no server needed:
     cd agentmem
@@ -41,7 +41,7 @@ def demo_chat_history():
         role = "User" if msg.type == "human" else "AI  "
         print(f"  {role}: {msg.content}")
 
-    print(f"\n(Works with RunnableWithMessageHistory — pass a lambda that returns")
+    print(f"\n(Works with RunnableWithMessageHistory - pass a lambda that returns")
     print(f" LiansChatHistory(client=client, session_id=session_id))\n")
     client.close()
 
@@ -67,11 +67,11 @@ def demo_agent_tools():
     })
     print("Stored two NVDA guidance facts.\n")
 
-    # recall — present time (returns current valid value)
+    # recall - present time (returns current valid value)
     print("recall('NVDA guidance'):")
     print(tools["recall"].invoke({"query": "NVDA guidance", "k": 3}))
 
-    # recall_at — point in time (before the revision)
+    # recall_at - point in time (before the revision)
     print("\nrecall_at('NVDA guidance', as_of='2026-03-01')  <- before revision:")
     print(tools["recall_at"].invoke({
         "query": "NVDA guidance",

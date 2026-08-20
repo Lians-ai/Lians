@@ -1,12 +1,12 @@
 """A write for a crypto-shredded subject is a 410 Gone, never a 500.
 
-The subject's key is destroyed by /v1/erase and is never re-created —
+The subject's key is destroyed by /v1/erase and is never re-created -
 minting a fresh key for the same subject_id would let new content
 accumulate under an identity the controller already erased.
 """
 import pytest
 
-from test_api import _h, AGENT, T0, client  # noqa: F401 — client fixture
+from test_api import _h, AGENT, T0, client  # noqa: F401 - client fixture
 
 SUBJ = "shredded-subject-001"
 

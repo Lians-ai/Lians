@@ -152,7 +152,7 @@ class TestClassifyRelation:
 
 
 class TestRefines:
-    """REFINES — narrowing relation harvested from the Memory Governor vocabulary."""
+    """REFINES - narrowing relation harvested from the Memory Governor vocabulary."""
 
     def test_narrowing_newer_fact_refines(self):
         relation, conf = classify_relation(
@@ -167,7 +167,7 @@ class TestRefines:
         assert conf >= 0.7
 
     def test_narrowing_same_time_refines_not_contradicts(self):
-        """A same-time narrowing agrees with the old fact — it must not raise a conflict."""
+        """A same-time narrowing agrees with the old fact - it must not raise a conflict."""
         relation, _ = classify_relation(
             old_content="NVDA Q3 guidance $36B",
             new_content="NVDA Q3 guidance $36B excluding China exports",
@@ -179,7 +179,7 @@ class TestRefines:
         assert relation == "REFINES"
 
     def test_changed_value_still_supersedes(self):
-        """A genuine value update breaks token containment — SUPERSEDES, not REFINES."""
+        """A genuine value update breaks token containment - SUPERSEDES, not REFINES."""
         relation, _ = classify_relation(
             old_content="NVDA Q3 guidance $32B",
             new_content="NVDA Q3 guidance raised to $36B",
@@ -246,7 +246,7 @@ async def test_free_text_narrowing_refines_end_to_end(db):
     and a narrowing closes the old validity window under the REFINES label.
 
     Before this path existed, run_supersession only reached Stage 1 for facts
-    with no structured keys — but Stage 1 required structured-key overlap, so
+    with no structured keys - but Stage 1 required structured-key overlap, so
     free-text supersession could never fire at all.
     """
     from src.lians.schemas import MemoryAdd

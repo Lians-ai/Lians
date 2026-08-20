@@ -1,5 +1,5 @@
 """
-LiansClient — synchronous wrapper around AsyncLiansClient.
+LiansClient - synchronous wrapper around AsyncLiansClient.
 
 For scripts, CLIs, and any non-async context.  In async code (FastAPI
 handlers, Jupyter with a running loop) use AsyncLiansClient directly.
@@ -111,7 +111,7 @@ class LiansClient:
 
         Each message whose role matches *roles* (default: ``["assistant"]``) is
         stored as a separate memory with full supersession, bitemporal tracking,
-        and audit-chain writes — the same pipeline as ``add()``.
+        and audit-chain writes - the same pipeline as ``add()``.
 
         This is the equivalent of ``mem0.add(messages=[...])``, with the addition
         of bitemporal event time and compliance audit writes.
@@ -270,7 +270,7 @@ class LiansClient:
         Recall memories valid at *as_of* (point-in-time compliance query).
 
         Equivalent to ``recall(..., as_of=as_of)`` but signals intent at the
-        call site — use for audit questions rather than present-time queries.
+        call site - use for audit questions rather than present-time queries.
         """
         return self._loop.run_until_complete(
             self._async.recall_at(
@@ -356,7 +356,7 @@ class LiansClient:
         memory_id: str,
         reviewer_note: Optional[str] = None,
     ) -> dict:
-        """Reject a supersession — restores the old memory as valid."""
+        """Reject a supersession - restores the old memory as valid."""
         return self._loop.run_until_complete(
             self._async.reject_supersession(memory_id=memory_id, reviewer_note=reviewer_note)
         )
@@ -407,7 +407,7 @@ class LiansClient:
         """
         Reconstruct the complete knowledge state of *agent_id* at *as_of*.
 
-        Returns every fact that was valid at that timestamp — exhaustive, no
+        Returns every fact that was valid at that timestamp - exhaustive, no
         relevance filter.  The one-call compliance demo that closes deals with
         risk committees and regulators.
 
@@ -464,7 +464,7 @@ class LiansClient:
 
     def path(self, agent_id, src_entity, dst_entity, max_depth=4, as_of=None,
              rel_types=None, normalize=False) -> dict:
-        """Shortest connection between two entities — the COI / related-party query."""
+        """Shortest connection between two entities - the COI / related-party query."""
         return self._loop.run_until_complete(self._async.path(
             agent_id=agent_id, src_entity=src_entity, dst_entity=dst_entity,
             max_depth=max_depth, as_of=as_of, rel_types=rel_types, normalize=normalize,

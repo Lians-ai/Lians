@@ -2,7 +2,7 @@
 HTTP-level tests for the relationship-graph routes (/v1/graph/*).
 
 Confirms the endpoints, auth scoping, and namespace isolation work end-to-end
-through the FastAPI app — complementing the service-level tests in test_graph.py.
+through the FastAPI app - complementing the service-level tests in test_graph.py.
 """
 from __future__ import annotations
 

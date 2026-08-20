@@ -42,7 +42,7 @@ class _InMemoryRecallRedis:
 # ---------------------------------------------------------------------------
 # Determinism guard: a developer's local `agentmem/.env` (e.g. a Docker-stack
 # env with a real MASTER_ENCRYPTION_KEY, cache/rate-limit/WORM settings) must
-# never leak into the test run — it changes crypto, caching, and audit-chain
+# never leak into the test run - it changes crypto, caching, and audit-chain
 # behavior, so the suite fails on machines where it passes everywhere else.
 # Point pydantic-settings at a nonexistent env file and scrub the same
 # variables from the process environment before any Settings() is built.
@@ -90,7 +90,7 @@ def pytest_configure(config):
         return
 
     # Bring up only the postgres service (idempotent if already running).
-    # A half-started Docker daemon can hang any of these calls — treat every
+    # A half-started Docker daemon can hang any of these calls - treat every
     # failure (including TimeoutExpired) as "no Docker" and skip provisioning
     # rather than crashing collection with an INTERNALERROR.
     try:

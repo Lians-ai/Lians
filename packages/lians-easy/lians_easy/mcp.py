@@ -14,7 +14,7 @@ from .memory_health import MemoryHealthService
 from .project import detect_project
 from .state_integrity import StateIntegrityService
 from .store import MemoryStore
-from .task_contract import TaskContractService
+from .task_contract import TaskContractService, workspace_snapshot
 from .understanding import UnderstandingService
 from .verification import VerificationService
 
@@ -35,7 +35,11 @@ _SERVER_INSTRUCTIONS = (
     "knowledge matters. Use global scope only for cross-project user preferences. Recall "
     "returns a bounded context pack and signed receipt. For substantial work, use "
     "start_task once, checkpoint_task as evidence changes, and task_status before claiming "
-    "completion. Use continue_work when a user returns or switches agents; it selects the "
+    "readiness for human review. Evidence must identify its declared trust class, but this "
+    "agent-facing tool cannot grant measured or human-confirmed trust. Self-declared trusted "
+    "labels remain agent attestations. Agent text and inferred file activity do not satisfy "
+    "completion criteria. Use continue_work when a "
+    "user returns or switches agents; it selects the "
     "only active task without guessing. Use task_context for an exact task id. Use "
     "understand_request when the user's outcome is unclear so you ask only a question that "
     "changes the work. When an output depends on current state, use track_dependencies. "
@@ -421,8 +425,11 @@ def tool_definitions() -> list[dict[str, Any]]:
         {
             "name": "checkpoint_task",
             "description": (
-                "Record progress, evidence, constraint checks, blockers, and the current action. "
-                "Lians preserves prior checkpoints and rejects stale agent updates."
+                "Record progress, typed evidence, constraint checks, blockers, and the current "
+                "action. Lians preserves prior checkpoints, binds local Git state when available, "
+                "and rejects stale agent updates. This agent-facing tool cannot grant measured "
+                "or human-confirmed trust; those declared labels are stored as agent attestations "
+                "until an authorized verifier accepts them."
             ),
             "inputSchema": {
                 "type": "object",
@@ -440,7 +447,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "maxItems": 20,
                         "items": {
                             "type": "object",
-                            "required": ["criterion_id", "evidence"],
+                            "required": ["criterion_id", "evidence", "trust_class"],
                             "properties": {
                                 "criterion_id": {"type": "string"},
                                 "evidence": {
@@ -448,6 +455,17 @@ def tool_definitions() -> list[dict[str, Any]]:
                                     "minLength": 1,
                                     "maxLength": 4000,
                                 },
+                                "trust_class": {
+                                    "type": "string",
+                                    "enum": [
+                                        "measured_local",
+                                        "measured_ci",
+                                        "human_confirmed",
+                                        "agent_attested",
+                                        "inferred_activity",
+                                    ],
+                                },
+                                "source": {"type": "string", "maxLength": 1000},
                             },
                             "additionalProperties": False,
                         },
@@ -457,7 +475,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                         "maxItems": 20,
                         "items": {
                             "type": "object",
-                            "required": ["constraint_id", "status"],
+                            "required": ["constraint_id", "status", "trust_class"],
                             "properties": {
                                 "constraint_id": {"type": "string"},
                                 "status": {
@@ -465,6 +483,17 @@ def tool_definitions() -> list[dict[str, Any]]:
                                     "enum": ["passed", "failed", "unknown"],
                                 },
                                 "evidence": {"type": "string", "maxLength": 4000},
+                                "trust_class": {
+                                    "type": "string",
+                                    "enum": [
+                                        "measured_local",
+                                        "measured_ci",
+                                        "human_confirmed",
+                                        "agent_attested",
+                                        "inferred_activity",
+                                    ],
+                                },
+                                "source": {"type": "string", "maxLength": 1000},
                             },
                             "additionalProperties": False,
                         },
@@ -984,6 +1013,7 @@ def call_tool(
             client=arguments.get("client", "mcp"),
             source_ref=arguments.get("source_ref"),
             event_time=arguments.get("event_time"),
+            workspace=workspace_snapshot(project.trusted_root),
         )
         assessment = item["assessment"]
         cloud = sync.sync_if_connected()
@@ -996,7 +1026,11 @@ def call_tool(
         )
     if name == "task_status":
         sync.pull_if_connected()
-        item = tasks.status(arguments["task_id"], project_id=project.id)
+        item = tasks.status(
+            arguments["task_id"],
+            project_id=project.id,
+            workspace=workspace_snapshot(project.trusted_root),
+        )
         return _text_result(item)
     if name == "task_context":
         sync.pull_if_connected()
@@ -1005,6 +1039,7 @@ def call_tool(
             project_id=project.id,
             client=arguments.get("client", "mcp"),
             max_tokens=int(arguments.get("max_tokens", 768)),
+            workspace=workspace_snapshot(project.trusted_root),
         )
         return _text_result(item, item["context"])
     if name == "continue_work":
@@ -1014,6 +1049,7 @@ def call_tool(
             task_id=arguments.get("task_id"),
             client=arguments.get("client", "mcp"),
             max_tokens=int(arguments.get("max_tokens", 768)),
+            workspace=workspace_snapshot(project.trusted_root),
         )
         return _text_result(item, item.get("context") or item["message"])
     if name == "configure_verification":

@@ -151,7 +151,10 @@ def test_resident_companion_is_clear_and_fits_at_125_percent_scaling(monkeypatch
             return text
 
         assert "Lians is running" not in visible_text(root)
-        assert "Extended usage. Better memory." in visible_text(root)
+        assert (
+            "Recover work. See what is stale. Know what still has to pass."
+            in visible_text(root)
+        )
         app._render_lifeline()
         canvas_items = app.lifeline_canvas.find_all()
         assert len(canvas_items) == 1

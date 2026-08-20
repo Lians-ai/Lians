@@ -3,13 +3,13 @@ Deterministic synthetic dataset for the lookahead-bias demo.
 
 Generates two files under data/:
 
-  prices.csv   — daily close-to-close returns for 6 fictional tickers over
+  prices.csv - daily close-to-close returns for 6 fictional tickers over
                  ~6 months of trading days (weekdays, 2026-01-05 → 2026-06-26)
-  notes.jsonl  — timestamped research notes an agent would accumulate in its
+  notes.jsonl - timestamped research notes an agent would accumulate in its
                  memory layer: earnings previews, earnings/guidance/rating
                  outcomes, next-day analyst reactions, and neutral macro notes
 
-The market is synthetic ON PURPOSE — the demo is about a *mechanism*, not
+The market is synthetic ON PURPOSE - the demo is about a *mechanism*, not
 alpha. What is real, and what the whole demo hinges on, is the causal
 structure every market has:
 
@@ -20,8 +20,8 @@ structure every market has:
 So a note like "AVLN beats Q1 consensus" carries event_time = day E. If a
 backtest making a decision for day E (using information through day E-1)
 can retrieve that note, its memory layer is leaking the future. Synthetic
-prices make the leak *measurable* — we control exactly which information
-was knowable when — and make the repo reproducible with zero API keys.
+prices make the leak *measurable* - we control exactly which information
+was knowable when - and make the repo reproducible with zero API keys.
 
 Fictional tickers are used so no real company's facts are misstated.
 
@@ -98,7 +98,7 @@ def pick_event_days(rng: random.Random, days: list[date]) -> dict[str, list[tupl
 
 
 POS_OUTCOME = {
-    "earnings": ("{t} beats {q} consensus — EPS ${a:.2f} vs ${e:.2f} expected; revenue ahead of "
+    "earnings": ("{t} beats {q} consensus - EPS ${a:.2f} vs ${e:.2f} expected; revenue ahead of "
                  "street; management raises full-year guidance. ({mon} {day})"),
     "guidance": ("{t} raises FY outlook in an unscheduled {mon} update; cites strong demand and "
                  "expanding margins."),
@@ -106,7 +106,7 @@ POS_OUTCOME = {
                  "flow durability."),
 }
 NEG_OUTCOME = {
-    "earnings": ("{t} misses {q} consensus — EPS ${a:.2f} vs ${e:.2f} expected; revenue light; "
+    "earnings": ("{t} misses {q} consensus - EPS ${a:.2f} vs ${e:.2f} expected; revenue light; "
                  "management cuts full-year guidance. ({mon} {day})"),
     "guidance": ("{t} cuts FY outlook in an unscheduled {mon} update; flags weak demand and "
                  "margin pressure."),
@@ -149,7 +149,7 @@ def main() -> None:
                 q = QUARTER_NAMES[eday.month]
                 est = rng.uniform(0.30, 1.20)
                 act = est + (0.09 if direction > 0 else -0.09) * est
-                # preview — knowable BEFORE the event (neutral)
+                # preview - knowable BEFORE the event (neutral)
                 pday = eday - timedelta(days=4)
                 notes.append({
                     "ticker": t, "kind": "preview", "event_id": eid,
@@ -163,13 +163,13 @@ def main() -> None:
                 outcome = (POS_OUTCOME if direction > 0 else NEG_OUTCOME)[kind].format(
                     t=t, mon=mon)
 
-            # outcome — published the morning of the event (pre-open)
+            # outcome - published the morning of the event (pre-open)
             notes.append({
                 "ticker": t, "kind": "outcome", "event_id": eid,
                 "event_time": utc(eday, 12),
                 "content": outcome,
             })
-            # analyst reaction — next calendar day
+            # analyst reaction - next calendar day
             notes.append({
                 "ticker": t, "kind": "analyst", "event_id": eid,
                 "event_time": utc(eday + timedelta(days=1), 13, 30),

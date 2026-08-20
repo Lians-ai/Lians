@@ -1,13 +1,13 @@
 """
 Keyed fast-path relation classification.
 
-The fast path used to label every later keyed write SUPERSEDES 1.0 — REFINES
+The fast path used to label every later keyed write SUPERSEDES 1.0 - REFINES
 and CONFIRMS were unreachable for keyed facts (and unkeyed writes rarely find
 candidates without real embeddings, so they were unreachable, period).
 These tests pin the deterministic relation split:
 
   identical value, later event  → CONFIRMS  (old window closes, honest label)
-  narrowing (token superset)    → REFINES   (0.8 — reviewable, window closes)
+  narrowing (token superset)    → REFINES   (0.8 - reviewable, window closes)
   changed value, later event    → SUPERSEDES (1.0, unchanged behavior)
   different value, same instant → CONTRADICTS_SAME_TIME (conflict flag)
 """
@@ -46,7 +46,7 @@ async def test_identical_later_value_is_confirms_not_supersedes(db):
         agent_id=AGENT, content="ZORG Q2 EPS was 1.10", event_time=T1, metadata=meta))
 
     old = await db.get(Memory, m1.id)
-    # SQLite hands back naive datetimes — normalize before comparing.
+    # SQLite hands back naive datetimes - normalize before comparing.
     closed_at = old.valid_to.replace(tzinfo=timezone.utc) if old.valid_to.tzinfo is None else old.valid_to
     assert closed_at == T1, "re-confirmation must close the old window"
     assert str(old.superseded_by) == str(m2.id)

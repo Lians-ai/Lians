@@ -6,7 +6,7 @@ Writes one ``conv{i}_q{j}.json`` per LOCOMO question (categories 1-4) with
 w_sem .5 / w_lex .05, temporal-context smoothing .3, "query: " prefix). The
 mem0 harness's ``--evaluate-only`` mode then runs *their unmodified*
 answer-generation and judge pipeline over these files, so the resulting
-J-score is measured by the competitor's own code — the only defensible way
+J-score is measured by the competitor's own code - the only defensible way
 to put our number next to theirs.
 
 Doc content, arctic embeddings, and event times come straight from the live
@@ -63,7 +63,7 @@ def _last_session_date(conversation: dict) -> str | None:
 
 def _load_docs(db_path: Path, table: str = "live_facts"):
     """``table='memories'`` scores the full bitemporal log (live + superseded,
-    never erased) instead of the current view — for episodic-history QA the
+    never erased) instead of the current view - for episodic-history QA the
     closed rows ARE the answers ('what was X before...'), and the 2026-07-11
     flip analysis showed supersession closures removing gold turns from the
     live-only top-200."""
@@ -128,7 +128,7 @@ def main() -> None:
         ref_date = _last_session_date(entry["conversation"])
 
         # temporal adjacency for smoothing: docs are sorted by event_time, and
-        # in-session turns are 1s apart while sessions are days apart — treat
+        # in-session turns are 1s apart while sessions are days apart - treat
         # gaps <= 3600s as adjacent (same rule as the engine).
         import datetime as _dt
         ts = []
@@ -161,7 +161,7 @@ def main() -> None:
                     if 0 <= j < len(sem) and abs(ts[i] - ts[j]) <= 3600 and sem[j] > nb_best[i]:
                         nb_best[i] = sem[j]
             scores = W_SEM * (sem + SMOOTH * nb_best) + W_LEX * _bm25_scores(qa["question"], doc_tf, doc_len)
-            # temporal query grounding — mirrors src/lians/ranking (bonus 0.1)
+            # temporal query grounding - mirrors src/lians/ranking (bonus 0.1)
             wins = query_time_windows(qa["question"])
             if wins:
                 scores = scores + np.array(

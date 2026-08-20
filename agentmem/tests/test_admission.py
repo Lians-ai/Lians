@@ -1,5 +1,5 @@
 """
-Memory admission control — detectors, decision modes, and the write-path behavior
+Memory admission control - detectors, decision modes, and the write-path behavior
 (monitor tags, enforce rejects injection / holds PII for review, approve→admit).
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ def test_decision_modes():
 
 def test_vagueness_prefilter():
     """Too-vague candidates are tagged, and rejected in enforce mode
-    (harvested from the Memory Governor's IGNORE action — governor-integration Phase 3)."""
+    (harvested from the Memory Governor's IGNORE action - governor-integration Phase 3)."""
     from src.lians.admission import is_too_vague
     assert is_too_vague("ok")
     assert is_too_vague("yes boss")
@@ -101,7 +101,7 @@ def _enforce(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_monitor_admits_and_tags(client):
-    # default mode is monitor — risky content is admitted but tagged.
+    # default mode is monitor - risky content is admitted but tagged.
     r = await client.post("/v1/memories", headers=_h(), json={
         "agent_id": AGENT, "content": "user SSN 123-45-6789 on file", "event_time": T.isoformat(),
     })
@@ -219,7 +219,7 @@ async def test_enforce_reject_review(client, monkeypatch):
     assert r.status_code == 202
     pid = r.json()["pending_id"]
     res = await client.post(f"/v1/admissions/{pid}/resolve", headers=_h(),
-                            json={"action": "reject", "note": "MNPI — barred"})
+                            json={"action": "reject", "note": "MNPI - barred"})
     assert res.json()["status"] == "rejected"
 
 

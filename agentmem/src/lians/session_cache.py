@@ -1,11 +1,11 @@
 """
-In-process working-set cache for live facts per agent — Change 7 of the
+In-process working-set cache for live facts per agent - Change 7 of the
 performance roadmap.
 
 After a session is bound (first recall per agent per process), the agent's
 entire live working set is prefetched from ``live_facts`` and held here.
-Subsequent recalls for the same agent are served from memory — no Postgres
-or vector-index round-trip — until an explicit invalidation.
+Subsequent recalls for the same agent are served from memory - no Postgres
+or vector-index round-trip - until an explicit invalidation.
 
 Invalidation triggers (call ``invalidate_working_set``):
   - Any ``add_memory`` or ``batch_add_memories`` for the agent.
@@ -27,12 +27,12 @@ from typing import Optional
 
 _cache: dict[tuple[str, str], tuple[datetime, list, str]] = {}
 # Derived scoring artifacts (embedding matrix, BM25 stats, decrypted contents)
-# built by ranking._scoring_pack — same lifecycle as the working set.
+# built by ranking._scoring_pack - same lifecycle as the working set.
 _packs: dict[tuple[str, str], object] = {}
 _MAX_ENTRIES = 512
 _MAX_PACK_ENTRIES = 32
 _MAX_PACK_TEXT_CHARS = 1_048_576
-_TTL_SECONDS = 300  # 5 min max staleness — write invalidation handles most cases
+_TTL_SECONDS = 300  # 5 min max staleness - write invalidation handles most cases
 
 
 def get_working_set(
@@ -83,7 +83,7 @@ def set_working_set(
 
 
 def invalidate_working_set(namespace: str, agent_id: str) -> None:
-    """Drop cached facts — called on any write or erasure for this agent."""
+    """Drop cached facts - called on any write or erasure for this agent."""
     _cache.pop((namespace, agent_id), None)
     _packs.pop((namespace, agent_id), None)
 

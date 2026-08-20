@@ -1,9 +1,9 @@
 """
-Admission review queue — list and resolve memory writes that admission control
+Admission review queue - list and resolve memory writes that admission control
 held for human review (PII/PHI/MNPI in enforce mode).
 
-    GET  /v1/admissions                  — list held (pending) writes
-    POST /v1/admissions/{id}/resolve     — approve (→ create the memory) or reject
+    GET  /v1/admissions - list held (pending) writes
+    POST /v1/admissions/{id}/resolve - approve (→ create the memory) or reject
 
 Reviewing held content is a privileged compliance action, so these require the
 admin scope.

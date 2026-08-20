@@ -4,16 +4,16 @@ Revision ID: 0010_live_facts_merkle
 Revises: 0009_webhooks
 Create Date: 2026-06-22
 
-live_facts  — compact present-time projection of memories (Change 1 of the
+live_facts - compact present-time projection of memories (Change 1 of the
               performance roadmap).  One row per currently-valid memory;
               recall queries this table instead of scanning ``memories WHERE
               valid_to IS NULL``, shrinking the ANN search space 5–10×.
 
               Keyed facts (predicate_key IS NOT NULL) have at most one row per
-              (namespace, agent_id, predicate_key) — the supersession engine
+              (namespace, agent_id, predicate_key) - the supersession engine
               enforces this invariant on the write path.
 
-merkle_anchors — periodic Merkle-root anchors for the windowed audit-chain
+merkle_anchors - periodic Merkle-root anchors for the windowed audit-chain
               batcher (Change 8 of the performance roadmap).  Only written
               when MERKLE_BATCH_ENABLED=true.  The serial chain in event_log
               continues to work with or without Merkle batching.
@@ -95,7 +95,7 @@ def upgrade() -> None:
             server_default="{}",
         ),
         sa.Column("content_encrypted", sa.LargeBinary(), nullable=True),
-        # embedding column — Vector type on PG, JSON on SQLite
+        # embedding column - Vector type on PG, JSON on SQLite
         sa.Column("embedding", sa.Text() if not _is_postgres() else sa.Text(), nullable=True),
     )
 
@@ -110,10 +110,10 @@ def upgrade() -> None:
                 f"ALTER TABLE live_facts ADD COLUMN embedding vector({EMBED_DIM})"
             ))
         else:
-            # pgvector not available — fall back to JSONB array storage
+            # pgvector not available - fall back to JSONB array storage
             op.add_column("live_facts", sa.Column("embedding", postgresql.JSONB(), nullable=True))
 
-    # Indexes — fast path: (namespace, agent_id) and (namespace, agent_id, predicate_key)
+    # Indexes - fast path: (namespace, agent_id) and (namespace, agent_id, predicate_key)
     op.create_index("ix_live_facts_namespace", "live_facts", ["namespace"])
     op.create_index("ix_live_facts_agent_id", "live_facts", ["agent_id"])
     op.create_index("ix_live_facts_predicate_key", "live_facts", ["predicate_key"])
@@ -126,7 +126,7 @@ def upgrade() -> None:
         ["namespace", "agent_id", "predicate_key"],
     )
 
-    # HNSW vector index — PG + pgvector only
+    # HNSW vector index - PG + pgvector only
     if _is_postgres() and _has_pgvector():
         op.create_index(
             "ix_live_facts_embedding_hnsw",
@@ -142,7 +142,7 @@ def upgrade() -> None:
     # into live_facts so an upgraded database is immediately queryable.
     #
     # predicate_key is computed from structured metadata keys.  We store NULL
-    # here and let the application compute it on next write — existing memories
+    # here and let the application compute it on next write - existing memories
     # are retrievable via semantic search immediately after upgrade.
     if _is_postgres():
         op.execute(sa.text("""

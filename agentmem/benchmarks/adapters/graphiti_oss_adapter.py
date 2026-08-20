@@ -1,5 +1,5 @@
 """
-Graphiti OSS live adapter — runs getzep/graphiti in its default documented
+Graphiti OSS live adapter - runs getzep/graphiti in its default documented
 configuration (OpenAI LLM + embeddings + reranker) on an embedded Kuzu graph,
 so the Zep/Graphiti column can be *executed*, not capability-assessed.
 
@@ -8,7 +8,7 @@ Requirements to go live (all from Graphiti's own quickstart):
     export OPENAI_API_KEY=...
 
 Fairness notes:
-- This is Graphiti exactly as its README configures it — default clients,
+- This is Graphiti exactly as its README configures it - default clients,
   default search. We do not swap in weaker local models for the extraction
   step its invalidation logic depends on.
 - Primitives Graphiti does not expose as turnkey APIs (as-of recall, erasure
@@ -46,7 +46,7 @@ class GraphitiOSSAdapter:
             self._graphiti = Graphiti(graph_driver=driver)
             self._loop.run_until_complete(self._graphiti.build_indices_and_constraints())
             # graphiti-core 0.29.2: build_indices_and_constraints() is a no-op
-            # on Kuzu and setup_schema() creates tables only — but the default
+            # on Kuzu and setup_schema() creates tables only - but the default
             # hybrid search issues QUERY_FTS_INDEX, so search crashes out of
             # the box. Complete their documented setup with graphiti's OWN
             # index statements (graph_queries.get_fulltext_indices).
@@ -86,7 +86,7 @@ class GraphitiOSSAdapter:
 
     def recall(self, agent, query, *, k=5):
         # Facts are reported exactly as Graphiti's default search returns
-        # them — including invalidated edges (it does not filter those out).
+        # them - including invalidated edges (it does not filter those out).
         # The `invalidated` flag passes Graphiti's own invalid_at/expired_at
         # marking through so the harness can credit marked-but-returned stale
         # facts as partial rather than scoring the invalidation as absent.
@@ -102,7 +102,7 @@ class GraphitiOSSAdapter:
 
     def erase(self, subject_id, reason):
         # remove_episode is real deletion of the episode and its derived
-        # nodes/edges — but there is no crypto-shred and no certificate, so
+        # nodes/edges - but there is no crypto-shred and no certificate, so
         # at best this scores "partial" (behavioral deletion, no proof).
         episodes = self._episodes_by_subject.pop(subject_id, [])
         if not episodes:

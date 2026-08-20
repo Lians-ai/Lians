@@ -1,13 +1,13 @@
 """
-Stripe usage metering — per-namespace event reporting for memory writes and recalls.
+Stripe usage metering - per-namespace event reporting for memory writes and recalls.
 
 Architecture
 ────────────
-queue_usage_event() — synchronous, non-blocking (put_nowait).  Called on the hot
+queue_usage_event() - synchronous, non-blocking (put_nowait).  Called on the hot
   path after add_memory / recall_memories.  Silently drops events when the queue
   is full (circuit-breaker) and is a no-op when STRIPE_API_KEY is empty.
 
-run_metering_worker() — asyncio.Task started in FastAPI lifespan.  Drains the
+run_metering_worker() - asyncio.Task started in FastAPI lifespan.  Drains the
   queue and sends events to Stripe Meters API.  Cancelled on shutdown.
 
 Customer ID cache
@@ -146,7 +146,7 @@ def queue_usage_event(
             "identifier": identifier[:100],  # Stripe max 100 chars
         })
     except asyncio.QueueFull:
-        logger.warning("Metering queue full — event dropped", extra={"event": event_name})
+        logger.warning("Metering queue full - event dropped", extra={"event": event_name})
 
 
 # ── Background worker ────────────────────────────────────────────────────────
@@ -160,20 +160,20 @@ async def run_metering_worker(
     Drain the usage event queue and forward events to Stripe Meters API.
 
     Exits immediately (without entering the loop) if api_key is empty or the
-    stripe SDK is not installed — callers should check those conditions before
+    stripe SDK is not installed - callers should check those conditions before
     creating the task, but the worker is safe to call regardless.
 
     Cancelled cleanly by task.cancel() during lifespan shutdown.
     """
     if not api_key:
-        logger.info("STRIPE_API_KEY not set — metering worker disabled")
+        logger.info("STRIPE_API_KEY not set - metering worker disabled")
         return
 
     try:
         import stripe as _stripe  # type: ignore[import]
     except ImportError:
         logger.warning(
-            "stripe SDK not installed — metering disabled. "
+            "stripe SDK not installed - metering disabled. "
             "Run: pip install 'agentmem[billing]'"
         )
         return

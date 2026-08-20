@@ -1,5 +1,5 @@
 ﻿"""
-AgentMem Python SDK — async HTTP client.
+AgentMem Python SDK - async HTTP client.
 
 AgentMem is a financial-grade AI memory layer providing:
   - Bitemporal recall (SEC 17a-4 / FINRA / CFTC audit-ready)
@@ -372,7 +372,7 @@ class LiansClient:
         """
         Return all recorded versions of a structured fact ordered by event_time.
 
-        Query by ticker + metric — no memory_id needed.  Entity normalization is
+        Query by ticker + metric - no memory_id needed.  Entity normalization is
         automatic: 'Apple Inc.', ISIN 'US0378331005', and 'AAPL' resolve to the
         same series.
         """
@@ -394,7 +394,7 @@ class LiansClient:
         """
         Reconstruct the complete knowledge state of an agent at a specific point in time.
 
-        Returns every memory valid at ``as_of`` — exhaustive, no vector search.
+        Returns every memory valid at ``as_of`` - exhaustive, no vector search.
         The one-call compliance demo that closes deals with regulators.
         mem0 has no temporal model. Graphiti/Zep has temporal graph queries but
         no tamper-evident hash chain, crypto-shred, or compliance export API.
@@ -526,7 +526,7 @@ class LiansClient:
         memory_id: str,
         reviewer_note: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Confirm a supersession — the engine was correct."""
+        """Confirm a supersession - the engine was correct."""
         return await self._req("PATCH", f"/v1/supersessions/{memory_id}", json_body={
             "action": "confirm",
             "reviewer_note": reviewer_note,
@@ -537,7 +537,7 @@ class LiansClient:
         memory_id: str,
         reviewer_note: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Reject a supersession — restores the old memory as currently valid."""
+        """Reject a supersession - restores the old memory as currently valid."""
         return await self._req("PATCH", f"/v1/supersessions/{memory_id}", json_body={
             "action": "reject",
             "reviewer_note": reviewer_note,
@@ -556,7 +556,7 @@ class LiansClient:
         """
         Register a webhook endpoint.
 
-        The returned ``secret`` is shown exactly once — store it to verify
+        The returned ``secret`` is shown exactly once - store it to verify
         HMAC-SHA256 signatures on all deliveries.
         """
         body: dict[str, Any] = {"url": url, "events": events}

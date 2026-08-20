@@ -1,5 +1,5 @@
 """
-Shared type constants — imported by both core modules and adapter modules.
+Shared type constants - imported by both core modules and adapter modules.
 
 Keeping these here breaks the circular import that would occur if adapters
 imported from supersession.py and supersession.py imported from adapters.

@@ -32,7 +32,7 @@ from .portability import export_backup, import_backup, verify_backup
 from .project import detect_project
 from .session_capture import capture_claude_session_end
 from .store import ConcurrentUpdateError, MemoryStore
-from .task_contract import TaskContractService
+from .task_contract import TaskContractService, workspace_snapshot
 from .understanding import UnderstandingService
 from .updates import check_for_update, download_verified_update, open_prepared_update
 
@@ -579,6 +579,7 @@ class BridgeApplication:
                     "/v1/task-status",
                     "/v1/task-context",
                     "/v1/continue",
+                    "/v1/guard-report",
                 }:
                     cwd = query.get("cwd", [str(Path.cwd())])[0]
                     project = detect_project(cwd)
@@ -589,12 +590,20 @@ class BridgeApplication:
                             items = tasks.list(
                                 project_id=project.id,
                                 limit=int(query.get("limit", ["50"])[0]),
+                                workspace=workspace_snapshot(project.trusted_root),
                             )
                             result = {"tasks": items, "count": len(items)}
+                        elif parsed.path == "/v1/guard-report":
+                            result = tasks.report(
+                                project_id=project.id,
+                                workspace=workspace_snapshot(project.trusted_root),
+                                limit=int(query.get("limit", ["50"])[0]),
+                            )
                         elif parsed.path == "/v1/task-status":
                             result = tasks.status(
                                 query.get("task_id", [""])[0],
                                 project_id=project.id,
+                                workspace=workspace_snapshot(project.trusted_root),
                             )
                         elif parsed.path == "/v1/task-context":
                             result = tasks.context(
@@ -602,6 +611,7 @@ class BridgeApplication:
                                 project_id=project.id,
                                 client=query.get("client", ["lians-app"])[0],
                                 max_tokens=int(query.get("max_tokens", ["768"])[0]),
+                                workspace=workspace_snapshot(project.trusted_root),
                             )
                         else:
                             result = tasks.continue_work(
@@ -609,6 +619,7 @@ class BridgeApplication:
                                 task_id=query.get("task_id", [None])[0],
                                 client=query.get("client", ["lians-app"])[0],
                                 max_tokens=int(query.get("max_tokens", ["768"])[0]),
+                                workspace=workspace_snapshot(project.trusted_root),
                             )
                     except (LookupError, TypeError, ValueError) as exc:
                         self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
@@ -1084,6 +1095,7 @@ class BridgeApplication:
                             event_time=(
                                 str(data["event_time"]) if data.get("event_time") else None
                             ),
+                            workspace=workspace_snapshot(project.trusted_root),
                         )
                         self._json(
                             HTTPStatus.OK,
@@ -1238,7 +1250,10 @@ def run_hook(*, client: str, data_path: str | Path | None = None) -> int:
             sys.stdout.write("{}")
             return 0
         store = MemoryStore(data_path or default_data_path())
-        if client == "claude" and event.get("hook_event_name") == "SessionEnd":
+        if client == "claude" and event.get("hook_event_name") in {
+            "PreCompact",
+            "SessionEnd",
+        }:
             capture_claude_session_end(event, store=store)
             return 0
         cloud_sync = CloudSyncService.for_store(store)

@@ -1,11 +1,11 @@
 """
-Backtest-contamination detector — open-sourceable thin primitive.
+Backtest-contamination detector - open-sourceable thin primitive.
 
 Answers the question every quant fund fears:
   "Did my agent use data it couldn't have known at simulation time?"
 
 Lookahead bias in an AI agent is subtle. A memory may carry an event_time
-from last quarter — which looks historical — but if the *revision* of that
+from last quarter - which looks historical - but if the *revision* of that
 figure arrived after the simulation checkpoint, the agent used the corrected
 number before it existed.
 
@@ -18,7 +18,7 @@ Two contamination classes:
                   AND ingestion_time > simulation_as_of
                   The event is "old" but the corrected/revised report hadn't
                   landed yet at simulation time. This is the subtle case that
-                  vector stores miss entirely — they only see event_time.
+                  vector stores miss entirely - they only see event_time.
 
 This module is intentionally self-contained (no AgentMem-specific imports
 beyond the ORM model) so it can be extracted and open-sourced as a
@@ -88,7 +88,7 @@ async def check_contamination(
                 Memory.namespace == namespace,
                 Memory.agent_id == agent_id,
                 Memory.erased_at.is_(None),
-                # Either class of contamination — handle in Python for clarity
+                # Either class of contamination - handle in Python for clarity
                 or_(
                     Memory.event_time > simulation_as_of,
                     Memory.ingestion_time > simulation_as_of,

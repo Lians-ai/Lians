@@ -1,13 +1,13 @@
 """
-GET /v1/snapshot — audit reconstruction: complete agent knowledge state at T.
+GET /v1/snapshot - audit reconstruction: complete agent knowledge state at T.
 
 This is the "audit reconstruction as a product surface" from SCALE.md §4:
   "Show me the agent's complete knowledge state as of 2025-03-14T09:30."
   One call. This is the compliance demo that closes the deal.
 
 Different from /v1/recall (vector search → top-k relevant):
-  /v1/snapshot is exhaustive — every fact valid at T, no relevance filter.
-  SEC examiners don't want "the most relevant 5 memories" — they want everything.
+  /v1/snapshot is exhaustive - every fact valid at T, no relevance filter.
+  SEC examiners don't want "the most relevant 5 memories" - they want everything.
 """
 from datetime import datetime
 from typing import Optional
@@ -42,7 +42,7 @@ async def knowledge_snapshot(
 
     Returns every memory that was valid (`valid_from ≤ as_of < valid_to`) at the
     given timestamp, ordered by `event_time` ascending.  Erased content appears
-    with `content: null` — the memory's existence and metadata are preserved.
+    with `content: null` - the memory's existence and metadata are preserved.
 
     **Use cases:**
 
@@ -50,7 +50,7 @@ async def knowledge_snapshot(
       exact knowledge at any date without diving into application logs.
     - **Incident investigation:** "What did the agent know right before the
       suspicious trade at 09:31?"
-    - **Backtest validation:** Pair with `/v1/backtest/check` — first confirm
+    - **Backtest validation:** Pair with `/v1/backtest/check` - first confirm
       the snapshot contains only historically-valid facts, then reason about
       the agent's decisions with confidence.
     - **Drift analysis:** Compare snapshots across two dates to see which facts
@@ -98,7 +98,7 @@ async def snapshot_markdown(
     materiality; erased facts appear as explicit erasure markers. The document's
     SHA-256 is written into the tamper-evident audit chain as an
     `export_markdown` event, and the footer states the hash, the anchoring
-    event, and the verification procedure — an examiner (or a skeptical
+    event, and the verification procedure - an examiner (or a skeptical
     developer) can read exactly what the system knows and prove the statement
     was not altered after generation.
     """

@@ -1,5 +1,5 @@
 app            = 'agentmem-lotus'
-primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB chatter made writes ~2s
+primary_region = 'sjc'  # colocated with agentmem-lotus-db - cross-region DB chatter made writes ~2s
 
 [build]
   dockerfile = "Dockerfile"
@@ -32,7 +32,7 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
 [env]
   DEPLOYMENT_ENVIRONMENT        = "production"
   # bge-large-en-v1.5 is baked into the image; "local" (hash projection) makes
-  # semantic scores pure noise. Needs the 2GB VM below — the model is ~1.3GB.
+  # semantic scores pure noise. Needs the 2GB VM below - the model is ~1.3GB.
   EMBEDDING_PROVIDER            = "sentence-transformers"
   SENTENCE_TRANSFORMER_MODEL    = "BAAI/bge-large-en-v1.5"
   SENTENCE_TRANSFORMER_REVISION = "d4aa6901d3a41ba39fb536a557fa166f842b0e09"
@@ -68,6 +68,6 @@ primary_region = 'sjc'  # colocated with agentmem-lotus-db — cross-region DB c
 
 [[vm]]
   cpu_kind  = 'shared'
-  cpus      = 2   # bge-large CPU inference — 1 shared core made writes ~6s
+  cpus      = 2   # bge-large CPU inference - 1 shared core made writes ~6s
   memory    = '2gb'
   memory_mb = 2048

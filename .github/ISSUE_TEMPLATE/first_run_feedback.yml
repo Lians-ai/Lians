@@ -1,5 +1,5 @@
 name: First-run feedback
-description: Tell us where installation or the first memory test became unclear.
+description: Tell us whether installation and the first fresh-session recall worked.
 title: "first run: "
 labels: [documentation]
 body:
@@ -17,6 +17,17 @@ body:
         - Another MCP client
     validations:
       required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: First-run outcome
+      options:
+        - Fresh-session recall worked
+        - Connected, but recall did not work
+        - Installation or connection did not finish
+        - I am not sure
+    validations:
+      required: true
   - type: textarea
     id: goal
     attributes:
@@ -27,8 +38,8 @@ body:
   - type: textarea
     id: blocker
     attributes:
-      label: Where did you get stuck?
-      description: Include the step, what you expected, and what happened instead. Use synthetic values in examples.
+      label: What happened?
+      description: Include what felt clear or unclear. If something failed, include the step, what you expected, and what happened instead. Use synthetic values in examples.
     validations:
       required: true
   - type: input

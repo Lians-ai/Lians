@@ -247,7 +247,7 @@ class TestRateLimitMiddleware:
         limit = get_settings().rate_limit_per_minute
         with patch("src.lians.cache._get_redis") as mock_redis:
             r = AsyncMock()
-            # One past the configured limit — independent of the ambient value.
+            # One past the configured limit - independent of the ambient value.
             r.eval = AsyncMock(return_value=limit + 1)
             r.expire = AsyncMock()
             mock_redis.return_value = r
@@ -281,7 +281,7 @@ class TestRateLimitMiddleware:
             )
 
         assert resp.status_code == 429
-        # The header reflects the *configured* limit — the regression this proves
+        # The header reflects the *configured* limit - the regression this proves
         # is that the middleware is wired to the setting, not the hardcoded 300.
         assert resp.headers.get("X-RateLimit-Limit") == str(limit)
         assert resp.headers.get("X-RateLimit-Remaining") == "0"
@@ -561,7 +561,7 @@ class TestRateLimitMiddleware:
         if wired is None and entry.args:
             wired = entry.args[0]
         assert wired == get_settings().rate_limit_per_minute, (
-            "RateLimitMiddleware is not wired to the configured limit — "
+            "RateLimitMiddleware is not wired to the configured limit - "
             "RATE_LIMIT_PER_MINUTE is being ignored"
         )
         assert entry.kwargs.get("fingerprint_secret") == get_settings().api_secret_seed

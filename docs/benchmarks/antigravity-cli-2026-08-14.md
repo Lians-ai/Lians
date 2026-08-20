@@ -1,4 +1,4 @@
-# Antigravity CLI compatibility check — 2026-08-14
+# Antigravity CLI compatibility check - 2026-08-14
 
 This check used Antigravity CLI 1.1.13 on Windows with a fresh empty project,
 the Lians Easy local MCP runtime, a disposable database, and narrowly scoped

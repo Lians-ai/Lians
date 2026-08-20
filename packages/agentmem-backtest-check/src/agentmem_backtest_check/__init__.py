@@ -1,5 +1,5 @@
 """
-agentmem-backtest-check — standalone lookahead-bias detector for AI agents.
+agentmem-backtest-check - standalone lookahead-bias detector for AI agents.
 
 Answers the question every quant fund fears:
   "Did my agent use data it couldn't have known at simulation time?"
@@ -12,7 +12,7 @@ Two contamination classes:
   LATE_REVISION   event_time <= simulation_as_of
                   AND ingestion_time > simulation_as_of
                   The event is "old" but the corrected/revised figure hadn't
-                  landed yet. This is the subtle case — pure vector stores
+                  landed yet. This is the subtle case - pure vector stores
                   miss it entirely because they only track event_time.
 
 Usage::
@@ -91,13 +91,13 @@ class ContaminationReport:
     def summary(self) -> str:
         if self.is_clean:
             return (
-                f"CLEAN — {self.memories_checked} memories checked, "
+                f"CLEAN - {self.memories_checked} memories checked, "
                 f"0 contaminated (as of {self.simulation_as_of.date()})"
             )
         n = len(self.flags)
         rate = self.contamination_rate * 100
         return (
-            f"CONTAMINATED — {n}/{self.memories_checked} memories flagged "
+            f"CONTAMINATED - {n}/{self.memories_checked} memories flagged "
             f"({rate:.1f}%) as of {self.simulation_as_of.date()}"
         )
 
@@ -122,7 +122,7 @@ def check_contamination(
     """
     Scan *memories* for lookahead bias relative to *as_of*.
 
-    *memories* may be plain dicts or objects with attributes — the library
+    *memories* may be plain dicts or objects with attributes - the library
     handles both. Pass field name overrides if your schema differs.
 
     Parameters

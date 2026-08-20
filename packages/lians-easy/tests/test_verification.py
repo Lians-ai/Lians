@@ -60,19 +60,32 @@ def _ready_task(store: MemoryStore, *, project_id: str) -> None:
         constraints=["Do not expose credentials"],
         task_id="answer-fix",
     )
-    tasks.checkpoint(
+    tasks._checkpoint_trusted(
         "answer-fix",
         "The answer and checks are complete.",
+        issuer="local_verification",
         project_id=project_id,
         evidence=[
-            {"criterion_id": "criterion-1", "evidence": "src/app.py returns 42"},
-            {"criterion_id": "criterion-2", "evidence": "pytest passed"},
+            {
+                "criterion_id": "criterion-1",
+                "evidence": "src/app.py returns 42",
+                "trust_class": "measured_local",
+                "source": "repository inspection",
+            },
+            {
+                "criterion_id": "criterion-2",
+                "evidence": "pytest passed",
+                "trust_class": "measured_local",
+                "source": "test runner",
+            },
         ],
         constraint_checks=[
             {
                 "constraint_id": "constraint-1",
                 "status": "passed",
                 "evidence": "Diff credential scan passed",
+                "trust_class": "measured_local",
+                "source": "diff credential scan",
             }
         ],
         artifacts=["src/app.py"],

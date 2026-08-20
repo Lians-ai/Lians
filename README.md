@@ -1,13 +1,15 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/images/logo.png" width="320" alt="Lians">
+    <img src="docs/assets/lians-lotus.svg" width="190" alt="Lians lotus">
   </a>
 </p>
 
-<p align="center"><strong>Persistent project memory for Claude Code, Codex, and Cursor.</strong></p>
+<p align="center"><strong>Recover the task. Reject stale state. Block unsupported done.</strong></p>
 
 <p align="center">
   <a href="docs/quickstart.md"><strong>Quickstart</strong></a> ·
+  <a href="docs/why-lians.md">Why Lians</a> ·
+  <a href="docs/benchmarks/continuitybench-v0.1.md">ContinuityBench</a> ·
   <a href="docs/install.md">Install</a> ·
   <a href="docs/">Docs</a> ·
   <a href="https://github.com/Lians-ai/Lians/issues">Issues</a>
@@ -20,42 +22,58 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
 </p>
 
-## Stop re-explaining your project to AI
+## Lians Guard
 
-Save a project decision once. Lians recalls the relevant part in a later
-session—even when you switch supported AI tools—without replaying your entire
-chat history.
+**The current-state and completion guard for AI coding agents.**
 
-- **Continue across sessions.** Carry completed work, open work, decisions, and
-  constraints into a fresh task.
-- **Keep memory current.** Correct or supersede stale facts instead of letting
-  an agent revive an old decision.
-- **Stay in control.** Inspect, export, or permanently delete anything Lians
-  stores.
-- **Run locally.** The starter setup needs no Lians account, AI password, or
+Lians recovers interrupted agent work, rejects stale task state, and blocks
+`done` until the current task is ready for human review.
+
+> Your agent can forget the chat. It cannot forget what is finished, what
+> changed, or what still has to pass.
+
+- **Recover.** Resume a bounded current task across supported Claude Code and
+  Codex sessions.
+- **Reject stale state.** Bind checkpoints to current repository and task state
+  so old evidence is not silently reused.
+- **Guard completion.** Separate measured evidence from an agent's own claims
+  and keep the gate closed while work is missing, unknown, failed, or blocked.
+- **Require review.** `READY FOR HUMAN REVIEW` is a handoff to a person, never a
+  claim that the work is correct, approved, or safe to deploy.
+- **Stay local.** The free recovery path needs no Lians account, AI password, or
   provider API key.
 
 Lians works with your existing AI account and editor. It does not replace your
-model, enlarge its context window, or change its subscription quota.
+model, Git, CI, repository instructions, or human review.
 
-## See it in two chats
-
-In one chat:
+## One clear result after every agent session
 
 ```text
-You: Remember that this project uses PostgreSQL, not SQLite.
-Lians: Saved for this project.
+RECOVERED
+Task: Fix OAuth callback handling
+Next: Re-run the callback integration test
+
+STALE
+Reason: The authentication requirement changed after this checkpoint
+
+BLOCKED
+Missing: OAuth callback integration test
+Untrusted: "tests passed" was reported by the agent, not measured
+
+READY FOR HUMAN REVIEW
+Measured locally: callback tests passed
+Measured by CI: required checks passed
 ```
 
-Open a new chat—or switch to another supported AI tool:
-
-```text
-You: Which database should this feature use?
-Lians: PostgreSQL. The project explicitly excludes SQLite.
-```
-
-If that decision changes, correct it once and future current-state recall uses
-the replacement. [Watch the 33-second remember, reuse, and delete proof](https://github.com/Lians-ai/Lians/releases/download/lians-memory-openai-demo-v1.0.0/Lians-Memory-OpenAI-submission-demo-v1.0.0.mp4).
+The trust model is deliberately strict. `measured_local`, `measured_ci`, and
+`human_confirmed` evidence can satisfy a criterion. `agent_attested` and
+`inferred_activity` records remain useful context but cannot open the review
+gate. An agent cannot promote its own checkpoint into a trusted class. Trusted
+CI evidence requires an exact GitHub attestation and commit match plus an
+interactive check-to-criterion mapping; human evidence requires interactive
+confirmation. Read [why Lians exists](docs/why-lians.md), the full
+[Lians Guard product contract](docs/lians-guard.md), and the current [market
+pressure test](docs/market-pressure-test-2026-08.md).
 
 ## Try it in two minutes
 
@@ -74,22 +92,23 @@ For example, after [installing `uv`](https://docs.astral.sh/uv/getting-started/i
 codex mcp add lians --env LIANS_MCP_ENABLED_TOOLS=remember,recall,list_memories,correct_memory,forget_memory -- uvx --from "lians-sdk[mcp]" lians-mcp
 ```
 
-Restart Codex, then try the two-chat example above. Local memory is stored in
-`~/.lians/mcp.db` by default.
+Restart Codex, then save one safe project fact and recover it in a fresh chat.
+Local memory is stored in `~/.lians/mcp.db` by default. This is the available
+free recovery path; the full Guard workflow is currently a developer preview.
 
-[Follow the complete quickstart](docs/quickstart.md) for setup, verification,
-correction, deletion, and troubleshooting.
+[Follow the complete quickstart](docs/quickstart.md) for setup, recovery,
+correction, deletion, and the Guard preview boundary.
 
 ## What a fresh coding agent receives
 
 Lians can generate a bounded project handoff instead of replaying a transcript:
 
 ```text
-Completed:
+Reported complete; verify:
 - migrated the orders API to /v2/orders
-- updated tests
 
 Still open:
+- verify the migration against current Git state
 - update documentation
 
 Decisions:
@@ -103,40 +122,77 @@ Next:
 ```
 
 The handoff is derived from current Lians state, not a manually maintained
-summary.
+summary. Agent-reported work remains visible without being mislabeled as
+verified completion.
+
+## Why this is not another generic memory layer
+
+Native memories are convenient when work stays inside one product. General
+memory is no longer a scarce category. Lians uses local memory for recovery,
+then focuses on the expensive gap: current task state and evidence-backed
+readiness.
+
+The [current competitive landscape](docs/competitive-landscape.md) pressure
+tests this position against native Claude Code, Codex, Cursor, GitHub Copilot,
+Entire, Factory, and AI review workflows.
+
+| Approach | Best fit | Boundary |
+|---|---|---|
+| Native tool memory | One AI tool, minimal setup | Usually stays inside that vendor |
+| `AGENTS.md` or `CLAUDE.md` | Stable repository instructions | Must be maintained manually |
+| Transcript replay | Reconstructing one conversation | Large, noisy, and may revive stale decisions |
+| Free Lians recovery | Resume current project context across supported tools | Requires a local connection to each tool |
+| Lians Guard | Detect stale state and gate readiness with typed evidence | Team workflow is still in developer preview |
+
+Lians is not claiming that every project needs a separate memory layer. See the
+[honest comparison and decision guide](docs/why-lians.md).
 
 ## Project status
 
-Lians is under active development. Start with local memory; preview features
-are clearly labeled so you can choose the appropriate risk level.
+Lians is under active development. Available recovery features and preview Guard
+features are separated here so the repository does not imply a production
+guarantee that does not exist yet.
 
 | Capability | Status |
 |---|---|
 | Local memory through MCP and Python | Available |
-| Codex, Claude Code, and Cursor setup paths | Available |
+| Codex, Claude Code, and Cursor local recovery setup | Available |
 | Inspect, correct, and confirmed permanent deletion | Available |
 | Bounded context and signed selection receipts | Available |
 | Automatic Claude-to-Codex project handoff | Beta |
+| Typed evidence and evidence-backed task gate | Developer preview |
+| Local Git workspace fingerprint on checkpoints | Developer preview |
+| Automatic stale evidence invalidation | In development |
+| Attested GitHub Actions evidence intake | Developer preview |
+| Local Guard reporting | Developer preview |
+| Shared team queue | Planned |
+| Cross-platform clean-install CI | Required by the new Guard workflow; first hosted run pending |
 | Guided desktop installer and local control center | Release candidate |
-| Managed cross-device continuity | Technical preview |
 
 The macOS and Windows desktop builds remain release candidates pending platform
 signing and notarization. See the [desktop preview boundary](docs/easy-install.md).
 
-## Evidence
+## Current evidence
 
 The included Claude-to-Codex continuity fixture recovered **10/10 expected
 facts**, exposed **0 stale facts as current**, and produced a **231-token
 handoff**. These are bounded beta results, not a promise that every live coding
 session extracts perfectly. [Run the experiment](experiments/cross-agent-continuity/README.md).
 
+The developing [ContinuityBench v0.1](docs/benchmarks/continuitybench-v0.1.md)
+publishes the proposed cross-agent, freshness, correction, erasure, provenance,
+and boundedness test contract. Its current Lians fixture is evidence for that
+fixture only; it is not presented as a completed competitor leaderboard.
+
 A separate live test saved a synthetic project fact through Cursor, recalled it
 in a new Cursor chat and a fresh Claude Code session, and confirmed it was gone
 after deletion. [Read the test method](docs/benchmarks/cross-agent-memory-2026-08-14.md).
 
-Four paired synthetic workloads also returned the exact expected answer while
-using **79.9% to 96.7% fewer provider-reported input tokens**. Results depend on
-the workload and do not guarantee lower usage or cost. [Read the benchmark](docs/benchmarks/work-per-token-2026-08-16.md).
+The Guard correctness benchmark exercises missing evidence, unknown criteria,
+failed constraints, blockers, stale updates, and drift signals. It is a local,
+deterministic test of the configured policy, not proof of semantic correctness
+or a production outcome. Run `packages/lians-easy/benchmarks/task_contract_correctness.py`
+to inspect the cases.
 
 ## Build with Lians
 

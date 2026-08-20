@@ -8,11 +8,11 @@ metadata:
 data:
   DEPLOYMENT_ENVIRONMENT: "production"
   CORS_ORIGINS: "https://memory.example.com"  # CHANGE: trusted browser origins
-  # Embedding provider — set to "voyage" for production (requires VOYAGE_API_KEY in secret)
+  # Embedding provider - set to "voyage" for production (requires VOYAGE_API_KEY in secret)
   # Options: voyage | openai | sentence-transformers | local
   EMBEDDING_PROVIDER: "voyage"
 
-  # KMS provider — set to "aws", "azure", or "vault" for production.
+  # KMS provider - set to "aws", "azure", or "vault" for production.
   # "env" reads MASTER_ENCRYPTION_KEY from the secret (acceptable only for dev/staging).
   KMS_PROVIDER: "env"
 
@@ -31,10 +31,10 @@ data:
   # Rate limiting (requests per minute per API key)
   RATE_LIMIT_PER_MINUTE: "300"
 
-  # Retention scheduler — set to "0" to disable
+  # Retention scheduler - set to "0" to disable
   RETENTION_PRUNE_INTERVAL_HOURS: "24"
 
-  # Air-gapped mode — set "true" for deployments where data must not leave the network
+  # Air-gapped mode - set "true" for deployments where data must not leave the network
   AIRGAP_MODE: "false"
 
   # OpenTelemetry

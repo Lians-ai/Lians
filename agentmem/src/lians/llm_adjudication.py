@@ -7,7 +7,7 @@ same fact (which should be CONFIRMS, not SUPERSEDES).
 
 Key properties:
 - Disabled by default (config.supersession_llm_stage = False)
-- In-memory cache keyed by (hash(old), hash(new)) — same pair never
+- In-memory cache keyed by (hash(old), hash(new)) - same pair never
   adjudicated twice within a process lifetime
 - Falls back to ("SUPERSEDES", 0.7, "llm_error: ...") on any failure so
   the write path is never blocked by an LLM outage
@@ -39,17 +39,17 @@ NEW: {new}
 Metadata: {meta}
 
 Classify the relationship. Choose exactly one:
-- SUPERSEDES  : NEW has a genuinely different value — the old fact is now stale.
+- SUPERSEDES  : NEW has a genuinely different value - the old fact is now stale.
 - REFINES     : NEW keeps the old value but narrows it (adds scope, segment, or precision).
 - CONFIRMS    : NEW expresses the same underlying value as OLD (paraphrase, rounding, unit variant).
-- ADDS        : NEW is a related but distinct attribute — both facts remain valid.
+- ADDS        : NEW is a related but distinct attribute - both facts remain valid.
 - CONTRADICTS_SAME_TIME : conflicting values with no clear temporal ordering.
 
 Rules:
 1. A paraphrase or restatement of the same number → CONFIRMS, never SUPERSEDES.
 2. A different numeric value (beyond rounding) → SUPERSEDES.
 3. Same value with added qualification or scope → REFINES, not CONFIRMS.
-4. When uncertain, prefer SUPERSEDES in finance — missing a real update is worse than a false confirm.
+4. When uncertain, prefer SUPERSEDES in finance - missing a real update is worse than a false confirm.
 5. Rationale must be one sentence max.
 
 Return ONLY valid JSON, no markdown fences:
@@ -130,7 +130,7 @@ Rules:
 1. One triplet per stated relationship: [subject, relation, object].
 2. subject and object are proper-noun entities exactly as written (people, firms, funds, issuers).
 3. relation is a lowercase snake_case verb phrase. Prefer these when they fit: {rels}.
-4. Only extract relationships the text actually asserts — never infer or invent.
+4. Only extract relationships the text actually asserts - never infer or invent.
 5. If the text asserts no relationships, return [].
 
 Return ONLY a JSON array of [subject, relation, object] arrays, no markdown fences. Example:

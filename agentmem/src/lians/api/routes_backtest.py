@@ -1,8 +1,8 @@
 """
-POST /v1/backtest/check — lookahead-bias contamination detection.
+POST /v1/backtest/check - lookahead-bias contamination detection.
 
 This is the open-sourceable thin primitive from SCALE.md §6:
-  "Open-source one thin, genuinely useful primitive — a point-in-time-correctness
+  "Open-source one thin, genuinely useful primitive - a point-in-time-correctness
    checker or backtest-contamination detector."
 
 The quant engineer who finds this endpoint is the next design partner.
@@ -45,13 +45,13 @@ async def backtest_contamination_check(
 
     **Two contamination classes:**
 
-    - `future_event` — `event_time > simulation_as_of`. The underlying event had
+    - `future_event` - `event_time > simulation_as_of`. The underlying event had
       not yet occurred at simulation time. Clear lookahead bias.
 
-    - `late_revision` — `event_time <= simulation_as_of` but
+    - `late_revision` - `event_time <= simulation_as_of` but
       `ingestion_time > simulation_as_of`. The event is historical, but the
       *revised* or *corrected* version of the figure hadn't landed yet. This is
-      the subtle case that pure vector stores miss entirely — they only index
+      the subtle case that pure vector stores miss entirely - they only index
       event_time, not when the revision arrived.
 
     A report with `is_clean: true` is the proof a risk committee needs before

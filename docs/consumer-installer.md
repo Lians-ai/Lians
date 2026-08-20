@@ -5,19 +5,22 @@ installer for every AI client. The installer places one local Lians Bridge on
 the device, detects compatible AI apps, and lets the user connect any of them
 from one screen.
 
-The consumer promise is **Use less context. Get more AI.** Memory is the local
-engine that makes this possible, not the job the user should have to manage.
-The default experience should help someone optimize the AI tools they already
-use, keep working normally, and see evidence that irrelevant saved context was
-left out. Memory directories, lineage, receipts, backup, and deployment remain
-available as controls and technical detail.
+The consumer promise is **Recover the task. Guard what done means.** Lians gives
+supported AI coding tools local recovery across sessions, marks mismatched
+checkpoints stale, and separates trustworthy completion evidence from agent
+claims or touched-file activity. The first available experience should help
+someone connect the tools they already use, save one safe project decision, and
+recover it in a fresh task. The complete Guard experience remains a developer
+preview until lifecycle capture, stale evidence invalidation, and trusted CI
+intake pass the release gates in this document.
 
 Product language must stay within the measured boundary:
 
-- Say that Lians reduces repeated saved context and measures an estimate of what
-  it leaves out.
-- Say that this can help users get more useful work from the AI tools they
-  already pay for.
+- Say when Lians recovered a task, measured a workspace, detected a mismatch,
+  or blocked a configured gate.
+- Say `ready for human review` only when every configured criterion has measured
+  or human-confirmed evidence and no constraint is failed, unknown, or blocked.
+- Make clear that human review is still required.
 - Do not promise that Lians extends every provider's plan, message cap, or
   billing quota. That requires provider-reported measurement in the installed
   product.
@@ -106,27 +109,28 @@ successfully.
 
 The setup sequence has four moments:
 
-1. **Promise and trust.** Lead with **Use less context. Get more AI.** Explain
-   that Lians gives later tasks only useful saved context. State that saved
-   context is encrypted locally, existing settings are backed up, and no AI
-   account password or provider API key is required.
+1. **Promise and trust.** Lead with **Recover the task. Guard what done means.**
+   Explain that Lians restores bounded current work and distinguishes measured
+   evidence from agent claims. State that saved context is encrypted locally,
+   existing settings are backed up, and no AI account password or provider API
+   key is required.
 2. **Choose apps.** Detect installed clients, select them by default, and keep
    unsupported or absent clients behind **Add another AI app**. One connected
    app provides value; a second also demonstrates portability.
 3. **Set up.** Show one progress bar and three plain-language states:
-   **Protect your existing settings**, **Optimize your AI apps**, and **Check
-   that Lians is ready**.
-4. **Prove value.** Copy a ready-made `remember` prompt, tell the user to open a
-   new task in the same or another app, and show the estimated context reused
-   and left out. Do not end on a generic "installation complete" message.
+   **Protect your existing settings**, **Connect Lians Guard**, and **Check that
+   recovery is ready**.
+4. **Prove value.** Copy a ready-made recovery prompt, tell the user to open a
+   new task in the same or another app, and show `RECOVERED` with the restored
+   current state. Do not end on a generic "installation complete" message.
 
 The user should see the outcome, not the implementation:
 
 | Internal operation | Consumer copy |
 |---|---|
 | Back up and atomically update client configuration | Protect your existing settings |
-| Register MCP server, hook, plugin, or project rule | Optimize Cursor / Claude / Codex |
-| Start Bridge and validate the client contract | Check that Lians is ready |
+| Register MCP server, hook, plugin, or project rule | Connect Lians Guard |
+| Start Bridge and validate the client contract | Check that recovery is ready |
 | Display configuration paths, commands, and exceptions | Technical details |
 | Create diagnostic archive | Save support report |
 

@@ -1,4 +1,4 @@
-﻿# TESTING.md — Lians Correctness Invariants
+﻿# TESTING.md - Lians Correctness Invariants
 
 This document is for customers, compliance officers, and design partners who need
 to verify that Lians's correctness guarantees hold on their deployment. It lists
@@ -13,21 +13,21 @@ These are the properties that define "correct" for Lians. A build that violates
 any of them is wrong even if all tests pass. They are stable across versions; any
 change that weakens them is a breaking change.
 
-### I1 — Temporal soundness
+### I1 - Temporal soundness
 
-> `recall(as_of=t)` returns exactly the facts that were valid at time `t` — no more,
+> `recall(as_of=t)` returns exactly the facts that were valid at time `t` - no more,
 > no less.
 
 A fact is valid at `t` if `valid_from ≤ t` and (`valid_to IS NULL` or `valid_to > t`).
 Superseded facts (with a non-null `valid_to`) must not appear in a query bounded to
 a time before their supersession.
 
-**Test coverage:** `tests/test_temporal.py` — property-based (Hypothesis); ~80 cases.
+**Test coverage:** `tests/test_temporal.py` - property-based (Hypothesis); ~80 cases.
 **Manual check:** see Benchmark 2 in `demo/index.html`.
 
 ---
 
-### I2 — No silent loss
+### I2 - No silent loss
 
 > Every fact ever written is permanently retrievable from the audit log, even after
 > it is superseded or the subject's data is erased.
@@ -38,11 +38,11 @@ reconstruction query (`GET /v1/audit/reconstruct`) can always prove a fact exist
 
 **Test coverage:** `tests/test_audit.py`, `tests/test_erasure.py`.
 **Manual check:** write a fact, supersede it, then call `GET /v1/audit/reconstruct`
-with an `as_of` before the supersession — the original fact appears.
+with an `as_of` before the supersession - the original fact appears.
 
 ---
 
-### I3 — Audit immutability
+### I3 - Audit immutability
 
 > The `event_log` table is append-only. No row is ever updated or deleted, including
 > during erasure operations or admin corrections.
@@ -62,7 +62,7 @@ curl -H "X-API-Key: $KEY" http://localhost:8000/v1/admin/audit/verify
 
 ---
 
-### I4 — Erasure with audit survival
+### I4 - Erasure with audit survival
 
 > After `POST /v1/erase` for a subject, that subject's content is cryptographically
 > unrecoverable AND the audit trail proves the content existed and was erased.
@@ -88,7 +88,7 @@ curl -H "X-API-Key: $KEY" \
 
 ---
 
-### I5 — Present-time validity preference
+### I5 - Present-time validity preference
 
 > When no `as_of` is specified, `recall` returns only currently-valid facts
 > (where `valid_to IS NULL`). Superseded facts do not appear.
@@ -109,7 +109,7 @@ EMBEDDING_PROVIDER=local python Lians/scripts/run_benchmark.py
 
 ---
 
-### I6 — Tenant and barrier isolation
+### I6 - Tenant and barrier isolation
 
 > No query crosses `namespace` boundaries. Within a namespace, agents assigned to
 > a `barrier_group` cannot see memories from a different `barrier_group`.
@@ -126,7 +126,7 @@ multi-namespace writes).
 ```bash
 # Provision two API keys in the same namespace but different barrier groups
 # Write a memory as barrier_group "A"
-# Recall as barrier_group "B" — the memory must not appear
+# Recall as barrier_group "B" - the memory must not appear
 ```
 
 ---
@@ -156,16 +156,16 @@ pytest -v
 ### Invariant-targeted runs
 
 ```bash
-# I1 — Temporal soundness
+# I1 - Temporal soundness
 pytest tests/test_temporal.py -v
 
-# I2 + I3 + I4 — Audit and erasure
+# I2 + I3 + I4 - Audit and erasure
 pytest tests/test_audit.py tests/test_audit_chain.py tests/test_erasure.py -v
 
-# I5 — Present-time validity
+# I5 - Present-time validity
 pytest tests/test_supersession_benchmark.py tests/test_recall_quality.py -v
 
-# I6 — Isolation
+# I6 - Isolation
 pytest tests/test_barrier.py tests/test_concurrency.py -v
 ```
 
@@ -179,18 +179,18 @@ EMBEDDING_PROVIDER=local python Lians/scripts/run_benchmark.py
 Expected output:
 
 ```
-Benchmark 1 — Stale-fact contamination (5-revision NVDA chain)
-✓ Lians — stale facts in top-5: 0 / 4
-  Pure-cosine (mem0-style) — stale facts visible: 4 / 4
+Benchmark 1 - Stale-fact contamination (5-revision NVDA chain)
+✓ Lians - stale facts in top-5: 0 / 4
+  Pure-cosine (mem0-style) - stale facts visible: 4 / 4
 
-Benchmark 2 — Supersession classification (12-pair labeled set)
+Benchmark 2 - Supersession classification (12-pair labeled set)
 ✓ Accuracy: 12/12 (100%)
 
-Benchmark 3 — Point-in-time recall (4 quarterly queries)
+Benchmark 3 - Point-in-time recall (4 quarterly queries)
 ✓ Correct: 4/4
   mem0 score (no as_of support): 0/4
 
-Benchmark 4 — Compliance auditability (SEC 17a-4 hash chain)
+Benchmark 4 - Compliance auditability (SEC 17a-4 hash chain)
 ✓ Hash chain: ok (1 rows, 0 violations)
 ```
 

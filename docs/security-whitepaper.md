@@ -10,7 +10,7 @@ to [threat-model.md](threat-model.md), [soc2-hipaa-readiness.md](soc2-hipaa-read
 A self-hostable memory layer for AI agents with a bitemporal data model and a
 compliance spine: a tamper-evident audit chain, per-subject encryption with
 crypto-shred erasure, and database-layer information barriers. Deployable fully
-inside your perimeter (air-gap mode) — no agent data needs to leave the network.
+inside your perimeter (air-gap mode) - no agent data needs to leave the network.
 
 ## 2. Data classification & flow
 
@@ -34,7 +34,7 @@ Postgres (RLS-enforced) + append audit row → optional SIEM stream / webhooks.
   endpoints additionally require an `X-Admin-Secret`.
 - **RBAC roles** (`owner` / `analyst` / `compliance` / `readonly`) expand to scope
   sets at auth time.
-- **SSO** is integrated at the gateway via forward-auth / OIDC — see [sso.md](sso.md).
+- **SSO** is integrated at the gateway via forward-auth / OIDC - see [sso.md](sso.md).
 
 ## 4. Tenant & information-barrier isolation
 
@@ -43,7 +43,7 @@ Postgres (RLS-enforced) + append audit row → optional SIEM stream / webhooks.
   policies restrict every query to that namespace.
 - **Information barriers** (Chinese walls) are enforced by a **RESTRICTIVE** RLS
   policy keyed on `agentmem.barrier_group` (migration 0013), so cross-barrier
-  reads are denied at the database layer even for the table owner — verified in CI
+  reads are denied at the database layer even for the table owner - verified in CI
   against a non-superuser role. The application server cannot leak across a wall
   because the wall is below it.
 
@@ -57,7 +57,7 @@ Postgres (RLS-enforced) + append audit row → optional SIEM stream / webhooks.
   `vault`).
 - **Crypto-shred erasure** (GDPR Art. 17 / HIPAA): destroying a subject's DEK
   renders all their content permanently unreadable, while the SHA-256 content
-  hashes remain in the audit chain — the erasure is provable. A signed erasure
+  hashes remain in the audit chain - the erasure is provable. A signed erasure
   certificate is available.
 - **Evidence Pack signing** uses a key isolated from content encryption and API
   authentication. The current raw Ed25519 signer must receive its key from an

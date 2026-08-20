@@ -91,6 +91,14 @@ def test_session_end_capture_creates_bounded_cross_agent_continuity(tmp_path) ->
     assert result["task"]["assessment"]["status"] == "active"
     state = result["task"]["state"]
     assert len(state["evidence"]) == 2
+    assert result["task"]["assessment"]["missing_criteria"][:2] == [
+        "criterion-1",
+        "criterion-2",
+    ]
+    assert result["task"]["assessment"]["untrusted_criteria"] == [
+        "criterion-1",
+        "criterion-2",
+    ]
     assert state["current_action"] == "Update the API documentation"
     assert any("pytest" in item["decision"] for item in state["decisions"])
     assert any("superseded and stale" in item["decision"] for item in state["decisions"])
@@ -158,3 +166,18 @@ def test_transcript_is_evidence_not_persisted_memory(tmp_path) -> None:
     assert extracted["unfinished"] == ["Update the API documentation"]
     assert extracted["changes"][0]["previous"] == "/v1/orders"
     assert extracted["changes"][0]["current"] == "/v2/orders"
+
+
+def test_touched_files_are_activity_not_completed_work() -> None:
+    extracted = extract_continuity(
+        {
+            "messages": [
+                {"role": "user", "text": "Fix the checkout retry behavior."},
+                {"role": "assistant", "text": "I inspected the retry module."},
+            ],
+            "files_touched": ["src/retry.py"],
+        }
+    )
+
+    assert extracted["completed"] == []
+    assert extracted["files_touched"] == ["src/retry.py"]

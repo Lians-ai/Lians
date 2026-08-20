@@ -27,7 +27,7 @@ endif()
 add_executable(lians_example examples/example.c)
 target_link_libraries(lians_example PRIVATE lians)
 
-# ── Tests (pure helpers — no network, no libcurl needed) ─────────────────────
+# ── Tests (pure helpers - no network, no libcurl needed) ─────────────────────
 enable_testing()
 add_executable(lians_test_json tests/test_json.c src/lians_json.c)
 target_include_directories(lians_test_json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

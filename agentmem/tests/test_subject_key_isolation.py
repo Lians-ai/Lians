@@ -1,7 +1,7 @@
 """Cross-tenant SubjectKey isolation (regression for the 0019 composite-PK fix).
 
 Before 0019 the subject_keys PK was subject_id alone, so two namespaces sharing
-a subject_id shared one AES DEK — and one tenant's erase crypto-shredded the
+a subject_id shared one AES DEK - and one tenant's erase crypto-shredded the
 other tenant's data and 500'd their next write. These tests pin the isolation.
 """
 import asyncio

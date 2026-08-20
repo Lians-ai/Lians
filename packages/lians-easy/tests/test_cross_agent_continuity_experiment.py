@@ -249,7 +249,7 @@ def test_bounded_handoff_and_offline_acceptance_metrics(tmp_path: Path) -> None:
     service.capture(_session(), project=project)
     handoff = service.handoff(project=project, max_tokens=500, max_items=12)
     expected = {
-        "completed": ["Migrate the authentication middleware."],
+        "reported_completed": ["Migrate the authentication middleware."],
         "unfinished": ["Fix the OAuth callback integration test."],
         "project_truth": ["Tests use pytest."],
         "decisions": ["Keep PKCE."],
@@ -307,3 +307,37 @@ def test_fixture_files_remain_valid_json() -> None:
     fixture_root = MODULE_PATH.parent / "fixtures"
     assert json.loads((fixture_root / "claude-session.json").read_text(encoding="utf-8"))
     assert json.loads((fixture_root / "expected.json").read_text(encoding="utf-8"))
+
+
+def test_capture_cli_emits_bounded_receipt_without_session_content(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sensitive = "private-session-value-that-must-not-appear"
+    payload = _session()
+    payload["summary"] = sensitive
+    payload["completed"][0]["evidence"] = sensitive
+    session = tmp_path / "session.json"
+    session.write_text(json.dumps(payload), encoding="utf-8")
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+
+    exit_code = MODULE.main(
+        [
+            "--data",
+            str(tmp_path / "memory.sqlite3"),
+            "--project-root",
+            str(project_root),
+            "capture",
+            "--session",
+            str(session),
+            "--client",
+            "claude",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    receipt = json.loads(output)
+    assert exit_code == 0
+    assert receipt["status"] == "captured"
+    assert receipt["memories_captured_or_confirmed"] > 0
+    assert sensitive not in output

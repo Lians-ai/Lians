@@ -25,7 +25,7 @@ Add a memory layer; don't rewrite the app. Work test-first.
 
 4. **Wire memory in.**
 
-   Raw loop — use the harness:
+   Raw loop - use the harness:
    ```python
    from lians import LiansClient, LiansMemoryHarness
    harness = LiansMemoryHarness(
@@ -38,7 +38,7 @@ Add a memory layer; don't rewrite the app. Work test-first.
    # or both:           answer = harness.run_turn(user_query, generate=call_model)
    ```
 
-   Framework — import its integration module:
+   Framework - import its integration module:
    ```python
    from lians.langchain_integration import LiansChatHistory, build_tools
    from lians.langgraph_integration import create_recall_node, create_remember_node
@@ -54,12 +54,12 @@ Add a memory layer; don't rewrite the app. Work test-first.
 
 6. **Report.** Summarize the diff, the env vars required (`LIANS_URL`,
    `LIANS_API_KEY`, `LIANS_AGENT_ID`), and how to verify locally. **Do not
-   commit** — leave the branch for review.
+   commit** - leave the branch for review.
 
 ## Guardrails
 
 - Keep the diff small and reversible.
 - Store `event_time` as the business time of each fact, not `datetime.now()`,
-  wherever the source provides it — point-in-time recall and backtest checks
+  wherever the source provides it - point-in-time recall and backtest checks
   depend on it.
 - If tests fail, stop and report. Do not declare the integration complete.

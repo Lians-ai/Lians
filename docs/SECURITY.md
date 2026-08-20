@@ -43,12 +43,12 @@ Out of scope:
 
 Lians enforces isolation at multiple layers:
 
-- **OAuth resource-server authentication** — the public MCP endpoint validates JWT signature, issuer, audience, expiry, and per-tool scopes on every request
-- **API key authentication** — REST data-plane routes require `X-API-Key`; keys are stored as SHA-256 hashes, never plaintext
-- **Admin secret** — a separate credential (`X-Admin-Secret`) gates all `/v1/admin/*` routes; it is not derivable from agent keys
-- **PostgreSQL RLS** — information barriers are enforced at the database layer with `FORCE ROW LEVEL SECURITY`, not the application layer
-- **AES-256-GCM encryption** — each subject's memories are encrypted under a unique data-encryption key (DEK); destroying the DEK makes the data cryptographically unrecoverable (GDPR crypto-shred)
-- **Append-only audit chain** — every write is recorded in a SHA-256 hash chain; audit rows are never updated or deleted
+- **OAuth resource-server authentication** - the public MCP endpoint validates JWT signature, issuer, audience, expiry, and per-tool scopes on every request
+- **API key authentication** - REST data-plane routes require `X-API-Key`; keys are stored as SHA-256 hashes, never plaintext
+- **Admin secret** - a separate credential (`X-Admin-Secret`) gates all `/v1/admin/*` routes; it is not derivable from agent keys
+- **PostgreSQL RLS** - information barriers are enforced at the database layer with `FORCE ROW LEVEL SECURITY`, not the application layer
+- **AES-256-GCM encryption** - each subject's memories are encrypted under a unique data-encryption key (DEK); destroying the DEK makes the data cryptographically unrecoverable (GDPR crypto-shred)
+- **Append-only audit chain** - every write is recorded in a SHA-256 hash chain; audit rows are never updated or deleted
 
 ## Disclosure policy
 

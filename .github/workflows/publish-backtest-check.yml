@@ -9,7 +9,7 @@ name: Publish agentmem-backtest-check to PyPI
 # - Repository: AI_Memory_Software_lotus
 # - Workflow:   publish-backtest-check.yml
 # - Environment: pypi
-# No API token or secret needed — OIDC trusted publishing handles auth.
+# No API token or secret needed - OIDC trusted publishing handles auth.
 
 on:
   push:

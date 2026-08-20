@@ -1,6 +1,6 @@
 """distill=True ingest: derived facts stored beside raw provenance.
 
-The extractor is stubbed — no LLM call, no API key, deterministic."""
+The extractor is stubbed - no LLM call, no API key, deterministic."""
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +11,7 @@ from lians import LocalLiansClient  # noqa: E402
 
 MESSAGES = [
     {"role": "user", "content": "I moved my emergency fund from Chase to Fidelity."},
-    {"role": "assistant", "content": "Noted — Fidelity is your emergency fund home now."},
+    {"role": "assistant", "content": "Noted - Fidelity is your emergency fund home now."},
 ]
 
 STUB_FACTS = [

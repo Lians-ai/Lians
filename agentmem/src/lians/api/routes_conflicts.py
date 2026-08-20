@@ -1,8 +1,8 @@
 """
 Conflict detection and resolution routes.
 
-    GET  /v1/conflicts                        — list flagged conflicts
-    POST /v1/conflicts/{conflict_id}/resolve  — resolve a conflict
+    GET  /v1/conflicts - list flagged conflicts
+    POST /v1/conflicts/{conflict_id}/resolve - resolve a conflict
 
 Conflicts arise when two memories report different values for the same fact at
 the same (or ambiguous) point in time and the supersession engine cannot
@@ -13,9 +13,9 @@ system deliberately chose NOT to overwrite either memory.
 Both conflicting memories remain valid and visible until a human resolves the
 conflict.  Resolution options:
 
-    accept_a — memory_a is authoritative; memory_b is invalidated (valid_to=now)
-    accept_b — memory_b is authoritative; memory_a is invalidated
-    dismiss  — both memories remain live (sources legitimately differ)
+    accept_a - memory_a is authoritative; memory_b is invalidated (valid_to=now)
+    accept_b - memory_b is authoritative; memory_a is invalidated
+    dismiss - both memories remain live (sources legitimately differ)
 
 A "conflict_resolved" audit event is appended to the SEC 17a-4 chain on every
 resolution so the decision is tamper-evident.
@@ -49,7 +49,7 @@ async def get_conflicts(
     """
     List conflict flags for this namespace.
 
-    By default returns only ``open`` conflicts — those awaiting human review.
+    By default returns only ``open`` conflicts - those awaiting human review.
     Pass ``status=`` with any value to filter, or ``status=`` with an empty
     string (or omit) to see all statuses.
 
@@ -77,9 +77,9 @@ async def resolve_conflict_endpoint(
 
     ``resolution`` must be one of:
 
-    * ``accept_a`` — memory_a is authoritative; memory_b is invalidated
-    * ``accept_b`` — memory_b is authoritative; memory_a is invalidated
-    * ``dismiss``  — both memories remain live
+    * ``accept_a`` - memory_a is authoritative; memory_b is invalidated
+    * ``accept_b`` - memory_b is authoritative; memory_a is invalidated
+    * ``dismiss`` - both memories remain live
 
     A ``conflict_resolved`` event is appended to the namespace audit chain
     regardless of which resolution is chosen, recording the decision and

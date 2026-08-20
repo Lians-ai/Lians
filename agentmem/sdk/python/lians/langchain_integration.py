@@ -3,12 +3,12 @@ LangChain integration for Lians.
 
 Two integration patterns:
 
-1. LiansChatHistory — BaseChatMessageHistory for RunnableWithMessageHistory.
+1. LiansChatHistory - BaseChatMessageHistory for RunnableWithMessageHistory.
    Stores conversation turns as Lians memories; supports per-session isolation.
 
-2. LiansTools / build_tools — three StructuredTools for ReAct agents and
+2. LiansTools / build_tools - three StructuredTools for ReAct agents and
    LangGraph nodes: remember, recall, recall_at.  The recall_at tool is the
-   differentiating one — it answers "what did we know on date X?" which plain
+   differentiating one - it answers "what did we know on date X?" which plain
    vector stores cannot.
 
 Both work with any Lians client (LocalLiansClient for dev, LiansClient
@@ -19,7 +19,7 @@ Install langchain support::
     pip install langchain-core          # already installed if you're here
     pip install langchain langchain-openai   # or your preferred LLM provider
 
-Usage — chat history::
+Usage - chat history::
 
     from lians import LocalLiansClient
     from lians.langchain_integration import LiansChatHistory
@@ -34,7 +34,7 @@ Usage — chat history::
         history_messages_key="history",
     )
 
-Usage — agent tools::
+Usage - agent tools::
 
     from lians import LocalLiansClient
     from lians.langchain_integration import build_tools
@@ -105,7 +105,7 @@ class LiansChatHistory(BaseChatMessageHistory):
             filters={"session_id": self._session_id},
         )
         raw = result.get("memories", [])
-        # Sort chronologically — recall returns by relevance score
+        # Sort chronologically - recall returns by relevance score
         raw.sort(key=lambda m: m.get("event_time") or "")
         out: list[BaseMessage] = []
         for m in raw:
@@ -136,7 +136,7 @@ class LiansChatHistory(BaseChatMessageHistory):
             )
 
     def clear(self) -> None:
-        # Lians's audit trail is immutable — nothing to delete.
+        # Lians's audit trail is immutable - nothing to delete.
         # For GDPR erasure use client.erase(subject_id=...) explicitly.
         pass
 
@@ -150,7 +150,7 @@ class _RememberInput(BaseModel):
     event_time_iso: str = Field(
         ...,
         description=(
-            "ISO 8601 timestamp of when this event occurred — NOT when you are "
+            "ISO 8601 timestamp of when this event occurred - NOT when you are "
             "recording it.  E.g. '2026-05-10T00:00:00Z' for an earnings call on "
             "May 10."
         ),
@@ -198,9 +198,9 @@ def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
     """
     Return three LangChain tools wired to the given Lians client.
 
-    remember   — store a fact with its event timestamp
-    recall     — retrieve current relevant memories by semantic search
-    recall_at  — retrieve memories valid at a specific past date (compliance)
+    remember - store a fact with its event timestamp
+    recall - retrieve current relevant memories by semantic search
+    recall_at - retrieve memories valid at a specific past date (compliance)
 
     Example::
 
@@ -262,7 +262,7 @@ def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
             "Retrieve memories that were valid at a specific point in time. "
             "Use for compliance and audit questions: 'What guidance did we have "
             "on 2026-03-01?' or 'What was the consensus estimate before the revision?'. "
-            "This is point-in-time recall — later superseding updates are excluded."
+            "This is point-in-time recall - later superseding updates are excluded."
         ),
         args_schema=_RecallAtInput,
     )
@@ -272,7 +272,7 @@ def build_tools(client: Any, agent_id: str) -> list[BaseTool]:
 
 class LiansTools:
     """
-    Convenience wrapper — holds a client and builds tools on demand.
+    Convenience wrapper - holds a client and builds tools on demand.
 
     Example::
 

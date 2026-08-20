@@ -23,7 +23,7 @@ import java.util.Map;
  *
  * <p>Lians is a memory layer for AI agents built for regulated environments
  * (financial institutions, healthcare, legal). Unlike a plain vector store it
- * uses a bitemporal model — superseded facts are excluded at the database layer,
+ * uses a bitemporal model - superseded facts are excluded at the database layer,
  * every write lands in a tamper-evident SHA-256 audit chain,
  * per-subject keys support crypto-shred erasure, and information barriers are
  * enforced at PostgreSQL row-level security. It also exposes a bitemporal
@@ -113,7 +113,7 @@ public final class LiansClient {
 
     /**
      * Recall with optional point-in-time ({@code asOf}) and metadata {@code filters}.
-     * Pass {@code asOf} to ask "what did the agent know on this date?" — the
+     * Pass {@code asOf} to ask "what did the agent know on this date?" - the
      * compliance query mem0 and Zep cannot answer.
      */
     public RecallResult recall(String agentId, String query, int k, Instant asOf,
@@ -127,7 +127,7 @@ public final class LiansClient {
         return request("POST", "/v1/recall", body, null, false, RecallResult.class);
     }
 
-    /** Point-in-time recall — sugar for {@link #recall(String, String, int, Instant, Map)}. */
+    /** Point-in-time recall - sugar for {@link #recall(String, String, int, Instant, Map)}. */
     public RecallResult recallAt(String agentId, String query, Instant asOf, int k) {
         return recall(agentId, query, k, asOf, null);
     }
@@ -156,7 +156,7 @@ public final class LiansClient {
         return requestJson("GET", "/v1/snapshot", null, p, false);
     }
 
-    /** Detect lookahead bias — facts the agent held that it couldn't have known. */
+    /** Detect lookahead bias - facts the agent held that it couldn't have known. */
     public JsonNode backtestCheck(String agentId, Instant simulationAsOf) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("agent_id", agentId);
@@ -244,7 +244,7 @@ public final class LiansClient {
     }
 
     /**
-     * Shortest connection between two entities — the conflict-of-interest /
+     * Shortest connection between two entities - the conflict-of-interest /
      * related-party reachability query. {@code "connected": false} is the clean result.
      */
     public JsonNode path(String agentId, String srcEntity, String dstEntity, int maxDepth, Instant asOf) {

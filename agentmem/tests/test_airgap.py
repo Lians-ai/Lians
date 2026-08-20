@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
-# SentenceTransformerProvider — unit tests with mocked model
+# SentenceTransformerProvider - unit tests with mocked model
 # ---------------------------------------------------------------------------
 
 class TestSentenceTransformerProvider:
@@ -72,7 +72,7 @@ class TestSentenceTransformerProvider:
             )
             provider = SentenceTransformerProvider()
 
-        # _model should be None — not loaded yet
+        # _model should be None - not loaded yet
         assert provider._model is None
 
     def test_dim_mismatch_raises_at_load(self):
@@ -222,7 +222,7 @@ class TestSentenceTransformerProvider:
 
 
 # ---------------------------------------------------------------------------
-# Air-gapped mode — startup validation
+# Air-gapped mode - startup validation
 # ---------------------------------------------------------------------------
 
 class TestAirgapValidation:
@@ -281,7 +281,7 @@ class TestAirgapValidation:
         # that would otherwise be fine in non-airgap mode.
         # The test confirms the guard is in _validate_airgap, not in the providers.
         settings = self._settings(airgap_mode=False, embedding_provider="voyage")
-        # Calling it directly would still raise — the airgap_mode check lives
+        # Calling it directly would still raise - the airgap_mode check lives
         # in lifespan(), which only calls _validate_airgap when True.
         # This test documents that contract.
         assert settings.airgap_mode is False

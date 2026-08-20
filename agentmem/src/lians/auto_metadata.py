@@ -1,17 +1,17 @@
 """
-Auto-metadata extraction — auto-supersession parity (mem0 / Zep style).
+Auto-metadata extraction - auto-supersession parity (mem0 / Zep style).
 
 mem0 and Zep let a caller send plain text and quietly infer the structured facts
 needed to decide what that text supersedes.  Lians offers the same convenience
 but keeps its regulated-determinism posture:
 
   * the default extractor is **rule-based** (deterministic, reproducible, no
-    model, no network) and lives in the **domain adapter** — the core never
+    model, no network) and lives in the **domain adapter** - the core never
     learns what a ticker or a metric is;
   * caller-supplied structured keys are **authoritative** and never overridden;
   * every auto-derived key is **provenance-tagged** under ``metadata._auto_meta``
     so an examiner can tell machine-inferred keys from human-supplied ones;
-  * the whole path is **fail-open** — an extractor error never blocks a write;
+  * the whole path is **fail-open** - an extractor error never blocks a write;
   * it is **opt-in** (``config.auto_metadata_enabled``), so existing deployments
     keep caller-only keying and identical behavior.
 
@@ -45,7 +45,7 @@ async def enrich_metadata(
     Return ``(metadata, provenance)``.
 
     ``provenance`` is None when nothing was auto-derived (feature disabled, caller
-    already keyed the write, or the extractor found nothing) — in that case
+    already keyed the write, or the extractor found nothing) - in that case
     ``metadata`` is returned unchanged.  Otherwise ``metadata`` is a new dict with
     the derived structured keys merged in and a ``_auto_meta`` provenance block.
     """
@@ -54,7 +54,7 @@ async def enrich_metadata(
     if not getattr(settings, "auto_metadata_enabled", False):
         return meta, None
 
-    # Respect caller-supplied structured keys — never override authoritative tagging.
+    # Respect caller-supplied structured keys - never override authoritative tagging.
     if _structured_present(meta, adapter):
         return meta, None
 

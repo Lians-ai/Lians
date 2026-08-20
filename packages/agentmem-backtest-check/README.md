@@ -11,7 +11,7 @@ There are two classes of contamination:
 | `future_event` | `event_time > simulation_as_of` | Agent has Nov earnings data; backtest is "as of" Sep |
 | `late_revision` | `event_time ≤ as_of` AND `ingestion_time > as_of` | Revenue figure was restated 3 days after the simulated date; agent has the restated number |
 
-The `late_revision` case is the subtle one. Pure vector stores miss it entirely — they only index *when an event happened*, not *when a revised version of that event arrived*.
+The `late_revision` case is the subtle one. Pure vector stores miss it entirely - they only index *when an event happened*, not *when a revised version of that event arrived*.
 
 ---
 
@@ -59,7 +59,7 @@ result = check_contamination(
 )
 
 print(result.summary())
-# CONTAMINATED — 2/3 memories flagged (66.7%) as of 2025-09-01
+# CONTAMINATED - 2/3 memories flagged (66.7%) as of 2025-09-01
 
 for flag in result.flags:
     print(f"[{flag.contamination_type}] +{flag.delta_days:.0f} days: {flag.content_preview}")
@@ -76,7 +76,7 @@ from agentmem_backtest_check import check_contamination, LATE_REVISION
 from datetime import datetime, timezone
 
 # Earnings were originally reported on Apr 15; a restatement landed Apr 20.
-# Backtest is "as of" Apr 17 — the restated figure didn't exist yet.
+# Backtest is "as of" Apr 17 - the restated figure didn't exist yet.
 memories = [
     {
         "id": "original",
@@ -99,7 +99,7 @@ result = check_contamination(
 
 assert not result.is_clean
 flag = result.flags[0]
-assert flag.contamination_type == LATE_REVISION    # not future_event — event_time is in the past
+assert flag.contamination_type == LATE_REVISION    # not future_event - event_time is in the past
 assert flag.delta_days == 3.0                      # ingestion was 3 days after as_of
 ```
 
@@ -176,7 +176,7 @@ This library makes contamination auditable in a single call, with no database or
 
 ## Full AgentMem
 
-This package is a thin primitive extracted from [AgentMem](https://github.com/ebeirne/Lians) — a bitemporal memory layer for regulated AI agents. AgentMem adds:
+This package is a thin primitive extracted from [AgentMem](https://github.com/ebeirne/Lians) - a bitemporal memory layer for regulated AI agents. AgentMem adds:
 
 - Bitemporal storage with automatic supersession (old facts can't contaminate recall)
 - Point-in-time reconstruction of any agent's full knowledge state

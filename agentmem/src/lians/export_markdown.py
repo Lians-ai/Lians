@@ -2,7 +2,7 @@
 Signed human-readable memory export.
 
 Renders an agent's complete point-in-time knowledge state (the same exhaustive
-set /v1/snapshot returns) as a Markdown document with YAML frontmatter — the
+set /v1/snapshot returns) as a Markdown document with YAML frontmatter - the
 transparency developers love about file-based memory systems, produced from a
 store that keeps encryption, barriers, and bitemporal correctness underneath.
 
@@ -16,7 +16,7 @@ Verification procedure (also stated in the footer):
   1. Remove the final integrity comment block **and the single newline
      separator before it** (everything from the newline immediately preceding
      the ``<!-- lians:integrity`` line to the end of the file).
-  2. SHA-256 the remaining bytes (UTF-8) — must equal ``document_sha256``.
+  2. SHA-256 the remaining bytes (UTF-8) - must equal ``document_sha256``.
   3. Confirm the audit chain holds an ``export_markdown`` event whose
      ``content_hash`` equals ``document_sha256`` and whose ``row_hash`` matches.
 """
@@ -44,16 +44,16 @@ def _stamp(dt: Optional[datetime]) -> str:
 
 
 def _render_memory(m: MemoryOut) -> list[str]:
-    lines = [f"## {_stamp(m.event_time)}" + (f" — {m.source}" if m.source else "")]
+    lines = [f"## {_stamp(m.event_time)}" + (f" - {m.source}" if m.source else "")]
     if m.content is not None:
         lines.append("")
         lines.append(m.content)
     elif m.erased_at is not None:
         lines.append("")
-        lines.append("*[ERASED — content crypto-shredded; existence and metadata preserved]*")
+        lines.append("*[ERASED - content crypto-shredded; existence and metadata preserved]*")
     else:
         lines.append("")
-        lines.append("*[content unavailable — subject key not accessible]*")
+        lines.append("*[content unavailable - subject key not accessible]*")
     lines.append("")
     lines.append(f"- id: `{m.id}`")
     lines.append(f"- content_hash: `{m.content_hash}`")
@@ -102,10 +102,10 @@ async def export_memory_markdown(
         f"memory_count: {len(items)}",
         "---",
         "",
-        f"# Memory statement — `{agent_id}` as of {_stamp(effective_as_of)}",
+        f"# Memory statement - `{agent_id}` as of {_stamp(effective_as_of)}",
         "",
         f"Every fact valid at the stated time, oldest first ({len(items)} total). "
-        "Erased facts appear as erasure markers — existence is preserved, content is unrecoverable.",
+        "Erased facts appear as erasure markers - existence is preserved, content is unrecoverable.",
         "",
     ]
     for m in items:
@@ -154,7 +154,7 @@ async def export_memory_markdown(
 
 
 def strip_integrity_footer(markdown: str) -> str:
-    """Return the hashable body — everything before the integrity comment."""
+    """Return the hashable body - everything before the integrity comment."""
     idx = markdown.rfind("\n" + _INTEGRITY_MARK)
     return markdown[:idx] if idx != -1 else markdown
 
@@ -163,7 +163,7 @@ def verify_export_document(markdown: str) -> tuple[str, Optional[str]]:
     """
     Recompute the document hash and read the stated one from the footer.
 
-    Returns ``(recomputed_sha256, stated_sha256)`` — equal for an untampered
+    Returns ``(recomputed_sha256, stated_sha256)`` - equal for an untampered
     document. Chain-side confirmation still requires the audit log.
     """
     body = strip_integrity_footer(markdown)

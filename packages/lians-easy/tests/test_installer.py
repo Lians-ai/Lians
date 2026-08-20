@@ -49,6 +49,11 @@ def test_installer_preserves_json_and_creates_backup(tmp_path, monkeypatch):
     assert hook["statusMessage"] == HOOK_STATUS
     assert "hook --client claude" in hook["command"]
     assert str(expected_database) in hook["command"]
+    [precompact_group] = hooks["PreCompact"]
+    [precompact_hook] = precompact_group["hooks"]
+    assert precompact_hook["statusMessage"] == "Lians is saving project continuity"
+    assert "hook --client claude" in precompact_hook["command"]
+    assert precompact_hook["timeout"] == 12
     [session_group] = hooks["SessionEnd"]
     [session_hook] = session_group["hooks"]
     assert session_hook["statusMessage"] == "Lians is saving project continuity"

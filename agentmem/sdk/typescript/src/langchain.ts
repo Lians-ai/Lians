@@ -43,7 +43,7 @@ export async function createRecallTool(
     name: "recall_memory",
     description:
       "Retrieve relevant memories for a query. Input: a natural-language question. " +
-      "Returns current valid facts — superseded facts are excluded automatically.",
+      "Returns current valid facts - superseded facts are excluded automatically.",
     func: async (query: string) => {
       const result = await client.recall({ agent_id: agentId, query, k: opts.k ?? 5 });
       if (!result.memories.length) return "No relevant memories found.";

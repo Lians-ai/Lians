@@ -4,13 +4,13 @@ Wheel build hook: vendor the Lians service engine as ``lians_engine``.
 The engine source lives in one of two places depending on what we're
 building from:
 
-- **repo checkout** — ``../../src/lians`` relative to this file (the sdk dir)
-- **unpacked sdist** — ``lians_engine/lians`` inside the project root (the
+- **repo checkout** - ``../../src/lians`` relative to this file (the sdk dir)
+- **unpacked sdist** - ``lians_engine/lians`` inside the project root (the
   sdist's own force-include put it there, because ``../../`` doesn't exist
   in an sdist)
 
 A static ``[tool.hatch.build.targets.wheel.force-include]`` can only name one
-path, and `python -m build` builds the wheel *from the sdist* — which is how
+path, and `python -m build` builds the wheel *from the sdist* - which is how
 the 0.3.3 release pipeline failed with "Forced include not found". This hook
 picks whichever source exists at build time.
 """

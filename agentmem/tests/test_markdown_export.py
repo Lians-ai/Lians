@@ -58,7 +58,7 @@ async def test_export_renders_frontmatter_and_facts(db):
     assert "no tobacco exposure" in result.markdown
     assert "materiality: critical" in result.markdown
     assert "[onboarding-call]" not in result.markdown  # sources render as headings
-    assert "— onboarding-call" in result.markdown
+    assert " - onboarding-call" in result.markdown
 
 
 @pytest.mark.asyncio
@@ -110,7 +110,7 @@ async def test_erased_facts_render_as_erasure_markers(db):
     result = await export_memory_markdown(db, NS, AGENT)
 
     assert result.memory_count == 2  # existence preserved
-    assert "ERASED — content crypto-shredded" in result.markdown
+    assert "ERASED - content crypto-shredded" in result.markdown
     assert "preferring email" not in result.markdown  # content unrecoverable
 
 

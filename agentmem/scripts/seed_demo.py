@@ -2,9 +2,9 @@
 AgentMem demo seed script
 ─────────────────────────
 Populates a local AgentMem instance with realistic financial data to demonstrate:
-  1. Stale-fact suppression  — 5 revisions of NVDA guidance; only the latest is returned
-  2. Point-in-time recall    — 4 quarters of TSLA deliveries; query any past date
-  3. Supersession chains     — 6 Fed rate decisions; each supersedes the previous
+  1. Stale-fact suppression - 5 revisions of NVDA guidance; only the latest is returned
+  2. Point-in-time recall - 4 quarters of TSLA deliveries; query any past date
+  3. Supersession chains - 6 Fed rate decisions; each supersedes the previous
 
 Usage:
     # Start the stack first:
@@ -53,7 +53,7 @@ def _ts(year: int, month: int, day: int) -> str:
 NVDA_GUIDANCE = [
     {
         "agent_id": "market-analyst",
-        "content": "NVDA FY2026 revenue guidance: $28B — initial estimate from Q3 FY2025 earnings call",
+        "content": "NVDA FY2026 revenue guidance: $28B - initial estimate from Q3 FY2025 earnings call",
         "event_time": _ts(2024, 11, 20),
         "source": "nvda_q3_fy2025_earnings",
         "metadata": {"ticker": "NVDA", "metric": "revenue_guidance", "fiscal_year": 2026, "value_bn": 28},
@@ -61,7 +61,7 @@ NVDA_GUIDANCE = [
     },
     {
         "agent_id": "market-analyst",
-        "content": "NVDA FY2026 revenue guidance raised to $32B — Blackwell ramp ahead of schedule (Q4 FY2025 earnings)",
+        "content": "NVDA FY2026 revenue guidance raised to $32B - Blackwell ramp ahead of schedule (Q4 FY2025 earnings)",
         "event_time": _ts(2025, 2, 26),
         "source": "nvda_q4_fy2025_earnings",
         "metadata": {"ticker": "NVDA", "metric": "revenue_guidance", "fiscal_year": 2026, "value_bn": 32},
@@ -69,7 +69,7 @@ NVDA_GUIDANCE = [
     },
     {
         "agent_id": "market-analyst",
-        "content": "NVDA FY2026 revenue guidance raised to $36B — hyperscaler CapEx expansion driving demand (Q1 FY2026 earnings)",
+        "content": "NVDA FY2026 revenue guidance raised to $36B - hyperscaler CapEx expansion driving demand (Q1 FY2026 earnings)",
         "event_time": _ts(2025, 5, 28),
         "source": "nvda_q1_fy2026_earnings",
         "metadata": {"ticker": "NVDA", "metric": "revenue_guidance", "fiscal_year": 2026, "value_bn": 36},
@@ -77,7 +77,7 @@ NVDA_GUIDANCE = [
     },
     {
         "agent_id": "market-analyst",
-        "content": "NVDA FY2026 revenue guidance raised to $38B — data center demand remains robust (Q2 FY2026 earnings)",
+        "content": "NVDA FY2026 revenue guidance raised to $38B - data center demand remains robust (Q2 FY2026 earnings)",
         "event_time": _ts(2025, 8, 27),
         "source": "nvda_q2_fy2026_earnings",
         "metadata": {"ticker": "NVDA", "metric": "revenue_guidance", "fiscal_year": 2026, "value_bn": 38},
@@ -85,7 +85,7 @@ NVDA_GUIDANCE = [
     },
     {
         "agent_id": "market-analyst",
-        "content": "NVDA FY2026 revenue guidance raised to $40B — beat consensus by $2B, Blackwell GB200 NVL72 sold out through FY2027 (Q3 FY2026 earnings)",
+        "content": "NVDA FY2026 revenue guidance raised to $40B - beat consensus by $2B, Blackwell GB200 NVL72 sold out through FY2027 (Q3 FY2026 earnings)",
         "event_time": _ts(2025, 11, 19),
         "source": "nvda_q3_fy2026_earnings",
         "metadata": {"ticker": "NVDA", "metric": "revenue_guidance", "fiscal_year": 2026, "value_bn": 40},

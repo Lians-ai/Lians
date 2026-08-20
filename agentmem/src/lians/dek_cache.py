@@ -1,5 +1,5 @@
 """
-Per-subject Data Encryption Key (DEK) cache — Change 6 of the performance roadmap.
+Per-subject Data Encryption Key (DEK) cache - Change 6 of the performance roadmap.
 
 The subject key stored in ``subject_keys`` is wrapped with the master key.
 Unwrapping requires an AES-GCM decrypt every time.  This module caches the

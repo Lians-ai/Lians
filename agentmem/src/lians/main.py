@@ -92,7 +92,7 @@ def _warn_insecure_secrets(settings) -> None:
     Log prominent warnings when development placeholder secrets are detected.
 
     These defaults are intentionally weak so tests work without configuration.
-    A production deployment using them is exploitable — any party that reads
+    A production deployment using them is exploitable - any party that reads
     this source code can bypass admin authentication.
     """
     warnings = []
@@ -136,7 +136,7 @@ def _validate_airgap(settings) -> None:
     """
     Hard-fail at startup if AIRGAP_MODE=true but the configuration would
     send data to an external API.  Catches misconfiguration before any
-    customer data is processed — not at request time.
+    customer data is processed - not at request time.
     """
     errors = []
     if settings.embedding_provider not in _AIRGAP_SAFE_PROVIDERS:
@@ -484,7 +484,7 @@ app = FastAPI(
 @app.exception_handler(SubjectKeyDestroyedError)
 async def _shredded_subject_handler(request: Request, exc: SubjectKeyDestroyedError):
     # A destroyed subject key is never re-created (GDPR Art. 17), so a write
-    # for that subject is permanently impossible — 410 Gone, not a 500.
+    # for that subject is permanently impossible - 410 Gone, not a 500.
     return JSONResponse(
         status_code=410,
         content={
@@ -497,7 +497,7 @@ async def _shredded_subject_handler(request: Request, exc: SubjectKeyDestroyedEr
 
 instrument_fastapi(app)
 
-# CORS — allows the demo/index.html page to call the API from a browser.
+# CORS - allows the demo/index.html page to call the API from a browser.
 # In production, set CORS_ORIGINS to a comma-separated list of trusted origins.
 _cors_origins = [o.strip() for o in (get_settings().cors_origins or "*").split(",")]
 app.add_middleware(
@@ -604,7 +604,7 @@ async def deployment_version():
 @app.get("/health", include_in_schema=False)
 async def health(db: AsyncSession = Depends(_get_db)):
     """
-    Deep health check — verifies DB and Redis connectivity, not just process liveness.
+    Deep health check - verifies DB and Redis connectivity, not just process liveness.
 
     Returns 200 {"status": "ok"} when all dependencies are reachable.
     Returns 503 {"status": "degraded"} with per-dependency details when any fail.
@@ -616,14 +616,14 @@ async def health(db: AsyncSession = Depends(_get_db)):
 
     checks: dict[str, str] = {}
 
-    # DB — SELECT 1 with a 2-second timeout
+    # DB - SELECT 1 with a 2-second timeout
     try:
         await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=2.0)
         checks["db"] = "ok"
     except Exception as exc:
         checks["db"] = f"error: {type(exc).__name__}"
 
-    # Redis — PING with a 1-second timeout (skipped when cache is disabled)
+    # Redis - PING with a 1-second timeout (skipped when cache is disabled)
     if get_settings().recall_cache_enabled:
         try:
             await asyncio.wait_for(_get_redis().ping(), timeout=1.0)
@@ -657,7 +657,7 @@ async def health(db: AsyncSession = Depends(_get_db)):
 @app.get("/livez", include_in_schema=False)
 async def livez():
     """
-    Liveness probe — confirms the process is up. Intentionally cheap: it never
+    Liveness probe - confirms the process is up. Intentionally cheap: it never
     touches the database or Redis, so a transient dependency blip does not cause
     Kubernetes to restart an otherwise-healthy pod. Use for livenessProbe.
     """
@@ -667,7 +667,7 @@ async def livez():
 @app.get("/readyz", include_in_schema=False)
 async def readyz(db: AsyncSession = Depends(_get_db)):
     """
-    Readiness probe — deep dependency check (same as /health). A 503 takes the
+    Readiness probe - deep dependency check (same as /health). A 503 takes the
     instance out of rotation without killing the process. Use for readinessProbe.
     """
     if _hosted_mcp_runtime is not None:

@@ -1,4 +1,4 @@
-# Regulated-memory eval — head-to-head results
+# Regulated-memory eval - head-to-head results
 
 > **Historical capability snapshot:** generated July 4, 2026 and not an
 > independent or current general-product ranking. Several columns were assessed
@@ -22,24 +22,24 @@ primitive: either the product has an API that satisfies it, or it does not.
 | Audit-state snapshot at T | ✅ pass | 🟡 partial | ❌ absent | ❌ absent | ❌ absent | ❌ absent |
 | **Score (pass=1, partial=½)** | **5.0 / 5** | **2.0 / 5** | **1.0 / 5** | **1.0 / 5** | **1.0 / 5** | **0.5 / 5** |
 
-**Run status:** Lians (executed live: LocalLiansClient — same engine as the server), Zep / Graphiti (executed live: Graphiti OSS, default OpenAI config, embedded Kuzu), Letta (capability-assessed), Hindsight (capability-assessed), Supermemory (capability-assessed), mem0 (executed live: mem0 OSS, default config (OpenAI LLM + embeddings)).
+**Run status:** Lians (executed live: LocalLiansClient - same engine as the server), Zep / Graphiti (executed live: Graphiti OSS, default OpenAI config, embedded Kuzu), Letta (capability-assessed), Hindsight (capability-assessed), Supermemory (capability-assessed), mem0 (executed live: mem0 OSS, default config (OpenAI LLM + embeddings)).
 
 ## What each invariant means
 
-1. **Stale revision suppressed** — after a fact is revised, the superseded value must
+1. **Stale revision suppressed** - after a fact is revised, the superseded value must
    not be retrieved. Lians does this with deterministic keyed supersession; competitors
    attempt it via LLM/graph/reflection invalidation (non-deterministic, extraction-dependent).
-2. **Point-in-time (as-of) recall** — recall *as it was known* on a past date. Requires
+2. **Point-in-time (as-of) recall** - recall *as it was known* on a past date. Requires
    a bitemporal model with an as-of query primitive.
-3. **Provable erasure** — erased content is cryptographically unrecoverable and the
+3. **Provable erasure** - erased content is cryptographically unrecoverable and the
    system emits an erasure certificate (GDPR Art. 17 / HIPAA). Deleting a row is not
    the same as proving it is gone.
-4. **Lookahead / backtest guard** — facts unknowable at a simulation date are flagged,
+4. **Lookahead / backtest guard** - facts unknowable at a simulation date are flagged,
    so a backtest or model isn't contaminated by future information.
-5. **Audit-state snapshot at T** — the full knowledge state at any past time is
+5. **Audit-state snapshot at T** - the full knowledge state at any past time is
    reproducible for an examiner.
 
-A sixth invariant — **barrier-group (Chinese-wall) leakage** — is verified separately
+A sixth invariant - **barrier-group (Chinese-wall) leakage** - is verified separately
 against PostgreSQL Row-Level Security with a non-superuser role
 (`agentmem/tests/test_pgvector.py`), because it is a database-layer guarantee, not an
 application-API call.
@@ -52,16 +52,16 @@ application-API call.
   `OPENAI_API_KEY` set, the mem0 column runs **mem0 OSS in its default
   documented configuration** (`Memory()`, OpenAI LLM + embeddings) and the
   Zep/Graphiti column runs **Graphiti OSS in its default configuration**
-  (OpenAI LLM/embeddings/reranker, embedded Kuzu) — the self-hosted
+  (OpenAI LLM/embeddings/reranker, embedded Kuzu) - the self-hosted
   deployments a regulated buyer would actually evaluate, configured exactly
   as their own quickstarts configure them. Remaining columns are scored from
   documented capabilities encoded in `benchmarks/adapters/*_adapter.py`,
   with a one-line justification per cell.
 - **Live merges are fair in both directions.** A check that *runs* gets its
-  live result — better or worse than the documented score. A check that
+  live result - better or worse than the documented score. A check that
   raises `CapabilityAbsent` ("no turnkey API") carries no new behavioral
   evidence, so the documented credit (e.g. Graphiti's partial for temporal
-  edge filtering) is preserved — a live run never zeroes a cell for the same
+  edge filtering) is preserved - a live run never zeroes a cell for the same
   reason the static map already discounted it.
 - **A full erasure pass requires the proof artifact.** Behavioral deletion
   (content stops being retrievable) scores *partial*; *pass* additionally
@@ -70,18 +70,18 @@ application-API call.
 - **mem0's temporal parameters are Platform-only.** mem0 2.x exposes
   `timestamp` and `reference_date` in its SDK signatures, but its own
   docstrings mark them "Platform-only temporal parameter. Not supported in
-  OSS" — the OSS as-of cell reflects that, per mem0's documentation.
+  OSS" - the OSS as-of cell reflects that, per mem0's documentation.
 - **Anyone can re-run any column.** Install the competitor SDK, export the
   relevant key (`OPENAI_API_KEY` for the OSS columns; `MEM0_API_KEY` /
   `ZEP_API_KEY` / `LETTA_API_KEY` / `HINDSIGHT_API_URL` /
-  `SUPERMEMORY_API_KEY` for hosted APIs), and re-run — the adapter switches
+  `SUPERMEMORY_API_KEY` for hosted APIs), and re-run - the adapter switches
   from the static capability map to live execution and overwrites that column.
 - **Competitors are credited where they're strong.** Zep's bitemporal graph earns
   partials on temporal recall and stale-edge invalidation; mem0's LLM fact management
   earns a partial on supersession; Letta's agent-driven memory edits earn a partial on
   supersession; Hindsight's timestamped retain + temporal retrieval earns a partial on
   point-in-time recall and its belief revision a partial on supersession; Supermemory's
-  profile consolidation earns a partial on supersession. This is not a strawman — the
+  profile consolidation earns a partial on supersession. This is not a strawman - the
   gaps are the compliance primitives (provable erasure, lookahead guard, audit
   snapshot) that the dev-memory, agent-memory, and temporal-graph lanes were never
   built to provide. Hindsight is the only column with **no deletion API at all**, so
@@ -94,7 +94,7 @@ cd agentmem
 python -m benchmarks.compare_regulated            # print the table
 python -m benchmarks.compare_regulated --write    # regenerate this file
 
-# live OSS columns (mem0 OSS + Graphiti OSS, default configs — one key):
+# live OSS columns (mem0 OSS + Graphiti OSS, default configs - one key):
 pip install mem0ai graphiti-core kuzu
 export OPENAI_API_KEY=...                                # then re-run
 
@@ -106,10 +106,10 @@ pip install hindsight-client && export HINDSIGHT_API_URL=...  # then re-run
 pip install supermemory && export SUPERMEMORY_API_KEY=...     # then re-run
 ```
 
-## Appendix — live-run findings (2026-07-04, mem0 2.0.11, graphiti-core 0.29.2)
+## Appendix - live-run findings (2026-07-04, mem0 2.0.11, graphiti-core 0.29.2)
 
 Executed configurations: **mem0 OSS** `Memory.from_config({"llm": {"provider":
-"openai", "config": {"model": "gpt-4o-mini"}}})` — default everything else;
+"openai", "config": {"model": "gpt-4o-mini"}}})` - default everything else;
 **Graphiti OSS** default OpenAI clients on an embedded Kuzu database.
 
 Per-cell behavioral evidence (stale-revision pair: "Moody's credit rating for
@@ -121,7 +121,7 @@ ACME Corp is Baa2" → "Moody's upgraded ACME Corp's credit rating to Baa1"):
   emits no proof artifact → partial. As-of recall: mem0 2.x's `timestamp` /
   `reference_date` parameters are documented by mem0 itself as "Platform-only
   temporal parameter. Not supported in OSS" → absent in the self-hosted product.
-- **Graphiti**: its contradiction invalidation **worked** — both stale edges
+- **Graphiti**: its contradiction invalidation **worked** - both stale edges
   received `invalid_at = 2025-11-01`, correctly backdated to the revision's
   reference time (genuinely good engineering, credited). But default search
   **returns invalidated edges**: an agent assembling context from Graphiti's
@@ -141,9 +141,9 @@ upstream 2026-07-03: [mem0ai/mem0#6085](https://github.com/mem0ai/mem0/issues/60
    stores nothing. Accommodation: pin `gpt-4o-mini` (the model mem0's docs
    use), which accepts their default temperature.
 2. **graphiti-core 0.29.2 (Kuzu)**: passing any `group_id` to `add_episode`
-   crashes — it reads `driver._database`, which `KuzuDriver.__init__` never
+   crashes - it reads `driver._database`, which `KuzuDriver.__init__` never
    sets. Accommodation: use the provider's default group.
 3. **graphiti-core 0.29.2 (Kuzu)**: `build_indices_and_constraints()` is a
    no-op and `setup_schema()` creates no FTS indexes, but default search
-   issues `QUERY_FTS_INDEX` — search crashes out of the box. Accommodation:
+   issues `QUERY_FTS_INDEX` - search crashes out of the box. Accommodation:
    run graphiti's own `get_fulltext_indices(KUZU)` statements at setup.

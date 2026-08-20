@@ -1,11 +1,11 @@
 """
-Lians agent memory harness — a drop-in memory loop for any agent framework.
+Lians agent memory harness - a drop-in memory loop for any agent framework.
 
 The harness wraps the two operations every memory-augmented agent needs:
 
-    1. **Recall-before** — fetch the current (non-stale) facts relevant to the
+    1. **Recall-before** - fetch the current (non-stale) facts relevant to the
        turn and format them for injection into the model's context.
-    2. **Remember-after** — persist what the agent learned or decided, with the
+    2. **Remember-after** - persist what the agent learned or decided, with the
        compliance scoping (subject, source, event-time, importance) that
        regulated deployments require.
 
@@ -16,7 +16,7 @@ tamper-evident audit chain, and per-subject scoping supports crypto-shred erasur
 
 It is deliberately framework-agnostic. It works with any Lians client that
 exposes the shared synchronous surface (``add``, ``recall``, ``recall_at``,
-``add_from_messages``, ``snapshot``, ``backtest_check``, ``erase``) — that means
+``add_from_messages``, ``snapshot``, ``backtest_check``, ``erase``) - that means
 ``LiansClient`` (hosted/self-hosted), ``LocalLiansClient`` (SQLite), and any
 duck-typed stand-in used in tests.
 
@@ -124,7 +124,7 @@ class RecalledMemory:
 
 @dataclass(frozen=True)
 class TurnResult:
-    """Everything a single harnessed turn produced — useful for audit/logging."""
+    """Everything a single harnessed turn produced - useful for audit/logging."""
 
     query: str
     context: str
@@ -185,7 +185,7 @@ class LiansMemoryHarness:
     ----------
     client:
         Any Lians client exposing ``add`` and ``recall`` (``LiansClient``,
-        ``AsyncLiansClient`` is *not* supported here — use the sync clients).
+        ``AsyncLiansClient`` is *not* supported here - use the sync clients).
     agent_id:
         The memory namespace for this agent/session. Required.
     subject_id:
@@ -227,7 +227,7 @@ class LiansMemoryHarness:
         if not (hasattr(client, "add") and hasattr(client, "recall")):
             raise TypeError(
                 "client must expose `add` and `recall` (use LiansClient or "
-                "LocalLiansClient — AsyncLiansClient is not supported by the harness)"
+                "LocalLiansClient - AsyncLiansClient is not supported by the harness)"
             )
         self.client = client
         self.agent_id = agent_id
@@ -448,7 +448,7 @@ class LiansMemoryHarness:
         """
         Return the current (non-stale) memories relevant to ``query``.
 
-        Pass ``as_of`` for point-in-time recall — the compliance query that
+        Pass ``as_of`` for point-in-time recall - the compliance query that
         answers "what did this agent know on date X?" without contamination
         from facts learned later.
         """
@@ -475,7 +475,7 @@ class LiansMemoryHarness:
         """
         Recall and render memories as a context block ready to inject into a prompt.
 
-        The block is plain text — drop it into a system message, a RAG context
+        The block is plain text - drop it into a system message, a RAG context
         slot, or straight into the user turn. Each line carries the event time
         and source so the model can reason about recency and provenance.
         """
@@ -485,7 +485,7 @@ class LiansMemoryHarness:
         lines = [header]
         for m in memories:
             if not m.content:
-                continue  # erased (crypto-shredded) — content unrecoverable
+                continue  # erased (crypto-shredded) - content unrecoverable
             stamp = _short_time(m.event_time)
             prov = f" [{m.source}]" if m.source else ""
             lines.append(f"- ({stamp}){prov} {m.content}")
@@ -682,7 +682,7 @@ class LiansMemoryHarness:
         as_of: Optional[datetime] = None,
     ) -> list[RecalledMemory]:
         """
-        Recall with graph-proximity reranking — facts about entities near
+        Recall with graph-proximity reranking - facts about entities near
         ``near_entity`` in the relationship graph are boosted.
         """
         self._require("recall_near")
@@ -705,7 +705,7 @@ class LiansMemoryHarness:
         return self.client.snapshot(agent_id=self.agent_id, as_of=as_of, **kwargs)  # type: ignore[attr-defined]
 
     def backtest_check(self, simulation_as_of: datetime) -> dict:
-        """Detect lookahead bias — facts the agent held that it couldn't have known."""
+        """Detect lookahead bias - facts the agent held that it couldn't have known."""
         self._require("backtest_check")
         return self.client.backtest_check(  # type: ignore[attr-defined]
             agent_id=self.agent_id, simulation_as_of=simulation_as_of
@@ -742,12 +742,12 @@ class LiansMemoryHarness:
         :class:`CompactionGuard` for automatic tracking) so the durable facts
         cross into governed memory first. Every write is tagged
         ``_flush: "pre_compaction"``, so the audit chain shows *when* the agent
-        externalized what it knew — the flush itself is evidence.
+        externalized what it knew - the flush itself is evidence.
 
         Provide exactly one source of facts, checked in this order:
 
         ``facts``
-            Pre-extracted durable facts — one write per string.
+            Pre-extracted durable facts - one write per string.
         ``extract`` + ``messages``
             ``extract(transcript_text)`` returns the facts to write. Pass an
             LLM-backed extractor here to reproduce OpenClaw's "silent agentic
@@ -832,7 +832,7 @@ class LiansMemoryHarness:
     def _require(self, attr: str) -> None:
         if not hasattr(self.client, attr):
             raise AttributeError(
-                f"client does not support `{attr}` — use a hosted/local Lians client"
+                f"client does not support `{attr}` - use a hosted/local Lians client"
             )
 
 
@@ -840,7 +840,7 @@ class LiansMemoryHarness:
 
 
 def _estimate_tokens(text: str) -> int:
-    """Cheap token estimate (~4 chars/token) — matches the server's budgeting."""
+    """Cheap token estimate (~4 chars/token) - matches the server's budgeting."""
     return max(1, len(text) // 4)
 
 
@@ -851,7 +851,7 @@ class CompactionGuard:
     Wire it into any agent loop: call :meth:`observe` with each turn's text (or
     :meth:`observe_messages` with the running message list), and when the
     estimated usage crosses ``threshold`` × ``context_limit_tokens`` the guard
-    fires :meth:`LiansMemoryHarness.flush_before_compaction` — once — then
+    fires :meth:`LiansMemoryHarness.flush_before_compaction` - once - then
     waits for :meth:`reset` (call it after the host framework actually
     compacts/summarizes).
 
@@ -929,7 +929,7 @@ class CompactionGuard:
         return result
 
     def reset(self) -> None:
-        """Call after the host framework compacts — starts a fresh window."""
+        """Call after the host framework compacts - starts a fresh window."""
         self.used_tokens = 0
         self._flushed_this_window = False
 

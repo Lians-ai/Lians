@@ -10,7 +10,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: agentmem
-  minReplicas: 2   # never drop below 2 — ensures HA even at idle
+  minReplicas: 2   # never drop below 2 - ensures HA even at idle
   maxReplicas: 10
   metrics:
     - type: Resource
@@ -18,7 +18,7 @@ spec:
         name: cpu
         target:
           type: Utilization
-          averageUtilization: 60   # scale out at 60% CPU — leaves headroom for burst
+          averageUtilization: 60   # scale out at 60% CPU - leaves headroom for burst
     - type: Resource
       resource:
         name: memory

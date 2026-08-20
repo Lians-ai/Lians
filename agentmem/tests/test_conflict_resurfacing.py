@@ -2,7 +2,7 @@
 Active resurfacing of unresolved conflicts.
 
 Open conflicts push to the top of every /v1/context block (oldest first) until
-a human adjudicates them — an unresolved conflict must not silently age out,
+a human adjudicates them - an unresolved conflict must not silently age out,
 and the model must treat contested facts as contested rather than confidently
 using whichever version recall ranked higher.
 """

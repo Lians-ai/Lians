@@ -1,5 +1,5 @@
 """
-LongMemEval — Lians retrieval dump for the mem0ai/memory-benchmarks harness.
+LongMemEval - Lians retrieval dump for the mem0ai/memory-benchmarks harness.
 
 Same play as ``locomo_dump_mem0.py``: for each of the 500 LongMemEval-S
 questions, embed its haystack (per-message, arctic), score with the engine's
@@ -76,7 +76,7 @@ def build_docs(question: dict):
 
     ``pair_content`` renders the message with its adjacent counterpart in the
     same session (user question + assistant reply), so a hit can be *scored*
-    on the message alone but *shown* to the answerer as the full exchange —
+    on the message alone but *shown* to the answerer as the full exchange -
     answers routinely live in the half of the pair that didn't match the
     query.
     """
@@ -93,7 +93,7 @@ def build_docs(question: dict):
             times.append(t.isoformat())
             ts.append(t.timestamp())
             # partner: previous message for an assistant turn, next for a user
-            # turn — the natural QA pairing of chat transcripts
+            # turn - the natural QA pairing of chat transcripts
             partner = None
             if role == "assistant" and j > 0 and msgs[j - 1][1]:
                 partner = ("before", f"{msgs[j - 1][0]}: {msgs[j - 1][1]}")
@@ -145,7 +145,7 @@ def main() -> None:
             doc_embs, q_emb = z["doc_embs"], z["q_emb"]
         else:
             # batch_size 8: at 32, one long-message haystack OOM'd the 16GB
-            # machine (1GB tensor alloc in XLM-R attention) — 2026-07-11.
+            # machine (1GB tensor alloc in XLM-R attention) - 2026-07-11.
             doc_embs = model.encode(contents, normalize_embeddings=True,
                                     batch_size=8, show_progress_bar=False)
             q_emb = model.encode([QUERY_PREFIX + question["question"]],

@@ -1,5 +1,5 @@
 """
-Legal domain adapter — matter ID, jurisdiction, claim type normalization.
+Legal domain adapter - matter ID, jurisdiction, claim type normalization.
 
 This adapter is the ONLY place in AgentMem where legal-specific concepts
 (matter identifiers, court jurisdictions, privilege dates) exist.
@@ -13,7 +13,7 @@ AgentMem features map directly to legal requirements:
 
   Point-in-time recall (as_of=privilege_date)
     → FRCP Rule 34 eDiscovery: reproduce exactly what the agent knew before the
-      privilege cutoff — without contamination from documents produced after cutoff
+      privilege cutoff - without contamination from documents produced after cutoff
 
   Hash chain (/v1/admin/audit/verify)
     → Chain-of-custody documentation: proves no facts were altered post-deposition
@@ -84,7 +84,7 @@ class LegalAdapter:
 
     - Privilege cutoff reconstruction
         recall(as_of=privilege_date) returns exactly what the agent knew before
-        the cutoff — without contamination from documents produced later in
+        the cutoff - without contamination from documents produced later in
         discovery. This is a direct FRCP Rule 34 / eDiscovery requirement.
 
     - Chinese wall enforcement
@@ -99,7 +99,7 @@ class LegalAdapter:
 
     - Expert witness contamination check
         POST /v1/backtest/check with simulation_as_of=<relevant_date> flags
-        any fact the agent possessed that wasn't available at that date —
+        any fact the agent possessed that wasn't available at that date -
         the same lookahead-bias detection used for quantitative finance.
     """
 
@@ -144,9 +144,9 @@ class LegalAdapter:
         Parameters
         ----------
         matter_id:
-            Any of: matter_id, case_id, docket_no — normalized to canonical form.
+            Any of: matter_id, case_id, docket_no - normalized to canonical form.
         claim_type:
-            Cause of action or charge type — lowercased for canonical matching.
+            Cause of action or charge type - lowercased for canonical matching.
         """
         from ...memory_service import get_structured_fact_history
 

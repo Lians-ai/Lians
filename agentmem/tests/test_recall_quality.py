@@ -5,7 +5,7 @@ Demonstrates AgentMem's advantages over naive retrieval approaches:
 
 1. Hybrid scoring beats pure-cosine: recency + importance + validity weight
    correctly surface current facts over stale ones.
-2. Supersession exclusion: stale facts get a 0.1Ã— validity penalty; pure
+2. Supersession exclusion: stale facts get a 0.1Ã - validity penalty; pure
    retrieval systems (mem0-style cosine search) return them at full rank.
 3. Temporal filtering: point-in-time recall returns the right revision.
    mem0 has no bitemporal model. Graphiti/Zep has temporal graph queries but
@@ -156,7 +156,7 @@ class TestHybridVsPureSemantic:
     async def test_supersession_penalty_prevents_stale_recall(self, db):
         """
         After supersession, the verbose old memory has higher cosine with the
-        query than the terse new memory.  Hybrid's 0.1Ã— validity multiplier
+        query than the terse new memory.  Hybrid's 0.1Ã - validity multiplier
         ensures the current fact wins.
 
         mem0-style pure cosine would return the stale memory at rank 1 â€”

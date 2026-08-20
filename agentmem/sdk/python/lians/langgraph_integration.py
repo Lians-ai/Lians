@@ -9,7 +9,7 @@ Install::
 
     pip install lians[langgraph]
 
-Usage — inject memories into a ReAct agent graph::
+Usage - inject memories into a ReAct agent graph::
 
     from langgraph.graph import StateGraph, END
     from lians import LocalLiansClient
@@ -31,9 +31,9 @@ Usage — inject memories into a ReAct agent graph::
     app = graph.compile()
 
     result = await app.ainvoke({"query": "NVDA guidance Q3 2026"})
-    # result["memories"] — list of MemoryOut dicts injected before the LLM
+    # result["memories"] - list of MemoryOut dicts injected before the LLM
 
-Usage — point-in-time compliance node::
+Usage - point-in-time compliance node::
 
     recall_audit_node = create_recall_node(
         client,
@@ -81,7 +81,7 @@ def create_recall_node(
         Maximum number of memories to return.
     as_of_key:
         Optional state key holding a ``datetime`` or ISO string for point-in-time
-        recall.  When set, only memories valid at that timestamp are returned —
+        recall.  When set, only memories valid at that timestamp are returned -
         the compliance / audit path.
     filters_key:
         Optional state key holding a metadata filter dict (e.g.
@@ -303,8 +303,8 @@ def create_batch_remember_node(
     """
     Create a LangGraph node that batch-stores a list of facts from state.
 
-    Reads ``state[memories_in_key]`` — a list of dicts, each matching the
-    ``MemoryAdd`` schema (``content``, ``event_time``, ``metadata``, etc.) —
+    Reads ``state[memories_in_key]`` - a list of dicts, each matching the
+    ``MemoryAdd`` schema (``content``, ``event_time``, ``metadata``, etc.) -
     and writes ``state[result_key]`` with the MemoryBatchResult dict.
 
     Useful for ingestion pipelines where an upstream node extracts multiple
@@ -350,7 +350,7 @@ def create_flush_node(
 
     Long-running graphs lose granular facts at the context cliff: the framework
     summarizes old turns and whatever the summary drops is gone. Insert this
-    node before your summarize/compact step (or on every loop iteration — it
+    node before your summarize/compact step (or on every loop iteration - it
     only fires past the threshold). It estimates token usage of
     ``state[messages_key]``; once usage crosses ``threshold × context_limit_
     tokens``, each not-yet-empty message with a role in ``roles`` is persisted,
@@ -402,7 +402,7 @@ def create_flush_node(
                 await client.add(**kwargs)
             else:
                 # Sync clients (e.g. LocalLiansClient) drive their own event
-                # loop internally — calling them on this thread would raise
+                # loop internally - calling them on this thread would raise
                 # "Cannot run the event loop while another loop is running".
                 await asyncio.get_event_loop().run_in_executor(
                     None, lambda kw=kwargs: client.add(**kw)

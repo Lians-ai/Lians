@@ -1,22 +1,22 @@
 """
-Deterministic interjection extraction — sub-turn durable facts.
+Deterministic interjection extraction - sub-turn durable facts.
 
 Conversational turns bury durable personal facts as mid-clause asides:
 "...their whole team flying into my studio in Portland and they won't all
 know each other", or "remind me I eat fish now" dropped mid-pricing-math.
-Stored whole, the turn's embedding dilutes the fact — recall misses it, and
+Stored whole, the turn's embedding dilutes the fact - recall misses it, and
 unkeyed supersession can never match a revision to it because turn-vs-turn
 cosine stays below the cue threshold (the agent_sim finding, 2026-07-10).
 
 When ``interjection_extraction_enabled`` is on, ``add_memory`` extracts such
 clauses and stores each as a *derived* memory alongside the raw turn:
 
-  * rule-based (clause splitting + cue lexicon) — deterministic, reproducible,
+  * rule-based (clause splitting + cue lexicon) - deterministic, reproducible,
     no model call, same posture as auto_metadata;
   * derived rows are provenance-tagged (``metadata._derived`` /
     ``metadata._parent``) and drop structured keys, so a clause can never trip
     keyed supersession against its own parent;
-  * the raw turn stays the auditable record — derived rows are a recall and
+  * the raw turn stays the auditable record - derived rows are a recall and
     supersession surface, closable and time-travelable like any memory.
 """
 from __future__ import annotations
@@ -37,7 +37,7 @@ _SPEAKER_RE = re.compile(r"^([A-Za-z][\w .'&-]{0,24}):\s+(.*)$", re.DOTALL)
 # every character (quadratic time).  The scanners below consume every input
 # character at most a constant number of times instead.
 _SENTENCE_ENDERS = frozenset(".!?…")
-_SPOKEN_DASHES = frozenset("—–")
+_SPOKEN_DASHES = frozenset("\u2014\u2013")
 _COMMA_CONNECTORS = ("so", "since", "because", "but", "although", "though", "anyway")
 
 
@@ -186,7 +186,7 @@ def _split_clauses(segment: str) -> list[str]:
     parts.append(segment[start:])
     return parts
 
-# Aside markers: the clause is an explicit "store this" interjection — trim to
+# Aside markers: the clause is an explicit "store this" interjection - trim to
 # the marker so the stored fact starts at the request, not the task chatter.
 _ASIDE_CUES = re.compile(
     r"\b(?:remind me|reminder (?:to|for) (?:myself|me)|note to self|"
@@ -230,7 +230,7 @@ def extract_interjections(content: str, max_clauses: int = _MAX_CLAUSES) -> list
     """Return durable-fact clauses buried in a conversational turn.
 
     Empty when the content is short/single-clause (the whole turn already IS
-    the fact — extraction would just duplicate it) or when no cue fires.
+    the fact - extraction would just duplicate it) or when no cue fires.
     """
     if not content:
         return []
@@ -249,7 +249,7 @@ def extract_interjections(content: str, max_clauses: int = _MAX_CLAUSES) -> list
     seen: set[str] = set()
     for clause, segment in clauses:
         # An aside marker trims the clause to the request itself ("remind me I
-        # eat fish now") — but a trailing marker ("my day rate is $900 by the
+        # eat fish now") - but a trailing marker ("my day rate is $900 by the
         # way") leaves nothing after it, so fall back to the fact-cue whole
         # clause in that case.
         aside = _ASIDE_CUES.search(clause)
@@ -262,11 +262,11 @@ def extract_interjections(content: str, max_clauses: int = _MAX_CLAUSES) -> list
         elif not _FACT_CUES.search(clause):
             continue
         if len(clause) < _MIN_LEN:
-            clause = segment  # cue fired but the split left a stub — keep its segment
+            clause = segment  # cue fired but the split left a stub - keep its segment
         if not (_MIN_LEN <= len(clause) <= _MAX_LEN):
             continue
         if len(clause) >= 0.8 * len(body):
-            continue  # not buried — the turn is essentially this clause already
+            continue  # not buried - the turn is essentially this clause already
         key = clause.lower()
         if key in seen:
             continue

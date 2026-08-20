@@ -24,7 +24,7 @@ resources:
   - hpa.yaml
   - pdb.yaml
   - networkpolicy.yaml
-  # migrate-job.yaml is intentionally excluded here — run it manually before
+  # migrate-job.yaml is intentionally excluded here - run it manually before
   # each deployment to avoid applying the job on every `kubectl apply -k`.
 
 # Image candidate. It becomes a supported install path only after this exact

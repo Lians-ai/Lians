@@ -196,7 +196,7 @@ async def update_key_scopes(
     "/api-keys/{key_id}/rotate",
     response_model=ApiKeyCreated,
     status_code=status.HTTP_201_CREATED,
-    summary="Rotate an API key — old key is revoked, new key is returned",
+    summary="Rotate an API key - old key is revoked, new key is returned",
 )
 async def rotate_key(
     key_id: UUID,
@@ -263,7 +263,7 @@ async def assign_barrier_group(
     will be tagged with group_name automatically.
 
     To grant compliance-officer access (see all memories), do NOT assign the
-    agent to any group — unassigned agents see everything in the namespace.
+    agent to any group - unassigned agents see everything in the namespace.
 
     Example barrier groups:  equity_desk, fixed_income, investment_banking
     """
@@ -369,7 +369,7 @@ async def get_retention(
 
     Default policy (auto-created on first fetch):
       - content_ttl_days: None (retain forever)
-      - audit_retention_days: 1825 (5 years — CFTC swap dealer minimum)
+      - audit_retention_days: 1825 (5 years - CFTC swap dealer minimum)
       - legal_hold: False
     """
     return await get_retention_policy(db, namespace)
@@ -444,7 +444,7 @@ async def verify_audit_chain(
 
     Returns `{"status": "ok"}` when the chain is intact.
     Returns `{"status": "tampered", "violations": [...]}` with details
-    identifying every broken link — suitable for regulatory examination.
+    identifying every broken link - suitable for regulatory examination.
 
     Rows written before migration 0006 (which added the hash columns) have
     NULL hashes and are skipped rather than reported as violations.
@@ -500,11 +500,11 @@ async def export_audit(
     chain-of-custody verdict.
 
     **Output fields per event:**
-    - `id`, `namespace`, `agent_id`, `op` — who did what
-    - `memory_id`, `content_hash` — which memory row was affected
-    - `payload` — operation-specific context (e.g. superseded_by, query_hash)
-    - `created_at` — when the event was ingested (UTC)
-    - `prev_hash`, `row_hash` — hash-chain links for independent verification
+    - `id`, `namespace`, `agent_id`, `op` - who did what
+    - `memory_id`, `content_hash` - which memory row was affected
+    - `payload` - operation-specific context (e.g. superseded_by, query_hash)
+    - `created_at` - when the event was ingested (UTC)
+    - `prev_hash`, `row_hash` - hash-chain links for independent verification
     """
     data = await export_audit_log(
         db,
@@ -532,7 +532,7 @@ async def get_billing(
     """
     Return the Stripe customer ID wired to *namespace*.
 
-    When stripe_customer_id is null the namespace is not metered — writes and
+    When stripe_customer_id is null the namespace is not metered - writes and
     recalls are not reported to Stripe regardless of STRIPE_API_KEY.
     """
     pol = await db.get(NamespacePolicy, namespace)
@@ -590,7 +590,7 @@ async def get_usage_summary(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Current-calendar-month write/recall counts for a namespace — powers the
+    Current-calendar-month write/recall counts for a namespace - powers the
     console's usage meters. Reads the append-only event_log (the same table the
     audit endpoints read), so no RLS context is required.
     """

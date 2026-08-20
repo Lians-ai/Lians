@@ -3,12 +3,12 @@ KMS (Key Management Service) integration for the master encryption key.
 
 Supports four providers, selected via the KMS_PROVIDER environment variable:
 
-  env    — master key loaded from MASTER_ENCRYPTION_KEY env var (default, dev-friendly)
-  aws    — AWS KMS envelope encryption: an AES-256 data key is stored encrypted in
+  env - master key loaded from MASTER_ENCRYPTION_KEY env var (default, dev-friendly)
+  aws - AWS KMS envelope encryption: an AES-256 data key is stored encrypted in
            KMS_AWS_ENCRYPTED_KEY (base64 CiphertextBlob); decrypted at startup.
-  azure  — Azure Key Vault Secrets: the 32-byte key is stored as a base64 secret
+  azure - Azure Key Vault Secrets: the 32-byte key is stored as a base64 secret
            at KMS_AZURE_VAULT_URL / KMS_AZURE_SECRET_NAME.
-  vault  — HashiCorp Vault KV v2: key is stored at KMS_VAULT_PATH under key
+  vault - HashiCorp Vault KV v2: key is stored at KMS_VAULT_PATH under key
            "master_key" (base64) in mount KMS_VAULT_MOUNT_POINT.
 
 Usage (FastAPI / any async app)
@@ -21,7 +21,7 @@ Usage (FastAPI / any async app)
 
 Usage (synchronous / local)
 ----------------------------
-    # For kms_provider="env" only — runs load synchronously at object creation.
+    # For kms_provider="env" only - runs load synchronously at object creation.
     # For cloud providers, wrap in asyncio.run() before creating the client.
 
 Key rotation
@@ -38,7 +38,7 @@ import logging
 
 logger = logging.getLogger("agentmem.kms")
 
-# Module-level cache — populated by load_master_key(), never written after that.
+# Module-level cache - populated by load_master_key(), never written after that.
 _master_key_cache: bytes | None = None
 
 
@@ -48,7 +48,7 @@ def get_master_key() -> bytes:
     """Return the cached 32-byte master encryption key.
 
     For kms_provider='env': falls back to reading the env var synchronously
-    if load_master_key() has not yet been called — safe for tests and scripts.
+    if load_master_key() has not yet been called - safe for tests and scripts.
 
     For all other providers: raises RuntimeError unless load_master_key() was
     called first (typically in the app lifespan / __init__ of the local client).
@@ -69,7 +69,7 @@ def get_master_key() -> bytes:
 async def load_master_key() -> None:
     """Fetch and cache the master encryption key from the configured KMS provider.
 
-    Idempotent — subsequent calls are no-ops once the key is cached.
+    Idempotent - subsequent calls are no-ops once the key is cached.
     Call once in the application lifespan / client __init__.
     """
     global _master_key_cache
@@ -85,7 +85,7 @@ async def load_master_key() -> None:
 
 
 def _reset_cache() -> None:
-    """Clear the cached master key — for testing only."""
+    """Clear the cached master key - for testing only."""
     global _master_key_cache
     _master_key_cache = None
 

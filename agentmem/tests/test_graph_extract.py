@@ -84,7 +84,7 @@ async def test_extract_writes_edges_and_path_connects(client):
     assert ("ClientX", "adverse_to", "PartyY") in rels
     assert len(body["edges"]) == 2
 
-    # The extracted edges are real graph edges — COI path resolves.
+    # The extracted edges are real graph edges - COI path resolves.
     p = await client.get("/v1/graph/path", headers=_h(),
                         params={"src": "Attorney", "dst": "PartyY", "agent_id": AGENT})
     assert p.status_code == 200

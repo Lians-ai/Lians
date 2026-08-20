@@ -18,7 +18,7 @@
     { "type": "panel", "id": "piechart", "name": "Pie chart", "version": "" }
   ],
   "annotations": { "list": [] },
-  "description": "AgentMem — financial-grade AI memory layer. Write path, recall path, conflict queue, and compliance erasure.",
+  "description": "AgentMem - financial-grade AI memory layer. Write path, recall path, conflict queue, and compliance erasure.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -92,7 +92,7 @@
           "refId": "C"
         }
       ],
-      "title": "add_memory() latency — p50 / p90 / p99",
+      "title": "add_memory() latency - p50 / p90 / p99",
       "type": "timeseries"
     },
 
@@ -195,7 +195,7 @@
           "refId": "C"
         }
       ],
-      "title": "recall_memories() latency — p50 / p90 / p99",
+      "title": "recall_memories() latency - p50 / p90 / p99",
       "type": "timeseries"
     },
 
@@ -408,7 +408,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 },
       "id": 103,
-      "title": "Compliance — GDPR / CCPA Erasure",
+      "title": "Compliance - GDPR / CCPA Erasure",
       "type": "row"
     },
 
@@ -429,13 +429,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(increase(agentmem_erasure_requests_total{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace)",
-          "legendFormat": "Erasure requests — {{namespace}}",
+          "legendFormat": "Erasure requests - {{namespace}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "expr": "sum(increase(agentmem_memories_erased_total{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace)",
-          "legendFormat": "Records crypto-shredded — {{namespace}}",
+          "legendFormat": "Records crypto-shredded - {{namespace}}",
           "refId": "B"
         }
       ],
@@ -552,7 +552,7 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "AgentMem — Financial AI Memory",
+  "title": "AgentMem - Financial AI Memory",
   "uid": "agentmem-financial-v1",
   "version": 1
 }

@@ -1,5 +1,5 @@
 """
-Passthrough adapter — domain-agnostic default for non-financial verticals.
+Passthrough adapter - domain-agnostic default for non-financial verticals.
 
 Use DOMAIN_ADAPTER=passthrough when deploying AgentMem for a domain where
 you haven't yet written a custom adapter.  structured_keys defaults to an

@@ -196,7 +196,14 @@ def test_task_contract_moves_between_mcp_clients_and_gates_completion(tmp_path):
         {
             "task_id": "cross-agent",
             "summary": "The launcher passed",
-            "evidence": [{"criterion_id": "criterion-1", "evidence": "Exit code 0"}],
+            "evidence": [
+                {
+                    "criterion_id": "criterion-1",
+                    "evidence": "Exit code 0",
+                    "trust_class": "measured_local",
+                    "source": "launcher process",
+                }
+            ],
             "project_root": project_root,
             "client": "codex",
             "decisions": [
@@ -210,7 +217,11 @@ def test_task_contract_moves_between_mcp_clients_and_gates_completion(tmp_path):
         },
     )
     assert checkpoint["structuredContent"]["assessment"]["missing_criteria"] == [
-        "criterion-2"
+        "criterion-1",
+        "criterion-2",
+    ]
+    assert checkpoint["structuredContent"]["assessment"]["untrusted_criteria"] == [
+        "criterion-1"
     ]
 
     context = _call(
@@ -219,7 +230,7 @@ def test_task_contract_moves_between_mcp_clients_and_gates_completion(tmp_path):
         "task_context",
         {"task_id": "cross-agent", "project_root": project_root, "client": "claude"},
     )
-    assert "do not claim completion" in context["content"][0]["text"]
+    assert "do not claim readiness" in context["content"][0]["text"]
     assert context["structuredContent"]["receipt"]["signature"]["algorithm"] == "Ed25519"
 
     continued = _call(

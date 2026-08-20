@@ -17,10 +17,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # Embeddings
-    # "voyage"               — Voyage AI (best finance quality, requires VOYAGE_API_KEY)
-    # "openai"               — OpenAI text-embedding-3-small (dev fallback, requires OPENAI_API_KEY)
-    # "sentence-transformers" — fully self-hosted, no external API calls (requires pip install agentmem[local])
-    # "local"                — deterministic hash-projection for unit tests only
+    # "voyage" - Voyage AI (best finance quality, requires VOYAGE_API_KEY)
+    # "openai" - OpenAI text-embedding-3-small (dev fallback, requires OPENAI_API_KEY)
+    # "sentence-transformers" - fully self-hosted, no external API calls (requires pip install agentmem[local])
+    # "local" - deterministic hash-projection for unit tests only
     embedding_provider: str = "local"
     voyage_api_key: str = ""
     openai_api_key: str = ""
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # arctic-embed-l-v2.0 replaced bge-large-en-v1.5 as the default after
     # scoring +10pts evidence retrieval on LOCOMO (82.4% vs 72.5% hit@10) at
     # the same dimensionality; existing stores keep working by pinning the
-    # old model via SENTENCE_TRANSFORMER_MODEL — embeddings from different
+    # old model via SENTENCE_TRANSFORMER_MODEL - embeddings from different
     # models never mix in one store.
     sentence_transformer_model: str = "Snowflake/snowflake-arctic-embed-l-v2.0"
     # Immutable Hugging Face commit for production builds. Blank remains useful
@@ -48,11 +48,11 @@ class Settings(BaseSettings):
     evidence_signing_private_key: str = ""
     evidence_signing_key_id: str = "lians-local"
 
-    # KMS provider — controls how the master_encryption_key is fetched at startup
-    # "env"   — read MASTER_ENCRYPTION_KEY env var (default; dev-friendly)
-    # "aws"   — AWS KMS envelope decryption (requires boto3)
-    # "azure" — Azure Key Vault Secrets (requires azure-keyvault-secrets + azure-identity)
-    # "vault" — HashiCorp Vault KV v2 (requires hvac)
+    # KMS provider - controls how the master_encryption_key is fetched at startup
+    # "env" - read MASTER_ENCRYPTION_KEY env var (default; dev-friendly)
+    # "aws" - AWS KMS envelope decryption (requires boto3)
+    # "azure" - Azure Key Vault Secrets (requires azure-keyvault-secrets + azure-identity)
+    # "vault" - HashiCorp Vault KV v2 (requires hvac)
     kms_provider: str = "env"
 
     # AWS KMS settings (used when kms_provider="aws")
@@ -153,7 +153,7 @@ class Settings(BaseSettings):
     # Recall hot cache (Redis)
     recall_cache_enabled: bool = True
     recall_cache_ttl_seconds: int = 60
-    # Supersession review queue — supersessions below this confidence are flagged for review
+    # Supersession review queue - supersessions below this confidence are flagged for review
     supersession_review_threshold: float = 0.75
 
     # Logging
@@ -177,19 +177,19 @@ class Settings(BaseSettings):
     durable_job_worker_mode: str = "embedded"  # embedded | external | disabled
     durable_job_poll_seconds: float = 1.0
 
-    # Stripe usage metering — optional; metering is silently disabled when api_key is empty.
+    # Stripe usage metering - optional; metering is silently disabled when api_key is empty.
     # Requires pip install agentmem[billing] (stripe>=7.0.0).
     # Set stripe_customer_id per namespace via PUT /v1/admin/billing/{namespace}.
     stripe_api_key: str = ""
     stripe_meter_write_event: str = "agentmem_memory_write"
     stripe_meter_recall_event: str = "agentmem_memory_recall"
 
-    # CORS — comma-separated list of allowed origins for browser clients.
+    # CORS - comma-separated list of allowed origins for browser clients.
     # Use "*" for open-access demo instances.  In production, list explicit origins,
     # e.g. "https://app.example.com,https://admin.example.com".
     cors_origins: str = "*"
 
-    # Air-gapped mode — guarantees no customer data leaves the deployment boundary.
+    # Air-gapped mode - guarantees no customer data leaves the deployment boundary.
     # When True, startup validation enforces:
     #   1. EMBEDDING_PROVIDER must be "sentence-transformers" or "local"
     #   2. SUPERSESSION_LLM_STAGE must be False
@@ -198,7 +198,7 @@ class Settings(BaseSettings):
 
     # ── SIEM audit streaming ──────────────────────────────────────────────────
     # When set, every audit-chain event is forwarded (fire-and-forget) to this
-    # HTTP collector — e.g. a Splunk HEC URL or a Datadog/Elastic intake. The
+    # HTTP collector - e.g. a Splunk HEC URL or a Datadog/Elastic intake. The
     # token, if set, is sent as `Authorization: <siem_token>`. Empty = disabled.
     siem_url: str = ""
     siem_token: str = ""
@@ -209,13 +209,13 @@ class Settings(BaseSettings):
     # ── Auto-metadata extraction (auto-supersession parity) ───────────────────
     # When True, a memory ingested WITHOUT any structured keys has them derived
     # from its content at write time (via the active domain adapter) so the
-    # deterministic keyed-supersession fast path can fire — the mem0/Zep-style
+    # deterministic keyed-supersession fast path can fire - the mem0/Zep-style
     # "just send text and we work out what it supersedes" convenience.
     #
     # Kept in the regulated-determinism posture: the extractor is rule-based by
     # default (auditable, reproducible, no network), caller-supplied keys are
     # never overridden, and every auto-derived key is provenance-tagged under
-    # metadata._auto_meta.  Off by default — existing deployments keep
+    # metadata._auto_meta.  Off by default - existing deployments keep
     # caller-only keying and identical behavior.
     auto_metadata_enabled: bool = False
     # Optional LLM fallback used only when the deterministic extractor finds
@@ -248,9 +248,9 @@ class Settings(BaseSettings):
     recall_reconstruct_budget_ms: float = 2000.0
 
     # ── Memory admission control ──────────────────────────────────────────────
-    # off     — no admission evaluation
-    # monitor — evaluate + tag + audit, always admit (default; observe first)
-    # enforce — reject injection/blocked-source writes; hold PII/PHI/MNPI for review
+    # off - no admission evaluation
+    # monitor - evaluate + tag + audit, always admit (default; observe first)
+    # enforce - reject injection/blocked-source writes; hold PII/PHI/MNPI for review
     admission_mode: str = "monitor"
     # Comma-separated source labels that are never admitted (e.g. "scraped,unverified").
     admission_blocked_sources: str = ""
@@ -259,7 +259,7 @@ class Settings(BaseSettings):
     # Set true when the deployment backs the audit log with write-once-read-many
     # storage (e.g. S3 Object Lock in Compliance mode + app DB role with no
     # UPDATE/DELETE on event_log). Surfaced via /v1/compliance/worm for examiners.
-    # See docs/worm-storage.md — this asserts intent; physical WORM is a deploy control.
+    # See docs/worm-storage.md - this asserts intent; physical WORM is a deploy control.
     worm_mode: bool = False
 
     # ── Performance roadmap (Changes 3 / 7 / 8) ───────────────────────────────
@@ -277,7 +277,7 @@ class Settings(BaseSettings):
     # into Merkle windows before the serial chain anchor is written, reducing
     # write serialization to one DB row per window.  Set to False to use the
     # classic per-event serial chain (suitable for very low write rates).
-    merkle_batch_enabled: bool = False  # opt-in — won't break existing chain
+    merkle_batch_enabled: bool = False  # opt-in - won't break existing chain
     merkle_batch_size: int = 64         # events per Merkle window
 
     # Change 9: Postgres RLS barrier enforcement.
@@ -302,19 +302,19 @@ class Settings(BaseSettings):
     # Active domain adapter.  Controls entity normalization and which metadata
     # keys participate in the keyed supersession fast path.
     #
-    # "finance"     — financial entities: ticker/ISIN/CUSIP normalization,
+    # "finance" - financial entities: ticker/ISIN/CUSIP normalization,
     #                 structured keys: ticker, metric, entity, isin, cusip,
     #                 instrument, field.  Default for financial deployments.
-    # "healthcare"  — clinical entities: ICD-10 normalization, NPI validation,
+    # "healthcare" - clinical entities: ICD-10 normalization, NPI validation,
     #                 medication name canonicalization.
     #                 structured keys: patient_id, condition, medication,
     #                 encounter_id, provider_id, procedure_code.
     #                 Requires HIPAA BAA before processing real PHI.
-    # "legal"       — legal entities: matter ID / docket normalization,
+    # "legal" - legal entities: matter ID / docket normalization,
     #                 jurisdiction abbreviation, claim type canonicalization.
     #                 structured keys: matter_id, jurisdiction, claim_type,
     #                 party_id, privilege_date, document_type.
-    # "passthrough" — no normalization, no structured keys; pure semantic
+    # "passthrough" - no normalization, no structured keys; pure semantic
     #                 supersession only.  Starting point for custom verticals.
     #
     # Custom adapters can be registered via adapters.register_adapter() before

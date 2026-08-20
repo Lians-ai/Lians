@@ -1,9 +1,9 @@
 """
-Offline LOCOMO ranking lab — replay recall experiments without re-ingesting.
+Offline LOCOMO ranking lab - replay recall experiments without re-ingesting.
 
 The checkpointed eval runs (``locomo_eval.py --db results/locomo_dbs/conv_N.sqlite``)
 leave behind every turn's bge embedding. On SQLite the ANN prefetch always
-falls back to a full scan, so the live candidate pool is the entire corpus —
+falls back to a full scan, so the live candidate pool is the entire corpus -
 which means top-k selection can be reproduced *exactly* offline from the
 stored vectors plus one batched pass of query embeddings. That turns a
 30-minute eval run into a ~5-second numpy experiment, so ranking ideas can be
@@ -13,7 +13,7 @@ Fidelity notes (why the replay is exact, not approximate):
   - candidates = all live_facts rows (SQLite has no pgvector; the ANN
     order_by raises and hybrid_recall scans everything);
   - recency decay is ~2**-38 on this 2023 corpus and importance is the
-    uniform default 0.5 — both are additive constants, invariant under both
+    uniform default 0.5 - both are additive constants, invariant under both
     sorting and MMR's min-max normalization, so they are omitted;
   - BM25 and MMR are re-implemented bit-for-bit (tokenizer is imported from
     ``src.lians.ranking``); ``--validate`` checks replayed hit/all flags
@@ -364,7 +364,7 @@ def experiments(nums: list[int]) -> None:
         per = "  ".join(f"{cats[c]} {h:.0%}/{a:.0%}" for c, (_, h, a) in r["by_cat"].items())
         print(f"{name:<44} hit@10 {r['hit']:.1%}  all@10 {r['all']:.1%}   [{per}]")
 
-    print(f"— replaying {len(nums)} convs, n={run_config(convs)['n']} headline questions —\n")
+    print(f" - replaying {len(nums)} convs, n={run_config(convs)['n']} headline questions - \n")
 
     show("baseline replica (raw, .5/.2, no MMR)",
          run_config(convs, prefix=False, mmr_lam=1.0))
@@ -465,7 +465,7 @@ def rerank_probe(nums: list[int], prefetch: int = 50,
     for n in nums:
         conv = Conv(n)
         sem_all = conv.q_pre @ conv.doc_embs.T
-        # query embedding = avg(prefixed, raw) — current best variant
+        # query embedding = avg(prefixed, raw) - current best variant
         q_avg = conv.q_pre + conv.q_raw
         q_avg = q_avg / np.linalg.norm(q_avg, axis=1, keepdims=True)
         sem_all = q_avg @ conv.doc_embs.T

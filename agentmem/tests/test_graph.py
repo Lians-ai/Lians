@@ -1,5 +1,5 @@
 """
-Relationship-graph layer tests — bitemporal edges, traversal, point-in-time,
+Relationship-graph layer tests - bitemporal edges, traversal, point-in-time,
 and graph-proximity reranking. Exercised against the real LocalLiansClient.
 """
 import sys

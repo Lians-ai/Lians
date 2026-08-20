@@ -7,7 +7,7 @@ from benchmarks.task_contract_latency import run_benchmark as run_latency
 def test_task_contract_adversarial_benchmark(tmp_path) -> None:
     result = run_correctness(tmp_path / "correctness.sqlite3")
 
-    assert result["passed"] == result["total"] == 8
+    assert result["passed"] == result["total"] == 9
     assert result["accuracy"] == 1.0
     assert "does not measure semantic" in result["claim_boundary"]
 

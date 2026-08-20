@@ -25,10 +25,10 @@ Usage::
 
 Four tools are returned:
 
-- ``remember_fact``   — store a financial fact with its event timestamp
-- ``recall_facts``    — retrieve current memories by semantic search
-- ``recall_facts_at`` — retrieve memories valid at a specific past date (compliance)
-- ``flush_memory``    — batch-persist durable facts before context compaction
+- ``remember_fact`` - store a financial fact with its event timestamp
+- ``recall_facts`` - retrieve current memories by semantic search
+- ``recall_facts_at`` - retrieve memories valid at a specific past date (compliance)
+- ``flush_memory`` - batch-persist durable facts before context compaction
 
 The ``recall_facts_at`` tool queries memories as they were at a specific past date.
 mem0 has no bitemporal model. Graphiti/Zep has temporal graph queries but no
@@ -56,7 +56,7 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
     Parameters
     ----------
     client:
-        Any synchronous Lians client — ``LocalLiansClient`` or
+        Any synchronous Lians client - ``LocalLiansClient`` or
         ``LiansClient``.  (CrewAI runs tools synchronously.)
     agent_id:
         The agent namespace to read/write memories under.
@@ -98,7 +98,7 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
         event_time_iso: str = Field(
             ...,
             description=(
-                "ISO 8601 timestamp for when the event occurred — NOT the current time. "
+                "ISO 8601 timestamp for when the event occurred - NOT the current time. "
                 "Example: '2026-05-10T00:00:00Z' for an earnings call on May 10."
             ),
         )
@@ -122,7 +122,7 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
         description: str = (
             "Store a financial fact, observation, or decision in Lians persistent memory. "
             "Always use the event_time_iso for when the event *occurred*, not when you are "
-            "recording it.  Add ticker/metric metadata when relevant — it enables precision "
+            "recording it.  Add ticker/metric metadata when relevant - it enables precision "
             "recall later without semantic search ambiguity."
         )
         args_schema: type[BaseModel] = _RememberInput
@@ -163,7 +163,7 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
         name: str = "recall_facts"
         description: str = (
             "Retrieve the most relevant *current* financial facts from Lians. "
-            "Superseded facts are automatically excluded — only the latest valid value "
+            "Superseded facts are automatically excluded - only the latest valid value "
             "is returned.  Use this before answering any question that may rely on stored "
             "financial data to avoid hallucinating stale figures."
         )
@@ -227,8 +227,8 @@ def build_crewai_tools(client: Any, agent_id: str) -> list:
         description: str = (
             "Persist a batch of durable facts NOW, before the conversation is "
             "summarized or truncated. Anything not written here may be lost when "
-            "older turns are compacted away. Extract the facts worth keeping — "
-            "decisions, constraints, client instructions, corrections, commitments — "
+            "older turns are compacted away. Extract the facts worth keeping - "
+            "decisions, constraints, client instructions, corrections, commitments - "
             "not chit-chat. Each write is tagged as a pre-compaction flush in the "
             "tamper-evident audit chain."
         )

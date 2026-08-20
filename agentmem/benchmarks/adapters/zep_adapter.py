@@ -15,8 +15,8 @@ Capability map (each cell justified against the public API):
                                         (sets invalid_at); search prefers valid
                                         edges. Strong, but LLM-extraction-dependent,
                                         not a deterministic keyed supersession.
-  point_in_time_reconstruction PARTIAL  Bitemporal edges support as-of filtering —
-                                        Zep's headline strength — but the SDK exposes
+  point_in_time_reconstruction PARTIAL  Bitemporal edges support as-of filtering -
+                                        Zep's headline strength - but the SDK exposes
                                         it as temporal edge filtering, not a single
                                         `recall_at` call.
   erasure_proof                PARTIAL  delete removes nodes/edges, but there is no
@@ -49,7 +49,7 @@ CAPABILITIES = {
 def live_adapter():
     """
     Prefer executing the self-hostable engine (Graphiti OSS, its default
-    OpenAI configuration on embedded Kuzu) — that is the apples-to-apples
+    OpenAI configuration on embedded Kuzu) - that is the apples-to-apples
     open-deployment comparison. Fall back to the Zep Cloud API if only
     ZEP_API_KEY is present. Returns (adapter_or_None, mode_description).
     """

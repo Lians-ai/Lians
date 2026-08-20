@@ -1,5 +1,5 @@
 """
-WORM posture endpoint — reports the SEC 17a-4 immutability posture.
+WORM posture endpoint - reports the SEC 17a-4 immutability posture.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ async def test_worm_posture_default(client):
     r = await client.get("/v1/compliance/worm", headers=_h())
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["audit_chain_append_only"] is True       # always — Lians never mutates event_log
+    assert body["audit_chain_append_only"] is True       # always - Lians never mutates event_log
     assert body["audit_chain_status"] in ("ok", "unchecked")
     assert body["worm_mode"] is False                     # not attested by default
     assert body["physical_worm_attested"] is False
@@ -61,6 +61,6 @@ async def test_worm_posture_attested(client, monkeypatch):
     assert body["worm_mode"] is True
     assert body["physical_worm_attested"] is True
     # Attested wording must stay factual: controls attested, compliance is
-    # the operator's — the API must never self-assert "compliant".
+    # the operator's - the API must never self-assert "compliant".
     assert "controls attested" in body["recommendation"]
     assert "compliant posture" not in body["recommendation"]

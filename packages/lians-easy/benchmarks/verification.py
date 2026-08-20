@@ -74,16 +74,26 @@ def _task(
         constraints=["No credentials are exposed"],
         task_id=task_id,
     )
-    tasks.checkpoint(
+    tasks._checkpoint_trusted(
         task_id,
         "Implementation and verification evidence recorded.",
+        issuer="local_verification",
         project_id=project.id,
-        evidence=[{"criterion_id": "criterion-1", "evidence": "Changed implementation"}],
+        evidence=[
+            {
+                "criterion_id": "criterion-1",
+                "evidence": "Changed implementation",
+                "trust_class": "measured_local",
+                "source": "benchmark repository inspection",
+            }
+        ],
         constraint_checks=[
             {
                 "constraint_id": "constraint-1",
                 "status": "passed",
                 "evidence": "Credential review reported clear",
+                "trust_class": "measured_local",
+                "source": "benchmark credential scan",
             }
         ],
     )

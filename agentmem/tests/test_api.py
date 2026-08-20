@@ -383,7 +383,7 @@ async def test_erased_memory_never_reaches_recall(client):
     """
     Regression (found in live limit-testing 2026-07-02): erase nulled the
     ciphertext but left the live_facts read-model row, so present-time recall
-    returned the erased memory as a null-content tombstone — and the
+    returned the erased memory as a null-content tombstone - and the
     content-derived embedding plus plaintext metadata survived on the row.
     """
     add = await client.post("/v1/memories", headers=_h(), json={

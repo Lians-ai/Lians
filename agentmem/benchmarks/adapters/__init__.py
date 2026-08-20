@@ -15,7 +15,7 @@ Lians implements all six natively (see sdk/python LocalLiansClient).
 mem0 and Zep do NOT expose all six. Their adapters below map each primitive to the
 *real* public SDK call where one exists, and raise `CapabilityAbsent` where the
 product has no such primitive. A thrown invariant is scored as a failure by the
-harness — which is the literal truth: there is no API to call.
+harness - which is the literal truth: there is no API to call.
 
 To run a competitor LIVE, install its SDK and export its key; the adapter will use
 the real client. With no SDK/key present, the adapter still declares its capability
@@ -29,9 +29,9 @@ class CapabilityAbsent(NotImplementedError):
 
 
 # Per-invariant capability, derived from each product's public API surface.
-#   "pass"    — a real primitive satisfies the invariant
-#   "partial" — best-effort / non-deterministic / no proof artifact
-#   "absent"  — no primitive exists; the call cannot be made
+#   "pass" - a real primitive satisfies the invariant
+#   "partial" - best-effort / non-deterministic / no proof artifact
+#   "absent" - no primitive exists; the call cannot be made
 PASS, PARTIAL, ABSENT = "pass", "partial", "absent"
 
 # Numeric weight per capability state for the comparison score.

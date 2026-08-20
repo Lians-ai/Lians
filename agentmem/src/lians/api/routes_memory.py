@@ -224,7 +224,7 @@ async def create_memory(
             "risk_tags": decision.risk_tags, "reasons": decision.reasons,
         })
 
-    # admitted — record any risk findings on the memory for downstream visibility
+    # admitted - record any risk findings on the memory for downstream visibility
     return await add_memory_idempotent(
         db, auth.namespace, req, idempotency_key, barrier_override=auth.barrier_group,
     )
@@ -334,7 +334,7 @@ async def memory_lineage(
     "What did the system believe about AAPL earnings guidance on 2026-03-01,
     and how did that belief evolve before and after that date?"
 
-    The queried memory may be anywhere in the chain — root, tip, or middle.
+    The queried memory may be anywhere in the chain - root, tip, or middle.
     ``nodes`` are always returned oldest-first.
     """
     auth.require("read")
@@ -356,11 +356,11 @@ async def fact_history(
     Return every recorded version of a structured fact, ordered by event_time ascending.
 
     This is the time-series complement to lineage: instead of navigating from a
-    known memory_id, the caller queries by what they know — the ticker and metric
+    known memory_id, the caller queries by what they know - the ticker and metric
     they care about.  Superseded versions are included so analysts can see how a
     fact evolved.
 
-    Entity normalization is applied automatically — passing 'Apple Inc.',
+    Entity normalization is applied automatically - passing 'Apple Inc.',
     'US0378331005' (ISIN), or '037833100' (CUSIP) all return the same AAPL series.
 
     Example use case: ``GET /v1/facts/history?ticker=AAPL&metric=eps&agent_id=equity-desk``
@@ -428,7 +428,7 @@ async def context(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Build a token-budgeted, ready-to-inject context block from recall — one call
+    Build a token-budgeted, ready-to-inject context block from recall - one call
     to get the "memory context" string for a prompt. Facts are bitemporal, so the
     block never contains stale revisions; pass ``as_of`` for point-in-time context,
     ``mmr: true`` for diversity reranking, and ``max_tokens`` to cap the budget.

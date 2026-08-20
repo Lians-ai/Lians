@@ -1,5 +1,5 @@
 ﻿/**
- * AgentMem TypeScript SDK — async HTTP client for the REST API.
+ * AgentMem TypeScript SDK - async HTTP client for the REST API.
  *
  * Lians is a decision evidence and reconstruction layer that provides:
  *  - Cross-platform Decision Envelopes that bind memory, traces, policy
@@ -466,7 +466,7 @@ export class LiansClient {
   }
 
   /**
-   * Confirm a supersession — the engine was correct.
+   * Confirm a supersession - the engine was correct.
    * Writes an immutable audit event; the superseded memory remains closed.
    */
   confirmSupersession(memoryId: string, reviewerNote?: string): Promise<unknown> {
@@ -476,7 +476,7 @@ export class LiansClient {
   }
 
   /**
-   * Reject a supersession — the engine was wrong.
+   * Reject a supersession - the engine was wrong.
    * Restores the old memory as currently valid (valid_to = NULL) and writes an
    * immutable audit event. Both memories are now treated as additive.
    */
@@ -507,7 +507,7 @@ export class LiansClient {
 
   /**
    * Register a webhook endpoint.
-   * The returned `secret` is shown exactly once — store it to verify signatures.
+   * The returned `secret` is shown exactly once - store it to verify signatures.
    * Every delivery is HMAC-SHA256-signed: `X-Lians-Signature: sha256=<hex>`
    */
   registerWebhook(req: WebhookRegisterRequest): Promise<WebhookRegisterResult> {
@@ -546,7 +546,7 @@ export class LiansClient {
    * analysts already know: the ticker and metric.  Superseded versions are
    * included so you can see how a fact evolved over time.
    *
-   * Entity normalization is automatic — 'Apple Inc.', 'US0378331005' (ISIN),
+   * Entity normalization is automatic - 'Apple Inc.', 'US0378331005' (ISIN),
    * '037833100' (CUSIP), and 'AAPL' all resolve to the same fact series.
    *
    * @example
@@ -572,7 +572,7 @@ export class LiansClient {
 
   /**
    * Reconstruct the complete knowledge state of an agent at a specific point
-   * in time. Returns every fact that was valid at `as_of` — exhaustive, no
+   * in time. Returns every fact that was valid at `as_of` - exhaustive, no
    * relevance filter.
    *
    * This is the "audit reconstruction as a product surface" from SCALE.md §4:
@@ -598,8 +598,8 @@ export class LiansClient {
    *
    * Scans the agent's memory store and flags every fact the agent couldn't have
    * known at `simulation_as_of`. Returns two contamination types:
-   *   - `future_event`  — event_time > simulation_as_of (clear lookahead)
-   *   - `late_revision` — ingestion_time > simulation_as_of (subtle: the revised
+   *   - `future_event` - event_time > simulation_as_of (clear lookahead)
+   *   - `late_revision` - ingestion_time > simulation_as_of (subtle: the revised
    *     figure hadn't landed yet, even though the event is historical)
    *
    * `is_clean: true` is the proof a risk committee needs before trusting a
@@ -624,7 +624,7 @@ export class LiansClient {
    * Retrieve the cryptographic proof-of-erasure certificate for a data subject.
    *
    * The certificate proves: (1) N memories had their encrypted content permanently
-   * destroyed; (2) SHA-256 content_hashes are preserved — auditable but
+   * destroyed; (2) SHA-256 content_hashes are preserved - auditable but
    * unrecoverable; (3) the audit chain remained intact after erasure.
    *
    * Returns 404 if no erasure has been recorded for this subject.

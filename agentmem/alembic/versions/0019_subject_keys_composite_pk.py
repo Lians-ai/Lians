@@ -1,4 +1,4 @@
-"""Make subject_keys keyed by (namespace, subject_id) — cross-tenant isolation fix
+"""Make subject_keys keyed by (namespace, subject_id) - cross-tenant isolation fix
 
 Revision ID: 0019_subject_keys_composite_pk
 Revises: 0018_live_facts_namespace_rls
@@ -10,7 +10,7 @@ Bug
 only unique *within* a tenant (namespace). Two tenants that both use, say,
 ``subject_id="customer-42"`` therefore shared ONE AES data-encryption key:
 
-  * Tenant B's memory content was encrypted under a key created by Tenant A —
+  * Tenant B's memory content was encrypted under a key created by Tenant A -
     a crypto-layer breach of the information barrier the product sells.
   * A GDPR erase issued by Tenant A ran ``destroy_subject_key("customer-42")``
     against the single global row, crypto-shredding Tenant B's data and making

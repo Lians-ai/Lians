@@ -3,7 +3,7 @@ Diagnose the low LOCOMO evidence_hit rate: ingest one conversation into a
 persistent db, then answer three questions:
 
   1. How many of the ingested turns are actually retrievable at all?
-     (query each evidence turn by its own text — near-verbatim recall)
+     (query each evidence turn by its own text - near-verbatim recall)
   2. For failed questions, is the evidence memory stored but outranked,
      stored but validity-gated (superseded), or absent?
   3. Do retrieved memories carry dia_id metadata back out?

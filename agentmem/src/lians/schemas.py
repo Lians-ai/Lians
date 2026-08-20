@@ -33,7 +33,7 @@ class MemoryOut(BaseModel):
     content_hash: str
     erased_at: Optional[datetime]
     metadata: dict[str, Any]
-    # Relevance score (hybrid semantic+lexical fusion) — populated on recall
+    # Relevance score (hybrid semantic+lexical fusion) - populated on recall
     # responses only; None on write/snapshot surfaces. Additive for API
     # consumers that rank or threshold on similarity (e.g. the Memory Governor).
     score: Optional[float] = None
@@ -148,7 +148,7 @@ class RecallRequest(BaseModel):
     filters: dict[str, Any] = Field(default_factory=dict, max_length=100)
     # Attach each hit's temporally-adjacent neighbors (context_before/_after).
     # Measured on LongMemEval: answer-session retrieval coverage was ~100%
-    # while judged QA sat at 89% — the failures were an answerer misreading
+    # while judged QA sat at 89% - the failures were an answerer misreading
     # isolated fragments whose meaning lived in the adjacent turn.
     include_context: bool = False
     # ``adaptive`` keeps simple questions on the standard fast path and plans
@@ -665,7 +665,7 @@ class ApiKeyOut(BaseModel):
 
 
 class ApiKeyCreated(ApiKeyOut):
-    key: str  # plaintext raw key — returned ONCE at creation/rotation, never stored
+    key: str  # plaintext raw key - returned ONCE at creation/rotation, never stored
 
 
 class SupersessionResult(BaseModel):
@@ -674,7 +674,7 @@ class SupersessionResult(BaseModel):
     superseded_ids: list[UUID] = Field(default_factory=list)
     conflict_ids: list[UUID] = Field(default_factory=list)  # memories that CONTRADICTS_SAME_TIME
     # Out-of-order ingestion: an already-live fact with a LATER event_time makes
-    # the incoming memory historical on arrival — its validity window closes at
+    # the incoming memory historical on arrival - its validity window closes at
     # that fact's event_time instead of staying open alongside it.
     superseded_by_id: Optional[UUID] = None
     rationale: Optional[str] = None
@@ -790,7 +790,7 @@ class ConflictFlagOut(BaseModel):
     agent_id: str
     memory_a_id: UUID          # pre-existing memory
     memory_b_id: UUID          # newly ingested memory that triggered detection
-    memory_a_content: Optional[str]    # decrypted — None if erased
+    memory_a_content: Optional[str]    # decrypted - None if erased
     memory_b_content: Optional[str]
     memory_a_source: Optional[str]
     memory_b_source: Optional[str]
@@ -890,7 +890,7 @@ class KnowledgeSnapshot(BaseModel):
     """
     Complete knowledge state of an agent at a given point in time.
 
-    Unlike recall (which does vector search + ranking), this is exhaustive —
+    Unlike recall (which does vector search + ranking), this is exhaustive -
     every memory that was valid as of `as_of` is returned.  Use this for
     audit reconstruction: "show me everything the agent knew on 2025-03-14."
 
@@ -952,7 +952,7 @@ class ErasureCertificate(BaseModel):
 
     The certificate proves:
       1. N memories had their encrypted content destroyed on `erased_at`.
-      2. The SHA-256 content_hashes are preserved — the erasure is auditable
+      2. The SHA-256 content_hashes are preserved - the erasure is auditable
          but the content is unrecoverable.
       3. The audit chain remains intact after the erasure (chain_status = "ok").
       4. This certificate itself has a unique `certificate_id` for external
@@ -1093,7 +1093,7 @@ class ContextRequest(BaseModel):
     )
     mmr: bool = False                     # diversity reranking before assembly
     # Active resurfacing: open conflicts push to the top of every context block
-    # until adjudicated — an unresolved conflict must not silently age out.
+    # until adjudicated - an unresolved conflict must not silently age out.
     # Opt out per-call for surfaces where contested facts are handled elsewhere.
     surface_conflicts: bool = True
     max_conflicts: int = Field(default=5, ge=0, le=50)

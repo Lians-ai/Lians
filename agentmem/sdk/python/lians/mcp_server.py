@@ -1,5 +1,5 @@
 """
-Lians MCP server — exposes Lians memory tools over Model Context Protocol (stdio transport).
+Lians MCP server - exposes Lians memory tools over Model Context Protocol (stdio transport).
 
 Any MCP-compatible host (Claude Desktop, Cursor, VS Code with MCP, custom LLM servers)
 can call Lians directly without a custom SDK adapter after one-time configuration.
@@ -7,7 +7,7 @@ can call Lians directly without a custom SDK adapter after one-time configuratio
 Install:
     pip install lians-sdk[mcp]
 
-Run (stdio transport — standard for local LLM integration):
+Run (stdio transport - standard for local LLM integration):
     lians-mcp
 
 Environment variables:
@@ -657,7 +657,7 @@ def _build_server() -> Any:
         else (
             "Store a financial fact, observation, or decision in persistent memory. "
             "Always provide event_time_iso as when the event occurred, not now. "
-            "Add ticker/metric/entity metadata for precise supersession detection — "
+            "Add ticker/metric/entity metadata for precise supersession detection - "
             "this lets Lians automatically replace stale guidance numbers."
         )
     )
@@ -700,7 +700,7 @@ def _build_server() -> Any:
         if compact_schema
         else (
             "Retrieve token-bounded context from the most relevant CURRENT memories. "
-            "Returns only presently-valid facts — superseded facts are excluded at the DB layer. "
+            "Returns only presently-valid facts - superseded facts are excluded at the DB layer. "
             "Call this before answering any question that may be in memory. "
             "Use filters={ticker: NVDA} to narrow to a specific instrument."
         )
@@ -837,7 +837,7 @@ def _build_server() -> Any:
                 description=(
                     "Retrieve memories that were valid at a specific past point in time. "
                     "Use for compliance and audit: 'What guidance did we have on 2026-03-01?' "
-                    "Later superseding updates are excluded — this is true point-in-time recall. "
+                    "Later superseding updates are excluded - this is true point-in-time recall. "
                     "mem0 and Zep have no bitemporal model with compliance audit stack."
                 ),
                 inputSchema={
@@ -896,7 +896,7 @@ def _build_server() -> Any:
             Tool(
                 name="list_conflicts",
                 description=(
-                    "List open conflict flags — cases where two sources reported different values "
+                    "List open conflict flags - cases where two sources reported different values "
                     "for the same fact at the same event_time. Use this to surface data quality "
                     "issues before they affect decisions. Returns up to 20 open conflicts "
                     "with both memory contents so a human or LLM can decide which source to trust."
@@ -949,7 +949,7 @@ def _build_server() -> Any:
                 name="fact_history",
                 description=(
                     "Return matches from a bounded, ordered structured-fact scan. "
-                    "Query by ticker + metric — ideal for time-series views like "
+                    "Query by ticker + metric - ideal for time-series views like "
                     "'show me how AAPL EPS evolved over the last four quarters'. "
                     "Superseded versions are included when found within the disclosed scan. "
                     "Entity normalization: 'Apple Inc.', ISIN 'US0378331005', and 'AAPL' "
@@ -1146,7 +1146,7 @@ def _build_server() -> Any:
                 memories = result.get("memories", [])
                 trail = result.get("event_trail", [])
                 lines = [
-                    f"State as of {arguments['as_of_iso'][:10]} — {len(memories)} memories:",
+                    f"State as of {arguments['as_of_iso'][:10]} - {len(memories)} memories:",
                     _fmt_memories(memories),
                     f"\nAudit trail: {len(trail)} events",
                 ]
@@ -1242,14 +1242,14 @@ def _build_server() -> Any:
                         TextContent(
                             type="text",
                             text=(
-                                f"CLEAN RECORDED SCOPE — {checked} visible memories checked; "
+                                f"CLEAN RECORDED SCOPE - {checked} visible memories checked; "
                                 "this does not attest to unrecorded external inputs."
                             ),
                         )
                     ]
                 lines = [
                     (
-                        f"CONTAMINATED — showing {len(flags)} of {flags_total} flag(s) "
+                        f"CONTAMINATED - showing {len(flags)} of {flags_total} flag(s) "
                         f"out of {checked} memories ({rate:.1%} contamination rate):"
                     ),
                 ]

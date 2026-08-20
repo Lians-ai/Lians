@@ -45,10 +45,10 @@ def _ensure_src_importable() -> None:
     """
     Make ``from src.lians.xxx import ...`` resolve in both environments:
 
-    1. **Monorepo checkout** — this file lives at
+    1. **Monorepo checkout** - this file lives at
        ``<pkg_root>/sdk/python/lians/local_client.py``, so ``parents[3]`` is
        the agentmem root that contains ``src/lians``; add it to sys.path.
-    2. **Installed wheel** — the engine ships inside the wheel as
+    2. **Installed wheel** - the engine ships inside the wheel as
        ``lians_engine.lians`` (see pyproject force-include). Alias it to
        ``src.lians`` in sys.modules so the service-layer imports above
        resolve identically. The engine's own imports are all relative, so
@@ -476,7 +476,7 @@ class LocalLiansClient:
         """Recall memories. Returns RecallResult as a dict.
 
         ``include_context=True`` attaches each hit's temporally-adjacent
-        neighbors as ``context_before``/``context_after`` — the other half of
+        neighbors as ``context_before``/``context_after`` - the other half of
         an exchange, for consumers that feed memories to an LLM.
         """
         return self._run(self._async_recall(
@@ -730,8 +730,8 @@ class LocalLiansClient:
         whole transcript (``src.lians.enrichment``): every atomic, dated,
         speaker-attributed fact is stored as a derived memory
         (``metadata.derived = true``) alongside the raw messages. Recall then
-        surfaces dense facts and raw evidence together, and — unlike
-        extract-only memory layers — the verbatim transcript stays in the
+        surfaces dense facts and raw evidence together, and - unlike
+        extract-only memory layers - the verbatim transcript stays in the
         bitemporal log as provenance for every derived fact. Opt-in: it puts
         an LLM call in the ingest path (``OPENAI_API_KEY``, model via
         ``LIANS_DISTILL_MODEL``) with its cost, latency, and

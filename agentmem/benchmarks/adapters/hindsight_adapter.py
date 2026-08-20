@@ -5,7 +5,7 @@ Hindsight is "agent memory that learns": retain / recall / reflect over a
 per-agent memory bank. retain() accepts an event timestamp; recall() runs four
 retrieval strategies in parallel (semantic, BM25, entity-graph, temporal
 time-range filtering); reflect() revises observations and mental models, with
-history preserved ("updated — not overwritten"). It is the strongest of the
+history preserved ("updated - not overwritten"). It is the strongest of the
 dev-memory lane on temporal awareness, and is credited as such. What it does
 NOT provide is the compliance layer: no as-of knowledge-state recall (temporal
 filtering scopes *event* time ranges, not what-was-believed-at-T), **no delete
@@ -16,13 +16,13 @@ Capability map (each cell justified against the public API):
 
   stale_revision_suppression   PARTIAL  reflect() revises observations when new
                                         evidence contradicts them and recall
-                                        prefers current beliefs — but it is
+                                        prefers current beliefs - but it is
                                         LLM-reflection-driven, not a keyed
                                         deterministic supersession; raw retained
                                         memories still accumulate.
   point_in_time_reconstruction PARTIAL  retain() stamps event timestamps and the
                                         temporal strategy answers time-range
-                                        queries ("what happened in June") — but
+                                        queries ("what happened in June") - but
                                         there is no as-of primitive returning
                                         the knowledge state as believed at T.
   erasure_proof                ABSENT   no delete / forget / erase API exists on

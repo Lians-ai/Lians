@@ -7,12 +7,12 @@ Returns a structured JSON report covering the time window, suitable for
 submission to regulators (SEC, FINRA, CFTC) or internal compliance teams.
 
 Report sections:
-  summary        — total memories, supersessions, conflicts, erasures
-  audit_chain    — chain integrity status (ok / broken / unchecked)
-  erasures       — GDPR Art. 17 / CCPA right-to-erasure events
-  conflicts      — open and resolved conflict flags
-  supersessions  — high-level supersession statistics
-  retention      — namespace policy snapshot (TTL, legal hold, audit retention)
+  summary - total memories, supersessions, conflicts, erasures
+  audit_chain - chain integrity status (ok / broken / unchecked)
+  erasures - GDPR Art. 17 / CCPA right-to-erasure events
+  conflicts - open and resolved conflict flags
+  supersessions - high-level supersession statistics
+  retention - namespace policy snapshot (TTL, legal hold, audit retention)
 
 All timestamps are UTC ISO-8601.  All counts cover the requested window.
 """
@@ -107,7 +107,7 @@ async def worm_posture(
     examiners. Combines the *logical* WORM guarantee Lians always provides (an
     append-only, hash-chained audit log) with the *physical* WORM the operator
     configures (``WORM_MODE`` true ⇒ object-locked storage + a DB role with no
-    UPDATE/DELETE on the audit tables — see docs/worm-storage.md).
+    UPDATE/DELETE on the audit tables - see docs/worm-storage.md).
     """
     from ..config import get_settings
     auth.require("read")

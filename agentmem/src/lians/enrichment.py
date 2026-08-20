@@ -5,7 +5,7 @@ Raw event streams (dialogue turns, tickets, logs) split durable knowledge
 across many low-signal entries: "what activities has X done?" has six answers
 scattered over six sessions. Distillation extracts atomic, dated, attributed
 fact statements per batch of entries and stores them as *derived* memories
-alongside the raw ones — recall then surfaces dense facts and raw evidence
+alongside the raw ones - recall then surfaces dense facts and raw evidence
 together.
 
 This is deliberately opt-in: it puts an LLM in the ingest path, which costs

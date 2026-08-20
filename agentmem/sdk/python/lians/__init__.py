@@ -3,9 +3,9 @@ Lians Python SDK: durable, temporal AI memory with governance built in.
 
 Three clients, same API surface:
 
-    LiansClient        — synchronous HTTP client (scripts, CLIs)
-    AsyncLiansClient   — async HTTP client (FastAPI, async frameworks)
-    LocalLiansClient   — zero-setup local SQLite mode (prototyping, CI)
+    LiansClient - synchronous HTTP client (scripts, CLIs)
+    AsyncLiansClient - async HTTP client (FastAPI, async frameworks)
+    LocalLiansClient - zero-setup local SQLite mode (prototyping, CI)
 
 Convenience methods on all clients::
 
@@ -72,8 +72,8 @@ AsyncAgentMemClient = AsyncLiansClient
 
 def __getattr__(name: str):
     # LocalLiansClient needs the optional [local] extra (sqlalchemy/aiosqlite).
-    # Import it lazily so a plain `pip install lians-sdk` — whose only core
-    # dependency is httpx — can `import lians` without crashing.
+    # Import it lazily so a plain `pip install lians-sdk` - whose only core
+    # dependency is httpx - can `import lians` without crashing.
     if name in ("LocalLiansClient", "LocalAgentMemClient"):
         from .local_client import LocalLiansClient
         return LocalLiansClient

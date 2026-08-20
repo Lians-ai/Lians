@@ -399,7 +399,7 @@ main {
 }
 
 #continuity-status[data-state="active"],
-#continuity-status[data-state="ready_for_review"] {
+#continuity-status[data-state="ready_for_human_review"] {
   color: var(--mint);
 }
 

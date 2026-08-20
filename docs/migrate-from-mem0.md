@@ -1,6 +1,6 @@
 # Migrate from mem0 to Lians
 
-mem0 is a popular starting point for agent memory. If you're hitting issues with **stale facts contaminating your LLM context**, you've found the core architectural limit: mem0's memory algorithm is ADD-only — it does not supersede outdated facts. When a fact changes, both the old and new versions compete for the top-k slots in your context window.
+mem0 is a popular starting point for agent memory. If you're hitting issues with **stale facts contaminating your LLM context**, you've found the core architectural limit: mem0's memory algorithm is ADD-only - it does not supersede outdated facts. When a fact changes, both the old and new versions compete for the top-k slots in your context window.
 
 Lians fixes this with a bitemporal model. Superseded facts are excluded at the database layer before they ever reach your LLM.
 
@@ -8,7 +8,7 @@ Lians fixes this with a bitemporal model. Superseded facts are excluded at the d
 
 **mem0 (April 2026 algorithm):** Single-pass ADD-only extraction. When "NVDA guidance is $35B" is superseded by "NVDA guidance revised to $40B", both facts exist in the store with equal retrieval weight.
 
-**Lians:** A three-stage supersession pipeline detects the relationship and marks the old fact `valid_to = NOW()`. Present recall filters `WHERE valid_to IS NULL` — stale facts are invisible at the DB layer.
+**Lians:** A three-stage supersession pipeline detects the relationship and marks the old fact `valid_to = NOW()`. Present recall filters `WHERE valid_to IS NULL` - stale facts are invisible at the DB layer.
 
 ### Benchmark result
 
@@ -30,7 +30,7 @@ The Lians client API mirrors mem0's interface closely. Most migrations are a fin
 pip uninstall mem0ai
 
 # Install Lians
-pip install lians-sdk[local]     # local SQLite, zero setup — identical to mem0's library mode
+pip install lians-sdk[local]     # local SQLite, zero setup - identical to mem0's library mode
 # or
 pip install lians-sdk            # connect to a Lians server or cloud
 ```
@@ -62,8 +62,8 @@ results = mem.recall(agent_id="analyst-1", query="NVDA revenue guidance")
 
 The main additions are:
 - `agent_id` instead of `user_id` (same concept, different name)
-- `event_time` — the business timestamp of the fact (when it happened, not when you wrote it)
-- No LLM key required — Lians runs locally with no external API calls
+- `event_time` - the business timestamp of the fact (when it happened, not when you wrote it)
+- No LLM key required - Lians runs locally with no external API calls
 
 ### Switching to the hosted server
 
@@ -76,7 +76,7 @@ mem = LocalLiansClient()
 from lians import LiansClient
 mem = LiansClient(base_url="https://agentmem-lotus.fly.dev", api_key="lians_...")
 
-# Both share the same API surface — one line change
+# Both share the same API surface - one line change
 ```
 
 ## Features you gain
@@ -108,13 +108,13 @@ history = LiansChatHistory(client=mem, agent_id="user-123")
 
 ## Environment variables
 
-mem0 requires an OpenAI API key by default. Lians does not — it runs with local embeddings out of the box.
+mem0 requires an OpenAI API key by default. Lians does not - it runs with local embeddings out of the box.
 
 ```bash
 # mem0 required
 OPENAI_API_KEY=sk-...
 
-# Lians — no key needed for local mode
+# Lians - no key needed for local mode
 # For production quality embeddings (optional):
 EMBEDDING_PROVIDER=voyage
 VOYAGE_API_KEY=pa-...

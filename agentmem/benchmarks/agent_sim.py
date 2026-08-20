@@ -5,8 +5,8 @@ Static datasets don't capture how real users interrupt themselves, switch
 topics, and circle back days later. This harness drives an LLM "User" agent
 with a hidden persona (see ``data/personas.json``) against a memory-augmented
 "Assistant" across multiple simulated sessions. The persona's session plans
-force the messy behaviors we want to test — mid-task interjections, revisions
-of earlier facts, topic switches — while the assistant stores every user turn
+force the messy behaviors we want to test - mid-task interjections, revisions
+of earlier facts, topic switches - while the assistant stores every user turn
 in Lians and answers from recall.
 
 Scoring stays deterministic: after the conversation, the persona's ground-truth
@@ -115,7 +115,7 @@ def score(mem, agent_id: str, probes: list[dict], k: int = 5,
     for q in probes:
         # Sim-fidelity guard: the User-LLM sometimes never works a must_mention
         # detail into the conversation. A probe whose answer was never uttered
-        # is unanswerable by ANY memory system — report it separately instead
+        # is unanswerable by ANY memory system - report it separately instead
         # of scoring it against the engine.
         if transcript_text and q["answer"].lower() not in transcript_text:
             rows.append({"query": q["query"], "as_of": q.get("as_of"),

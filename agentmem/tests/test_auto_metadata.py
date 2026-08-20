@@ -1,10 +1,10 @@
 """
-Auto-metadata extraction — auto-supersession parity (mem0 / Zep style).
+Auto-metadata extraction - auto-supersession parity (mem0 / Zep style).
 
 Two layers under test:
-  1. The deterministic finance extractor (pure) — turns free text into
+  1. The deterministic finance extractor (pure) - turns free text into
      {ticker, metric}.
-  2. The end-to-end path — with auto_metadata_enabled, a plain-text write with
+  2. The end-to-end path - with auto_metadata_enabled, a plain-text write with
      NO caller metadata is auto-keyed so the deterministic keyed-supersession
      fast path fires; with it disabled, nothing is inferred.
 """
@@ -62,7 +62,7 @@ def test_extract_partial_ticker_only():
 
 
 def test_extract_nothing_on_plain_text():
-    # No known entity, no metric keyword — bare all-caps must not false-positive.
+    # No known entity, no metric keyword - bare all-caps must not false-positive.
     assert extract_finance_keys("THE WEATHER WAS NICE TODAY") == {}
 
 
@@ -145,7 +145,7 @@ async def test_caller_keys_are_authoritative(client, monkeypatch):
     monkeypatch.setenv("AUTO_METADATA_ENABLED", "true")
     get_settings.cache_clear()
 
-    # Content mentions AAPL, but the caller explicitly tagged MSFT — caller wins,
+    # Content mentions AAPL, but the caller explicitly tagged MSFT - caller wins,
     # and no auto-extraction runs.
     mem = await _add(client, "AAPL price target raised to $250", _ts(2026, 2, 1),
                      metadata={"ticker": "MSFT", "metric": "price_target"})

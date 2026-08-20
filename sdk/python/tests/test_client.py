@@ -1,5 +1,5 @@
 ﻿"""
-AgentMem Python SDK — unit tests.
+AgentMem Python SDK - unit tests.
 
 All tests use respx to mock httpx so no real API is needed.
 Validates:

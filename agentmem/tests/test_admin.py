@@ -713,7 +713,7 @@ class TestUsageSummary:
 
     @pytest.mark.asyncio
     async def test_usage_counts_writes_from_event_log(self, app_client):
-        # A key creation writes an admin op to the event log, not add/recall —
+        # A key creation writes an admin op to the event log, not add/recall -
         # usage must not count admin ops as writes or recalls.
         resp = await app_client.post(
             "/v1/admin/api-keys",

@@ -1,5 +1,5 @@
 """
-Supersession review queue — low-confidence supersessions flagged for human review.
+Supersession review queue - low-confidence supersessions flagged for human review.
 
 In finance a wrong silent supersession (dropping the old number when it should
 have been kept) is a compliance failure.  This route surfaces every supersession
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/v1", tags=["supersessions"])
 @router.get("/supersessions/review", response_model=SupersessionReviewResult)
 async def review_supersessions(
     threshold: Optional[float] = Query(default=None, ge=0.0, le=1.0,
-        description="Confidence threshold — events below this score are returned. "
+        description="Confidence threshold - events below this score are returned. "
                     "Defaults to config.supersession_review_threshold (0.75)."),
     limit: int = Query(default=50, ge=1, le=500),
     auth: AuthContext = Depends(get_auth),
@@ -75,12 +75,12 @@ async def action_supersession(
     """
     Act on a supersession flagged for review.
 
-    **confirm** — the supersession was correct. Writes an immutable audit event
+    **confirm** - the supersession was correct. Writes an immutable audit event
     with the reviewer's note; the superseded memory remains closed.
 
-    **reject** — the supersession was wrong. Restores the old memory as currently
+    **reject** - the supersession was wrong. Restores the old memory as currently
     valid (`valid_to = NULL`), clears `superseded_by`, and writes an audit event.
-    Both memories are now valid — the engine treated them as additive facts.
+    Both memories are now valid - the engine treated them as additive facts.
 
     After a reject, the old memory will appear in future recall results alongside
     the newer memory until a human explicitly supersedes or erases one of them.

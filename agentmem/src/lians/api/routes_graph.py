@@ -1,10 +1,10 @@
 """
-Relationship-graph routes — the knowledge-graph layer.
+Relationship-graph routes - the knowledge-graph layer.
 
-    POST /v1/graph/relate      — assert an edge (src --rel_type--> dst)
-    POST /v1/graph/unrelate    — invalidate a live edge (sets valid_to)
-    GET  /v1/graph/neighbors   — entities within N hops (optional as_of)
-    GET  /v1/graph/path        — shortest connection between two entities
+    POST /v1/graph/relate - assert an edge (src --rel_type--> dst)
+    POST /v1/graph/unrelate - invalidate a live edge (sets valid_to)
+    GET  /v1/graph/neighbors - entities within N hops (optional as_of)
+    GET  /v1/graph/path - shortest connection between two entities
 
 The path query is the conflict-of-interest / related-party / referral-reachability
 question; every read accepts ``as_of`` for point-in-time traversal. Edges live in
@@ -67,7 +67,7 @@ async def extract(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Extract relationship edges from unstructured text and write them — the
+    Extract relationship edges from unstructured text and write them - the
     Graphiti-style "build the graph for me" convenience, but rule-based and
     deterministic by default (auditable), with opt-in LLM extraction. Every
     extracted edge lands in the audit chain and inside the information barrier.
@@ -137,7 +137,7 @@ async def path(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Shortest connection between two entities — the conflict-of-interest /
+    Shortest connection between two entities - the conflict-of-interest /
     related-party reachability query. ``connected: false`` is the clean result.
     """
     auth.require("read")

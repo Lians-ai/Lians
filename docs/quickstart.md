@@ -1,7 +1,12 @@
-# Lians quickstart
+# Lians recovery quickstart
 
-Give an AI coding tool one project fact, open a fresh chat, and confirm that the
-fact is recalled. The local setup requires no Lians account or provider API key.
+Set up the available free recovery layer, give an AI coding tool one safe project
+fact, then confirm that the current fact survives a fresh chat. The local setup
+requires no Lians account or provider API key.
+
+This quickstart proves local recovery and correction. The full Lians Guard
+workflow, including automatic lifecycle checkpoints, stale workspace detection,
+typed completion evidence, and trusted CI intake, remains a developer preview.
 
 ## 1. Choose a client
 
@@ -45,7 +50,7 @@ Remember that this project uses Python 3.12 and pytest.
 Approve the `remember` tool if your client asks. Do not use passwords, API keys,
 personal data, or other secrets as test values.
 
-## 3. Recall it in a fresh chat
+## 3. Recall it in a fresh chat or second tool
 
 Open a new chat in the same project and ask:
 
@@ -55,6 +60,11 @@ What Python version and test runner does this project use?
 
 Approve the `recall` tool if prompted. The answer should mention Python 3.12
 and pytest without requiring the previous transcript.
+
+For the clearest continuity proof, save the fact in one connected tool and ask
+the question in another, for example, remember it in Claude Code and recall it
+from a fresh Codex task. Both tools must resolve to the same project and local
+Lians store.
 
 ## 4. Correct the memory
 
@@ -82,6 +92,23 @@ The basic MCP setup stores local memory in `~/.lians/mcp.db`. Set
 
 Lians does not ask for your Claude, Cursor, or Codex password or provider API
 key. The first use may download a local semantic model.
+
+## Preview the Guard tools from source
+
+Contributors can install the preview package from a clone:
+
+```bash
+python -m pip install -e ./packages/lians-easy
+lians mcp
+```
+
+The preview MCP server includes `start_task`, `checkpoint_task`, `task_status`,
+`continue_work`, `configure_verification`, `verify_work`, and
+`verification_status`. Positive completion evidence must declare one of
+`measured_local`, `measured_ci`, or `human_confirmed`. Agent summaries and
+touched files remain recovery context and do not satisfy completion criteria.
+
+Read [the Lians Guard contract](lians-guard.md) before evaluating the preview.
 
 ## Troubleshooting
 

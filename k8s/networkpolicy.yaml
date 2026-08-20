@@ -1,4 +1,4 @@
-# NetworkPolicy — defence-in-depth for financial deployments.
+# NetworkPolicy - defence-in-depth for financial deployments.
 # Restricts what can reach the API pods and where the pods can connect to.
 #
 # Ingress: only traffic from the ingress-nginx controller namespace is allowed.
@@ -34,7 +34,7 @@ spec:
           protocol: TCP
 
   egress:
-    # DNS — required for service discovery
+    # DNS - required for service discovery
     - ports:
         - port: 53
           protocol: UDP
@@ -51,12 +51,12 @@ spec:
         - port: 6379
           protocol: TCP
 
-    # External HTTPS — Voyage AI, Anthropic, Stripe, AWS KMS, Azure KV, Vault
+    # External HTTPS - Voyage AI, Anthropic, Stripe, AWS KMS, Azure KV, Vault
     - ports:
         - port: 443
           protocol: TCP
 
-    # HashiCorp Vault (in-cluster) — only needed when KMS_PROVIDER=vault
+    # HashiCorp Vault (in-cluster) - only needed when KMS_PROVIDER=vault
     - ports:
         - port: 8200
           protocol: TCP

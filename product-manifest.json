@@ -1,62 +1,67 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-18",
+  "updatedAt": "2026-08-19",
   "source": {
     "repository": "Lians-ai/Lians",
     "branch": "master"
   },
   "product": {
-    "name": "Lians",
-    "category": "Persistent project memory for AI coding tools",
-    "summary": "Lians gives Claude Code, Codex, Cursor, and other compatible AI tools current project memory across sessions. Save a useful fact, decision, constraint, or work state once; Lians recalls a small relevant subset later and keeps superseded facts out of current-state answers. Local mode is free and does not require an AI account password or provider API key.",
+    "name": "Lians Guard",
+    "category": "Current-state and completion guard for AI coding agents",
+    "summary": "Lians recovers interrupted agent work, rejects stale task state, and blocks unsupported completion claims until the configured task is ready for human review. Free local recovery remains available without a Lians account, AI account password, or provider API key. The full team Guard workflow is a developer preview.",
     "workflow": [
       {
-        "label": "Connect",
-        "detail": "Connect Lians to a supported AI coding tool without replacing the user's model, editor, or workflow."
+        "label": "Recover",
+        "detail": "Restore the bounded current task, decisions, blockers, and next action in a supported Claude Code or Codex session."
       },
       {
-        "label": "Work normally",
-        "detail": "The user saves a useful preference, fact, constraint, or decision once and continues working in the AI tools they already use."
+        "label": "Check freshness",
+        "detail": "Compare the saved checkpoint with current repository and task state, and mark mismatches stale instead of silently reusing them."
       },
       {
-        "label": "Continue",
-        "detail": "In a later session or compatible AI tool, Lians selects a bounded set of relevant current project context instead of replaying the full history."
+        "label": "Evaluate evidence",
+        "detail": "Accept evidence only through a Lians-owned verifier, exact attested CI import, or interactive human confirmation while keeping agent attestations and inferred activity outside the completion gate."
       },
       {
-        "label": "See the proof",
-        "detail": "Status and signed receipts show what context was reused, what was left out, and the estimated repeated memory tokens avoided."
+        "label": "Hand off to a human",
+        "detail": "Show RECOVERED, STALE, BLOCKED, or READY FOR HUMAN REVIEW with inspectable evidence and remaining work."
       }
     ],
     "surfaces": [
       {
-        "label": "Lians desktop app",
-        "status": "Release candidate",
-        "detail": "Guided local setup detects supported AI apps, lets the user optimize them from one screen, and opens the encrypted local control center. Consumer publication remains gated on trusted Windows and Apple signing."
+        "label": "Free local recovery",
+        "status": "Available",
+        "detail": "Local memory, bounded recall, correction, deletion, and supported AI-client connections provide the individual recovery path."
       },
       {
-        "label": "Bounded context engine",
-        "status": "Available",
-        "detail": "Stores useful context once, selects a small current subset for each task, and measures the estimated repeated memory context left out."
+        "label": "Typed task evidence gate",
+        "status": "Developer preview",
+        "detail": "Task criteria distinguish measured evidence and human confirmation from agent-reported or inferred activity."
       },
       {
-        "label": "Claude, Cursor, and Codex connections",
-        "status": "Available",
-        "detail": "Connects through supported plugins, hooks, rules, and MCP settings without asking for the user's AI account password or changing the underlying model."
+        "label": "Local Git checkpoint fingerprint",
+        "status": "Developer preview",
+        "detail": "Task checkpoints record repository identity, HEAD, dirty state, and a digest of changed paths when Git is available."
       },
       {
-        "label": "Python local library",
-        "status": "Available",
-        "detail": "SQLite-backed memory inside Python applications with no server, Docker container, or API key."
+        "label": "Automatic stale evidence invalidation",
+        "status": "In development",
+        "detail": "Workspace or requirement changes will invalidate dependent evidence and create a visible stale signal."
       },
       {
-        "label": "Developer and framework integrations",
-        "status": "Available",
-        "detail": "MCP, Python, TypeScript, Go, Java, C, Pydantic AI, LangGraph, and other integration paths remain available behind the simple end-user product."
+        "label": "Trusted GitHub Actions intake",
+        "status": "Developer preview",
+        "detail": "CI evidence requires a verified GitHub attestation for the exact repository, signer workflow, source ref, commit, hosted runner, and selected passing checks, plus interactive authorization of the check-to-criterion mapping."
       },
       {
-        "label": "Self-hosted service",
-        "status": "Available",
-        "detail": "A shared deployment path for teams that need server-backed memory, administration, and advanced controls."
+        "label": "Local Guard reporting",
+        "status": "Developer preview",
+        "detail": "A local bounded report summarizes task states, missing criteria, untrusted evidence, and constraint failures without claiming business outcomes."
+      },
+      {
+        "label": "Team Guard",
+        "status": "Pilot hypothesis",
+        "detail": "Shared current state, completion policies, queue visibility, reporting, support, and managed operations for AI-native teams."
       }
     ]
   }

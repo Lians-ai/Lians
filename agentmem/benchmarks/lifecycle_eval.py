@@ -1,22 +1,22 @@
 """
-Lifecycle eval — state reconstruction, temporal disambiguation, interjections.
+Lifecycle eval - state reconstruction, temporal disambiguation, interjections.
 
 Where memory_eval scores ranked recall on QA datasets, this harness tests the
 agent's ability to maintain a *dynamic model* of a user or domain:
 
-  1. **State reconstruction** — messy, interleaved preference updates over
+  1. **State reconstruction** - messy, interleaved preference updates over
      weeks ("I'm vegan" → "I eat fish now" → "allergic to salmon"). We then
      reconstruct a clean profile from ``snapshot(now)`` and score, per field:
      is the current value live, and is every superseded value gone (a leaked
      stale value = a zombie fact the agent would act on).
-  2. **Temporal disambiguation / time-travel** — the same profile is
+  2. **Temporal disambiguation / time-travel** - the same profile is
      reconstructed ``as_of`` past checkpoints: the belief of that era must be
      live and later values must not exist yet. Includes an out-of-order
      ingestion case (backdated fact arrives last and must not supersede).
-  3. **Interjections** — a background fact dropped mid-task must be stored and
+  3. **Interjections** - a background fact dropped mid-task must be stored and
      recallable on its own, while task-focused queries stay unpolluted by it.
 
-All scoring is deterministic (case-insensitive substring, like memory_eval) —
+All scoring is deterministic (case-insensitive substring, like memory_eval) -
 no LLM judge. Two modes isolate the layers:
 
   ``--mode keyed``  metadata keys supplied → tests the lifecycle engine alone

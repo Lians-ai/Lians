@@ -1,5 +1,5 @@
 """
-Regulated memory eval — every compliance invariant must hold against a real
+Regulated memory eval - every compliance invariant must hold against a real
 LocalLiansClient. These are the checks an accumulate-everything store fails.
 """
 import sys

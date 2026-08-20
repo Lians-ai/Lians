@@ -22,6 +22,7 @@ from .claude_experiment import (
     build_experiment_plan,
     run_claude_experiment,
 )
+from .ci_evidence import emit_github_actions_evidence, import_github_actions_evidence
 from .control_policy import ControlPolicyService
 from .installer import client_targets, doctor, install, plan, uninstall
 from .lifecycle import listen_for_windows_installer_shutdown
@@ -30,7 +31,7 @@ from .portability import export_backup, import_backup, verify_backup
 from .project import detect_project
 from .store import MemoryStore
 from .stretch_experiment import build_stretch_plan, run_stretch_experiment
-from .task_contract import TaskContractService
+from .task_contract import TaskContractService, workspace_snapshot
 from .video_pipeline import DEFAULT_BATCH_SIZE, MAX_BATCH_SIZE, VideoAnalysisPipeline
 from .work_brief import WorkBriefError, compile_work_brief_file
 
@@ -59,6 +60,12 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
         avoided = int(efficiency.get("repeated_memory_tokens_avoided_estimate") or 0)
         events = int(efficiency.get("context_events") or 0)
         print(f"- Repeated memory context left out: ~{avoided} tokens across {events} tasks")
+    activation = result.get("activation")
+    if isinstance(activation, dict):
+        if activation.get("status") == "reuse_observed":
+            print("- Activation: saved project memory has been reused")
+        elif activation.get("status") == "connected":
+            print("- Activation: connected; complete one fresh-session recall")
     control = result.get("control")
     if isinstance(control, dict):
         mode = str((control.get("policy") or {}).get("mode") or "guide").title()
@@ -77,12 +84,22 @@ def product_status(
     store = MemoryStore(data_path or default_data_path())
     memory = store.stats()
     control = ControlPolicyService(store).status()
+    successful_context_events = int(
+        memory["efficiency"].get("successful_context_events") or 0
+    )
+    activation_status = (
+        "reuse_observed"
+        if configured and successful_context_events > 0
+        else "connected"
+        if configured
+        else "not_connected"
+    )
     return {
         "status": "optimized" if configured else "not_configured",
         "headline": (
-            f"Lians is active in {len(configured)} AI app{'s' if len(configured) != 1 else ''}."
+            f"Lians Guard is connected to {len(configured)} AI app{'s' if len(configured) != 1 else ''}."
             if configured
-            else "Lians is ready to optimize your AI apps."
+            else "Lians Guard is ready to connect to your AI coding apps."
         ),
         "clients": [
             {
@@ -101,6 +118,14 @@ def product_status(
         "configured_clients": len(configured),
         "detected_clients": len(detected),
         "efficiency": memory["efficiency"],
+        "activation": {
+            "status": activation_status,
+            "connected_client_observed": bool(configured),
+            "successful_context_events": successful_context_events,
+            "measurement": "local_only",
+            "content_collected": False,
+            "fresh_session_confirmation": "self_reported",
+        },
         "control": control,
         "privacy": {
             "local": True,
@@ -108,10 +133,38 @@ def product_status(
             "ai_account_credentials_required": False,
         },
         "next_step": (
-            "Keep using your connected apps normally. Lians adds only relevant saved context."
+            "Start or recover a task in your connected app. Lians keeps the current state bounded."
             if configured
             else "Open Lians for guided setup, or run `lians optimize --clients detected --yes`."
         ),
+    }
+
+
+def continuity_share_card(
+    *, data_path: str | Path | None = None, home: Path | None = None
+) -> dict[str, Any]:
+    """Return an explicitly requested, content-free continuity card."""
+    status = product_status(data_path=data_path, home=home)
+    if status["activation"]["status"] != "reuse_observed":
+        raise ValueError(
+            "Complete one successful fresh-task context reuse before creating a share card."
+        )
+    connected = int(status["configured_clients"])
+    app_label = "AI app" if connected == 1 else "AI apps"
+    markdown = (
+        "> **Lians continuity verified**\n"
+        f"> Fresh-task context reuse observed locally · {connected} connected {app_label}\n"
+        "> No project or memory content is included in this card."
+    )
+    return {
+        "schema": "lians.continuity-share-card.v1",
+        "headline": "Lians continuity verified",
+        "status": "local_context_reuse_observed",
+        "connected_client_count": connected,
+        "measurement": "local_only",
+        "content_included": False,
+        "certification": False,
+        "markdown": markdown,
     }
 
 
@@ -142,6 +195,20 @@ def parser() -> argparse.ArgumentParser:
     status.add_argument("--data", type=Path)
     status.add_argument("--json", action="store_true")
 
+    report = commands.add_parser(
+        "report", help="Show the current Guard state for one project"
+    )
+    report.add_argument("--cwd", type=Path, default=Path.cwd())
+    report.add_argument("--data", type=Path)
+    report.add_argument("--limit", type=int, default=50)
+    report.add_argument("--json", action="store_true")
+
+    share_card = commands.add_parser(
+        "share-card", help="Create a content-free Markdown card after context reuse"
+    )
+    share_card.add_argument("--data", type=Path)
+    share_card.add_argument("--json", action="store_true")
+
     hook = commands.add_parser("hook", help="Inject bounded memory into an AI prompt")
     hook.add_argument(
         "--client",
@@ -166,6 +233,37 @@ def parser() -> argparse.ArgumentParser:
     continue_work.add_argument("--data", type=Path)
     continue_work.add_argument("--max-tokens", type=int, default=768)
     continue_work.add_argument("--json", action="store_true")
+
+    confirm = commands.add_parser(
+        "confirm", help="Confirm one task criterion as the human reviewer"
+    )
+    confirm.add_argument("task_id")
+    confirm.add_argument("criterion_id")
+    confirm.add_argument("--evidence", required=True)
+    confirm.add_argument("--cwd", type=Path, default=Path.cwd())
+    confirm.add_argument("--data", type=Path)
+    confirm.add_argument("--json", action="store_true")
+
+    ci_evidence = commands.add_parser(
+        "ci-evidence", help="Emit or import attested GitHub Actions evidence"
+    )
+    ci_commands = ci_evidence.add_subparsers(dest="ci_command", required=True)
+    ci_emit = ci_commands.add_parser("emit", help=argparse.SUPPRESS)
+    ci_emit.add_argument("--output", type=Path, required=True)
+    ci_emit.add_argument("--check", action="append", required=True)
+    ci_import = ci_commands.add_parser(
+        "import", help="Verify and import an attested GitHub Actions artifact"
+    )
+    ci_import.add_argument("artifact", type=Path)
+    ci_import.add_argument("--repo", required=True)
+    ci_import.add_argument("--signer-workflow", required=True)
+    ci_import.add_argument("--source-ref", required=True)
+    ci_import.add_argument("--task", required=True)
+    ci_import.add_argument("--criterion", action="append", required=True)
+    ci_import.add_argument("--check", action="append", required=True)
+    ci_import.add_argument("--cwd", type=Path, default=Path.cwd())
+    ci_import.add_argument("--data", type=Path)
+    ci_import.add_argument("--json", action="store_true")
 
     cursor_rule = commands.add_parser(
         "cursor-rule", help="Refresh Cursor's always-applied Lians project context"
@@ -376,6 +474,39 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "status":
         _show(product_status(data_path=args.data), as_json=args.json)
         return
+    if args.command == "report":
+        project = detect_project(args.cwd)
+        result = TaskContractService(
+            MemoryStore(args.data or default_data_path())
+        ).report(
+            project_id=project.id,
+            workspace=workspace_snapshot(project.trusted_root),
+            limit=args.limit,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            statuses = result["tasks"]["by_status"]
+            print(f"Lians Guard: {result['tasks']['total']} recorded task(s)")
+            print(
+                "- Ready for human review: "
+                f"{statuses['ready_for_human_review']}"
+            )
+            print(f"- Active: {statuses['active']}")
+            print(f"- Stale: {statuses['stale']}")
+            print(f"- Blocked or at risk: {statuses['blocked'] + statuses['at_risk']}")
+            print(
+                "- Untrusted claims with evidence: "
+                f"{result['criteria']['untrusted_with_evidence']}"
+            )
+        return
+    if args.command == "share-card":
+        try:
+            result = continuity_share_card(data_path=args.data)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+        print(json.dumps(result, indent=2) if args.json else result["markdown"])
+        return
     if args.command == "hook":
         raise SystemExit(run_hook(client=args.client, data_path=args.data))
     if args.command == "context":
@@ -407,6 +538,66 @@ def main(argv: list[str] | None = None) -> None:
             print(result["message"])
             for item in result.get("tasks", []):
                 print(f"- {item['task_id']}: {item['title']} ({item['status']})")
+        return
+    if args.command == "confirm":
+        if not sys.stdin.isatty():
+            raise SystemExit("Human confirmation requires an interactive terminal")
+        project = detect_project(args.cwd)
+        prompt = f"Type CONFIRM {args.criterion_id} to record this human decision: "
+        if input(prompt).strip() != f"CONFIRM {args.criterion_id}":
+            raise SystemExit("Human confirmation was not recorded")
+        result = TaskContractService(
+            MemoryStore(args.data or default_data_path())
+        )._checkpoint_trusted(
+            args.task_id,
+            f"Human confirmed {args.criterion_id}",
+            issuer="human_confirmation",
+            project_id=project.id,
+            evidence=[
+                {
+                    "criterion_id": args.criterion_id,
+                    "evidence": args.evidence,
+                    "trust_class": "human_confirmed",
+                    "source": "interactive Lians confirmation",
+                }
+            ],
+            client="human-cli",
+            workspace=workspace_snapshot(project.trusted_root),
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Recorded human confirmation for {args.criterion_id}."
+        )
+        return
+    if args.command == "ci-evidence":
+        if args.ci_command == "emit":
+            result = emit_github_actions_evidence(args.output, checks=args.check)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return
+        if not sys.stdin.isatty():
+            raise SystemExit("CI criterion mapping requires an interactive terminal")
+        print("Attested checks: " + ", ".join(args.check))
+        print("Task criteria: " + ", ".join(args.criterion))
+        prompt = f"Type IMPORT {args.task} to authorize this evidence mapping: "
+        if input(prompt).strip() != f"IMPORT {args.task}":
+            raise SystemExit("CI evidence mapping was not authorized")
+        result = import_github_actions_evidence(
+            args.artifact,
+            repository=args.repo,
+            signer_workflow=args.signer_workflow,
+            source_ref=args.source_ref,
+            task_id=args.task,
+            criterion_ids=args.criterion,
+            check_ids=args.check,
+            project_root=args.cwd,
+            store=MemoryStore(args.data or default_data_path()),
+        )
+        print(
+            json.dumps(result, ensure_ascii=False, indent=2)
+            if args.json
+            else f"Imported attested CI evidence for task {args.task}."
+        )
         return
     if args.command == "cursor-rule":
         result = write_cursor_rule(

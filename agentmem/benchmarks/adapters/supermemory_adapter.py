@@ -14,7 +14,7 @@ Capability map (each cell justified against the public API):
 
   stale_revision_suppression   PARTIAL  the dynamic user profile consolidates and
                                         revises profile facts as new evidence
-                                        arrives — but document search itself is
+                                        arrives - but document search itself is
                                         accumulate-and-rank: both revisions stay
                                         retrievable, with no keyed guarantee the
                                         stale one is excluded.

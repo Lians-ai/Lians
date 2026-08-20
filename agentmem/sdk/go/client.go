@@ -210,7 +210,7 @@ func (c *Client) Recall(ctx context.Context, req RecallRequest) (*RecallResult, 
 	return &out, nil
 }
 
-// RecallAt is point-in-time recall — "what did the agent know on this date?".
+// RecallAt is point-in-time recall - "what did the agent know on this date?".
 func (c *Client) RecallAt(ctx context.Context, agentID, query string, asOf time.Time, k int) (*RecallResult, error) {
 	return c.Recall(ctx, RecallRequest{AgentID: agentID, Query: query, K: k, AsOf: &asOf})
 }
@@ -365,7 +365,7 @@ func (c *Client) Neighbors(ctx context.Context, agentID, entity string, depth in
 	return out, nil
 }
 
-// Path returns the shortest connection between two entities — the
+// Path returns the shortest connection between two entities - the
 // conflict-of-interest / related-party reachability query.
 func (c *Client) Path(ctx context.Context, agentID, srcEntity, dstEntity string, maxDepth int, asOf *time.Time) (json.RawMessage, error) {
 	params := url.Values{}

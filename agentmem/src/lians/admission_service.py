@@ -1,5 +1,5 @@
 """
-Service layer for memory admission control — the held-for-review queue and its
+Service layer for memory admission control - the held-for-review queue and its
 resolution. Every decision is written to the tamper-evident audit chain, so the
 admission trail itself is examiner-grade.
 """

@@ -18,10 +18,17 @@ def test_primary_github_and_desktop_surfaces_share_one_product_promise() -> None
     gui = (PACKAGE_ROOT / "lians_easy" / "gui.py").read_text(encoding="utf-8")
     manifest = json.loads((REPOSITORY_ROOT / "product-manifest.json").read_text())
 
-    for surface in (readme, direction, consumer_contract, gui):
-        assert "Use less context. Get more AI." in surface
-    assert manifest["product"]["category"] == "AI efficiency for the tools you already use"
-    assert "Optimize my AI apps" in gui
+    assert "Recover the task. Reject stale state. Block unsupported done." in readme
+    assert "current-state and completion guard for AI coding agents" in " ".join(
+        direction.split()
+    )
+    assert "Recover the task. Guard what done means." in consumer_contract
+    assert "Recover the task. Guard what done means." in gui
+    assert (
+        manifest["product"]["category"]
+        == "Current-state and completion guard for AI coding agents"
+    )
+    assert "Connect Lians Guard" in gui
     assert "provider API key" in readme
 
 

@@ -3,6 +3,16 @@ from __future__ import annotations
 import sys
 from types import SimpleNamespace
 
+import pytest
+
+try:
+    import tkinter  # noqa: F401
+except ImportError:
+    pytest.skip(
+        "The optional native GUI requires a Python build with Tk support",
+        allow_module_level=True,
+    )
+
 
 def test_active_ai_client_prefers_foreground_then_retains_last_open_client() -> None:
     from lians_easy.gui import _active_ai_client

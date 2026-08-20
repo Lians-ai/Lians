@@ -1,5 +1,5 @@
 """
-Domain adapter protocol — the boundary between the correctness/compliance core
+Domain adapter protocol - the boundary between the correctness/compliance core
 and domain-specific logic (financial entity normalization, legal matter IDs,
 healthcare patient identifiers, etc.).
 
@@ -9,11 +9,11 @@ The core does NOT know about: tickers, ISINs, CUSIPs, or any finance concept.
 To add a new vertical (healthcare, legal, gov):
   1. Create adapters/<vertical>/__init__.py implementing DomainAdapter.
   2. Set DOMAIN_ADAPTER=<vertical> in the environment.
-  3. The core picks it up at startup — no core changes needed.
+  3. The core picks it up at startup - no core changes needed.
 
 This is the architectural decision that lets the same engine serve a hospital
 reconstructing "what did the triage agent know at 3am" or a law firm answering
-"what did the agent know before the privilege cutoff" — same primitives, new adapter.
+"what did the agent know before the privilege cutoff" - same primitives, new adapter.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class DomainAdapter(Protocol):
     Interface for domain-specific entity normalization and structured-key definitions.
 
     Implementations live in adapters/<vertical>/ and are registered by name.
-    The core calls only these two methods — nothing domain-specific leaks in.
+    The core calls only these two methods - nothing domain-specific leaks in.
     """
 
     @property
@@ -72,7 +72,7 @@ class DomainAdapter(Protocol):
     #     def extract_structured_keys(self, content: str) -> dict[str, str]: ...
     #
     # which derives a subset of ``structured_keys`` from free-text content for the
-    # auto-metadata / auto-supersession path (config ``auto_metadata_enabled``) —
+    # auto-metadata / auto-supersession path (config ``auto_metadata_enabled``) -
     # e.g. finance maps "AAPL price target raised to $250" → {"ticker": "AAPL",
     # "metric": "price_target"}, returning {} when nothing is recognized.
     #

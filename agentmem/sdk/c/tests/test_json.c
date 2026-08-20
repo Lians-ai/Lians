@@ -1,4 +1,4 @@
-/* Unit tests for the pure JSON/string helpers — no network, no libcurl. */
+/* Unit tests for the pure JSON/string helpers - no network, no libcurl. */
 #include "lians_json.h"
 
 #include <stdio.h>

@@ -140,9 +140,6 @@ _EQUITY_DATA: dict[str, tuple[frozenset[str], str, str]] = {
              "US8552441094", "855244109"),
     "TGT":  (frozenset({"target", "target corp", "target corporation"}),
              "US8745371025", "874537102"),
-    "AMZN": (frozenset({"amazon", "amazon.com", "amazon com", "amazon inc"}),
-             "US0231351067", "023135106"),
-
     # ── Industrial / energy ──────────────────────────────────────────────────
     "XOM":  (frozenset({"exxon", "exxonmobil", "exxon mobil", "exxon mobil corporation"}),
              "US30231G1022", "30231G102"),
@@ -347,7 +344,7 @@ def cached_normalize(key: str, value: str) -> str:
 
 def known_aliases() -> frozenset[str]:
     """
-    Every lowercased entity alias the normalizer recognizes — canonical tickers
+    Every lowercased entity alias the normalizer recognizes - canonical tickers
     plus all name aliases (and any AGENTMEM_ENTITY_OVERRIDES additions).
 
     The finance adapter's auto-metadata extractor uses this to spot known

@@ -1,7 +1,7 @@
 """
 Full-LOCOMO offline validation of the cross-encoder reranker stage.
 
-Local CPU only (models already cached) — no API spend. Per-conversation
+Local CPU only (models already cached) - no API spend. Per-conversation
 checkpointing in results/replay/rerank_validation.json so interrupted runs
 resume free.
 

@@ -9,9 +9,9 @@ same structured fact (same ticker/metric/etc.) at the same event_time.  Both
 memories remain valid until a human resolves which source to trust.
 
 Resolution options:
-  accept_a  — memory_a is authoritative; memory_b is invalidated
-  accept_b  — memory_b is authoritative; memory_a is invalidated
-  dismissed — both memories remain live (legitimate source disagreement)
+  accept_a - memory_a is authoritative; memory_b is invalidated
+  accept_b - memory_b is authoritative; memory_a is invalidated
+  dismissed - both memories remain live (legitimate source disagreement)
 
 Every resolution writes a conflict_resolved event to the audit chain.
 """
