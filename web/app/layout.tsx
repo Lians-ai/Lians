@@ -7,6 +7,7 @@ const wide = Anybody({ variable: "--font-wide", subsets: ["latin"] });
 const serif = Instrument_Serif({ variable: "--font-serif", subsets: ["latin"], weight: "400" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://lians-make.ethan-beirne.chatgpt.site"),
   title: "Lians | Make",
   description: "Describe what your group needs. Get a working app you can use and share.",
   icons: { icon: "/favicon.svg" },
