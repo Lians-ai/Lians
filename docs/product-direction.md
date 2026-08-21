@@ -4,6 +4,10 @@
 
 Do not build generic Deploy All or Lians Ship as the company.
 
+The shipped product remains Lians Check, the evidence-backed proof layer for AI
+work. The candidate below is a separate validation experiment and cannot change
+that public promise before its proof gate passes.
+
 Deploy All is already replaceable by general coding agents and focused
 builders. Ship identifies a real production problem, but it is limited to AI
 builders, is likely to become custom engineering work, and has no direct Lians
