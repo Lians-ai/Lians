@@ -1,248 +1,201 @@
 # Lians product direction
 
-## Product decision
+## Decision
 
-Lians is the **evidence-backed proof layer for AI work**.
+Do not build or market generic Deploy All as the company.
+
+OpenAI already documents a Codex workflow from a rough idea to a checked live
+URL, Anthropic positions Claude Code across build and deployment, and Replit can
+generate and automatically deploy an application directly from ChatGPT. A
+Lians prompt box that combines those steps would be replaceable.
+
+The current repository product remains Lians Check, the evidence-backed proof
+layer for AI work. The next product direction is an experiment, not an
+implemented product or a proven pivot.
+
+Read the full [Deploy All replacement test](deploy-all-pressure-test.md) and the
+binding [product parameters](product-parameters.md) before expanding the build.
+
+## Candidate experiment
 
 The one-word action is:
 
-> Check.
+> **Ship.**
 
-The public promise is:
+The customer moment is:
 
-> Your AI says it is done. Lians checks the receipts.
+> My AI-built app works in preview, but I cannot get it working reliably in
+> production.
 
-The company can serve anyone who uses AI without launching as a vague product
-for everyone. Lians markets one universal moment: AI produced something, and a
-person needs to know whether it is ready to use.
+The promise to test is:
 
-The first supported check is code. This is a capability wedge, not a permanent
-customer niche. Code comes first because tests, builds, lint, and Git provide
-objective evidence that Lians can measure without asking an AI to grade itself.
+> Your AI app works in preview. Lians gets it live and keeps it live.
 
-## Why this is a real universal problem
+This is a universal moment among AI builders, not a profession. The first
+technical scope can still be narrow.
 
-AI use is broad enough to support a universal behavior. Gallup reported in
-February 2026 that [half of employed US adults use AI at work at least a few
-times a year](https://www.gallup.com/workplace/704225/rising-adoption-spurs-workforce-changes.aspx).
-The unresolved problem is trust. Gallup separately found that only
-[27 percent of Americans trust businesses to use AI
-responsibly](https://news.gallup.com/poll/712751/americans-cool-toward.aspx).
+## Why the raw idea fails
 
-Model quality does not remove the need for checks. Google DeepMind describes
-factuality as an ongoing research problem and reports that even leading models
-remain imperfect on its
-[FACTS benchmark suite](https://deepmind.google/blog/facts-benchmark-suite-systematically-evaluating-the-factuality-of-large-language-models/).
-NIST is also developing guidance around
-[AI agent security and identity](https://www.nist.gov/publications/summary-analysis-responses-request-information-regarding-security-considerations-ai),
-which reinforces the need to know what an agent actually did and what evidence
-supports the result.
+```text
+GENERIC DEPLOY ALL
+IDEA -> GENERATE -> DEPLOY -> URL
 
-These sources validate a broad trust gap. They do not prove demand for Lians.
-Only activation, repeated checks, sharing, and retention can do that.
+EXISTING REPLACEMENTS
+CODEX + HOSTING -> URL
+CLAUDE CODE + HOSTING -> URL
+REPLIT IN CHATGPT -> URL
+LOVABLE / BOLT / WIX -> URL
+```
 
-## Why this is not another chatbot
+More tools do not create differentiation. SEO checks, animation libraries,
+deployment adapters, models, and browser tests are capabilities competitors can
+copy or already provide.
 
-A chatbot generates or judges an answer with a model. Lians must do something a
-prompt alone cannot do:
+## What Lians would have to own
 
-1. connect to evidence outside the model;
-2. run or inspect the authoritative check;
-3. bind the receipt to the exact work that was checked;
-4. fail closed when proof is absent or stale; and
-5. hand the evidence to a person for review.
+```text
+STUCK PREVIEW
+  -> IMPORT
+  -> DIAGNOSE PRODUCTION BLOCKERS
+  -> REPAIR SUPPORTED FAILURES
+  -> DEPLOY IMMUTABLE PREVIEW
+  -> TEST LIVE CORE FLOW
+  -> APPROVE
+  -> PUBLISH
+  -> MONITOR
+  -> ROLLBACK IF NEEDED
+```
 
-If a proposed feature can be replaced by pasting the same request into ChatGPT
-or Claude, it is not the Lians wedge.
+The value is responsibility for the live production contract, not generation.
 
-## The current product loop
+Lians must own:
 
-1. **Initialize once.** `lians init` discovers a short set of high-signal
-   project commands and requires the user to authorize them.
-2. **Check current work.** `lians check` runs those commands itself without an
-   implicit shell and records bounded evidence.
-3. **Bind the receipt.** The result is tied to the current Git state and the
-   authorized policy. Changed code or commands require fresh proof.
-4. **Show one clear state.** Lians reports `NO PROOF`, `NEEDS WORK`, or `READY TO
-   REVIEW`, plus the next useful action.
-5. **Invite the next check.** A receipt can be shared with a reviewer or team,
-   creating the product-led distribution loop.
+- one opinionated production stack;
+- build and environment configuration;
+- least-privilege secret intake;
+- deterministic release gates;
+- browser verification against the deployed revision;
+- fixed resource and cost limits;
+- monitoring and incident visibility;
+- safe rollback; and
+- plain unsupported boundaries.
 
-## Expansion without losing focus
+## Exact first scope
 
-The brand is universal. Each capability remains narrow until it works.
+The free validation cohort accepts only:
 
-| Lane | Authoritative evidence | Status | Earliest build gate |
-|---|---|---|---|
-| Code | Tests, builds, lint, and Git state | Developer preview | Current focus |
-| Research | Live source access, dates, quotes, and claim support | Hypothesis | 25 repeated user requests and a deterministic source-check prototype |
-| Spreadsheets | Formulas, totals, constraints, and source reconciliation | Hypothesis | 25 repeated user requests and a safe workbook-check prototype |
-| Documents | Required sections, fields, links, and cited source support | Hypothesis | 25 repeated user requests and an inspectable requirements contract |
-| Completed actions | Confirmation from the system where the action occurred | Hypothesis | 25 repeated user requests and an authoritative integration receipt |
+- a GitHub repository exported from an AI builder;
+- React with Vite;
+- an existing Supabase backend when a backend is needed;
+- one core flow that already works in preview;
+- production configuration and deployment defects; and
+- reversible changes with human approval.
 
-Every new lane must pass five tests:
+It excludes new feature development, new auth systems, payment flows, data
+migrations, native mobile apps, arbitrary backends, regulated data, and custom
+cloud architecture.
 
-1. The problem occurs repeatedly for many kinds of people.
-2. A failed result has a real cost in time, money, trust, or risk.
-3. Lians can inspect evidence the generating model does not control.
-4. The result can be expressed as one clear state and one next action.
-5. The receipt naturally reaches another person or another workflow.
+## User experience
 
-Do not build a lane that fails any of these tests.
+The user:
+
+1. connects the repository;
+2. shows the flow that works in preview;
+3. supplies only the missing production authority or secret;
+4. approves the exact release; and
+5. receives the live URL.
+
+The user should not need to read code, understand a framework, choose a cloud,
+write deployment commands, diagnose logs, or manage a prompt loop.
+
+Visible states remain plain:
+
+```text
+UNSUPPORTED
+NEEDS YOU
+READY TO SHIP
+LIVE
+```
+
+## Why Codex and Claude still matter
+
+They are the baseline, not an enemy to ignore.
+
+Every first-cohort project must be tested against the easiest available agent
+workflow. If a user can ask Codex or Claude once and receive the same working,
+monitored release with the same effort, Lians has no reason to exist for that
+case.
+
+Lians only survives when its supported production system removes setup,
+reduces failure, and continues owning the release after a coding agent would
+stop.
+
+## First proof gate
+
+Do not build the full platform first. Run a free concierge test with ten real
+stuck applications.
+
+The experiment passes only when:
+
+- ten independent users connect real repositories;
+- at least five problems survive a one-request agent baseline;
+- seven applications reach a verified live state within 24 hours;
+- human rescue time falls below 30 minutes at the median after the first three;
+- four creators ship a second update within 30 days; and
+- two creators refer another qualified project.
+
+If the fixes stay unique, Lians Ship is an agency. If the fixes repeat and the
+manual work falls, there may be a scalable product.
 
 ## Product-led distribution
 
-The distribution unit is the receipt, not a generic social post.
+The live app is the distribution surface:
 
-- **Zero-friction start:** no Lians account, provider password, or model API key
-  for the local code check.
-- **Immediate value:** the first successful path stays `lians init`, then
-  `lians check`.
-- **Shareable outcome:** every receipt should have a small, safe summary with
-  the state, checked commit, check names, and timestamp. Private code and raw
-  logs remain private by default.
-- **Referral moment:** after a useful second check, ask the user to share the
-  receipt or invite one collaborator. Do not interrupt the first check.
-- **Use-case search pages:** publish pages around moments such as "check AI
-  generated code," "verify AI citations," and "check AI spreadsheet formulas."
-  Only the code page may claim a working product today. Future pages collect
-  demand and clearly say what is not built.
-- **Short-form demos:** show the agent claiming completion, Lians catching a
-  failed check, the fix, and a new ready receipt in 15 to 30 seconds.
-- **Brand personality:** calm, plain, and slightly skeptical. Lians is the
-  friend who asks to see the receipt, not a security company trying to scare
-  people.
-
-## First 100 users
-
-Revenue is not the first gate. Repeated use is.
-
-The first launch cohort is free and centered on one promise:
-
-> Let your AI finish the task. Run Lians before you trust "done."
-
-For each of the first 100 users, record only the minimum safe funnel data:
-
-1. repository type and AI tool;
-2. whether installation completed;
-3. time to first receipt;
-4. first result state;
-5. whether Lians caught something useful;
-6. whether the user ran a second check within seven days; and
-7. whether a receipt or invitation brought in another user.
-
-Direct outreach can begin with code users because that is the working lane, but
-the public message should market the moment, not label Lians as a developer-only
-company.
-
-## Next 72 hours
-
-### Hours 0 to 12
-
-- keep the two-command path reliable on a clean machine;
-- make the three states visually unmistakable;
-- generate a privacy-safe receipt summary; and
-- record anonymous local funnel events only with explicit permission.
-
-### Hours 12 to 36
-
-- publish one real 20-second demo;
-- publish the "check AI generated code" use-case page;
-- recruit the first 20 users from people already shipping with coding agents;
+- a privacy-safe optional `Shipped with Lians` link;
+- a public release receipt that reveals no private code or secrets;
+- a one-click path for another builder to connect a stuck project;
+- short demos showing preview failure, Lians repair, and the verified live flow;
   and
-- watch five installs live without explaining the interface.
+- use-case pages for concrete failure moments such as auth, environment,
+  routing, domain, and production-only failures.
 
-### Hours 36 to 72
-
-- fix the three largest activation failures;
-- contact enough users to reach 100 qualified attempts;
-- publish anonymized examples of failures Lians caught;
-- add the referral ask after the second useful check; and
-- decide from evidence whether to improve code activation or prototype one new
-  lane. Do not widen the product because a new idea sounds larger.
+Do not publish generic SEO pages that restate “AI app builder.”
 
 ## Metrics
 
-The primary metric is **second check within seven days**. It is the first signal
-that Check is a behavior rather than a demo.
+- qualified stuck project to repository connected;
+- connected repository to supported contract;
+- supported contract to `LIVE`;
+- median time to `LIVE`;
+- human engineering minutes per release;
+- cost per monitored live app;
+- production regression and rollback rate;
+- second release within 30 days;
+- referred qualified project; and
+- percentage of failures represented by a reusable repair.
 
-Track:
+The activation metric is **a stuck preview becoming a verified live release**.
 
-- visitor to install;
-- install to first receipt;
-- median time to first receipt;
-- percent of receipts that catch useful missing or failed proof;
-- second check within seven days;
-- weekly active checking repositories;
-- receipts shared or collaborators invited;
-- new users activated from a receipt; and
-- four-week retained users.
+The scalability metric is **human engineering time falling as successful
+releases increase**.
 
-Do not optimize signups, impressions, or repository stars while repeat checks
-remain weak.
+## Current implementation boundary
 
-## Revenue later
+Lians Ship is not implemented. Lians Check and Guard can support release
+evidence and confirmation, but they do not import, repair, deploy, monitor, or
+roll back an application today.
 
-Keep the individual Check loop free while establishing habit and distribution.
-Paid value becomes credible when multiple people need shared proof policies,
-CI enforcement, audit history, administration, or managed support.
-
-Pricing remains a hypothesis until retained teams ask for those controls. Do
-not place pricing work ahead of activation, the second check, or referrals.
-
-## Evidence trust model
-
-Every criterion and constraint record has a trust class:
-
-| Trust class | Meaning | Can satisfy a completion criterion? |
-|---|---|---|
-| `measured_local` | Produced by a local command or deterministic inspection | Yes |
-| `measured_ci` | Produced by a trusted CI run | Yes |
-| `human_confirmed` | Explicitly confirmed by an authorized human | Yes |
-| `agent_attested` | Reported by an AI agent or session summary | No |
-| `inferred_activity` | Inferred from touched files, messages, or other activity | No |
-
-Failed evidence remains a blocker regardless of its source. Positive evidence
-must be measured or human-confirmed. A changed file is an artifact, not proof
-that the requested behavior works.
-
-Trust labels are types, not caller permissions. An agent-facing call that
-declares `measured_local`, `measured_ci`, or `human_confirmed` is stored as
-`agent_attested` and its declared label remains visible for audit. Satisfying
-evidence enters only through a Lians-owned verifier, an attested CI import, or
-an explicit interactive human confirmation.
-
-`READY FOR HUMAN REVIEW` never means that the work is correct, approved,
-merged, or safe to deploy. It means the configured review gate has the required
-current evidence and no known failed, unknown, or blocked constraint.
+No public copy may imply otherwise.
 
 ## Explicit non-goals
 
-Do not build or lead with:
-
-- a general chat interface;
-- an AI writing assistant;
-- another model that grades model output;
-- generic memory or transcript replay;
-- broad agent SDKs and mode selection;
-- autonomous high-risk actions without human approval;
-- a dashboard before the receipt loop works;
-- unsupported claims about correctness, safety, time saved, or money saved; or
-- simultaneous launches for research, spreadsheets, documents, and actions.
-
-Useful existing recovery capabilities can stay available behind progressive
-disclosure. They are not the category Lians should try to own.
-
-## Claim boundary
-
-Lians may say that it recorded, recovered, measured, detected, invalidated, or
-blocked something when an inspectable record supports that statement. It may
-say `ready for human review` when the configured gate passes.
-
-Lians must not claim that it proves semantic correctness, guarantees a safe
-deployment, eliminates hallucinations, completes human review, or saves a fixed
-percentage of time, tokens, or money without matching production evidence.
-
-See [the Guard product contract](lians-guard.md) for the implementation boundary
-and the [August 2026 market pressure test](market-pressure-test-2026-08.md) for
-the competitive and evidence boundary.
+- generic prompt-to-app generation;
+- an IDE or visual website editor;
+- code as the end result;
+- every application framework;
+- user-managed deployment;
+- arbitrary feature completion;
+- autonomous releases without approval;
+- SEO ranking guarantees;
+- pricing before repeated use; and
+- claims that the experiment is proven before live cohort evidence exists.
