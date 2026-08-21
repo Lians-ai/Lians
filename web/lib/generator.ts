@@ -27,12 +27,21 @@ function titleFromPrompt(prompt: string, kind: AppKind) {
     .replace(/\s+for\s+(my|our)\s+(friends|family|group|class|team).*$/i, "")
     .replace(/[.!?]+$/, "")
     .trim();
+  if (kind === "vote") title = title.replace(/\s*:\s*.+$/, "").trim();
   if (!title) title = kind === "challenge" ? "Our new challenge" : `Our ${kind}`;
   title = title.charAt(0).toUpperCase() + title.slice(1);
   return title.slice(0, 72);
 }
 
 function voteOptions(prompt: string) {
+  const afterColon = prompt.match(/:\s*(.+?)(?:[.!?]|$)/)?.[1];
+  if (afterColon) {
+    const options = afterColon
+      .split(/\s*(?:,|;|\||\/|\bor\b)\s*/i)
+      .map((option) => option.replace(/^(?:or|and)\s+/i, "").trim())
+      .filter((option) => option.length > 0 && option.length <= 40);
+    if (options.length >= 2 && options.length <= 6) return options;
+  }
   const between = prompt.match(/between\s+(.+?)\s+and\s+(.+?)(?:[.!?]|$)/i);
   if (between) return [between[1].trim(), between[2].trim()];
   const lower = prompt.toLowerCase();

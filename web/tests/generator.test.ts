@@ -36,6 +36,12 @@ test("extracts explicit vote options", () => {
   assert.deepEqual(app.config.options, ["pasta", "tacos"]);
 });
 
+test("extracts a vote list after a colon", () => {
+  const app = generateMiniApp("Make a vote for our launch snack: cookies, fruit, or popcorn");
+  assert.equal(app.title, "A vote for our launch snack");
+  assert.deepEqual(app.config.options, ["cookies", "fruit", "popcorn"]);
+});
+
 test("uses contextual vote options", () => {
   const app = generateMiniApp("Make a movie poll for Friday");
   assert.deepEqual(app.config.options, ["Something funny", "A thriller", "A classic"]);
