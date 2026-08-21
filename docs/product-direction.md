@@ -21,8 +21,9 @@ proven pivot:
 > Forward the receipt or support thread. Lians gets your money back.
 
 Read the full [10 out of 10 pressure test](ten-out-of-ten-pressure-test.md) and
-the binding [product parameters](product-parameters.md) before changing the
-product.
+the [Refund scalability and 60-day test](refund-scalability-and-60-day-test.md),
+then apply the binding [product parameters](product-parameters.md) before
+changing the product.
 
 ## Why this candidate is stronger
 

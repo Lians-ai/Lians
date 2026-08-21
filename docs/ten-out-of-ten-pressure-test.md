@@ -258,6 +258,10 @@ The activation metric is **money confirmed back in the user's account**.
 The scalability metric is **human operating time falling while confirmed
 refunds rise**.
 
+The assumptions, two-month scenarios, operator limits, unit economics, and
+day-60 decision gates are defined in the [Refund scalability and 60-day
+test](refund-scalability-and-60-day-test.md).
+
 ## Final decision
 
 Do not rebuild Lians around Refund tonight.
