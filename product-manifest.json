@@ -1,68 +1,58 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19",
+  "updatedAt": "2026-08-21",
   "source": {
     "repository": "Lians-ai/Lians",
-    "branch": "master"
+    "branch": "codex/simple-done-check"
   },
   "product": {
-    "name": "Lians Guard",
-    "category": "Current-state and completion guard for AI coding agents",
-    "summary": "Lians recovers interrupted agent work, rejects stale task state, and blocks unsupported completion claims until the configured task is ready for human review. Free local recovery remains available without a Lians account, AI account password, or provider API key. The full team Guard workflow is a developer preview.",
+    "name": "Lians Make",
+    "category": "Instant shared mini apps",
+    "action": "Make",
+    "summary": "Describe what your group needs. Get a working app you can use and share.",
     "workflow": [
       {
-        "label": "Recover",
-        "detail": "Restore the bounded current task, decisions, blockers, and next action in a supported Claude Code or Codex session."
+        "label": "Describe",
+        "detail": "Write one sentence about the group result you need."
       },
       {
-        "label": "Check freshness",
-        "detail": "Compare the saved checkpoint with current repository and task state, and mark mismatches stale instead of silently reusing them."
+        "label": "Make",
+        "detail": "Lians selects a safe app shape and publishes a working result."
       },
       {
-        "label": "Evaluate evidence",
-        "detail": "Accept evidence only through a Lians-owned verifier, exact attested CI import, or interactive human confirmation while keeping agent attestations and inferred activity outside the completion gate."
+        "label": "Use",
+        "detail": "People join from one link without creating accounts."
       },
       {
-        "label": "Hand off to a human",
-        "detail": "Show RECOVERED, STALE, BLOCKED, or READY FOR HUMAN REVIEW with inspectable evidence and remaining work."
+        "label": "Spread",
+        "detail": "Every app can be shared and remixed into the next app."
       }
     ],
     "surfaces": [
       {
-        "label": "Free local recovery",
-        "status": "Available",
-        "detail": "Local memory, bounded recall, correction, deletion, and supported AI-client connections provide the individual recovery path."
+        "label": "Make page",
+        "status": "Working preview",
+        "detail": "One prompt creates a challenge, vote, quiz, leaderboard, tracker, or shared list."
       },
       {
-        "label": "Typed task evidence gate",
-        "status": "Developer preview",
-        "detail": "Task criteria distinguish measured evidence and human confirmation from agent-reported or inferred activity."
+        "label": "Shared app",
+        "status": "Working preview",
+        "detail": "Each result has persistent shared state, a participant name, sharing, and remixing."
       },
       {
-        "label": "Local Git checkpoint fingerprint",
-        "status": "Developer preview",
-        "detail": "Task checkpoints record repository identity, HEAD, dirty state, and a digest of changed paths when Git is available."
-      },
-      {
-        "label": "Automatic stale evidence invalidation",
-        "status": "In development",
-        "detail": "Workspace or requirement changes will invalidate dependent evidence and create a visible stale signal."
-      },
-      {
-        "label": "Trusted GitHub Actions intake",
-        "status": "Developer preview",
-        "detail": "CI evidence requires a verified GitHub attestation for the exact repository, signer workflow, source ref, commit, hosted runner, and selected passing checks, plus interactive authorization of the check-to-criterion mapping."
-      },
-      {
-        "label": "Local Guard reporting",
-        "status": "Developer preview",
-        "detail": "A local bounded report summarizes task states, missing criteria, untrusted evidence, and constraint failures without claiming business outcomes."
-      },
-      {
-        "label": "Team Guard",
-        "status": "Pilot hypothesis",
-        "detail": "Shared current state, completion policies, queue visibility, reporting, support, and managed operations for AI-native teams."
+        "label": "Growth events",
+        "status": "Working preview",
+        "detail": "Creation, views, participation, shares, and remixes can be measured from first-party data."
       }
+    ],
+    "activation": "A created app receives a meaningful action from a second person.",
+    "northStar": "Activated apps per week",
+    "nonGoals": [
+      "General-purpose coding agent",
+      "Arbitrary production software",
+      "Chat that only returns code",
+      "Payments or high-consequence workflows",
+      "Monetization before retained use"
     ]
   }
 }

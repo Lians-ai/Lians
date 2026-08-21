@@ -41,7 +41,7 @@ def test_product_status_keeps_setup_and_measured_impact_simple(tmp_path, monkeyp
     result = cli.product_status(data_path=data)
 
     assert result["status"] == "optimized"
-    assert result["headline"] == "Lians Guard is connected to 1 AI app."
+    assert result["headline"] == "Lians is connected to 1 AI app."
     assert result["configured_clients"] == 1
     assert result["detected_clients"] == 2
     assert result["privacy"]["ai_account_credentials_required"] is False

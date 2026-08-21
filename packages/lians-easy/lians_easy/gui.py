@@ -344,7 +344,7 @@ class SetupApp:
         self.other_visible = False
         self.open_requested = False
 
-        self.root.title("Lians AI Efficiency")
+        self.root.title("Lians Check")
         self.root.geometry("780x720")
         self.root.minsize(680, 620)
         self.root.configure(background=BACKGROUND)
@@ -389,7 +389,7 @@ class SetupApp:
 
         self._label(
             self.shell,
-            "Recover the task. Guard what done means.",
+            "Your AI says it is done. Lians checks the receipts.",
             foreground=TEXT,
             font=("Segoe UI", 22, "bold"),
             anchor="w",
@@ -501,7 +501,7 @@ class SetupApp:
         self.progress_bar.pack(fill="x", pady=(0, 12))
         steps = (
             ("protecting", "Protect your existing settings"),
-            ("connecting", "Connect Lians Guard"),
+            ("connecting", "Connect Lians"),
             ("verifying", "Check that recovery is ready"),
         )
         for key, copy in steps:
@@ -529,7 +529,7 @@ class SetupApp:
         actions.pack(fill="x")
         self.install_button = tk.Button(
             actions,
-            text="Connect Lians Guard",
+            text="Connect Lians",
             command=self._start_install,
             background=BLUE,
             foreground="white",

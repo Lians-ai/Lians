@@ -5,13 +5,13 @@ repository.
 
 ## What Lians is
 
-Lians Guard is a local-first, provider-neutral current-state and completion guard
-for AI coding agents. Its core product loop is deliberately small:
+Lians Check is a local-first, provider-neutral proof-of-done check for AI coding
+agents. Its core product loop is deliberately small:
 
-1. recover the current task in a later supported session;
-2. reject task or evidence state that no longer matches the workspace; and
-3. keep the completion gate closed until every configured criterion has trusted
-   evidence and every constraint is known and passing.
+1. discover and authorize a short set of real project checks;
+2. run those checks through a Lians-owned local verifier;
+3. reject evidence that no longer matches the workspace; and
+4. show `NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`.
 
 Free local `remember` and `recall` remain the recovery and distribution wedge.
 MCP is the default integration surface for existing AI clients. The Python local

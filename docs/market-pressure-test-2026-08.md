@@ -1,160 +1,127 @@
-# Lians Guard market pressure test
+# Lians market pressure test
 
-Date: 2026-08-19
+Date: 2026-08-20
 
-This is a decision document, not a fundraising claim. Repository behavior is
-marked separately from customer and revenue evidence.
+> Historical note: this Ship test has been superseded by the [2026-08-21
+> 10 out of 10 pressure test](ten-out-of-ten-pressure-test.md). Keep this file
+> as the evidence for rejecting generic Deploy All.
 
-## Verdict
+## Current decision
 
-Lians has a credible product wedge, but the repository alone cannot make it
-venture-ready or prove product-market fit. The repo can prove a sharper trust
-boundary, current-state checks, installability, and test coverage. Only real
-users can prove activation, retention, willingness to pay, distribution, and
-time saved.
+Generic idea-to-app creation fails the replacement test. The current market
+already includes focused builders and general agents that can generate, check,
+and deploy software from natural language.
 
-The current strategic position is:
+The only adjacent problem worth a live test is the production gap after an
+AI-built app already works in preview.
 
-> Pilot-ready after the clean-install workflow passes on the supported
-> platforms. Not yet market-proven or venture-ready.
+Read the complete [Deploy All replacement test](deploy-all-pressure-test.md).
 
-## What the market invalidates
+## Evidence hierarchy
 
-The following are not strong standalone differentiation in the current market:
+### Category evidence
 
-- cross-session memory;
-- summaries and context compression;
-- Git-linked agent session replay;
-- native agent checkpoints;
-- MCP connectivity;
-- local storage;
-- a task dashboard; and
-- broad claims about saving tokens.
+- Lovable reported [$200 million ARR and 100,000 new projects per
+  day](https://lovable.dev/blog/one-year-of-lovable) in November 2025.
+- Wix reported approximately [304.2 million registered users at the end of
+  2025](https://www.sec.gov/Archives/edgar/data/1576789/000162828026015222/wix-20251231.htm).
+- Canva says more than [89 million websites have been
+  created](https://www.canva.com/newsroom/news/canva-websites/) with Canva
+  Websites.
 
-Native and adjacent products already cover much of that surface. See the
-[current competitive landscape](competitive-landscape.md).
+This proves large creation demand and intense competition. It is not Lians
+demand.
 
-## The wedge that survives
+### Replacement evidence
 
-Lians should own the boundary between an agent's claim and a human's review:
+- The [official Codex deployment
+  workflow](https://learn.chatgpt.com/use-cases/deploy-app-or-website) already
+  covers a rough idea or repository through checks, preview deployment, and a
+  live URL.
+- [Claude Code](https://claude.com/product/claude-code) says it can build,
+  debug, and ship with deployment, database, monitoring, and version-control
+  tools.
+- [Replit in ChatGPT](https://docs.replit.com/references/platforms/chatgpt)
+  already generates and automatically deploys applications from natural
+  language.
 
-1. restore one bounded current task;
-2. compare it with the current repository state;
-3. downgrade agent-declared proof to an attestation;
-4. accept measured evidence only through a Lians-controlled verifier, an exact
-   attested GitHub Actions workflow with an interactively authorized criterion
-   mapping, or explicit interactive human confirmation;
-5. mark mismatches stale; and
-6. show one result: `RECOVERED`, `STALE`, `BLOCKED`, or
-   `READY FOR HUMAN REVIEW`.
+This invalidates Deploy All as a differentiated product promise.
 
-That is narrower than memory and more useful than another session recorder.
+### Problem evidence
 
-## Consumer pressure test
+Recent public customer reports describe preview and production differences,
+auth and database failures, infrastructure failures, lost credits, unstable
+hosting costs, and repeated agent-created regressions:
 
-| What a developer needs | Current repo answer | Score | Required proof |
-|---|---|---:|---|
-| Understand the value immediately | One Guard promise and four visible states | 4/5 | Five-user comprehension test |
-| Reach first value in minutes | Local recovery exists, Guard setup still has several surfaces | 2/5 | Median install-to-first-recovery under 5 minutes |
-| Keep the existing AI workflow | MCP and supported lifecycle hooks, no replacement chat UI | 4/5 | Live Claude Code and Codex sessions |
-| Trust the result | Agent self-promotion is blocked; CI evidence is attested and commit-bound | 4/5 | Adversarial import and stale-state tests in production |
-| Stay private and in control | Local encrypted state, correction, and deletion paths exist | 4/5 | Clean uninstall and deletion usability study |
-| See a concrete benefit | Local reports can expose recovered, stale, blocked, and ready events | 2/5 | Repeated-explanation and review-rework baseline versus pilot |
-| Return every week | No external retention data exists | 0/5 | Four-week cohort retention |
+- [Replit publishing failure, May
+  2026](https://www.reddit.com/r/replit/comments/1to09km/replit_support_and_publishing_is_awful/)
+- [Replit development versus production failure, April
+  2026](https://www.reddit.com/r/replit/comments/1skorhm/should_proddev_once_deployed/)
+- [Non-coder deployment account](https://www.reddit.com/r/replit/comments/1m58nzn)
+- [Migration after reliability problems around 50
+  users](https://www.reddit.com/r/replit/comments/1sqtbfh/my_clients_replit_app_hit_200_daily_users_heres/)
+- [Bolt production help request, March
+  2026](https://www.reddit.com/r/boltnewbuilders/comments/1s1k9s8/converting_development_to_production/)
 
-The consumer launch message should not explain the whole architecture. It
-should show the relief: work resumes with the current task intact, stale claims
-are caught, and the user knows what still needs review.
+These are anecdotes. They justify a direct test, not a market-size claim.
 
-## Investor pressure test
+## Candidate wedge
 
-Current investor writing consistently emphasizes a sharp wedge, retention,
-efficient growth, durable margins, and differentiated data or evaluation loops.
-The useful pressure is not whether Lians can make a larger feature list. It is
-whether a narrow workflow becomes habitual and expands inside teams.
+> **Ship.**
 
-| Investment question | Current evidence | Honest answer |
-|---|---|---|
-| Is the problem clear? | Guard category, target customer, and visible states are documented | Yes, at hypothesis level |
-| Is the product technically differentiated? | Trust boundary, workspace binding, attested CI intake, and provider-neutral task state | Promising, not yet a moat |
-| Is there a distribution loop? | Open-source repo and integrations exist | Not yet observed |
-| Do users retain? | No live cohort data | Unknown |
-| Will teams pay? | Pilot price and packaging are hypotheses | Unknown |
-| Can the company expand? | Team policy, reporting, regulated controls, and managed deployment are plausible expansions | Unproven |
-| Are margins durable? | Local execution can reduce hosted inference cost, but support and enterprise operations are unmeasured | Unknown |
-| Is there proprietary compounding data? | The architecture can collect bounded failure events | No meaningful corpus yet |
+> Your AI app works in preview. Lians gets it live and keeps it live.
 
-Relevant primary sources:
+The first cohort is restricted to GitHub repositories using React, Vite, and an
+existing Supabase backend. Lians handles supported production blockers,
+publishes an approved immutable release, tests one core flow, monitors it, and
+can roll it back.
 
-- Bessemer's [State of AI 2025](https://www.bvp.com/atlas/the-state-of-ai-2025)
-  distinguishes fast-growing but fragile products from businesses with stronger
-  retention and margins, and identifies memory and context as emerging moats.
-- a16z's [enterprise AI review](https://a16z.com/ai-enterprise-2025/) emphasizes
-  product quality, speed, and the way strong user pull can drive enterprise
-  adoption.
-- a16z's [consumer AI review](https://a16z.com/state-of-consumer-ai-2025-product-hits-misses-and-whats-next/)
-  shows how concentrated paid consumer behavior remains, which raises the bar
-  for habit and differentiation.
-- Sequoia's [product-market-fit framework](https://sequoiacap.com/article/pmf-framework/)
-  and [sustainable product growth](https://articles.sequoiacap.com/sustainable-product-growth)
-  place retention and differentiated value ahead of launch attention.
-- Sequoia's [Generative AI Act Two](https://sequoiacap.com/article/generative-ai-act-two/)
-  frames proven value and retention as harder problems than initial demand.
+## Honest score
 
-## Current scorecard
-
-These are internal judgments, not measured market scores.
-
-| Dimension | Score | Why |
+| Dimension | Score | Reason |
 |---|---:|---|
-| Problem clarity | 4/5 | The Guard promise is specific and understandable |
-| Technical differentiation | 3.5/5 | Trust and freshness are real; competitors can still move into the space |
-| Activation | 2/5 | Clean-install CI is added, but live onboarding data does not exist |
-| Trust and evidence | 4/5 | Agent self-promotion is blocked and CI import requires exact attestation and commit binding |
-| Resistance to native competition | 3/5 | Provider neutrality helps, but native tools own distribution |
-| Distribution | 2/5 | The repo can attract users, but no repeatable acquisition loop is measured |
-| Retention | 0/5 | No cohort evidence |
-| Willingness to pay | 0/5 | No paid-pilot evidence |
+| Pain clarity | 8/10 | Current users report concrete production failures and losses |
+| Category demand | 9/10 | AI software creation is large and growing |
+| Direct Lians demand | 0/10 | No qualified user has connected a stuck repository |
+| Agent resistance | 4/10 | Ownership may help, but Codex and Claude remain strong substitutes |
+| Differentiation | 3/10 | The production contract is a hypothesis, not a product |
+| Scalability | 3/10 | Arbitrary rescue work becomes an agency quickly |
+| Retention | 0/10 | No second-release behavior exists |
+| Distribution | 0/10 | No referral loop has been observed |
+| Revenue evidence | 1/10 | Rescue services show price points, not Lians willingness to pay |
 
-## Validation gates
+## First 100 users do not come first
 
-The following are operating hypotheses. They are not customer results:
+The first gate is ten qualified users, not one hundred broad signups.
 
-1. Interview 30 qualified AI-native teams and identify the same Guard failure
-   in at least 15.
-2. Get 60 percent of qualified installs to a first recovery or blocked stale
-   claim within 24 hours.
-3. Get at least 50 percent of active pilot repositories to record a second
-   meaningful Guard event in week two.
-4. Close three 30-day paid design-partner pilots at $1,000 or more.
-5. Retain at least 40 percent of pilot teams through week four before widening
-   the roadmap.
-6. Produce customer-reviewed evidence of reduced repeated explanation, stale
-   work, unsupported completion, or review rework before making savings claims.
+A qualified user must have:
 
-If Lians cannot pass these gates, add no new broad platform surface. Narrow the
-problem, buyer, or activation loop instead.
+- a real repository;
+- a flow that works in preview;
+- a production blocker;
+- permission to connect the project; and
+- a reason the application needs to become live now.
 
-## Repository actions from this pressure test
+Only after the ten-project test shows repeated repairs and declining human work
+should Lians recruit a free first-100 cohort.
 
-- Agent-facing checkpoint calls cannot grant themselves measured or
-  human-confirmed trust.
-- GitHub Actions evidence is accepted only after GitHub attestation verification
-  for an exact repository, workflow, ref, commit, and hosted runner, plus an
-  interactive authorization of the check-to-criterion mapping.
-- Human confirmation requires an interactive exact confirmation phrase.
-- Claude lifecycle capture covers supported `PreCompact` and `SessionEnd`
-  events.
-- The new workflow requires clean install on Linux, macOS, and Windows; its
-  first hosted run is pending.
-- The new workflow requires native GUI launch on macOS and Windows; its first
-  hosted run is pending.
-- A local Guard report exposes state counts and missing or untrusted evidence
-  without claiming business outcomes.
-- The repository-wide lint policy is explicit and centered on correctness.
+## Metrics
 
-## Claims still prohibited
+- qualified problem to repository connected;
+- repository connected to supported;
+- supported to verified live release;
+- time to live;
+- human engineering minutes;
+- reusable repair rate;
+- deployment regression and rollback rate;
+- second release within 30 days; and
+- qualified referrals.
 
-Do not say that Lians saves a fixed amount of time, tokens, or money; proves
-semantic correctness; guarantees deployment safety; has product-market fit;
-has a moat; or is venture-ready until matching external evidence exists.
+## Decision rule
+
+Continue only if real users hand over real stuck projects, a meaningful share
+cannot get the same result from one ordinary Codex or Claude request, and the
+human rescue burden falls with every cohort.
+
+Otherwise, stop. Do not turn an agency workflow or a replaceable prompt into a
+software company by changing the landing-page language.

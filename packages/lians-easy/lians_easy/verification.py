@@ -357,6 +357,7 @@ class VerificationService:
         required_checks: list[str] | None = None,
         forbidden_terms: list[str] | None = None,
         formal_proofs: list[dict[str, Any]] | None = None,
+        check_config_sha256: str | None = None,
         max_changed_files: int = 500,
         max_advisories: int = 1,
         client: str = "mcp",
@@ -438,6 +439,11 @@ class VerificationService:
             raise VerificationError("max_changed_files must be an integer from 1 to 2000")
         if type(max_advisories) is not int or not 0 <= max_advisories <= 5:
             raise VerificationError("max_advisories must be an integer from 0 to 5")
+        config_digest = None
+        if check_config_sha256 is not None:
+            config_digest = str(check_config_sha256).strip().casefold()
+            if not _HEX_256.fullmatch(config_digest):
+                raise VerificationError("check_config_sha256 must be a lowercase SHA-256 digest")
 
         policy = {
             "schema": "https://lians.ai/schemas/verification-policy/v0.1",
@@ -453,6 +459,8 @@ class VerificationService:
             "external_check_trust": "caller_attested",
             "updated_at": _now(),
         }
+        if config_digest is not None:
+            policy["check_config_sha256"] = config_digest
         item = self.store.set_current(
             _policy_key(task["task_id"]),
             json.dumps(policy, ensure_ascii=False, sort_keys=True),
@@ -491,7 +499,13 @@ class VerificationService:
         return {"policy": policy, "memory_id": item["id"], "task": task}
 
     @staticmethod
-    def _check_results(values: Any) -> list[dict[str, Any]]:
+    def _check_results(
+        values: Any,
+        *,
+        trust: str = "caller_attested",
+    ) -> list[dict[str, Any]]:
+        if trust not in {"caller_attested", "lians_measured"}:
+            raise VerificationError("check result trust is invalid")
         if values is None:
             return []
         if not isinstance(values, list) or len(values) > 20:
@@ -558,7 +572,7 @@ class VerificationService:
                     "command": command,
                     "exit_code": exit_code,
                     "output_sha256": output_sha256,
-                    "trust": "caller_attested",
+                    "trust": trust,
                 }
             )
         return results
@@ -573,6 +587,49 @@ class VerificationService:
         check_results: list[dict[str, Any]] | None = None,
         client: str = "mcp",
     ) -> dict[str, Any]:
+        return self._verify(
+            task_id,
+            project=project,
+            base_ref=base_ref,
+            agent_summary=agent_summary,
+            check_results=check_results,
+            client=client,
+            external_check_trust="caller_attested",
+        )
+
+    def _verify_measured_local(
+        self,
+        task_id: str,
+        *,
+        project: Project,
+        base_ref: str = "HEAD",
+        agent_summary: str,
+        check_results: list[dict[str, Any]],
+        client: str = "lians-check",
+    ) -> dict[str, Any]:
+        """Verify results produced inside the bounded Lians local command runner."""
+
+        return self._verify(
+            task_id,
+            project=project,
+            base_ref=base_ref,
+            agent_summary=agent_summary,
+            check_results=check_results,
+            client=client,
+            external_check_trust="lians_measured",
+        )
+
+    def _verify(
+        self,
+        task_id: str,
+        *,
+        project: Project,
+        base_ref: str,
+        agent_summary: str,
+        check_results: list[dict[str, Any]] | None,
+        client: str,
+        external_check_trust: str,
+    ) -> dict[str, Any]:
         configured = self.policy(task_id, project_id=project.id)
         policy = configured["policy"]
         task = configured["task"]
@@ -580,7 +637,7 @@ class VerificationService:
         base = _clean_text(base_ref, field="base_ref", maximum=200)
         base_commit = _base_commit(root, base)
         summary = _clean_text(agent_summary, field="agent_summary", maximum=20_000)
-        checks = self._check_results(check_results)
+        checks = self._check_results(check_results, trust=external_check_trust)
 
         changes = _name_status(root, base)
         tracked_paths = {item["path"] for item in changes}
@@ -882,7 +939,7 @@ class VerificationService:
             "trust": {
                 "git_inspection": "lians_measured",
                 "task_state": "lians_stored",
-                "external_checks": "caller_attested",
+                "external_checks": external_check_trust,
                 "formal_model": (
                     "proved_by_exhaustive_enumeration"
                     if configured_proofs

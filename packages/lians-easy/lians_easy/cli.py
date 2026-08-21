@@ -23,6 +23,12 @@ from .claude_experiment import (
     run_claude_experiment,
 )
 from .ci_evidence import emit_github_actions_evidence, import_github_actions_evidence
+from .check import (
+    CheckConfigError,
+    LiansCheckService,
+    parse_custom_check,
+    preview_checks,
+)
 from .control_policy import ControlPolicyService
 from .installer import client_targets, doctor, install, plan, uninstall
 from .lifecycle import listen_for_windows_installer_shutdown
@@ -74,6 +80,26 @@ def _show(result: dict[str, Any], *, as_json: bool) -> None:
         print(result["next_step"])
 
 
+def _show_check(result: dict[str, Any], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    print(result["headline"])
+    print(result["message"])
+    for item in result.get("checks", []):
+        if "status" not in item:
+            print(f"- {item.get('label') or item.get('id')}: {' '.join(item.get('argv') or [])}")
+            continue
+        status = "PASS" if item.get("status") == "passed" else "FAIL"
+        duration = float(item.get("duration_seconds") or 0)
+        print(f"- {status}  {item.get('label') or item.get('id')}  {duration:.2f}s")
+        if status == "FAIL" and item.get("detail"):
+            detail = str(item["detail"]).replace("\n", "\n    ")
+            print(f"    {detail}")
+    if result.get("next_step"):
+        print(result["next_step"])
+
+
 def product_status(
     *, data_path: str | Path | None = None, home: Path | None = None
 ) -> dict[str, Any]:
@@ -97,9 +123,9 @@ def product_status(
     return {
         "status": "optimized" if configured else "not_configured",
         "headline": (
-            f"Lians Guard is connected to {len(configured)} AI app{'s' if len(configured) != 1 else ''}."
+            f"Lians is connected to {len(configured)} AI app{'s' if len(configured) != 1 else ''}."
             if configured
-            else "Lians Guard is ready to connect to your AI coding apps."
+            else "Lians is ready to connect to your AI coding apps."
         ),
         "clients": [
             {
@@ -133,7 +159,7 @@ def product_status(
             "ai_account_credentials_required": False,
         },
         "next_step": (
-            "Start or recover a task in your connected app. Lians keeps the current state bounded."
+            "Run `lians init` in a Git project, then use `lians check` after an AI session."
             if configured
             else "Open Lians for guided setup, or run `lians optimize --clients detected --yes`."
         ),
@@ -171,7 +197,8 @@ def continuity_share_card(
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="lians",
-        description="See, guide, and control work in the AI agents you already use",
+        description="Check the receipts before trusting that AI-generated work is done",
+        epilog="Start with `lians init`, then run `lians check` after an AI coding session.",
     )
     result.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     result.add_argument("--background", action="store_true", help=argparse.SUPPRESS)
@@ -191,9 +218,32 @@ def parser() -> argparse.ArgumentParser:
     app.add_argument("--host", default="127.0.0.1")
     app.add_argument("--port", type=int, default=7317)
 
-    status = commands.add_parser("status", help="Show connected apps and measured context reuse")
+    status = commands.add_parser("status", help="Show connected apps and local activity")
     status.add_argument("--data", type=Path)
     status.add_argument("--json", action="store_true")
+
+    check_init = commands.add_parser(
+        "init", help="Set up proof-of-done checks for the current project"
+    )
+    check_init.add_argument("--cwd", type=Path, default=Path.cwd())
+    check_init.add_argument("--data", type=Path)
+    check_init.add_argument(
+        "--command",
+        dest="check_commands",
+        action="append",
+        help="Add a check as NAME=COMMAND; may be repeated",
+    )
+    check_init.add_argument("--force", action="store_true")
+    check_init.add_argument("--yes", action="store_true", help="Authorize the detected checks")
+    check_init.add_argument("--json", action="store_true")
+
+    check = commands.add_parser(
+        "check", help="Check the receipts before trusting that AI work is done"
+    )
+    check.add_argument("--cwd", type=Path, default=Path.cwd())
+    check.add_argument("--data", type=Path)
+    check.add_argument("--base", default="auto")
+    check.add_argument("--json", action="store_true")
 
     report = commands.add_parser(
         "report", help="Show the current Guard state for one project"
@@ -429,6 +479,12 @@ def parser() -> argparse.ArgumentParser:
     )
     backup_import.add_argument("--yes", action="store_true", help="Confirm the memory import")
     backup_import.add_argument("--json", action="store_true")
+    primary_commands = ("init", "check", "app", "status", "doctor")
+    command_help = {item.dest: item for item in commands._choices_actions}
+    commands._choices_actions = [
+        command_help[name] for name in primary_commands if name in command_help
+    ]
+    commands.metavar = "{" + ",".join(primary_commands) + "}"
     return result
 
 
@@ -473,6 +529,61 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "status":
         _show(product_status(data_path=args.data), as_json=args.json)
+        return
+    if args.command == "init":
+        project = detect_project(args.cwd)
+        try:
+            custom_checks = (
+                [parse_custom_check(value) for value in args.check_commands]
+                if args.check_commands
+                else None
+            )
+        except CheckConfigError as error:
+            raise SystemExit(str(error)) from error
+        if not args.yes:
+            if not sys.stdin.isatty():
+                raise SystemExit("Review the project checks, then rerun with --yes.")
+            try:
+                preview = custom_checks or preview_checks(
+                    project.trusted_root or Path(args.cwd), force=args.force
+                )
+            except CheckConfigError as error:
+                raise SystemExit(str(error)) from error
+            if preview:
+                print("Lians will run these commands when you ask it to check the project:")
+                for item in preview:
+                    print(f"- {item.label}: {' '.join(item.argv)}")
+            if input("Type ENABLE LIANS CHECK to continue: ").strip() != "ENABLE LIANS CHECK":
+                raise SystemExit("Lians Check was not enabled.")
+        try:
+            result = LiansCheckService(
+                MemoryStore(args.data or default_data_path())
+            ).initialize(project, checks=custom_checks, force=args.force)
+        except CheckConfigError as error:
+            raise SystemExit(str(error)) from error
+        _show_check(result, as_json=args.json)
+        return
+    if args.command == "check":
+        project = detect_project(args.cwd)
+        progress = None if args.json else lambda item: print(f"Checking {item.label}...")
+        try:
+            result = LiansCheckService(
+                MemoryStore(args.data or default_data_path())
+            ).run(project, base_ref=args.base, progress=progress)
+        except CheckConfigError as error:
+            result = {
+                "schema": "https://lians.ai/schemas/check-result/v0.1",
+                "status": "no_proof",
+                "headline": "NO PROOF",
+                "message": str(error),
+                "checks": [],
+                "next_step": "Run `lians init` to authorize this project's checks.",
+            }
+            _show_check(result, as_json=args.json)
+            raise SystemExit(2) from error
+        _show_check(result, as_json=args.json)
+        if result["status"] != "ready_for_review":
+            raise SystemExit(1)
         return
     if args.command == "report":
         project = detect_project(args.cwd)

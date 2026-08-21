@@ -1,129 +1,143 @@
 # Lians product direction
 
-## Product decision
+## Decision
 
-Lians is becoming **Lians Guard, the current-state and completion guard for AI
-coding agents**.
+Do not build generic Deploy All or Lians Ship as the company.
 
-The public promise is:
+The shipped product remains Lians Check, the evidence-backed proof layer for AI
+work. The candidate below is a separate validation experiment and cannot change
+that public promise before its proof gate passes.
 
-> Lians recovers interrupted agent work, rejects stale task state, and blocks
-> `done` until the current task is ready for human review.
+Deploy All is already replaceable by general coding agents and focused
+builders. Ship identifies a real production problem, but it is limited to AI
+builders, is likely to become custom engineering work, and has no direct Lians
+demand evidence.
 
-In plain language:
+The strongest candidate from the new pressure test is an experiment, not a
+proven pivot:
 
-> Your agent can forget the chat. It cannot forget what is finished, what
-> changed, or what still has to pass.
+> **Refund.**
 
-This is a focused reliability product, not a general memory platform. Memory
-and cross-agent handoff remain important because they create recovery. They are
-the free acquisition wedge, not the category Lians should try to own.
+> Forward the receipt or support thread. Lians gets your money back.
 
-## The first customer
+Read the full [10 out of 10 pressure test](ten-out-of-ten-pressure-test.md) and
+the [Refund scalability and 60-day test](refund-scalability-and-60-day-test.md),
+then apply the binding [product parameters](product-parameters.md) before
+changing the product.
 
-The primary customer is an AI-native software agency with 5 to 30 developers
-using Claude Code, Codex, Git, and GitHub Actions across several client
-repositories. These teams feel the cost of interrupted sessions, repeated
-explanations, stale requirements, false completion claims, review rework, and
-missed handoffs every week.
+## Why this candidate is stronger
 
-The secondary customer is an AI-native SaaS team with 5 to 25 engineers.
-Individual developers remain the free user and distribution base.
+Refund has a broad consumer trigger and a narrow first case type. It produces
+money returned, not advice, code, or another draft. It also fits the existing
+Lians forwarding and approval thesis better than an unrelated app builder.
 
-## The product loop
+ChatGPT or Claude can write a refund request. Lians only adds value if it keeps
+the evidence and authority for the case, sends the approved request, reads the
+reply, follows up, and verifies that the refund landed.
 
-1. **Recover.** Lians saves a bounded task checkpoint at a supported lifecycle
-   event and restores it in a later Claude Code or Codex session.
-2. **Check freshness.** The checkpoint is bound to the repository, commit,
-   working-tree state, changed-file digest, task definition, and recorded time.
-3. **Invalidate stale work.** If a requirement, decision, or repository state
-   changes, dependent work is marked stale instead of silently reused.
-4. **Evaluate readiness.** Definition-of-done criteria are evaluated using
-   typed evidence. Agent prose and file activity alone do not satisfy them.
-5. **Show one clear state.** The product reports `RECOVERED`, `STALE`, `BLOCKED`,
-   or `READY FOR HUMAN REVIEW` with the evidence and remaining work visible.
+## Exact first scope
 
-## Free and paid layers
+The free validation cohort accepts only U.S. merchant cases with:
 
-### Free local recovery
+- a duplicate charge;
+- a canceled order that was still charged;
+- a missing order covered by the merchant's stated policy;
+- a returned purchase whose promised refund is late; or
+- an approved refund that never posted.
 
-- local, inspectable task save points;
-- bounded resume context across supported Claude Code and Codex sessions;
-- current-state correction and stale-history exclusion;
-- no Lians account, AI account password, or provider API key; and
-- open-source tools for individual developers.
+The case must be addressable by email, worth at least $25, supported by a real
+receipt or thread, and require no physical return or bank dispute.
 
-### Paid team guard
+## User experience
 
-- authoritative task state across a team;
-- stale-state detection and invalidation;
-- definition-of-done policies connected to Git and CI evidence;
-- shared queues, reporting, administration, support, and incident review; and
-- managed deployment for agencies and AI-native engineering teams.
+The user:
 
-Pricing is a hypothesis until pilots validate willingness to pay. The current
-pilot offer is $1,000 for 30 days, up to 5 developers and 3 repositories. A
-successful pilot should reduce repeated explanation, stale-state incidents,
-unsupported completion claims, or review rework in a way the customer can
-measure.
+1. forwards the receipt or support thread;
+2. answers only missing factual questions;
+3. reviews the evidence, requested amount, and first action;
+4. approves the message; and
+5. leaves while Lians follows the case.
 
-## Evidence trust model
+Visible states stay plain:
 
-Every criterion and constraint record has a trust class:
+```text
+UNSUPPORTED
+NEEDS YOU
+READY TO SEND
+RECOVERING
+REFUNDED
+DENIED
+```
 
-| Trust class | Meaning | Can satisfy a completion criterion? |
-|---|---|---|
-| `measured_local` | Produced by a local command or deterministic inspection | Yes |
-| `measured_ci` | Produced by a trusted CI run | Yes |
-| `human_confirmed` | Explicitly confirmed by an authorized human | Yes |
-| `agent_attested` | Reported by an AI agent or session summary | No |
-| `inferred_activity` | Inferred from touched files, messages, or other activity | No |
+`REFUNDED` requires user-confirmed evidence that the money landed. A generated
+email or merchant promise does not count.
 
-Failed evidence remains a blocker regardless of its source. Positive evidence
-must be measured or human-confirmed. A changed file is an artifact, not proof
-that the requested behavior works.
+## What Lians would have to own
 
-Trust labels are types, not caller permissions. An agent-facing MCP or Bridge
-call that declares `measured_local`, `measured_ci`, or `human_confirmed` is stored
-as `agent_attested` and its declared label remains visible for audit. Satisfying
-evidence enters only through a Lians-owned local verifier, an attested CI import,
-or an explicit interactive human confirmation.
+```text
+FORWARD
+  -> BUILD EVIDENCE FILE
+  -> CHECK CASE BOUNDARY
+  -> PROPOSE ACTION
+  -> APPROVE
+  -> SEND
+  -> READ REPLY
+  -> FOLLOW UP
+  -> VERIFY MONEY RETURNED
+```
 
-`READY FOR HUMAN REVIEW` never means that the work is correct, approved,
-merged, or safe to deploy. It means the configured review gate has the required
-current evidence and no known failed, unknown, or blocked constraint.
+The first durable product assets would be:
 
-## What to build now
+- a structured case record;
+- merchant-specific policy and contact knowledge;
+- evidence requirements by failure type;
+- deterministic deadlines and safe escalation rules;
+- an approval ledger;
+- thread and outcome tracking; and
+- measured resolution patterns.
 
-1. Make automatic save, resume, stale detection, and the four visible states
-   reliable for Claude Code, Codex, Git, and GitHub Actions.
-2. Bind checkpoints to workspace fingerprints and invalidate evidence when its
-   inputs no longer match.
-3. Make installation and removal predictable on clean macOS, Windows, and Linux
-   environments.
-4. Run three paid design-partner pilots before widening the product surface.
-5. Measure recovery success, stale-state detections, blocked unsupported claims,
-   review rework, weekly active repositories, retention, and revenue.
+## Why this is not proven
 
-## What not to lead with
+The category has strong demand evidence and direct competition. A current UK
+competitor already markets nearly the same outcome and success-fee model.
+Merchant systems vary, claims can be abused, low-dollar cases may not cover
+operating cost, and Lians has not recovered one dollar for one user.
 
-Do not lead the product or onboarding with generic memory, more agent SDKs,
-browser and research features, video tools, 3D graphs, formal-proof language,
-mode selection, or token-reduction claims. Keep useful existing capabilities
-available behind progressive disclosure while the Guard workflow becomes
-reliable.
+That is why the next step is a free manual cohort, not a platform build or a
+website promise.
 
-## Claim boundary
+## First proof gate
 
-Lians may say that it recorded, recovered, measured, detected, invalidated, or
-blocked something when an inspectable record supports that statement. It may
-say `ready for human review` when the configured gate passes.
+Run twenty real cases manually behind a minimal forwarding and approval flow.
+Continue only if:
 
-Lians must not claim that it proves semantic correctness, guarantees a safe
-deployment, eliminates hallucinations, completes human review, or saves a fixed
-percentage of time, tokens, or money without matching production evidence.
+- at least eight confirmed refunds land within fourteen days;
+- confirmed refunds exceed $1,000 in total;
+- user time remains below three minutes at the median;
+- human operating time falls below fifteen minutes for the final five cases;
+- no false or unauthorized claim is sent;
+- four qualified referrals occur; and
+- four people bring a second valid case within thirty days.
 
-See [the Guard product contract](lians-guard.md) for the user-facing states,
-economic model, and implementation boundary. See the
-[August 2026 market pressure test](market-pressure-test-2026-08.md) for the
-competitive, consumer, and investor claim boundary.
+If ordinary ChatGPT-written emails resolve the same cases with the same effort,
+if merchant exceptions keep human work high, or if users will not connect real
+threads, stop.
+
+## Current implementation boundary
+
+Refund is not implemented. The shipped repository remains Lians Check, the
+evidence-backed proof layer for AI coding work. No public copy may claim that
+Lians currently recovers refunds.
+
+## Explicit non-goals
+
+- generic prompt-to-app generation;
+- Lians Ship platform work;
+- a chatbot that only drafts complaints;
+- ordinary physical returns;
+- chargebacks, legal threats, or regulated claims;
+- autonomous messages without approval;
+- every merchant or country;
+- a guaranteed recovery claim;
+- pricing before direct demand; and
+- calling the idea proven before users receive money.

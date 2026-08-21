@@ -10,7 +10,7 @@ const { chromium } = require("playwright");
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const output = resolve(root, "docs/assets/github-social-preview.png");
 const logo = (await readFile(resolve(root, "docs/images/logo.png"))).toString("base64");
-const lotus = (await readFile(resolve(root, "integrations/cursor/assets/logo.svg"))).toString("base64");
+const lotus = (await readFile(resolve(root, "docs/assets/lians-lotus.svg"))).toString("base64");
 const logoUrl = `data:image/png;base64,${logo}`;
 const lotusUrl = `data:image/svg+xml;base64,${lotus}`;
 const fontPath = resolve(root, "packages/lians-easy/lians_easy/app/fonts/sora-latin.woff2");
@@ -97,10 +97,10 @@ await page.setContent(`
 
         .lotus {
           position: absolute;
-          width: 330px;
-          height: 330px;
-          right: 65px;
-          top: 160px;
+          width: 380px;
+          height: auto;
+          right: 48px;
+          top: 214px;
           display: block;
           filter: drop-shadow(0 26px 60px rgba(20, 59, 127, 0.32));
         }
@@ -117,8 +117,8 @@ await page.setContent(`
     </head>
     <body>
       <img class="logo" src="${logoUrl}" alt="Lians">
-      <h1>Use less context.<br><span>Get more AI.</span></h1>
-      <p>Local memory and verifiable work briefs for Claude, Codex, and Cursor.</p>
+      <h1>AI said done.<br><span>Lians checked.</span></h1>
+      <p>Evidence-backed proof of done for Claude Code, Codex, Cursor, and every Git repository.</p>
       <img class="lotus" src="${lotusUrl}" alt="">
       <div class="rule"></div>
     </body>

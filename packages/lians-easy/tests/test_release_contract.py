@@ -22,10 +22,7 @@ def test_public_python_package_has_product_aligned_commands() -> None:
 
     assert 'requires = ["hatchling==1.32.0"]' in pyproject
     assert 'name = "lians-bridge"' in pyproject
-    assert (
-        'description = "Current-state recovery and completion guard for AI coding agents"'
-        in pyproject
-    )
+    assert 'description = "Evidence-backed proof-of-done checks for AI coding agents"' in pyproject
     assert '"Development Status :: 4 - Beta"' in pyproject
     assert 'lians = "lians_easy.cli:main"' in pyproject
     assert 'lians-bridge = "lians_easy.cli:main"' in pyproject

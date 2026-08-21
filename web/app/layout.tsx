@@ -1,0 +1,29 @@
+import type { Metadata } from "next";
+import { Bricolage_Grotesque, Instrument_Serif } from "next/font/google";
+import "./globals.css";
+
+const display = Bricolage_Grotesque({ variable: "--font-display", subsets: ["latin"] });
+const serif = Instrument_Serif({ variable: "--font-serif", subsets: ["latin"], weight: "400" });
+
+export const metadata: Metadata = {
+  metadataBase: new URL("https://lians-make.ethan-beirne.chatgpt.site"),
+  title: "Lians | Make",
+  description: "Describe what your group needs. Get a working app you can use and share.",
+  icons: { icon: "/favicon.svg" },
+  openGraph: {
+    title: "Lians | Make",
+    description: "Describe what your group needs. Get a working app you can use and share.",
+    type: "website",
+    images: [{ url: "/og-luxury.jpg", width: 1731, height: 909, alt: "MAKE. by lians" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Lians | Make",
+    description: "Describe what your group needs. Get a working app you can use and share.",
+    images: ["/og-luxury.jpg"],
+  },
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body className={`${display.variable} ${serif.variable}`}>{children}</body></html>;
+}

@@ -1,268 +1,99 @@
 <p align="center">
-  <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/lians-lotus.svg" width="190" alt="Lians lotus">
-  </a>
+  <img src="docs/assets/lians-lotus.svg" width="150" alt="Lians lotus">
 </p>
 
-<p align="center"><strong>Recover the task. Reject stale state. Block unsupported done.</strong></p>
+<p align="center"><strong>Come to Lians to Make.</strong></p>
 
-<p align="center">
-  <a href="docs/quickstart.md"><strong>Quickstart</strong></a> ·
-  <a href="docs/why-lians.md">Why Lians</a> ·
-  <a href="docs/benchmarks/continuitybench-v0.1.md">ContinuityBench</a> ·
-  <a href="docs/install.md">Install</a> ·
-  <a href="docs/">Docs</a> ·
-  <a href="https://github.com/Lians-ai/Lians/issues">Issues</a>
-</p>
+<p align="center">Describe what your group needs. Get a working app you can use and share.</p>
 
-<p align="center">
-  <a href="https://pypi.org/project/lians-sdk"><img src="https://img.shields.io/pypi/v/lians-sdk?label=PyPI" alt="PyPI version"></a>
-  <a href="https://www.npmjs.com/package/@lians-ai/lians"><img src="https://img.shields.io/npm/v/%40lians-ai%2Flians?label=npm" alt="npm version"></a>
-  <a href="https://registry.modelcontextprotocol.io/?q=io.github.ebeirne%2Flians"><img src="https://img.shields.io/badge/MCP-Official%20Registry-blueviolet" alt="MCP Official Registry"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 license"></a>
-</p>
+## Make
 
-## Lians Guard
-
-**The current-state and completion guard for AI coding agents.**
-
-Lians recovers interrupted agent work, rejects stale task state, and blocks
-`done` until the current task is ready for human review.
-
-> Your agent can forget the chat. It cannot forget what is finished, what
-> changed, or what still has to pass.
-
-- **Recover.** Resume a bounded current task across supported Claude Code and
-  Codex sessions.
-- **Reject stale state.** Bind checkpoints to current repository and task state
-  so old evidence is not silently reused.
-- **Guard completion.** Separate measured evidence from an agent's own claims
-  and keep the gate closed while work is missing, unknown, failed, or blocked.
-- **Require review.** `READY FOR HUMAN REVIEW` is a handoff to a person, never a
-  claim that the work is correct, approved, or safe to deploy.
-- **Stay local.** The free recovery path needs no Lians account, AI password, or
-  provider API key.
-
-Lians works with your existing AI account and editor. It does not replace your
-model, Git, CI, repository instructions, or human review.
-
-## One clear result after every agent session
+Lians turns one sentence into a focused shared app.
 
 ```text
-RECOVERED
-Task: Fix OAuth callback handling
-Next: Re-run the callback integration test
-
-STALE
-Reason: The authentication requirement changed after this checkpoint
-
-BLOCKED
-Missing: OAuth callback integration test
-Untrusted: "tests passed" was reported by the agent, not measured
-
-READY FOR HUMAN REVIEW
-Measured locally: callback tests passed
-Measured by CI: required checks passed
+Make a 30-day reading challenge for my friends.
 ```
 
-The trust model is deliberately strict. `measured_local`, `measured_ci`, and
-`human_confirmed` evidence can satisfy a criterion. `agent_attested` and
-`inferred_activity` records remain useful context but cannot open the review
-gate. An agent cannot promote its own checkpoint into a trusted class. Trusted
-CI evidence requires an exact GitHub attestation and commit match plus an
-interactive check-to-criterion mapping; human evidence requires interactive
-confirmation. Read [why Lians exists](docs/why-lians.md), the full
-[Lians Guard product contract](docs/lians-guard.md), and the current [market
-pressure test](docs/market-pressure-test-2026-08.md).
+Lians returns the live challenge, shared progress, and one link. Friends open it and join without creating accounts.
 
-## Try it in two minutes
+The first release makes six safe app shapes:
 
-Choose the AI tool you already use:
+- challenges;
+- votes;
+- quizzes;
+- leaderboards;
+- trackers; and
+- shared lists.
 
-| Tool | Fastest setup |
-|---|---|
-| Codex app, CLI, or IDE | [One command](integrations/codex) |
-| Claude Code | [Two plugin commands](integrations/lians-plugin) |
-| Cursor | [One-click MCP install](integrations/cursor) |
-| Other MCP clients | [Minimal MCP setup](docs/install.md#existing-ai-client-use-mcp) |
+This is not a chatbot that writes instructions for making an app. It creates the app, saves the shared state, and gives the group a usable result.
 
-For example, after [installing `uv`](https://docs.astral.sh/uv/getting-started/installation/), connect Codex with:
+## Why this wedge
 
-```bash
-codex mcp add lians --env LIANS_MCP_ENABLED_TOOLS=remember,recall,list_memories,correct_memory,forget_memory -- uvx --from "lians-sdk[mcp]" lians-mcp
-```
+General coding agents can build almost anything, but that power still asks people to understand code, setup, hosting, and debugging. Lians removes those decisions for common group moments.
 
-Restart Codex, then save one safe project fact and recover it in a fresh chat.
-Local memory is stored in `~/.lians/mcp.db` by default. This is the available
-free recovery path; the full Guard workflow is currently a developer preview.
-
-[Follow the complete quickstart](docs/quickstart.md) for setup, recovery,
-correction, deletion, and the Guard preview boundary.
-
-## What a fresh coding agent receives
-
-Lians can generate a bounded project handoff instead of replaying a transcript:
+The loop is intentionally short:
 
 ```text
-Reported complete; verify:
-- migrated the orders API to /v2/orders
-
-Still open:
-- verify the migration against current Git state
-- update documentation
-
-Decisions:
-- keep pytest
-
-Changed:
-- /v1/orders is stale; use /v2/orders
-
-Next:
-- update documentation before touching unrelated UI
+Describe it -> Make it -> Share it -> People use it -> Remix it
 ```
 
-The handoff is derived from current Lians state, not a manually maintained
-summary. Agent-reported work remains visible without being mislabeled as
-verified completion.
+Every completed app is both the result and the distribution surface for the next app.
 
-## Why this is not another generic memory layer
+## Run the web product
 
-Native memories are convenient when work stays inside one product. General
-memory is no longer a scarce category. Lians uses local memory for recovery,
-then focuses on the expensive gap: current task state and evidence-backed
-readiness.
-
-The [current competitive landscape](docs/competitive-landscape.md) pressure
-tests this position against native Claude Code, Codex, Cursor, GitHub Copilot,
-Entire, Factory, and AI review workflows.
-
-| Approach | Best fit | Boundary |
-|---|---|---|
-| Native tool memory | One AI tool, minimal setup | Usually stays inside that vendor |
-| `AGENTS.md` or `CLAUDE.md` | Stable repository instructions | Must be maintained manually |
-| Transcript replay | Reconstructing one conversation | Large, noisy, and may revive stale decisions |
-| Free Lians recovery | Resume current project context across supported tools | Requires a local connection to each tool |
-| Lians Guard | Detect stale state and gate readiness with typed evidence | Team workflow is still in developer preview |
-
-Lians is not claiming that every project needs a separate memory layer. See the
-[honest comparison and decision guide](docs/why-lians.md).
-
-## Project status
-
-Lians is under active development. Available recovery features and preview Guard
-features are separated here so the repository does not imply a production
-guarantee that does not exist yet.
-
-| Capability | Status |
-|---|---|
-| Local memory through MCP and Python | Available |
-| Codex, Claude Code, and Cursor local recovery setup | Available |
-| Inspect, correct, and confirmed permanent deletion | Available |
-| Bounded context and signed selection receipts | Available |
-| Automatic Claude-to-Codex project handoff | Beta |
-| Typed evidence and evidence-backed task gate | Developer preview |
-| Local Git workspace fingerprint on checkpoints | Developer preview |
-| Automatic stale evidence invalidation | In development |
-| Attested GitHub Actions evidence intake | Developer preview |
-| Local Guard reporting | Developer preview |
-| Shared team queue | Planned |
-| Cross-platform clean-install CI | Required by the new Guard workflow; first hosted run pending |
-| Guided desktop installer and local control center | Release candidate |
-
-The macOS and Windows desktop builds remain release candidates pending platform
-signing and notarization. See the [desktop preview boundary](docs/easy-install.md).
-
-## Current evidence
-
-The included Claude-to-Codex continuity fixture recovered **10/10 expected
-facts**, exposed **0 stale facts as current**, and produced a **231-token
-handoff**. These are bounded beta results, not a promise that every live coding
-session extracts perfectly. [Run the experiment](experiments/cross-agent-continuity/README.md).
-
-The developing [ContinuityBench v0.1](docs/benchmarks/continuitybench-v0.1.md)
-publishes the proposed cross-agent, freshness, correction, erasure, provenance,
-and boundedness test contract. Its current Lians fixture is evidence for that
-fixture only; it is not presented as a completed competitor leaderboard.
-
-A separate live test saved a synthetic project fact through Cursor, recalled it
-in a new Cursor chat and a fresh Claude Code session, and confirmed it was gone
-after deletion. [Read the test method](docs/benchmarks/cross-agent-memory-2026-08-14.md).
-
-The Guard correctness benchmark exercises missing evidence, unknown criteria,
-failed constraints, blockers, stale updates, and drift signals. It is a local,
-deterministic test of the configured policy, not proof of semantic correctness
-or a production outcome. Run `packages/lians-easy/benchmarks/task_contract_correctness.py`
-to inspect the cases.
-
-## Build with Lians
-
-Use the local Python SDK inside an application:
+The active product is in [`web`](web/README.md).
 
 ```bash
-pip install "lians-sdk[local]"
+cd web
+npm install
+npm run dev
 ```
 
-```python
-from datetime import datetime, timezone
-from lians import LocalLiansClient
-
-memory = LocalLiansClient(db_path=".lians/memory.db")
-memory.add(
-    agent_id="my-agent",
-    content="The project uses Python 3.12 and pytest.",
-    event_time=datetime.now(timezone.utc),
-)
-
-result = memory.recall(
-    agent_id="my-agent",
-    query="Which Python version and test runner should I use?",
-)
-```
-
-See the [install guide](docs/install.md) for TypeScript, Go, Java, C, framework
-integrations, and self-hosting.
-
-Running a class, club, hackathon, or campus developer group? Use the
-[student and community kit](docs/student-community-kit.md). Contributors and
-package integrators can start with
-[Supported paths and repository status](docs/supported-paths.md).
-
-<details>
-<summary><strong>Advanced capabilities</strong></summary>
-
-Lians also includes tools for project-scoped agent handoffs, signed selection
-and review receipts, local research and browser briefs, temporal reconstruction,
-lineage, information barriers, confirmed erasure, and bounded formal checks.
-These capabilities are useful for advanced or governed deployments but are not
-required for the starter memory workflow.
-
-- [Memory engine](docs/memory-engine.md)
-- [Cross-agent continuity experiment](experiments/cross-agent-continuity/README.md)
-- [Agent-work verification](docs/formal-verification.md)
-- [Security model](docs/security-whitepaper.md)
-- [Community and managed product boundary](docs/community-cloud-boundary.md)
-- [Supported paths and repository status](docs/supported-paths.md)
-
-</details>
-
-## Development
+Quality checks:
 
 ```bash
-git clone https://github.com/Lians-ai/Lians.git
-cd Lians
-python -m pip install -e ".[dev]"
-python scripts/test_all.py
+npm run lint
+npm test
 ```
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Feature
-ideas, integration requests, and reproducible bugs are welcome in
-[GitHub Issues](https://github.com/Lians-ai/Lians/issues).
+## Product rules
 
-If Lians helps your workflow, [star the repository](https://github.com/Lians-ai/Lians/stargazers)
-so other AI-tool users can find it.
+- One sentence in, one usable result out.
+- No account required for participants.
+- Human-readable templates instead of arbitrary generated code.
+- One obvious share action on every result.
+- Remixing starts from a working app.
+- Free access during the demand test.
+- Large, direct language with no technical setup in the main flow.
+
+## The test
+
+The first target is 100 people who create a real app and invite at least one other person.
+
+The main metric is the share loop:
+
+```text
+created app -> first participant -> share -> remix
+```
+
+Signups and page views do not count as product success. A creator is activated only after another person uses the app.
+
+See [`marketing/make/LAUNCH_TODAY.md`](marketing/make/LAUNCH_TODAY.md) for the launch sequence, demo scripts, metrics, and stop rules.
+
+## Non-goals
+
+- a general coding agent;
+- arbitrary websites from a prompt;
+- production software for payments, health, finance, or other high-consequence work;
+- a chat interface that returns code;
+- enterprise permissions;
+- subscriptions before repeat use exists; and
+- adding every design library to every page.
+
+## Existing Lians work
+
+The repository still contains the original local memory, MCP, SDK, and evidence-checking systems. They remain available for existing users, but they are not the active consumer product promise.
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
-
-<!-- mcp-name: io.github.ebeirne/lians -->
+Apache 2.0. See [`LICENSE`](LICENSE).
