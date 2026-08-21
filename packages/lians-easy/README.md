@@ -2,11 +2,12 @@
 
 **Your AI says it is done. Lians checks the receipts.**
 
-Lians Check is the local proof-of-done check for AI coding agents. It runs the
-project's authorized commands itself, binds the result to the current Git
-state, and returns `NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`. It does not
-replace Claude Code, Codex, Cursor, Git, CI, or the user's editor. Users do not
-give Lians their AI account credentials or provider API keys.
+Lians is the proof layer for AI work. Lians Check for code is its first
+supported product. It runs the project's authorized commands itself, binds the
+result to the current Git state, and returns `NO PROOF`, `NEEDS WORK`, or `READY
+TO REVIEW`. It does not replace Claude Code, Codex, Cursor, Git, CI, or the
+user's editor. Users do not give Lians their AI account credentials or provider
+API keys.
 
 ```bash
 python -m pip install -e ./packages/lians-easy

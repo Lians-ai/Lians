@@ -6,12 +6,14 @@ not established results.
 
 ## Category
 
-**Lians Check is the evidence-backed proof-of-done check for AI coding agents.**
+**Lians is the evidence-backed proof layer for AI work. Its first supported
+check is code.**
 
 The consumer surface is deliberately smaller than the underlying Guard trust
-contract. A user authorizes project checks once, runs `lians check`, and sees
-`NO PROOF`, `NEEDS WORK`, or `READY TO REVIEW`. Guard remains the internal and
-team policy layer for typed evidence, freshness, CI intake, and shared control.
+contract. The universal action is Check. In the current code lane, a user
+authorizes project checks once, runs `lians check`, and sees `NO PROOF`, `NEEDS
+WORK`, or `READY TO REVIEW`. Guard remains the internal and team policy layer
+for typed evidence, freshness, CI intake, and shared control.
 
 Lians helps a developer or team answer four questions after an agent session:
 
@@ -117,11 +119,14 @@ Free individual use centers on local recovery. Paid value centers on shared
 current state, policy-backed completion gates, team visibility, support, and
 managed operations.
 
-## Commercial hypotheses
+## Commercial hypotheses after retention
 
-The first design-partner offer is a 30-day founding pilot for $1,000, limited to
-5 developers and 3 repositories. The pilot should establish a baseline and
-report changes in:
+The individual Check loop stays free while Lians proves activation, repeat
+checks, referrals, and four-week retention. Team pricing should be tested only
+when retained users ask for shared policy, CI enforcement, audit history,
+administration, or managed support.
+
+A future team pilot should establish a baseline and report changes in:
 
 - repeated explanation events;
 - interrupted sessions successfully recovered;
@@ -130,15 +135,8 @@ report changes in:
 - review rework and time to review; and
 - weekly active repositories and developers.
 
-Recurring packaging to test after successful pilots:
-
-| Plan | Working hypothesis |
-|---|---|
-| Team | $249 per month for up to 10 developers |
-| Agency | $499 per month for up to 30 developers |
-| Managed | $12,000 to $30,000 per year based on support and deployment needs |
-
-These are testable starting points, not promises or published price commitments.
+Packaging and pricing are intentionally unset until usage shows which shared
+control is valuable. Revenue is an expansion test, not the first product gate.
 
 ## Release gate
 

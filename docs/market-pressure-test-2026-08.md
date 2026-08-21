@@ -1,22 +1,57 @@
-# Lians Guard market pressure test
+# Lians Check market pressure test
 
-Date: 2026-08-19
+Date: 2026-08-20
 
 This is a decision document, not a fundraising claim. Repository behavior is
 marked separately from customer and revenue evidence.
 
 ## Verdict
 
-Lians has a credible product wedge in **Lians Check**, but the repository alone cannot make it
-venture-ready or prove product-market fit. The repo can prove a sharper trust
-boundary, current-state checks, installability, and test coverage. Only real
-users can prove activation, retention, willingness to pay, distribution, and
+Lians has a credible universal company thesis and a narrow product wedge in
+**Lians Check**, but the repository alone cannot prove product-market fit. The
+universal action is Check. The first supported lane is code. The repo can prove
+a sharper trust boundary, current-state checks, installability, and test
+coverage. Only real users can prove activation, repeated use, distribution, and
 time saved.
 
 The current strategic position is:
 
-> Pilot-ready after the clean-install workflow passes on the supported
-> platforms. Not yet market-proven or venture-ready.
+> Ready for a free first-100-user pressure test after the clean-install workflow
+> passes on the supported platforms. Not yet market-proven.
+
+## Universal wedge pressure test
+
+The broad opportunity is not "AI for everyone." That language is too vague to
+create a habit. The opportunity is one repeated moment shared by many people:
+
+> AI says the work is done. Check it before you use it.
+
+Current evidence supports the scale of the moment:
+
+- Gallup reported in February 2026 that [half of employed US adults use AI at
+  work at least a few times a year](https://www.gallup.com/workplace/704225/rising-adoption-spurs-workforce-changes.aspx).
+- Gallup also found that only [27 percent of Americans trust businesses to use
+  AI responsibly](https://news.gallup.com/poll/712751/americans-cool-toward.aspx).
+- Google DeepMind says factuality remains an open problem and publishes
+  imperfect results even for leading models in its
+  [FACTS benchmark suite](https://deepmind.google/blog/facts-benchmark-suite-systematically-evaluating-the-factuality-of-large-language-models/).
+- NIST's work on [AI agent security and
+  identity](https://www.nist.gov/publications/summary-analysis-responses-request-information-regarding-security-considerations-ai)
+  highlights the need to establish what an agent did and which authority or
+  evidence supports it.
+
+The evidence does not validate a generic fact-checking chatbot. That category
+is crowded, and a second model opinion is not independent proof. Lians survives
+the pressure test only when it connects to an evidence source outside the
+generating model, binds the result to the exact work, and fails closed.
+
+| Question | Honest answer |
+|---|---|
+| Can the brand serve everyone who uses AI? | Yes, through the universal Check moment |
+| Can the product verify every kind of AI work today? | No, only the code lane is implemented |
+| Is the first lane too narrow for the company? | No, if the proof contract transfers to later evidence adapters |
+| Is this replaceable by ChatGPT or Claude? | Not when Lians runs external checks and binds receipts to exact state |
+| Does broad demand prove Lians demand? | No, repeated checks and referrals must prove it |
 
 ## Multichannel demand update
 
@@ -45,7 +80,7 @@ but not a broad new review bot:
   memory and generic review as standalone categories.
 - Small open-source proof-gate tools demonstrate repeated founder pain, but
   their limited adoption means the exact Lians Check package still needs direct
-  retention and payment validation.
+  retention and distribution validation.
 
 The decision from this evidence is to make the consumer surface smaller than
 the underlying Guard system:
@@ -91,17 +126,17 @@ That is narrower than memory and more useful than another session recorder.
 
 | What a developer needs | Current repo answer | Score | Required proof |
 |---|---|---:|---|
-| Understand the value immediately | One Guard promise and four visible states | 4/5 | Five-user comprehension test |
-| Reach first value in minutes | Local recovery exists, Guard setup still has several surfaces | 2/5 | Median install-to-first-recovery under 5 minutes |
+| Understand the value immediately | One Check promise and three visible states | 4/5 | Five-user comprehension test |
+| Reach first value in minutes | A two-command Check path exists, but no live activation data exists | 2/5 | Median install-to-first-receipt under 5 minutes |
 | Keep the existing AI workflow | MCP and supported lifecycle hooks, no replacement chat UI | 4/5 | Live Claude Code and Codex sessions |
 | Trust the result | Agent self-promotion is blocked; CI evidence is attested and commit-bound | 4/5 | Adversarial import and stale-state tests in production |
 | Stay private and in control | Local encrypted state, correction, and deletion paths exist | 4/5 | Clean uninstall and deletion usability study |
-| See a concrete benefit | Local reports can expose recovered, stale, blocked, and ready events | 2/5 | Repeated-explanation and review-rework baseline versus pilot |
+| See a concrete benefit | Check exposes missing, failed, and ready proof | 2/5 | Unsupported-claim and review-rework baseline versus cohort |
 | Return every week | No external retention data exists | 0/5 | Four-week cohort retention |
 
 The consumer launch message should not explain the whole architecture. It
-should show the relief: work resumes with the current task intact, stale claims
-are caught, and the user knows what still needs review.
+should show the relief: an AI says the work is done, Lians catches missing or
+failed proof, and the user knows what still needs review.
 
 ## Investor pressure test
 
@@ -112,11 +147,11 @@ whether a narrow workflow becomes habitual and expands inside teams.
 
 | Investment question | Current evidence | Honest answer |
 |---|---|---|
-| Is the problem clear? | Guard category, target customer, and visible states are documented | Yes, at hypothesis level |
+| Is the problem clear? | Check action, current lane, and visible states are documented | Yes, at hypothesis level |
 | Is the product technically differentiated? | Trust boundary, workspace binding, attested CI intake, and provider-neutral task state | Promising, not yet a moat |
 | Is there a distribution loop? | Open-source repo and integrations exist | Not yet observed |
 | Do users retain? | No live cohort data | Unknown |
-| Will teams pay? | Pilot price and packaging are hypotheses | Unknown |
+| Will teams pay? | No pricing evidence exists | Unknown and not the first gate |
 | Can the company expand? | Team policy, reporting, regulated controls, and managed deployment are plausible expansions | Unproven |
 | Are margins durable? | Local execution can reduce hosted inference cost, but support and enterprise operations are unmeasured | Unknown |
 | Is there proprietary compounding data? | The architecture can collect bounded failure events | No meaningful corpus yet |
@@ -144,7 +179,7 @@ These are internal judgments, not measured market scores.
 
 | Dimension | Score | Why |
 |---|---:|---|
-| Problem clarity | 4/5 | The Guard promise is specific and understandable |
+| Problem clarity | 4/5 | The Check action is specific and understandable |
 | Technical differentiation | 3.5/5 | Trust and freshness are real; competitors can still move into the space |
 | Activation | 2/5 | Clean-install CI is added, but live onboarding data does not exist |
 | Trust and evidence | 4/5 | Agent self-promotion is blocked and CI import requires exact attestation and commit binding |
@@ -157,17 +192,19 @@ These are internal judgments, not measured market scores.
 
 The following are operating hypotheses. They are not customer results:
 
-1. Interview 30 qualified AI-native teams and identify the same Guard failure
-   in at least 15.
+1. Get 100 real users to attempt Lians Check on non-confidential repositories.
 2. Get 70 percent of qualified installs to a first Lians Check receipt within
    five minutes.
-3. Get at least 50 percent of active pilot repositories to run a second check
+3. Get at least 50 percent of activated users to run a second check
    within seven days.
-4. Close three 30-day paid design-partner pilots at $1,000 or more.
-5. Retain at least 40 percent of pilot teams through week four before widening
+4. Have at least 20 percent of activated users share a receipt or invite one
+   collaborator after a useful check.
+5. Retain at least 40 percent of active users through week four before widening
    the roadmap.
-6. Produce customer-reviewed evidence of reduced repeated explanation, stale
+6. Produce user-reviewed evidence of reduced repeated explanation, stale
    work, unsupported completion, or review rework before making savings claims.
+7. Test team pricing only after repeated individual use reveals a real need for
+   shared policy, CI enforcement, or audit controls.
 
 If Lians cannot pass these gates, add no new broad platform surface. Narrow the
 problem, buyer, or activation loop instead.

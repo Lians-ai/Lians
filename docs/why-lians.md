@@ -2,13 +2,20 @@
 
 ## The short answer
 
-Lians Check is an evidence-backed proof-of-done check for AI coding agents.
+Lians is the evidence-backed proof layer for AI work. Its first supported check
+is code.
 
 > Your AI says it is done. Lians checks the receipts.
 
+The universal trigger is not a job title. It is the moment any person uses AI
+work and has to decide whether to trust it. Lians is useful when accepting a
+completion claim without current measured evidence would create rework, delay,
+or harm.
+
 Claude Code, Codex, and other agents can already store instructions, recall
-context, and review code. Lians is useful when the risk is accepting a
-completion claim without current measured evidence.
+context, generate work, and review their own output. Lians must not compete by
+adding another chat box or asking another model for an opinion. It earns a place
+in the workflow by checking evidence the model does not control.
 
 ## The pressure test
 
@@ -38,6 +45,11 @@ The differentiation is a narrow Guard contract:
 4. **Readiness.** Keep the gate closed while criteria are missing or constraints
    are failed, unknown, or blocked.
 5. **Human control.** Make the result inspectable and require human review.
+
+The first implementation applies that contract to code because tests, builds,
+lint, and Git provide objective evidence. Research, spreadsheets, documents,
+and completed actions are future lanes only if Lians can connect each one to an
+authoritative source and fail closed when proof is absent.
 
 ## Which approach should I use?
 

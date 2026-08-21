@@ -8,6 +8,7 @@ Two layers under test:
   2. The ranking helpers - parent/clause collapse (one fact can't fill two
      result slots) and the time-aware stale-clause demotion.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,8 +21,16 @@ from src.lians.ranking import STALE_CLAUSE_PENALTY, _collapse_derived, _stale_cl
 # Test-only references over bounded literals.  Production parsing must use the
 # linear scanners; these preserve an executable record of their former regex
 # semantics without applying the expressions to untrusted input.
+_EM_DASH = chr(0x2014)
+_EN_DASH = chr(0x2013)
 _REFERENCE_SEGMENT_SPLIT = re.compile(
-    r"(?<=[.!?…])\s+|\s+[\u2014\u2013]\s*|\s*[\u2014\u2013]\s+|\s+--\s+"
+    r"(?<=[.!?…])\s+|\s+["
+    + _EM_DASH
+    + _EN_DASH
+    + r"]\s*|\s*["
+    + _EM_DASH
+    + _EN_DASH
+    + r"]\s+|\s+--\s+"
 )
 _REFERENCE_CLAUSE_SPLIT = re.compile(
     r",\s+(?:so|since|because|but|although|though|anyway)\b\s*|\s+because\s+"
@@ -34,9 +43,11 @@ _REFERENCE_CLAUSE_SPLIT = re.compile(
 
 
 def test_buried_location_fact_extracted():
-    turn = ("User: Ooh that's good. Okay so now activities \u2014 I'm thinking we open "
-            "with something to get people talking, since I've got their whole team "
-            "flying into my studio in Portland and they won't all know each other.")
+    turn = (
+        "User: Ooh that's good. Okay so now activities " + _EM_DASH + " I'm thinking we open "
+        "with something to get people talking, since I've got their whole team "
+        "flying into my studio in Portland and they won't all know each other."
+    )
     out = extract_interjections(turn)
     assert len(out) == 1
     assert "my studio in Portland" in out[0]
@@ -44,23 +55,29 @@ def test_buried_location_fact_extracted():
 
 
 def test_aside_marker_trims_to_the_request():
-    turn = ("User: Um, discovery is probably like 4 days, UX design maybe 8? Oh and "
-            "I should tell you \u2014 the client wants to do a lunch meeting, remind me "
-            "I eat fish now, I'm not vegetarian anymore.")
+    turn = (
+        "User: Um, discovery is probably like 4 days, UX design maybe 8? Oh and "
+        "I should tell you " + _EM_DASH + " the client wants to do a lunch meeting, remind me "
+        "I eat fish now, I'm not vegetarian anymore."
+    )
     out = extract_interjections(turn)
     assert any(c.endswith("remind me I eat fish now, I'm not vegetarian anymore.") for c in out)
 
 
 def test_trailing_aside_falls_back_to_whole_fact_clause():
-    turn = ("User: Oh wait, actually can we do pricing at the same time because my "
-            "brain wants to know the numbers \u2014 my day rate is $900 by the way.")
+    turn = (
+        "User: Oh wait, actually can we do pricing at the same time because my "
+        "brain wants to know the numbers " + _EM_DASH + " my day rate is $900 by the way."
+    )
     out = extract_interjections(turn)
     assert out == ["User: my day rate is $900 by the way."]
 
 
 def test_revision_clause_carries_its_cue():
-    turn = ("User: Oh, by the way, my day rate went up to $1100 now that Loomis "
-            "renewed, so I should factor that into how long I'm spending prepping this.")
+    turn = (
+        "User: Oh, by the way, my day rate went up to $1100 now that Loomis "
+        "renewed, so I should factor that into how long I'm spending prepping this."
+    )
     out = extract_interjections(turn)
     assert len(out) == 1
     assert "$1100" in out[0] and "went up" in out[0]
@@ -69,17 +86,23 @@ def test_revision_clause_carries_its_cue():
 def test_short_fact_clause_falls_back_to_segment():
     # "my day rate is $900" alone is under the length floor; the segment rescue
     # must keep the fact (second agent_sim run's phrasing).
-    turn = "User: Yes, phases is perfect. Oh \u2014 my day rate is $900, so we can build off that for the estimates."
+    turn = (
+        "User: Yes, phases is perfect. Oh "
+        + _EM_DASH
+        + " my day rate is $900, so we can build off that for the estimates."
+    )
     out = extract_interjections(turn)
     assert len(out) == 1
     assert "$900" in out[0]
 
 
 def test_negotiated_revision_extracted():
-    turn = ("User: Let me find it real quick... okay it's basically like intro, then a "
-            "design system overview, then a break, then prototyping demo, then wrap-up. "
-            "Oh and by the way I finally negotiated my day rate up to $1100 after the "
-            "Loomis renewal, so that felt good.")
+    turn = (
+        "User: Let me find it real quick... okay it's basically like intro, then a "
+        "design system overview, then a break, then prototyping demo, then wrap-up. "
+        "Oh and by the way I finally negotiated my day rate up to $1100 after the "
+        "Loomis renewal, so that felt good."
+    )
     out = extract_interjections(turn)
     assert any("$1100" in c for c in out)
 
@@ -87,17 +110,21 @@ def test_negotiated_revision_extracted():
 def test_reminder_to_myself_and_adverbed_verb():
     # Third agent_sim run's phrasing: aside marker "reminder to myself" and the
     # adverb between subject and verb ("I actually eat").
-    turn = ("User: Yeah let's do it. Oh wait\u2014reminder to myself, I need to tell the "
-            "caterer I actually eat fish now, so I'm pescatarian, not full veggie. "
-            "Anyway, deliverables!")
+    turn = (
+        "User: Yeah let's do it. Oh wait" + _EM_DASH + "reminder to myself, I need to tell the "
+        "caterer I actually eat fish now, so I'm pescatarian, not full veggie. "
+        "Anyway, deliverables!"
+    )
     out = extract_interjections(turn)
     assert any("eat fish now" in c or "pescatarian" in c for c in out)
 
 
 def test_conjunction_buried_fact_splits_off():
-    turn = ("User: Ugh, hold on \u2014 remind me to reschedule the client lunch, they "
-            "picked a steakhouse and I'm pescatarian now, so I need to find "
-            "somewhere with fish.")
+    turn = (
+        "User: Ugh, hold on " + _EM_DASH + " remind me to reschedule the client lunch, they "
+        "picked a steakhouse and I'm pescatarian now, so I need to find "
+        "somewhere with fish."
+    )
     out = extract_interjections(turn)
     assert any(c == "User: I'm pescatarian now" for c in out), out
 
@@ -109,10 +136,12 @@ def test_single_clause_turn_not_duplicated():
 
 
 def test_task_chatter_ignored():
-    turn = ("User: Perfect, let's build in 2 rounds per phase and then it's like... "
-            "$900 a day after that for extra rounds, right? Oh god I also need to "
-            "reschedule my dentist thing but that's a later-me problem \u2014 anyway "
-            "yeah, put the revision clause in.")
+    turn = (
+        "User: Perfect, let's build in 2 rounds per phase and then it's like... "
+        "$900 a day after that for extra rounds, right? Oh god I also need to "
+        "reschedule my dentist thing but that's a later-me problem " + _EM_DASH + " anyway "
+        "yeah, put the revision clause in."
+    )
     assert extract_interjections(turn) == []
 
 
@@ -141,11 +170,11 @@ def test_maximum_size_whitespace_run_preserves_connector_semantics():
         "first.   second",
         "first?\tsecond",
         "first…\nsecond",
-        "first   \u2014second",
-        "first\u2014   second",
+        "first   " + _EM_DASH + "second",
+        "first" + _EM_DASH + "   second",
         "first   –   second",
         "first   --   second",
-        "first\u2014second",
+        "first" + _EM_DASH + "second",
         "first-- second",
     ],
 )

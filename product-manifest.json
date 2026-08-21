@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19",
+  "updatedAt": "2026-08-20",
   "source": {
     "repository": "Lians-ai/Lians",
     "branch": "master"
   },
   "product": {
     "name": "Lians Check",
-    "category": "Evidence-backed proof-of-done check for AI coding agents",
-    "summary": "Lians runs authorized project checks itself, binds the result to current Git state, and returns NO PROOF, NEEDS WORK, or READY TO REVIEW. Local use requires no Lians account, AI account password, or provider API key. Team policy and shared receipts remain a pilot hypothesis.",
+    "category": "Evidence-backed proof layer for AI work",
+    "summary": "Lians checks AI work against evidence outside the model. The first supported lane runs authorized code checks, binds the result to current Git state, and returns NO PROOF, NEEDS WORK, or READY TO REVIEW. Local use requires no Lians account, AI account password, or provider API key.",
     "workflow": [
       {
         "label": "Set up",

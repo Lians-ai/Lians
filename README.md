@@ -24,7 +24,19 @@
 
 ## Lians Check
 
-**The evidence-backed proof-of-done check for AI coding agents.**
+**The proof layer for AI work. The first check is code.**
+
+Come to Lians to **Check**.
+
+The universal moment is simple: AI says the work is done, but a person still
+has to decide whether to trust it. Lians checks the result against evidence
+outside the model, keeps unsupported claims out of the passing state, and shows
+what needs human review.
+
+Code is the first supported lane because repositories already expose strong,
+repeatable evidence through tests, builds, type checks, lint, and Git state.
+This is the working product today, not a claim that Lians can already verify
+every kind of AI output.
 
 Claude Code, Codex, Cursor, and other coding agents can confidently report that
 work is finished without current proof. Lians runs the checks itself, binds the
@@ -50,6 +62,26 @@ READY TO REVIEW
 
 Lians works with your existing AI account and editor. It does not replace your
 model, Git, CI, repository instructions, or human review.
+
+## One action, wider company
+
+Lians is built around a behavior, not a profession:
+
+> Before you use AI work, check it.
+
+Each future lane must have an authoritative evidence source. Lians will not
+use a second model's opinion as proof that the first model was right.
+
+| AI work | Evidence Lians could check | Status |
+|---|---|---|
+| Code | Tests, builds, lint, and current Git state | Developer preview |
+| Research | Live sources, dates, and support for cited claims | Hypothesis |
+| Spreadsheets | Formulas, totals, constraints, and source reconciliation | Hypothesis |
+| Documents | Stated requirements, links, citations, and required fields | Hypothesis |
+| Completed actions | Confirmation from the system where the action occurred | Hypothesis |
+
+An expansion lane is earned only after the current Check loop retains users and
+the new lane can fail closed when proof is missing.
 
 ## Check the work in two commands
 
@@ -94,17 +126,16 @@ PASS  Build  8.11s
 Next: Review the current changes.
 ```
 
-## Help pressure test Lians Check
+## Be one of the first 100 Check users
 
 Try Lians Check on a real, non-confidential repository, then share what happened
 through the [first-run feedback form](https://github.com/Lians-ai/Lians/issues/new?template=first_run_feedback.yml).
 Failures and confusing moments are as useful as successful checks. Never post
 credentials, private source code, or customer data.
 
-Lians is also recruiting three AI-native teams for a 30-day paid design-partner
-pilot. The working offer is $1,000 for up to five developers and three
-repositories, with direct setup support and an agreed measurement of false
-completion claims or review rework. Teams can [start a public, non-confidential
+The first goal is 100 real users, not revenue. We will measure whether people
+reach a receipt, run another check within seven days, and share a receipt or
+invite someone else. Users can [start a public, non-confidential
 conversation](https://github.com/Lians-ai/Lians/discussions/new?category=q-a).
 
 The trust model remains deliberately strict. The local runner creates

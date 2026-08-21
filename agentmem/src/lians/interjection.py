@@ -19,6 +19,7 @@ clauses and stores each as a *derived* memory alongside the raw turn:
   * the raw turn stays the auditable record - derived rows are a recall and
     supersession surface, closable and time-travelable like any memory.
 """
+
 from __future__ import annotations
 
 import re
@@ -31,13 +32,13 @@ _MAX_LEN = 240
 # extracted clauses so they stay self-attributing.
 _SPEAKER_RE = re.compile(r"^([A-Za-z][\w .'&-]{0,24}):\s+(.*)$", re.DOTALL)
 
-# Segment boundaries: sentence enders and spoken-style em/en dashes.  These
+# Segment boundaries: sentence enders and spoken-style long dashes.  These
 # used to be expressed as overlapping ``\s+`` regex alternatives.  Searching
 # an untrusted, long whitespace run forced the regex engine to retry the run at
 # every character (quadratic time).  The scanners below consume every input
 # character at most a constant number of times instead.
 _SENTENCE_ENDERS = frozenset(".!?…")
-_SPOKEN_DASHES = frozenset("\u2014\u2013")
+_SPOKEN_DASHES = frozenset((chr(0x2014), chr(0x2013)))
 _COMMA_CONNECTORS = ("so", "since", "because", "but", "although", "though", "anyway")
 
 
@@ -186,6 +187,7 @@ def _split_clauses(segment: str) -> list[str]:
     parts.append(segment[start:])
     return parts
 
+
 # Aside markers: the clause is an explicit "store this" interjection - trim to
 # the marker so the stored fact starts at the request, not the task chatter.
 _ASIDE_CUES = re.compile(
@@ -254,7 +256,7 @@ def extract_interjections(content: str, max_clauses: int = _MAX_CLAUSES) -> list
         # clause in that case.
         aside = _ASIDE_CUES.search(clause)
         if aside:
-            tail = clause[aside.start():].strip(" ,;")
+            tail = clause[aside.start() :].strip(" ,;")
             if len(tail) >= _MIN_LEN:
                 clause = tail
             elif not _FACT_CUES.search(clause):
