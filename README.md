@@ -142,8 +142,8 @@ The trust model remains deliberately strict. The local runner creates
 `measured_local` evidence. Agent summaries stay `agent_attested` and cannot open
 the review gate. Trusted CI evidence requires an exact GitHub attestation and
 commit match. Read [why Lians exists](docs/why-lians.md), the full
-[Lians Guard product contract](docs/lians-guard.md), and the current [market
-pressure test](docs/market-pressure-test-2026-08.md).
+[Lians Guard product contract](docs/lians-guard.md), and the current [product
+pressure test](docs/ten-out-of-ten-pressure-test.md).
 
 ## Optional cross-agent recovery
 

@@ -2,6 +2,10 @@
 
 Date: 2026-08-20
 
+> Historical note: this Ship test has been superseded by the [2026-08-21
+> 10 out of 10 pressure test](ten-out-of-ten-pressure-test.md). Keep this file
+> as the evidence for rejecting generic Deploy All.
+
 ## Current decision
 
 Generic idea-to-app creation fails the replacement test. The current market

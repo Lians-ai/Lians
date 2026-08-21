@@ -2,200 +2,137 @@
 
 ## Decision
 
-Do not build or market generic Deploy All as the company.
+Do not build generic Deploy All or Lians Ship as the company.
 
-OpenAI already documents a Codex workflow from a rough idea to a checked live
-URL, Anthropic positions Claude Code across build and deployment, and Replit can
-generate and automatically deploy an application directly from ChatGPT. A
-Lians prompt box that combines those steps would be replaceable.
+Deploy All is already replaceable by general coding agents and focused
+builders. Ship identifies a real production problem, but it is limited to AI
+builders, is likely to become custom engineering work, and has no direct Lians
+demand evidence.
 
-The current repository product remains Lians Check, the evidence-backed proof
-layer for AI work. The next product direction is an experiment, not an
-implemented product or a proven pivot.
+The strongest candidate from the new pressure test is an experiment, not a
+proven pivot:
 
-Read the full [Deploy All replacement test](deploy-all-pressure-test.md) and the
-binding [product parameters](product-parameters.md) before expanding the build.
+> **Refund.**
 
-## Candidate experiment
+> Forward the receipt or support thread. Lians gets your money back.
 
-The one-word action is:
+Read the full [10 out of 10 pressure test](ten-out-of-ten-pressure-test.md) and
+the binding [product parameters](product-parameters.md) before changing the
+product.
 
-> **Ship.**
+## Why this candidate is stronger
 
-The customer moment is:
+Refund has a broad consumer trigger and a narrow first case type. It produces
+money returned, not advice, code, or another draft. It also fits the existing
+Lians forwarding and approval thesis better than an unrelated app builder.
 
-> My AI-built app works in preview, but I cannot get it working reliably in
-> production.
-
-The promise to test is:
-
-> Your AI app works in preview. Lians gets it live and keeps it live.
-
-This is a universal moment among AI builders, not a profession. The first
-technical scope can still be narrow.
-
-## Why the raw idea fails
-
-```text
-GENERIC DEPLOY ALL
-IDEA -> GENERATE -> DEPLOY -> URL
-
-EXISTING REPLACEMENTS
-CODEX + HOSTING -> URL
-CLAUDE CODE + HOSTING -> URL
-REPLIT IN CHATGPT -> URL
-LOVABLE / BOLT / WIX -> URL
-```
-
-More tools do not create differentiation. SEO checks, animation libraries,
-deployment adapters, models, and browser tests are capabilities competitors can
-copy or already provide.
-
-## What Lians would have to own
-
-```text
-STUCK PREVIEW
-  -> IMPORT
-  -> DIAGNOSE PRODUCTION BLOCKERS
-  -> REPAIR SUPPORTED FAILURES
-  -> DEPLOY IMMUTABLE PREVIEW
-  -> TEST LIVE CORE FLOW
-  -> APPROVE
-  -> PUBLISH
-  -> MONITOR
-  -> ROLLBACK IF NEEDED
-```
-
-The value is responsibility for the live production contract, not generation.
-
-Lians must own:
-
-- one opinionated production stack;
-- build and environment configuration;
-- least-privilege secret intake;
-- deterministic release gates;
-- browser verification against the deployed revision;
-- fixed resource and cost limits;
-- monitoring and incident visibility;
-- safe rollback; and
-- plain unsupported boundaries.
+ChatGPT or Claude can write a refund request. Lians only adds value if it keeps
+the evidence and authority for the case, sends the approved request, reads the
+reply, follows up, and verifies that the refund landed.
 
 ## Exact first scope
 
-The free validation cohort accepts only:
+The free validation cohort accepts only U.S. merchant cases with:
 
-- a GitHub repository exported from an AI builder;
-- React with Vite;
-- an existing Supabase backend when a backend is needed;
-- one core flow that already works in preview;
-- production configuration and deployment defects; and
-- reversible changes with human approval.
+- a duplicate charge;
+- a canceled order that was still charged;
+- a missing order covered by the merchant's stated policy;
+- a returned purchase whose promised refund is late; or
+- an approved refund that never posted.
 
-It excludes new feature development, new auth systems, payment flows, data
-migrations, native mobile apps, arbitrary backends, regulated data, and custom
-cloud architecture.
+The case must be addressable by email, worth at least $25, supported by a real
+receipt or thread, and require no physical return or bank dispute.
 
 ## User experience
 
 The user:
 
-1. connects the repository;
-2. shows the flow that works in preview;
-3. supplies only the missing production authority or secret;
-4. approves the exact release; and
-5. receives the live URL.
+1. forwards the receipt or support thread;
+2. answers only missing factual questions;
+3. reviews the evidence, requested amount, and first action;
+4. approves the message; and
+5. leaves while Lians follows the case.
 
-The user should not need to read code, understand a framework, choose a cloud,
-write deployment commands, diagnose logs, or manage a prompt loop.
-
-Visible states remain plain:
+Visible states stay plain:
 
 ```text
 UNSUPPORTED
 NEEDS YOU
-READY TO SHIP
-LIVE
+READY TO SEND
+RECOVERING
+REFUNDED
+DENIED
 ```
 
-## Why Codex and Claude still matter
+`REFUNDED` requires user-confirmed evidence that the money landed. A generated
+email or merchant promise does not count.
 
-They are the baseline, not an enemy to ignore.
+## What Lians would have to own
 
-Every first-cohort project must be tested against the easiest available agent
-workflow. If a user can ask Codex or Claude once and receive the same working,
-monitored release with the same effort, Lians has no reason to exist for that
-case.
+```text
+FORWARD
+  -> BUILD EVIDENCE FILE
+  -> CHECK CASE BOUNDARY
+  -> PROPOSE ACTION
+  -> APPROVE
+  -> SEND
+  -> READ REPLY
+  -> FOLLOW UP
+  -> VERIFY MONEY RETURNED
+```
 
-Lians only survives when its supported production system removes setup,
-reduces failure, and continues owning the release after a coding agent would
-stop.
+The first durable product assets would be:
+
+- a structured case record;
+- merchant-specific policy and contact knowledge;
+- evidence requirements by failure type;
+- deterministic deadlines and safe escalation rules;
+- an approval ledger;
+- thread and outcome tracking; and
+- measured resolution patterns.
+
+## Why this is not proven
+
+The category has strong demand evidence and direct competition. A current UK
+competitor already markets nearly the same outcome and success-fee model.
+Merchant systems vary, claims can be abused, low-dollar cases may not cover
+operating cost, and Lians has not recovered one dollar for one user.
+
+That is why the next step is a free manual cohort, not a platform build or a
+website promise.
 
 ## First proof gate
 
-Do not build the full platform first. Run a free concierge test with ten real
-stuck applications.
+Run twenty real cases manually behind a minimal forwarding and approval flow.
+Continue only if:
 
-The experiment passes only when:
+- at least eight confirmed refunds land within fourteen days;
+- confirmed refunds exceed $1,000 in total;
+- user time remains below three minutes at the median;
+- human operating time falls below fifteen minutes for the final five cases;
+- no false or unauthorized claim is sent;
+- four qualified referrals occur; and
+- four people bring a second valid case within thirty days.
 
-- ten independent users connect real repositories;
-- at least five problems survive a one-request agent baseline;
-- seven applications reach a verified live state within 24 hours;
-- human rescue time falls below 30 minutes at the median after the first three;
-- four creators ship a second update within 30 days; and
-- two creators refer another qualified project.
-
-If the fixes stay unique, Lians Ship is an agency. If the fixes repeat and the
-manual work falls, there may be a scalable product.
-
-## Product-led distribution
-
-The live app is the distribution surface:
-
-- a privacy-safe optional `Shipped with Lians` link;
-- a public release receipt that reveals no private code or secrets;
-- a one-click path for another builder to connect a stuck project;
-- short demos showing preview failure, Lians repair, and the verified live flow;
-  and
-- use-case pages for concrete failure moments such as auth, environment,
-  routing, domain, and production-only failures.
-
-Do not publish generic SEO pages that restate “AI app builder.”
-
-## Metrics
-
-- qualified stuck project to repository connected;
-- connected repository to supported contract;
-- supported contract to `LIVE`;
-- median time to `LIVE`;
-- human engineering minutes per release;
-- cost per monitored live app;
-- production regression and rollback rate;
-- second release within 30 days;
-- referred qualified project; and
-- percentage of failures represented by a reusable repair.
-
-The activation metric is **a stuck preview becoming a verified live release**.
-
-The scalability metric is **human engineering time falling as successful
-releases increase**.
+If ordinary ChatGPT-written emails resolve the same cases with the same effort,
+if merchant exceptions keep human work high, or if users will not connect real
+threads, stop.
 
 ## Current implementation boundary
 
-Lians Ship is not implemented. Lians Check and Guard can support release
-evidence and confirmation, but they do not import, repair, deploy, monitor, or
-roll back an application today.
-
-No public copy may imply otherwise.
+Refund is not implemented. The shipped repository remains Lians Check, the
+evidence-backed proof layer for AI coding work. No public copy may claim that
+Lians currently recovers refunds.
 
 ## Explicit non-goals
 
 - generic prompt-to-app generation;
-- an IDE or visual website editor;
-- code as the end result;
-- every application framework;
-- user-managed deployment;
-- arbitrary feature completion;
-- autonomous releases without approval;
-- SEO ranking guarantees;
-- pricing before repeated use; and
-- claims that the experiment is proven before live cohort evidence exists.
+- Lians Ship platform work;
+- a chatbot that only drafts complaints;
+- ordinary physical returns;
+- chargebacks, legal threats, or regulated claims;
+- autonomous messages without approval;
+- every merchant or country;
+- a guaranteed recovery claim;
+- pricing before direct demand; and
+- calling the idea proven before users receive money.

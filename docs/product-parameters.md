@@ -8,120 +8,138 @@ parameter does not enter product implementation.
 Lians must create or maintain a real external outcome with less work than a
 general AI agent.
 
-The candidate action is:
+The current candidate action is:
 
-> **Ship.**
+> **Refund.**
 
-The candidate outcome is a supported AI-built application that moves from a
-working preview to a verified, monitored production release.
+The candidate outcome is money returned after a documented merchant failure,
+with the user approving every external claim.
+
+This is an unproven experiment. The shipped repository product remains Lians
+Check until the validation gates pass.
 
 ## Required parameters
 
 ### 1. Pass the direct replacement test
 
-Write the shortest credible Codex, Claude, Replit, or incumbent workflow for
+Write the shortest credible ChatGPT, Codex, Claude, or incumbent workflow for
 the same job before writing product code.
 
 Reject the concept when Lians only:
 
 - hides a prompt;
-- calls the same model with a longer system message;
-- bundles tools that the agent can already call;
-- returns the same code or URL; or
-- adds a cosmetic interface without taking more responsibility.
+- writes a complaint or refund email;
+- summarizes a return policy;
+- tells the user which form to complete;
+- bundles tools that a general agent can already call; or
+- stops before the money returns.
 
 ### 2. Solve an existing painful moment
 
-The first Ship experiment begins only after the user already has:
+The first Refund experiment begins only when a person has:
 
-- a real repository;
-- a flow that works in preview;
-- a production blocker; and
-- a consequence for remaining stuck.
+- a real purchase and merchant;
+- evidence of a duplicate charge, canceled order, missing order, delayed
+  refund, or approved refund that did not arrive;
+- an amount worth recovering; and
+- authority to pursue the case.
 
-An app idea or statement of interest does not count as demand.
+A hypothetical purchase, general frustration, or statement of interest does
+not count as demand.
 
 ### 3. Create the end result
 
-A report, checklist, code patch, or preview is not the end result.
+A draft, checklist, policy explanation, or case summary is not the end result.
 
-Completion requires an approved revision at a live URL whose agreed core flow
-passes in a real browser.
+Activation requires a refund that the user confirms has landed. Lians must
+send the approved request, read replies, request missing evidence, follow up,
+and track the case until it is refunded, denied, or declared unsupported.
 
-### 4. Own the ongoing production contract
+### 4. Own the case contract
 
-The release must be bound to:
+Every case must be bound to:
 
-- the exact source revision;
-- the exact deployed revision;
-- one tested user flow;
-- declared infrastructure and cost limits;
-- monitoring; and
-- a rollback path.
+- the purchase and merchant;
+- the claimed failure and amount;
+- the evidence supplied by the user;
+- the exact action the user approved;
+- every message sent and received;
+- the next deadline or escalation;
+- the terminal result; and
+- proof used to mark the refund complete.
 
-A one-time deploy with no continuing responsibility is too easy to replace.
+The case history, follow-through, and outcome verification are the initial
+product layer that survives model substitution.
 
-### 5. Use a narrow technical scope and a broad trigger
+### 5. Use a narrow case scope and a broad trigger
 
 Market the moment, not a profession:
 
-> It works in preview. Ship it for real.
+> You were charged and did not get what you paid for. Get your refund.
 
-Constrain the first implementation to React, Vite, and an existing Supabase
-backend. The scope can expand only after repair patterns repeat.
+The first experiment handles only email-addressable U.S. merchant cases that
+need no physical return, bank dispute, legal filing, phone call, medical
+judgment, or insurance interpretation.
 
 ### 6. Keep the human in control
 
 Require explicit approval before:
 
-- reading or changing production secrets;
-- changing a production database or auth configuration;
-- replacing a live release;
-- connecting a domain;
-- increasing a cost limit; or
-- rolling forward after a failed deployment.
+- sending the first request;
+- changing the stated facts, requested amount, or remedy;
+- attaching new evidence;
+- accepting store credit instead of money;
+- escalating to another merchant channel; or
+- closing a case without a refund.
 
-Prefer rollback over improvisation when production evidence fails.
+Never invent evidence, exaggerate a claim, threaten legal action, impersonate
+a professional, or submit a bank dispute in the first experiment.
 
-### 7. Ask for less knowledge than the alternatives
+### 7. Ask for less work than the alternatives
 
-The user should not have to know the framework, output directory, hosting
-provider, environment-variable model, DNS record, CI system, or browser-test
-tool.
+The user should be able to forward the receipt or support thread, answer only
+the missing factual questions, approve the action, and leave.
 
-If support requires the user to debug through chat, the product has failed.
+If the user has to research policy, rewrite messages, remember follow-up dates,
+or repeatedly explain the case, the product has failed.
 
-### 8. Learn from measured failures
+### 8. Protect sensitive data
 
-Record privacy-safe failure classes, attempted repairs, deployed outcomes,
-rollbacks, and human intervention time.
+Collect the minimum purchase and identity information required for the case.
+Do not request account passwords or payment-card numbers. Redact unrelated
+email content, encrypt case data, provide deletion, and retain an auditable
+record of approved actions.
 
-The system becomes more defensible only when each cohort creates reusable
-deterministic repair logic and reduces future manual work.
+### 9. Learn from measured cases
 
-### 9. Earn expansion
+Record privacy-safe merchant, failure, resolution, deadline, intervention, and
+outcome classes. The system becomes more defensible only when successful cases
+produce reusable policy and escalation logic while human work declines.
 
-Add a framework, backend, or cloud only when:
+### 10. Earn expansion
 
-- at least five qualified projects require it;
-- the same production contract can verify it;
-- the repair is safe and reversible;
+Add a merchant channel or case type only when:
+
+- at least five qualified cases require it;
+- the same case contract can verify it;
+- fraud and authorization rules are explicit;
 - human intervention is declining; and
-- the existing scope has repeated releases and referrals.
+- the existing scope has repeated refunds and referrals.
 
 ## Product test
 
 Before a feature enters the roadmap, answer:
 
-1. What is the painful external state before Lians?
-2. What exact live state exists after Lians?
-3. Can Codex or Claude reach it from one ordinary request?
-4. What responsibility does Lians keep after the model stops?
-5. What evidence opens the release gate?
-6. What requires approval?
-7. What happens when the release fails?
-8. Which part becomes cheaper or more reliable with every project?
+1. What exact amount may the user be owed, and why?
+2. What evidence supports the claim?
+3. Can a general AI agent complete the same case from one ordinary request?
+4. What external action does Lians take after drafting?
+5. What requires approval?
+6. How does Lians know the refund landed?
+7. What happens when the merchant denies or ignores the claim?
+8. Which part becomes cheaper or more reliable with every case?
 9. Why will the user return or refer another user?
+10. What fraud, privacy, or legal risk could invalidate the case?
 
 Any vague answer blocks implementation.
 
@@ -129,25 +147,30 @@ Any vague answer blocks implementation.
 
 Before platform work:
 
-- ten independent users connect real stuck repositories;
-- five cases survive a one-request Codex or Claude baseline;
-- seven reach `LIVE` within 24 hours;
-- median human engineering time drops below 30 minutes after the first three;
-- no critical regression, data loss, or secret exposure occurs;
-- four users ship a second update in 30 days; and
-- two qualified referrals occur.
+- twenty independent people submit real cases worth at least $25 each;
+- at least fifteen connect a real receipt or support thread;
+- at least twelve approve an external request;
+- at least eight refunds land within fourteen days;
+- total confirmed refunds exceed $1,000;
+- median user time stays below three minutes per case;
+- median human operating time falls below fifteen minutes for the final five
+  cases;
+- no false claim, unauthorized message, secret exposure, or material data loss
+  occurs;
+- four qualified referrals occur; and
+- four users submit a second valid case within thirty days.
 
 ## Explicit non-goals
 
 - claiming a 10 out of 10 idea before customer evidence;
-- generic Deploy All as a public promise;
-- another AI coding chat;
-- arbitrary app generation;
-- a design editor;
-- code or an audit as the final outcome;
-- every tool used by default;
-- every framework or cloud;
-- high-consequence applications in the first cohort;
-- autonomous production changes without approval;
-- SEO ranking promises; and
-- pricing before activation, repeat use, and declining manual work.
+- changing the current Lians Check product before the case test passes;
+- another AI complaint writer;
+- ordinary returns that require packing or dropping off an item;
+- chargebacks or bank disputes;
+- health, insurance, legal, tax, or government claims;
+- bill negotiation or subscription cancellation;
+- fabricated or exaggerated evidence;
+- autonomous external messages without approval;
+- every merchant and country;
+- pricing before refunds, repeat use, referrals, and declining manual work; and
+- a public promise that every valid claim will win.
