@@ -43,11 +43,12 @@ npm run db:generate
 
 ## Visual system
 
-- black and white foundation;
-- lilac as the only page accent;
-- white Lians lotus on black with a subtle blue outline;
-- oversized Bricolage Grotesque and Anybody typography;
-- Instrument Serif for selective contrast;
+- near-black and aged-silver foundation;
+- deep lilac as the only page accent;
+- deep lilac Lians lotus on black;
+- an IvyPresto-first editorial serif stack with Instrument Serif as the licensed web fallback;
+- Bricolage Grotesque for compact utility text;
+- oversized statements, square-edged surfaces, deep shadow, and subtle grain;
 - GSAP, Anime.js, and Lenis for focused motion; and
 - Paper Design Shaders for the liquid brand moment.
 

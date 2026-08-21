@@ -4,7 +4,7 @@ import { animate, stagger } from "animejs";
 import gsap from "gsap";
 import Lenis from "lenis";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MiniApp } from "../lib/types";
 
 const starters = [
@@ -14,27 +14,40 @@ const starters = [
 ];
 
 const examples = [
-  { title: "Read 20 pages", text: "12 friends · 84 check-ins", prompt: "Make a 30-day reading challenge for my friends" },
-  { title: "Where are we going?", text: "8 votes · City break wins", prompt: "Make a vote for our next group trip" },
-  { title: "How well do you know Maya?", text: "43 plays · 3 questions", prompt: "Make a birthday quiz for Maya" },
+  { title: "Read 20 pages", text: "12 friends · 84 check-ins", prompt: "Make a 30-day reading challenge for my friends", symbol: "30" },
+  { title: "Where are we going?", text: "8 votes · City break wins", prompt: "Make a vote for our next group trip", symbol: "↑" },
+  { title: "How well do you know Maya?", text: "43 plays · 3 questions", prompt: "Make a birthday quiz for Maya", symbol: "?" },
+];
+
+const appTypes = [
+  { number: "01", name: "Challenge", text: "Turn a goal into something everyone can join.", prompt: starters[0] },
+  { number: "02", name: "Vote", text: "Give the group one place to decide.", prompt: starters[1] },
+  { number: "03", name: "Quiz", text: "Make a question worth sending around.", prompt: starters[2] },
+  { number: "04", name: "Tracker", text: "Keep one shared number moving.", prompt: "Make a shared water tracker for my family" },
+  { number: "05", name: "List", text: "Put every person and item in the same place.", prompt: "Make a packing list for our group trip" },
+  { number: "06", name: "Leaderboard", text: "Turn a score into a reason to come back.", prompt: "Make a leaderboard for our game night" },
 ];
 
 const buildWords = ["Reading your idea", "Picking the right shape", "Making it work", "Putting it online"];
 
 export function MakeHome() {
-  const [prompt, setPrompt] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("prompt")?.slice(0, 280) ?? "";
-  });
+  const [prompt, setPrompt] = useState("");
+  const [remixOf, setRemixOf] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const [buildStep, setBuildStep] = useState(0);
   const [error, setError] = useState("");
   const [recent, setRecent] = useState<MiniApp[]>([]);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const progressRef = useRef<HTMLSpanElement>(null);
 
-  const remixOf = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return new URLSearchParams(window.location.search).get("remix");
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const params = new URLSearchParams(window.location.search);
+      const sharedPrompt = params.get("prompt")?.slice(0, 280) ?? "";
+      setPrompt((current) => current || sharedPrompt);
+      setRemixOf(params.get("remix")?.slice(0, 40) ?? null);
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -49,15 +62,26 @@ export function MakeHome() {
     let frame = 0;
     const raf = (time: number) => {
       lenis.raf(time);
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = scrollable > 0 ? Math.min(window.scrollY / scrollable, 1) : 0;
+      progressRef.current?.style.setProperty("--page-progress", String(progress));
       frame = requestAnimationFrame(raf);
     };
     frame = requestAnimationFrame(raf);
-    gsap.fromTo("[data-intro]", { y: 32, opacity: 0 }, { y: 0, opacity: 1, duration: 0.75, stagger: 0.08, ease: "power3.out" });
-    gsap.utils.toArray<HTMLElement>("[data-reveal]").forEach((element) => {
-      gsap.fromTo(element, { y: 35, opacity: 0 }, { y: 0, opacity: 1, duration: 0.75, ease: "power3.out", delay: 0.1 });
-    });
+    gsap.fromTo("[data-intro]", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 1, stagger: 0.09, ease: "power3.out" });
+    const revealElements = gsap.utils.toArray<HTMLElement>("[data-reveal]");
+    gsap.set(revealElements, { y: 55, opacity: 0 });
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        gsap.to(entry.target, { y: 0, opacity: 1, duration: 1, ease: "power3.out" });
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.12 });
+    revealElements.forEach((element) => observer.observe(element));
     return () => {
       cancelAnimationFrame(frame);
+      observer.disconnect();
       lenis.destroy();
     };
   }, []);
@@ -117,9 +141,11 @@ export function MakeHome() {
 
   return (
     <main className="site-shell">
+      <a className="skip-link" href="#make">Skip to maker</a>
       <nav className="nav-shell" aria-label="Main navigation">
-        <a className="brand-mark" href="#top" aria-label="Lians home"><Image src="/lians-lotus.svg" width={46} height={28} alt="" /><span>lians</span></a>
-        <div className="nav-actions"><a href="#examples">Examples</a><a className="nav-button" href="#make">Make</a></div>
+        <a className="brand-mark" href="#top" aria-label="Lians home"><Image src="/lians-lotus.svg" width={46} height={28} alt="" priority /><span>lians</span></a>
+        <div className="nav-actions"><a href="#types">What it makes</a><a className="nav-button" href="#make">Make</a></div>
+        <span className="scroll-progress" ref={progressRef} aria-hidden="true" />
       </nav>
 
       <section className="hero" id="top">
@@ -161,15 +187,43 @@ export function MakeHome() {
         <p className="hero-note" data-intro>Challenges · votes · quizzes · trackers · lists · leaderboards</p>
       </section>
 
-      <section className="examples-section" id="examples">
-        <div className="section-title" data-reveal>
-          <h2>Make the thing<br />people <em>use.</em></h2>
-          <p>No instructions. No code. No setup page. Your people open the link and start.</p>
+      <section className="artifact-section" id="examples">
+        <div className="artifact-copy" data-reveal>
+          <h2>The working thing.<br /><em>Not the answer.</em></h2>
+          <p>Chat gives you words. Lians gives your people somewhere to go, do the thing, and come back.</p>
         </div>
-        <div className="example-grid">
-          {examples.map((example) => (
-            <button className="example-card" key={example.title} onClick={() => chooseStarter(example.prompt)} data-reveal>
-              <strong>{example.title}</strong><p>{example.text}</p><i>Make this ↗</i>
+        <div className="artifact-stage" data-reveal>
+          <button className="floating-app floating-left" type="button" onClick={() => chooseStarter(examples[0].prompt)}>
+            <span>{examples[0].symbol}</span><strong>{examples[0].title}</strong><small>{examples[0].text}</small>
+          </button>
+          <button className="floating-app floating-right" type="button" onClick={() => chooseStarter(examples[2].prompt)}>
+            <span>{examples[2].symbol}</span><strong>{examples[2].title}</strong><small>{examples[2].text}</small>
+          </button>
+          <button className="center-app" type="button" onClick={() => chooseStarter(examples[1].prompt)}>
+            <div className="center-app-top"><Image src="/lians-lotus.svg" width={36} height={22} alt="" /><span>lians</span><i>Live</i></div>
+            <div className="center-app-copy"><small>8 people are here</small><strong>{examples[1].title}</strong></div>
+            <div className="mock-votes"><span>Beach weekend <i>3</i></span><span className="is-winning">City break <i>5</i></span><span>Cabin escape <i>0</i></span></div>
+          </button>
+        </div>
+      </section>
+
+      <section className="outcome-section">
+        <div className="outcome-noise" aria-hidden="true" />
+        <div className="outcome-copy" data-reveal>
+          <h2>A sentence becomes<br />somewhere people <em>go.</em></h2>
+          <p>Not a plan for an app. Not code you need to finish. The finished, hosted place where the result happens.</p>
+        </div>
+        <div className="outcome-lines" data-reveal>
+          <span>Join without an account</span><span>Use it together</span><span>Share one link</span>
+        </div>
+      </section>
+
+      <section className="types-section" id="types">
+        <h2 data-reveal>What can<br />you make?</h2>
+        <div className="type-list">
+          {appTypes.map((item) => (
+            <button type="button" key={item.number} onClick={() => chooseStarter(item.prompt)} data-reveal>
+              <small>{item.number}</small><strong>{item.name}</strong><span>{item.text}</span><i>↗</i>
             </button>
           ))}
         </div>
@@ -199,11 +253,12 @@ export function MakeHome() {
       )}
 
       <section className="final-section">
-        <h2 data-reveal>Make one.</h2>
+        <div className="final-lotus" aria-hidden="true"><Image src="/lians-lotus.svg" width={540} height={320} alt="" /></div>
+        <h2 data-reveal>Make it real.</h2>
         <button type="button" onClick={() => { document.getElementById("make")?.scrollIntoView(); promptRef.current?.focus(); }}>Start with a sentence <span>↑</span></button>
       </section>
 
-      <footer><a className="brand-mark" href="#top"><Image src="/lians-lotus.svg" width={46} height={28} alt="" /><span>lians</span></a><p>Useful software for everyone.</p><span>Made in 2026</span></footer>
+      <footer><a className="brand-mark" href="#top"><Image src="/lians-lotus.svg" width={46} height={28} alt="" /><span>lians</span></a><p>Make useful things for your people.</p><span>2026</span></footer>
     </main>
   );
 }

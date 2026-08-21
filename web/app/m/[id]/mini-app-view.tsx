@@ -111,9 +111,13 @@ export function MiniAppView({ app, initialEvents }: Props) {
       }
       return;
     }
-    await navigator.clipboard.writeText(window.location.href);
-    await record("share", "copy");
-    setMessage("Link copied.");
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      await record("share", "copy");
+      setMessage("Link copied.");
+    } catch {
+      setMessage("Copy this page from your address bar.");
+    }
   }
 
   async function addValue(action: "score" | "track") {
@@ -125,16 +129,31 @@ export function MiniAppView({ app, initialEvents }: Props) {
     if (await post(action, amount)) setValue("");
   }
 
-  function answerQuiz(optionIndex: number) {
-    const nextScore = quizScore + optionIndex;
-    if (quizStep + 1 >= app.config.questions.length) {
-      setQuizScore(nextScore);
-      setQuizStep(app.config.questions.length);
-      void post("quiz", String(nextScore));
+  async function answerQuiz(optionIndex: number) {
+    if (!actor.trim()) {
+      setMessage("Add your name first.");
+      document.getElementById("participant-name")?.focus();
       return;
     }
+    const nextScore = quizScore + optionIndex;
+    if (quizStep + 1 >= app.config.questions.length) {
+      if (!(await post("quiz", String(nextScore)))) return;
+      setQuizScore(nextScore);
+      setQuizStep(app.config.questions.length);
+      return;
+    }
+    setMessage("");
     setQuizScore(nextScore);
     setQuizStep((step) => step + 1);
+  }
+
+  async function addListItem() {
+    const clean = value.trim();
+    if (!clean) {
+      setMessage("Add something first.");
+      return;
+    }
+    if (await post("item", clean)) setValue("");
   }
 
   const total = actorTotals.reduce((sum, [, amount]) => sum + amount, 0);
@@ -179,7 +198,7 @@ export function MiniAppView({ app, initialEvents }: Props) {
           <div className="quiz-panel">
             <p>{quizStep + 1} of {app.config.questions.length}</p>
             <h3>{app.config.questions[quizStep].question}</h3>
-            {app.config.questions[quizStep].options.map((option, index) => <button key={option} type="button" onClick={() => answerQuiz(index)}>{option}</button>)}
+            {app.config.questions[quizStep].options.map((option, index) => <button key={option} type="button" disabled={busy} onClick={() => void answerQuiz(index)}>{option}</button>)}
           </div>
         )}
 
@@ -196,7 +215,7 @@ export function MiniAppView({ app, initialEvents }: Props) {
 
         {app.kind === "list" && (
           <div className="list-panel">
-            <div className="list-entry"><input value={value} onChange={(event) => setValue(event.target.value.slice(0, 100))} placeholder="Add something" /><button type="button" disabled={busy} onClick={async () => { if (value.trim() && await post("item", value.trim())) setValue(""); }}>Add</button></div>
+            <div className="list-entry"><input value={value} onChange={(event) => setValue(event.target.value.slice(0, 100))} placeholder="Add something" /><button type="button" disabled={busy} onClick={() => void addListItem()}>Add</button></div>
             <div className="list-items">
               {listItems.length === 0 && <p>The list is empty. Add the first thing.</p>}
               {listItems.map((item) => <button className={item.done ? "is-done" : ""} key={item.id} type="button" onClick={() => !item.done && void post("done", item.id)}><i>{item.done ? "✓" : ""}</i><span>{item.value}</span><small>{item.actor}</small></button>)}

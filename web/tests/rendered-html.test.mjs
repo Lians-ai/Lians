@@ -21,7 +21,11 @@ test("renders the Lians Make product", async () => {
   assert.match(html, /<title>Lians \| Make<\/title>/i);
   assert.match(html, /What should/);
   assert.match(html, /Describe what your group needs/);
-  assert.match(html, /Make the thing/);
+  assert.match(html, /The working thing/);
+  assert.match(html, /What can/);
+  assert.match(html, /Challenge/);
+  assert.match(html, /Leaderboard/);
   assert.match(html, /Start with a sentence/);
+  assert.match(html, /og-luxury\.jpg/);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|Your site is taking shape/i);
 });

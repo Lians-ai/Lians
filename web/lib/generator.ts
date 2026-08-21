@@ -1,6 +1,6 @@
 import type { AppConfig, AppKind, MiniApp } from "./types";
 
-const palette = ["#c8a7ff", "#f2ebff"];
+const palette = ["#765786", "#1f1723"];
 
 const kindDetails: Record<AppKind, { emoji: string; description: string; unit: string; target: number }> = {
   challenge: { emoji: "✦", description: "Show up together. One check-in at a time.", unit: "check-ins", target: 30 },

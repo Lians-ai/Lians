@@ -39,8 +39,8 @@ async function ensureSchema() {
 
 function fromStoredApp(row: Record<string, unknown>): MiniApp {
   const config = JSON.parse(String(row.config)) as AppConfig;
-  config.accent = "#c8a7ff";
-  config.accentSoft = "#f2ebff";
+  config.accent = "#765786";
+  config.accentSoft = "#1f1723";
   return {
     id: String(row.id),
     kind: String(row.kind) as AppKind,
