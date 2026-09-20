@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19",
+  "updatedAt": "2026-09-20",
   "source": {
     "repository": "Lians-ai/Lians",
     "branch": "master"
@@ -28,6 +28,11 @@
       }
     ],
     "surfaces": [
+      {
+        "label": "Lians web workspace",
+        "status": "Founding access",
+        "detail": "A browser workspace for sign-in, onboarding, projects, live memory writes and recalls, API keys, usage, and billing. The first ten hosted workspaces are free for 12 months; Personal is listed at $12 per month afterward."
+      },
       {
         "label": "Free local recovery",
         "status": "Available",
