@@ -7,6 +7,7 @@
 <p align="center"><strong>Recover the task. Reject stale state. Block unsupported done.</strong></p>
 
 <p align="center">
+  <a href="https://www.lians.ai/login?offer=founding-10"><strong>Open web app</strong></a> ·
   <a href="docs/quickstart.md"><strong>Quickstart</strong></a> ·
   <a href="docs/why-lians.md">Why Lians</a> ·
   <a href="docs/benchmarks/continuitybench-v0.1.md">ContinuityBench</a> ·
@@ -46,7 +47,24 @@ Lians recovers interrupted agent work, rejects stale task state, and blocks
 Lians works with your existing AI account and editor. It does not replace your
 model, Git, CI, repository instructions, or human review.
 
+## Start with the web app
+
+[Open Lians](https://www.lians.ai/login?offer=founding-10) to create a workspace,
+set up the AI tools you use, and try live memory from the browser.
+
+- **Founding 10:** the first ten hosted workspaces are free for 12 months. No
+  card is required.
+- **Personal:** $12 per month after the founding offer.
+- **Community:** the Apache 2.0 local and self-hosted path remains free.
+
+Paid checkout opens after the founding cohort. The price is published now so
+the offer is clear before signup. The [Windows engineering
+release](https://github.com/Lians-ai/Lians/releases/tag/mission-control-v0.10.1)
+remains available for people who prefer local mission control.
+
 ## One clear result after every agent session
+
+A fresh agent receives a bounded continuation view like this:
 
 ```text
 RECOVERED
@@ -155,6 +173,7 @@ guarantee that does not exist yet.
 
 | Capability | Status |
 |---|---|
+| Hosted Lians web workspace | Available to the first ten founding workspaces |
 | Local memory through MCP and Python | Available |
 | Codex, Claude Code, and Cursor local recovery setup | Available |
 | Inspect, correct, and confirmed permanent deletion | Available |
