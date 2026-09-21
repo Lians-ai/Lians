@@ -1,0 +1,75 @@
+name: Mission Control beta result
+description: Share a privacy-reviewed proof-gate report and first-hand beta feedback.
+title: "mission control beta: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the proof gate. Do not include task text, repository names or paths, credentials, model output, test output, personal data, or confidential information.
+  - type: input
+    id: participant
+    attributes:
+      label: Random beta participant ID
+      description: Copy the beta-… value from the exported report. This is not your name or account ID.
+      placeholder: beta-012345abcdef
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation result
+      options:
+        - Installed and opened successfully
+        - Installed after troubleshooting
+        - Could not install or open
+    validations:
+      required: true
+  - type: input
+    id: pairs
+    attributes:
+      label: Matched task pairs completed
+      placeholder: "4"
+    validations:
+      required: true
+  - type: dropdown
+    id: return
+    attributes:
+      label: Did you return on a later day for another task?
+      options:
+        - Yes
+        - Not yet
+        - No
+    validations:
+      required: true
+  - type: dropdown
+    id: willingness
+    attributes:
+      label: After seeing your own receipt, would you pay $12 per month?
+      options:
+        - Yes
+        - Maybe
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Privacy-reviewed beta report
+      description: Drag the exported lians-proof-gate-beta-….json file here after reading it. If you do not want it public, leave it out and say why.
+      placeholder: Attach the JSON file or explain why it is omitted.
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: What helped or got in the way?
+      description: Focus on installation, choosing proof, understanding the route, and whether the receipt changed your model choice. Use synthetic examples only.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy check
+      options:
+        - label: I reviewed the attachment and removed task text, repository information, credentials, outputs, personal data, and confidential information.
+          required: true

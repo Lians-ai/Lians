@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-19",
+  "updatedAt": "2026-09-21",
   "source": {
     "repository": "Lians-ai/Lians",
     "branch": "master"
@@ -8,7 +8,7 @@
   "product": {
     "name": "Lians Guard",
     "category": "Current-state and completion guard for AI coding agents",
-    "summary": "Lians recovers interrupted agent work, rejects stale task state, and blocks unsupported completion claims until the configured task is ready for human review. Free local recovery remains available without a Lians account, AI account password, or provider API key. The full team Guard workflow is a developer preview.",
+    "summary": "Lians Guard is the open-source state and evidence layer inside AI coding agents. The optional Mission Control beta gives one mission to one Codex thread, applies a bounded model policy, and blocks PASS until the user's verifier succeeds. Free local recovery remains available without a Lians account, AI account password, or separate provider API key.",
     "workflow": [
       {
         "label": "Recover",
@@ -62,6 +62,11 @@
         "label": "Team Guard",
         "status": "Pilot hypothesis",
         "detail": "Shared current state, completion policies, queue visibility, reporting, support, and managed operations for AI-native teams."
+      },
+      {
+        "label": "Mission Control proof beta",
+        "status": "Engineering beta candidate",
+        "detail": "A local application compares Protect and Maximum on matched tasks, requires verifier-backed completion, and exports privacy-bounded evidence. One mission uses one Codex app-server thread when supported, with a one-shot compatibility path while app-server remains experimental."
       }
     ]
   }

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lians-finish"
+version = "0.11.0"
+description = "A local-first governance layer that routes AI work by capability, usage, risk, and proof"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ethan Beirne" }]
+dependencies = []
+
+[project.scripts]
+lians-finish = "lians_finish.cli:main"
+lians-finish-app = "lians_finish.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lians_finish"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.coverage",
+  "/.ruff_cache",
+  "/dist",
+  "/output",
+  "/VERIFICATION.md",
+  "/.lians",
+  "/.pytest_cache",
+  "**/__pycache__",
+]
