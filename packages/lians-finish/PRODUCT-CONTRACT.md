@@ -1,4 +1,4 @@
-# Product contract: Lians Mission Control v0.11.0
+# Product contract: Lians v0.11.0
 
 ## User
 

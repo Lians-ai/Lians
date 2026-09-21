@@ -1,4 +1,4 @@
-# Lians Mission Control v0.11.0 release readiness
+# Lians v0.11.0 release readiness
 
 Status: **engineering beta candidate; external proof gate pending review,
 merge, and the tagged prerelease**.

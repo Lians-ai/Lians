@@ -1,1 +1,1 @@
-"""Packaged web assets for Lians Mission Control."""
+"""Packaged web assets for Lians."""

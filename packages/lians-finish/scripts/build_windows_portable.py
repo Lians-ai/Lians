@@ -44,7 +44,7 @@ def _source_provenance(executable_hash: str) -> dict[str, object]:
     source_commit = head.stdout.strip().lower() if head.returncode == 0 else None
     return {
         "schema": "lians.finish.build-provenance.v1",
-        "product": "Lians Mission Control",
+        "product": "Lians",
         "version": __version__,
         "source_repository": "https://github.com/Lians-ai/Lians",
         "source_commit": source_commit,
@@ -101,7 +101,7 @@ def main() -> int:
     executable_hash = _sha256(executable)
     provenance = _source_provenance(executable_hash)
     archive = distribution / f"Lians-{__version__}-Windows-x64.zip"
-    readme = f"""Lians Mission Control {__version__}
+    readme = f"""Lians {__version__}
 
 START
 1. Extract this ZIP before opening it.

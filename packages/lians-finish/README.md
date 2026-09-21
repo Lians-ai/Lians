@@ -1,4 +1,4 @@
-# Lians Mission Control
+# Lians
 
 > Give Lians the outcome once. It keeps the mission intact, chooses the least
 > expensive capable agent for each stage, protects premium usage, and refuses
@@ -76,7 +76,7 @@ cross-provider complexity is added. Lians may detect Claude Code, Cursor Agent,
 or Gemini CLI locally, but it labels them as detected rather than routable
 until an official, tested connector exists.
 
-On a current Codex installation, Mission Control uses the official app-server
+On a current Codex installation, Lians uses the official app-server
 integration surface to keep discovery, implementation, verification repair,
 and review inside one Codex thread. Each turn can still change model, reasoning
 effort, and sandbox. This reduces repeated context reconstruction; it does not
@@ -86,8 +86,30 @@ path as a compatibility option. Use `--codex-bridge exec` or set
 `LIANS_CODEX_BRIDGE=exec` to force that path.
 
 The open-source Lians MCP/plugin remains the in-Codex state and proof layer.
-Mission Control is the local routing and receipt layer. See
+Lians is the local routing and receipt layer. See
 [CODEX-BRIDGE.md](CODEX-BRIDGE.md) for the exact boundary.
+
+## Pair the web application with this computer
+
+The hosted application queues a bounded outcome. Your own computer claims it,
+runs the local Lians workflow, verifies the result, and returns only a status
+summary and proof receipt:
+
+```powershell
+lians-finish connect `
+  --server https://www.lians.ai `
+  --code YOUR-ONE-TIME-CODE `
+  --project C:\path\to\project `
+  --verify "python -m unittest"
+
+lians-finish agent --once
+```
+
+The connector keeps the repository path, task source, raw terminal output,
+proof command, and provider credentials on the local computer. Pairing rejects
+non-HTTPS servers except loopback addresses. The current beta intentionally
+claims one queued outcome per `agent --once` invocation; unattended polling is
+not enabled yet.
 
 ## Plan a task without consuming quota
 

@@ -108,7 +108,7 @@ class LiansApplication:
 
     def config(self) -> dict[str, Any]:
         return {
-            "product": "Lians Mission Control",
+            "product": "Lians",
             "default_repository": str(self.default_repository),
             "agent_stack": self._detect_agent_stack(),
             "codex_bridge": self._codex_bridge(),
