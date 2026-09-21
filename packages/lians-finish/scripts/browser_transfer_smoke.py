@@ -92,7 +92,14 @@ def main() -> int:
     debugging_port = _free_port()
     task = "Carry this governed browser mission to another workspace"
 
-    with tempfile.TemporaryDirectory(prefix="lians-browser-transfer-", dir=output) as temporary:
+    # Chromium can leave its Crashpad metrics file locked for a fraction of a
+    # second after the browser process exits on Windows.  The transfer result
+    # must not be turned into a false failure by best-effort profile cleanup.
+    with tempfile.TemporaryDirectory(
+        prefix="lians-browser-transfer-",
+        dir=output,
+        ignore_cleanup_errors=True,
+    ) as temporary:
         temporary_root = Path(temporary)
         download_directory = temporary_root / "downloads"
         download_directory.mkdir()
@@ -100,6 +107,8 @@ def main() -> int:
             str(args.chrome),
             "--headless",
             "--disable-gpu",
+            "--disable-breakpad",
+            "--disable-crash-reporter",
             "--hide-scrollbars",
             "--no-first-run",
             "--no-default-browser-check",
