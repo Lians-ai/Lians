@@ -102,11 +102,14 @@ class HostedConnectorTests(unittest.TestCase):
                 codex_bin="codex",
                 codex_bridge="auto",
             )
-            self.assertEqual(api.claimed, {
-                "code": "AAAA-BBBB-CCCC-DDDD",
-                "name": "Ethan laptop",
-                "label": "Lians",
-            })
+            self.assertEqual(
+                api.claimed,
+                {
+                    "code": "AAAA-BBBB-CCCC-DDDD",
+                    "name": "Ethan laptop",
+                    "label": "Lians",
+                },
+            )
             self.assertEqual(value["projects"][0]["repository"], str(repository.resolve()))
             self.assertIn("verification_command", value["projects"][0])
 
@@ -154,7 +157,9 @@ class HostedConnectorTests(unittest.TestCase):
 
             result = HostedConnector(api, config(repository), execute).run_once()
             self.assertEqual(result, {"mission_id": "mission-1", "status": "PASS"})
-            self.assertEqual([event[2] for event in api.events], ["planning", "implementing", "verifying"])
+            self.assertEqual(
+                [event[2] for event in api.events], ["planning", "implementing", "verifying"]
+            )
             self.assertEqual(api.completions[0][2]["receiptSha256"], "a" * 64)
             self.assertNotIn("goal", json.dumps(api.completions[0][2]))
 
@@ -194,10 +199,12 @@ class HostedConnectorTests(unittest.TestCase):
 
             @staticmethod
             def read(_limit):
-                return json.dumps({
-                    "token": "t" * 48,
-                    "connector": {"id": "connector-1", "projects": [{"id": "project-1"}]},
-                }).encode()
+                return json.dumps(
+                    {
+                        "token": "t" * 48,
+                        "connector": {"id": "connector-1", "projects": [{"id": "project-1"}]},
+                    }
+                ).encode()
 
         def fake_open(request, timeout):
             captured["body"] = json.loads(request.data.decode())
@@ -206,19 +213,30 @@ class HostedConnectorTests(unittest.TestCase):
 
         with patch("lians_finish.hosted_connector.urlopen", fake_open):
             HostedAPI("https://www.lians.ai").claim("PAIR-CODE", "Laptop", "Lians")
-        self.assertEqual(captured["body"], {
-            "code": "PAIR-CODE",
-            "name": "Laptop",
-            "projects": [{"label": "Lians", "verification": "configured"}],
-        })
+        self.assertEqual(
+            captured["body"],
+            {
+                "code": "PAIR-CODE",
+                "name": "Laptop",
+                "projects": [{"label": "Lians", "verification": "configured"}],
+            },
+        )
 
     def test_default_config_path_uses_windows_locations_then_a_safe_fallback(self):
         with patch.dict("os.environ", {"LOCALAPPDATA": "C:/LocalData"}, clear=True):
-            self.assertEqual(default_config_path(), Path("C:/LocalData") / "Lians Finish" / "hosted-connector.json")
+            self.assertEqual(
+                default_config_path(),
+                Path("C:/LocalData") / "Lians Finish" / "hosted-connector.json",
+            )
         with patch.dict("os.environ", {"USERPROFILE": "C:/Users/tester"}, clear=True):
-            self.assertEqual(default_config_path(), Path("C:/Users/tester").resolve() / ".lians-finish" / "hosted-connector.json")
+            self.assertEqual(
+                default_config_path(),
+                Path("C:/Users/tester").resolve() / ".lians-finish" / "hosted-connector.json",
+            )
         with patch.dict("os.environ", {}, clear=True):
-            self.assertEqual(default_config_path(), Path.cwd() / ".lians-finish" / "hosted-connector.json")
+            self.assertEqual(
+                default_config_path(), Path.cwd() / ".lians-finish" / "hosted-connector.json"
+            )
 
     def test_load_config_reports_missing_malformed_and_unsupported_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -231,10 +249,16 @@ class HostedConnectorTests(unittest.TestCase):
             path.write_text(json.dumps({"schema": "old"}), encoding="utf-8")
             with self.assertRaisesRegex(HostedConnectorError, "unsupported format"):
                 load_config(path)
-            path.write_text(json.dumps({"schema": CONFIG_SCHEMA, "token": "short", "projects": [{}]}), encoding="utf-8")
+            path.write_text(
+                json.dumps({"schema": CONFIG_SCHEMA, "token": "short", "projects": [{}]}),
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(HostedConnectorError, "missing its local token"):
                 load_config(path)
-            path.write_text(json.dumps({"schema": CONFIG_SCHEMA, "token": "t" * 40, "projects": []}), encoding="utf-8")
+            path.write_text(
+                json.dumps({"schema": CONFIG_SCHEMA, "token": "t" * 40, "projects": []}),
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(HostedConnectorError, "no local projects"):
                 load_config(path)
 
@@ -259,14 +283,21 @@ class HostedConnectorTests(unittest.TestCase):
         with patch("lians_finish.hosted_connector.urlopen", return_value=Response(body=b"[]")):
             with self.assertRaisesRegex(HostedConnectorError, "not a JSON object"):
                 api._request("GET", "/list")
-        with patch("lians_finish.hosted_connector.urlopen", return_value=Response(body=b"x" * (256 * 1024 + 1))):
+        with patch(
+            "lians_finish.hosted_connector.urlopen",
+            return_value=Response(body=b"x" * (256 * 1024 + 1)),
+        ):
             with self.assertRaisesRegex(HostedConnectorError, "exceeded"):
                 api._request("GET", "/large")
-        with patch("lians_finish.hosted_connector.urlopen", return_value=Response(body=b"not-json")):
+        with patch(
+            "lians_finish.hosted_connector.urlopen", return_value=Response(body=b"not-json")
+        ):
             with self.assertRaisesRegex(HostedConnectorError, "not valid JSON"):
                 api._request("GET", "/invalid")
 
-        hosted_error = HTTPError("https://www.lians.ai/bad", 400, "bad", {}, BytesIO(b'{"error":"Safe public error"}'))
+        hosted_error = HTTPError(
+            "https://www.lians.ai/bad", 400, "bad", {}, BytesIO(b'{"error":"Safe public error"}')
+        )
         with patch("lians_finish.hosted_connector.urlopen", side_effect=hosted_error):
             with self.assertRaisesRegex(HostedConnectorError, "Safe public error"):
                 api._request("GET", "/bad")
@@ -299,33 +330,72 @@ class HostedConnectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing"
             with self.assertRaisesRegex(HostedConnectorError, "does not exist"):
-                pair_connector(PairingAPI(), code="code", name="Laptop", repository=missing, label="Lians", verification_command="python -m unittest", allowed_verifiers=[], codex_bin="codex", codex_bridge="auto")
+                pair_connector(
+                    PairingAPI(),
+                    code="code",
+                    name="Laptop",
+                    repository=missing,
+                    label="Lians",
+                    verification_command="python -m unittest",
+                    allowed_verifiers=[],
+                    codex_bin="codex",
+                    codex_bridge="auto",
+                )
             with self.assertRaisesRegex(HostedConnectorError, "not allowed"):
-                pair_connector(PairingAPI(), code="code", name="Laptop", repository=Path(directory), label="Lians", verification_command="python ; bad", allowed_verifiers=[], codex_bin="codex", codex_bridge="auto")
+                pair_connector(
+                    PairingAPI(),
+                    code="code",
+                    name="Laptop",
+                    repository=Path(directory),
+                    label="Lians",
+                    verification_command="python ; bad",
+                    allowed_verifiers=[],
+                    codex_bin="codex",
+                    codex_bridge="auto",
+                )
 
             api = PairingAPI()
-            api.claim = lambda *_args: {"token": "t" * 40, "connector": {"id": "connector", "projects": []}}
+            api.claim = lambda *_args: {
+                "token": "t" * 40,
+                "connector": {"id": "connector", "projects": []},
+            }
             with self.assertRaisesRegex(HostedConnectorError, "did not return the local project"):
-                pair_connector(api, code="code", name="Laptop", repository=Path(directory), label="Lians", verification_command="python -m unittest", allowed_verifiers=[], codex_bin="codex", codex_bridge="auto")
+                pair_connector(
+                    api,
+                    code="code",
+                    name="Laptop",
+                    repository=Path(directory),
+                    label="Lians",
+                    verification_command="python -m unittest",
+                    allowed_verifiers=[],
+                    codex_bin="codex",
+                    codex_bridge="auto",
+                )
 
     def test_bounded_receipt_maps_local_terminal_states_without_private_output(self):
         project = {"verification_command": "python -m unittest"}
         mission = {"id": "mission-1"}
-        passed = LocalMissionExecutor._bounded_receipt({
-            "status": "PASS",
-            "execution_bridge": "codex_app_server",
-            "receipt": {
-                "model_calls": 3,
-                "premium_calls": 1,
-                "receipt_sha256": "a" * 64,
-                "verifier_command_sha256": "b" * 64,
-                "verification": [{"returncode": 0, "stdout": "private"}],
+        passed = LocalMissionExecutor._bounded_receipt(
+            {
+                "status": "PASS",
+                "execution_bridge": "codex_app_server",
+                "receipt": {
+                    "model_calls": 3,
+                    "premium_calls": 1,
+                    "receipt_sha256": "a" * 64,
+                    "verifier_command_sha256": "b" * 64,
+                    "verification": [{"returncode": 0, "stdout": "private"}],
+                },
             },
-        }, mission, project)
+            mission,
+            project,
+        )
         self.assertEqual(passed["status"], "PASS")
         self.assertEqual(passed["verification"]["exitCode"], 0)
         self.assertNotIn("stdout", json.dumps(passed))
-        interrupted = LocalMissionExecutor._bounded_receipt({"status": "INTERRUPTED"}, mission, project)
+        interrupted = LocalMissionExecutor._bounded_receipt(
+            {"status": "INTERRUPTED"}, mission, project
+        )
         self.assertEqual(interrupted["status"], "ERROR")
         blocked = LocalMissionExecutor._bounded_receipt({"status": "BLOCK"}, mission, project)
         self.assertEqual(blocked["status"], "FAIL")
@@ -336,14 +406,25 @@ class HostedConnectorTests(unittest.TestCase):
             self.assertIsNone(no_work.run_once())
             missing_lease = FakeMissionAPI({"id": "mission", "projectId": "project-1"})
             with self.assertRaisesRegex(HostedConnectorError, "missing its lease"):
-                HostedConnector(missing_lease, config(Path(directory)), lambda *_args: {}).run_once()
-            wrong_project = FakeMissionAPI({"id": "mission", "lease": "lease", "projectId": "other"})
+                HostedConnector(
+                    missing_lease, config(Path(directory)), lambda *_args: {}
+                ).run_once()
+            wrong_project = FakeMissionAPI(
+                {"id": "mission", "lease": "lease", "projectId": "other"}
+            )
             with self.assertRaisesRegex(HostedConnectorError, "unknown local project"):
-                HostedConnector(wrong_project, config(Path(directory)), lambda *_args: {}).run_once()
+                HostedConnector(
+                    wrong_project, config(Path(directory)), lambda *_args: {}
+                ).run_once()
 
             path = Path(directory) / "connector.json"
             save_config(path, config(Path(directory)))
-            with patch("lians_finish.hosted_connector.HostedAPI") as api_class, patch("lians_finish.hosted_connector.HostedConnector.run_once", return_value=None) as run_once:
+            with (
+                patch("lians_finish.hosted_connector.HostedAPI") as api_class,
+                patch(
+                    "lians_finish.hosted_connector.HostedConnector.run_once", return_value=None
+                ) as run_once,
+            ):
                 api_class.return_value = object()
                 self.assertIsNone(run_agent_once(path))
                 run_once.assert_called_once_with()

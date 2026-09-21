@@ -87,9 +87,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Print the final receipt as JSON instead of the human summary",
     )
     default_name, default_server = connect_defaults()
-    connect = subparsers.add_parser(
-        "connect", help="Pair this computer with Lians on the web"
-    )
+    connect = subparsers.add_parser("connect", help="Pair this computer with Lians on the web")
     connect.add_argument("--code", required=True, help="One-time code shown in Lians")
     connect.add_argument("--server", default=default_server, help="Hosted Lians origin")
     connect.add_argument("--name", default=default_name, help="Name shown for this computer")

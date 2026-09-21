@@ -59,9 +59,9 @@ def _server_origin(value: str) -> str:
 
 
 def _json_digest(value: Any) -> str:
-    encoded = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -293,8 +293,10 @@ class LocalMissionExecutor:
         job: dict[str, Any], mission: dict[str, Any], project: dict[str, Any]
     ) -> dict[str, Any]:
         receipt = job.get("receipt") if isinstance(job.get("receipt"), dict) else {}
-        status = "PASS" if job.get("status") == "PASS" else (
-            "ERROR" if job.get("status") in {"ERROR", "INTERRUPTED"} else "FAIL"
+        status = (
+            "PASS"
+            if job.get("status") == "PASS"
+            else ("ERROR" if job.get("status") in {"ERROR", "INTERRUPTED"} else "FAIL")
         )
         verifications = receipt.get("verification")
         last = verifications[-1] if isinstance(verifications, list) and verifications else {}
