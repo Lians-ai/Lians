@@ -10,6 +10,10 @@ Date: 2026-09-21
 - Python bytecode compilation.
 - Browser JavaScript syntax and product-manifest JSON parsing.
 - Real initialize handshake with the installed `codex app-server --stdio`.
+- Real two-turn Protect mission through the persistent app-server on a disposable
+  repository: Luna discovery, Terra implementation, zero premium calls, exact-file
+  verification pass, and offline-valid receipt
+  `467e6f0ebcae2e2fa01981f0a2c9dea1ae49b230ed53fd965f0fa8c99952f8bd`.
 - Wheel and source build for version 0.11.0.
 - Isolated wheel import, packaged assets, loopback server, readiness, and
   security headers.
@@ -36,8 +40,5 @@ E26FFAB3E64D42033DD57D4ECF2BF94107D3C5092BEFA35566E3906396A4CBEE  lians_finish-0
 ## Still required
 
 - Human review, merge, and tagged prerelease publication.
-- One full live multi-turn coding mission through app-server. The protocol
-  handshake was real; model turns were not consumed merely to validate the
-  adapter.
 - The external proof gate in `BETA-PROOF-GATE.md`.
 - Independent security review and Windows code signing before general release.
