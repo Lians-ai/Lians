@@ -17,6 +17,9 @@ Date: 2026-09-21
 - Portable-agent round trip with no run-state mutation.
 - Empty privacy-bounded beta export with no run-state mutation.
 - Archive file list and executable/provenance hash agreement.
+- Clean GitHub pull-request source, wheel, and Windows jobs, followed by an
+  independent download check of the artifact checksum, clean source provenance,
+  and GitHub build attestation.
 
 ## Local artifact hashes
 
@@ -32,7 +35,7 @@ E26FFAB3E64D42033DD57D4ECF2BF94107D3C5092BEFA35566E3906396A4CBEE  lians_finish-0
 
 ## Still required
 
-- Clean hosted Windows build, attestation, and prerelease publication.
+- Human review, merge, and tagged prerelease publication.
 - One full live multi-turn coding mission through app-server. The protocol
   handshake was real; model turns were not consumed merely to validate the
   adapter.

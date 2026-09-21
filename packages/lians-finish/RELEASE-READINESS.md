@@ -1,7 +1,7 @@
 # Lians Mission Control v0.11.0 release readiness
 
-Status: **engineering beta candidate; external proof gate pending the clean
-hosted prerelease**.
+Status: **engineering beta candidate; external proof gate pending review,
+merge, and the tagged prerelease**.
 
 ## What is ready
 
@@ -46,15 +46,17 @@ hosted prerelease**.
 - The local ZIP has the six expected files and its executable hash matches
   `BUILD-PROVENANCE.json`. Because it was built before this branch was committed,
   it truthfully reports `source_dirty: true` and is not a releasable artifact.
+- The pull-request workflow reproduced the source, wheel, and Windows archive
+  from a clean checkout. Every repository check passed. The downloaded Windows
+  artifact had a matching checksum, reported `source_dirty: false`, named the
+  workflow commit, and passed GitHub attestation verification.
 
 ## What remains before testers receive it
 
-1. Push this branch and let the new Windows hosted workflow pass from a clean
-   checkout.
-2. Review and merge the source change.
-3. Create the matching `mission-control-v0.11.0` tag so the workflow publishes
+1. Complete human review and merge the source change.
+2. Create the matching `mission-control-v0.11.0` tag so the workflow publishes
    the attested prerelease and checksums.
-4. Download that exact prerelease once and repeat the first-mission path on a
+3. Download that exact prerelease once and repeat the first-mission path on a
    clean Windows user account if one is available.
 
 ## What this does not prove
