@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="lians-token" content=__LIANS_TOKEN__>
+  <title>Lians — Mission Control</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="app-shell" id="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <a class="brand" href="#mission" aria-label="Lians home">
+          <img class="brand-wordmark" src="/assets/wordmark.png" alt="Lians">
+        </a>
+        <button class="sidebar-icon" id="toggle-sidebar" type="button" aria-label="Collapse sidebar" aria-pressed="false" title="Collapse sidebar (Ctrl+Alt+B)">⌑</button>
+      </div>
+
+      <button class="new-run" id="new-run" type="button">
+        <span class="new-run-icon">＋</span><span>New mission</span><kbd>Ctrl N</kbd>
+      </button>
+
+      <nav class="product-nav" aria-label="Product sections">
+        <a class="nav-item active" href="#mission">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12v11H4zM7 8h6M7 11h4"></path></svg>
+          <span>Missions</span>
+        </a>
+        <a class="nav-item" href="#activity">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10h3l2-5 3 10 2-5h3"></path></svg>
+          <span>Activity</span>
+        </a>
+      </nav>
+
+      <section class="history" aria-labelledby="history-heading">
+        <div class="section-kicker" id="history-heading"><span>Recent</span><button type="button" aria-label="Filter runs">≡</button></div>
+        <div id="run-history" class="history-list"><p class="muted">No missions yet</p></div>
+      </section>
+
+      <div class="sidebar-foot">
+        <div class="engine-status" id="engine-status"><i></i><span>Codex route</span><em id="engine-state">Checking</em></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="workspace-path"><span>Lians</span><i>/</i><strong id="workspace-name">Workspace</strong></div>
+        <div class="topbar-actions">
+          <span class="local-pill"><i></i> Local only</span>
+          <details class="system-drawer">
+            <summary>System <span id="stack-summary">Checking</span><b>⌄</b></summary>
+            <div class="system-popover">
+              <div class="popover-head"><span>Agent stack</span><b>On this device</b></div>
+              <div id="agent-stack" class="agent-stack"><p>Checking installed agents…</p></div>
+              <div class="usage-line"><span>Codex bridge</span><strong id="codex-bridge">Checking</strong></div>
+              <div class="usage-line"><span>Verified missions</span><strong id="usage-verified">0</strong></div>
+              <div class="usage-line"><span>Premium calls</span><strong id="usage-premium">0</strong></div>
+              <small>Observed receipts only—not provider billing.</small>
+              <div class="agent-transfer" aria-label="Portable agent">
+                <div><span>Portable agent</span><em>Mission · policy · proof</em></div>
+                <div class="agent-transfer-actions">
+                  <button id="import-agent" type="button" aria-label="Import portable agent">Import</button>
+                  <button id="export-agent" type="button" aria-label="Export portable agent">Export</button>
+                </div>
+                <input id="agent-file" type="file" accept=".lians-agent,application/json" hidden>
+              </div>
+              <div class="agent-transfer beta-transfer" aria-label="Beta proof report">
+                <div><span>Beta proof report</span><em>No task text or repository path</em></div>
+                <div class="agent-transfer-actions">
+                  <button id="export-beta" type="button" aria-label="Export beta proof report">Export</button>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      <div class="workbench" id="mission">
+        <section class="primary-column">
+          <header class="page-heading">
+            <h1>What should Lians finish?</h1>
+          </header>
+
+          <section class="composer" aria-label="Create a Lians mission">
+            <div class="composer-brand" aria-hidden="true">
+              <img src="/assets/wordmark.png" alt="">
+            </div>
+            <div class="outcome-field">
+              <textarea id="task" name="task" maxlength="8000" rows="4" aria-label="Mission outcome" placeholder="Describe an outcome, bug, or feature…"></textarea>
+              <span id="task-count">0 / 8,000</span>
+            </div>
+
+            <div class="composer-toolbar">
+              <div class="toolbar-left">
+                <button id="toggle-controls" class="tool-button" type="button" aria-label="Toggle context and proof" aria-controls="mission-controls" aria-expanded="false" title="Context & proof">＋</button>
+                <div class="mode-switch" id="mode-grid" aria-label="Usage policy">
+                  <label class="selected" title="Use lower-cost agents first; escalate only when needed"><input type="radio" name="mode" value="protect" checked><span>Protect</span></label>
+                  <label title="Use stronger everyday routing with a larger premium ceiling"><input type="radio" name="mode" value="balanced"><span>Balanced</span></label>
+                  <label title="Prioritize capability and allow the largest premium ceiling"><input type="radio" name="mode" value="maximum"><span>Maximum</span></label>
+                </div>
+              </div>
+              <div class="composer-actions">
+                <button id="preview" class="quiet-button" type="button">Preview</button>
+                <button id="run" class="primary" type="button" disabled>Start <span>↑</span></button>
+              </div>
+            </div>
+          </section>
+
+          <div class="composer-meta" aria-label="Current governance settings">
+            <span><i></i><b id="rail-mode">Protect</b><em id="rail-budget">1 premium max</em></span>
+            <span><i></i><b id="proof-brief">Proof</b><em id="proof-brief-state">detecting</em></span>
+            <span><i></i><b>Mission</b><em id="goal-state">draft</em></span>
+          </div>
+          <div id="form-message" class="form-message" role="status" aria-live="polite"></div>
+
+          <details class="controls" id="mission-controls">
+            <summary>Context & proof</summary>
+            <div class="controls-grid">
+              <div class="field full">
+                <label for="repository">Workspace</label>
+                <div class="input-row">
+                  <input id="repository" name="repository" autocomplete="off" spellcheck="false" placeholder="Choose a project folder">
+                  <button id="browse" class="secondary" type="button">Choose</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="constraints">Constraints <span>One per line</span></label>
+                <textarea id="constraints" name="constraints" rows="3" maxlength="10000" placeholder="Keep the public API stable"></textarea>
+              </div>
+              <div class="field">
+                <label for="definition">Done means</label>
+                <textarea id="definition" name="definition" rows="3" maxlength="2000" placeholder="The configured proof passes"></textarea>
+              </div>
+              <div class="field">
+                <label for="valid-until">Valid until <span>Optional</span></label>
+                <input id="valid-until" name="valid-until" type="datetime-local">
+              </div>
+              <div class="field">
+                <label for="verification">Proof command</label>
+                <div class="input-row">
+                  <input id="verification" name="verification" autocomplete="off" spellcheck="false" placeholder="Detecting from workspace…">
+                  <button id="detect-proof" class="secondary" type="button">Detect</button>
+                </div>
+                <small id="proof-source">Lians suggests a command. Starting approves it.</small>
+              </div>
+            </div>
+          </details>
+
+          <section id="route-panel" class="route-panel hidden" aria-live="polite">
+            <div class="panel-head">
+              <div><p class="eyebrow">Planned route</p><h2 id="route-title">Protect</h2></div>
+              <div id="risk-badge" class="risk-badge">normal risk</div>
+            </div>
+            <div class="mission-revision">
+              <span id="mission-revision">R1</span><strong id="mission-status">Active</strong><em id="mission-hash">Mission locked</em>
+            </div>
+            <div id="route-stages" class="route-stages"></div>
+            <div class="route-foot"><span id="premium-budget">Premium budget: 1</span><span>No model used for preview</span></div>
+          </section>
+
+          <section id="run-panel" class="run-panel hidden" aria-live="polite">
+            <div class="run-status-row">
+              <div id="status-icon" class="status-icon running"><span></span></div>
+              <div><p class="eyebrow" id="status-kicker">Running locally</p><h2 id="status-title">Lians is working</h2><p id="status-copy">The route and limit were locked before the first call.</p></div>
+              <div id="status-chip" class="status-chip">Running</div>
+            </div>
+            <div id="event-list" class="event-list"></div>
+            <div id="receipt-metrics" class="receipt-metrics hidden"></div>
+            <p id="claim-boundary" class="claim-boundary hidden"></p>
+          </section>
+        </section>
+
+        <aside class="inspector hidden" id="activity">
+          <div class="inspector-head"><span>Mission context</span><i></i></div>
+          <div class="context-block">
+            <span class="context-label">State</span>
+            <strong id="ledger-summary">Ready</strong>
+            <small>Versioned locally</small>
+          </div>
+          <div class="context-block">
+            <span class="context-label">Policy</span>
+            <strong><span id="inspector-mode">Protect</span> · <span id="inspector-budget">1 max</span></strong>
+            <small>Escalate only when needed</small>
+          </div>
+          <div class="context-block">
+            <span class="context-label">Proof</span>
+            <strong id="proof-summary">Not selected</strong>
+            <small>Required before completion</small>
+          </div>
+          <div class="context-block">
+            <span class="context-label">Observed usage</span>
+            <strong id="usage-summary">No runs yet</strong>
+            <small>Local receipts—not quota</small>
+          </div>
+          <div class="inspector-note">
+            <div class="inspector-mark" aria-hidden="true"><img src="/assets/wordmark.png" alt=""></div>
+            <p>The mission stays bound to its constraints, proof, and usage ceiling.</p>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

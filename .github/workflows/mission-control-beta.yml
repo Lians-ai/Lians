@@ -1,0 +1,203 @@
+name: Mission Control beta
+
+on:
+  pull_request:
+    paths:
+      - "packages/lians-finish/**"
+      - ".github/workflows/mission-control-beta.yml"
+      - ".github/ISSUE_TEMPLATE/mission_control_beta.yml"
+      - "README.md"
+      - "product-manifest.json"
+  push:
+    branches: [master]
+    tags: ["mission-control-v*"]
+    paths:
+      - "packages/lians-finish/**"
+      - ".github/workflows/mission-control-beta.yml"
+      - ".github/ISSUE_TEMPLATE/mission_control_beta.yml"
+      - "README.md"
+      - "product-manifest.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mission-control-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    name: Source, tests, and wheel
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - name: Install pinned build runner
+        run: python -m pip install uv==0.11.26 ruff==0.16.3
+      - name: Run the complete Mission Control suite with branch coverage
+        run: >-
+          uv run --project packages/lians-finish --frozen --with coverage==7.10.7
+          coverage run --branch --source=packages/lians-finish/src/lians_finish
+          -m unittest discover -s packages/lians-finish/tests -v
+      - name: Enforce the coverage floor
+        run: >-
+          uv run --project packages/lians-finish --frozen --with coverage==7.10.7
+          coverage report --fail-under=72
+      - name: Check Python style and formatting
+        run: |
+          python -m ruff check packages/lians-finish/src packages/lians-finish/tests packages/lians-finish/scripts
+          python -m ruff format --check packages/lians-finish/src packages/lians-finish/tests packages/lians-finish/scripts
+      - name: Compile every shipped Python module
+        run: uv run --project packages/lians-finish --frozen python -m compileall -q packages/lians-finish/src packages/lians-finish/scripts
+      - name: Validate browser JavaScript and public product data
+        run: |
+          node --check packages/lians-finish/src/lians_finish/web/app.js
+          python -m json.tool product-manifest.json > $null
+      - name: Build source and wheel artifacts
+        run: uv build --project packages/lians-finish
+      - name: Smoke-test the installed wheel outside the source checkout
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'lians-wheel-target'
+          $wheel = Get-ChildItem packages/lians-finish/dist/lians_finish-*.whl | Select-Object -First 1
+          python -m pip install --no-deps --target $target $wheel.FullName
+          python packages/lians-finish/scripts/wheel_smoke.py `
+            $target `
+            --expected-version (python -c "import pathlib,tomllib; print(tomllib.loads(pathlib.Path('packages/lians-finish/pyproject.toml').read_text())['project']['version'])")
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: Lians-Mission-Control-source
+          path: packages/lians-finish/dist/*
+          if-no-files-found: error
+
+  windows-portable:
+    name: Windows portable engineering beta
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - name: Install pinned packaging tools
+        run: python -m pip install uv==0.11.26 pyinstaller==6.22.0
+      - name: Build the portable Windows archive
+        run: python packages/lians-finish/scripts/build_windows_portable.py
+      - name: Verify the frozen executable and archive contract
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'lians-mission-control-smoke'
+          $repo = (Resolve-Path packages/lians-finish).Path
+          $binary = (Resolve-Path packages/lians-finish/output/windows-exe/Lians.exe).Path
+          $process = Start-Process -FilePath $binary `
+            -ArgumentList @('--no-open', '--data-dir', $data, '--repo', $repo, '--port', '4318') `
+            -WindowStyle Hidden `
+            -PassThru
+          try {
+            $ready = $false
+            foreach ($attempt in 1..60) {
+              try {
+                $response = Invoke-RestMethod -Uri 'http://127.0.0.1:4318/api/health' -TimeoutSec 2
+                if ($response.status -eq 'ok') { $ready = $true; break }
+              } catch {
+                Start-Sleep -Milliseconds 500
+              }
+            }
+            if (-not $ready) { throw 'Frozen Lians app did not become ready' }
+            python packages/lians-finish/scripts/portable_smoke.py `
+              --url http://127.0.0.1:4318 `
+              --repo packages/lians-finish
+          } finally {
+            $expected = (Resolve-Path $binary).Path
+            $targets = @(Get-Process Lians -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $expected })
+            if ($targets.Count -gt 0) { $targets | Stop-Process -Force }
+          }
+      - name: Verify archive contents and source provenance
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = Get-ChildItem packages/lians-finish/dist/Lians-*-Windows-x64.zip | Select-Object -First 1
+          $zip = [IO.Compression.ZipFile]::OpenRead($archive.FullName)
+          try {
+            $names = @($zip.Entries | ForEach-Object FullName | Sort-Object)
+            $expected = @('BETA-PROOF-GATE.md', 'BUILD-PROVENANCE.json', 'CODEX-BRIDGE.md', 'Lians.exe', 'README-WINDOWS.txt', 'SHA256SUMS.txt') | Sort-Object
+            if (($names -join "`n") -ne ($expected -join "`n")) { throw "Unexpected archive contents: $($names -join ', ')" }
+            $entry = $zip.GetEntry('BUILD-PROVENANCE.json')
+            $reader = [IO.StreamReader]::new($entry.Open())
+            try { $provenance = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+            if ($provenance.source_dirty) { throw 'CI release provenance reported a dirty source tree' }
+            if ($provenance.source_commit -ne $env:GITHUB_SHA.ToLowerInvariant()) { throw 'Archive source commit does not match GITHUB_SHA' }
+          } finally {
+            $zip.Dispose()
+          }
+      - name: Write the archive checksum
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem packages/lians-finish/dist/Lians-*-Windows-x64.zip | Select-Object -First 1
+          $digest = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  $($archive.Name)" | Set-Content -LiteralPath "$($archive.FullName).sha256" -Encoding ascii -NoNewline
+      - name: Generate GitHub build provenance
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'push' ||
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: |
+            packages/lians-finish/dist/Lians-*-Windows-x64.zip
+            packages/lians-finish/dist/Lians-*-Windows-x64.zip.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: Lians-Mission-Control-Windows-x64
+          path: |
+            packages/lians-finish/dist/Lians-*-Windows-x64.zip
+            packages/lians-finish/dist/Lians-*-Windows-x64.zip.sha256
+          if-no-files-found: error
+
+  prerelease:
+    name: Publish tagged engineering beta
+    if: startsWith(github.ref, 'refs/tags/mission-control-v')
+    needs: [source, windows-portable]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: Lians-Mission-Control-*
+          path: release-assets
+          merge-multiple: true
+      - name: Validate tag and publish a prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("packages/lians-finish/pyproject.toml").read_text())["project"]["version"])')"
+          expected="mission-control-v${version}"
+          if [[ "${GITHUB_REF_NAME}" != "${expected}" ]]; then
+            echo "tag ${GITHUB_REF_NAME} does not match ${expected}" >&2
+            exit 1
+          fi
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --verify-tag \
+              --prerelease \
+              --title "Lians Mission Control ${version} engineering beta" \
+              --notes-file packages/lians-finish/BETA-PROOF-GATE.md
+          fi
+          gh release upload "${GITHUB_REF_NAME}" release-assets/* --clobber

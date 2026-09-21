@@ -21,6 +21,19 @@ This follows Codex's official
 Local mode needs no Lians account or API key. Memories persist in
 `~/.lians/mcp.db` by default.
 
+## Where Mission Control fits
+
+The MCP server above is the open-source layer inside Codex: durable project
+state that can be inspected, corrected, and deleted. The optional
+[`Lians Mission Control`](../../packages/lians-finish) application is the local
+control and proof layer around Codex. On supported Codex versions it maps one
+mission to one app-server thread, changes model and sandbox per turn, and
+returns a verifier-bound receipt without asking for another API key.
+
+Codex remains the execution engine. Lians does not proxy model calls or claim
+to extend provider quota. Read the exact
+[open-source-to-Codex bridge boundary](../../packages/lians-finish/CODEX-BRIDGE.md).
+
 ## Test it in two chats
 
 In one Codex chat, ask:

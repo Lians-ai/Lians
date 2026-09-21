@@ -46,6 +46,24 @@ Lians recovers interrupted agent work, rejects stale task state, and blocks
 Lians works with your existing AI account and editor. It does not replace your
 model, Git, CI, repository instructions, or human review.
 
+## Two layers, one agent loop
+
+The open-source **Lians Guard** layer lives inside Codex through MCP, skills,
+hooks, and repository state. It remembers corrections and exposes evidence
+without taking over the model. The optional **Lians Mission Control** beta is
+the local control layer: give it one mission, let it choose a bounded Codex
+route, and require a real verifier before it returns PASS.
+
+On supported Codex versions, one Mission Control mission now uses one Codex
+app-server thread instead of starting a new process and replaying a summary for
+every stage. Codex still owns authentication, tools, sandboxes, and execution;
+Lians owns the durable mission, usage policy, and receipt. App-server is
+currently experimental, so the one-shot adapter remains available.
+
+[Inspect the Mission Control source](packages/lians-finish), read the
+[bridge boundary](docs/codex-open-source-bridge.md), or follow the
+[external proof-gate protocol](packages/lians-finish/BETA-PROOF-GATE.md).
+
 ## One clear result after every agent session
 
 ```text
@@ -168,6 +186,8 @@ guarantee that does not exist yet.
 | Shared team queue | Planned |
 | Cross-platform clean-install CI | Required by the new Guard workflow; first hosted run pending |
 | Guided desktop installer and local control center | Release candidate |
+| Mission Control Protect-versus-Maximum beta | Candidate; proof gate preregistered |
+| Persistent one-mission/one-Codex-thread bridge | Beta; app-server is experimental |
 
 The macOS and Windows desktop builds remain release candidates pending platform
 signing and notarization. See the [desktop preview boundary](docs/easy-install.md).
