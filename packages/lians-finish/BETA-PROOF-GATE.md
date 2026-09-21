@@ -112,6 +112,6 @@ Stop the beta and preserve the local receipt if Lians:
 ## Submit feedback
 
 Open a
-[Mission Control beta result](https://github.com/Lians-ai/Lians/issues/new?template=mission_control_beta.yml)
+[Lians beta result](https://github.com/Lians-ai/Lians/issues/new?template=mission_control_beta.yml)
 issue. Attach the exported report only after reviewing it. Use synthetic text
 for screenshots or examples and never post private repository content.

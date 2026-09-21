@@ -138,7 +138,7 @@ class CodexAppServerRunner:
             {
                 "clientInfo": {
                     "name": "lians_mission_control",
-                    "title": "Lians Mission Control",
+                    "title": "Lians",
                     "version": __version__,
                 },
                 "capabilities": {"experimentalApi": False},
@@ -213,7 +213,7 @@ class CodexAppServerRunner:
                 self._pending.append(value)
 
     def _decline_server_request(self, value: dict[str, Any]) -> None:
-        """Never grant new authority from a background Mission Control run."""
+        """Never grant new authority from a background Lians run."""
 
         method = str(value.get("method", ""))
         if method in {
@@ -252,7 +252,7 @@ class CodexAppServerRunner:
                 "writableRoots": [str(repo.resolve())],
                 "networkAccess": False,
             }
-        raise ValueError(f"unsupported Mission Control sandbox: {stage.sandbox}")
+        raise ValueError(f"unsupported Lians sandbox: {stage.sandbox}")
 
     def _start_thread(self, stage: StagePlan, repo: Path) -> None:
         response = self._request(

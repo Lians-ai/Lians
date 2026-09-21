@@ -1,4 +1,4 @@
-# Lians Mission Control v0.11.0 release readiness
+# Lians v0.11.0 release readiness
 
 Status: **engineering beta candidate; external proof gate pending review,
 merge, and the tagged prerelease**.
@@ -24,7 +24,7 @@ merge, and the tagged prerelease**.
 
 ## Current engineering evidence
 
-- 70 automated tests pass.
+- 83 automated tests pass, including 13 hosted-connector boundary tests.
 - Branch-aware coverage is 73% overall and 70% for the new app-server bridge.
   CLI tests execute child processes and therefore are not credited by this
   coverage run even though those behaviors pass.
@@ -34,6 +34,11 @@ merge, and the tagged prerelease**.
 - The installed Codex app-server completed a real local initialize handshake.
   Turn parsing, per-turn usage, context non-replay, sandbox selection, authority
   denial, fallback selection, timeout, error, and shutdown paths are unit tested.
+- A real two-turn Protect mission ran through the persistent Codex app-server
+  against a disposable repository on 2026-09-21. Discovery used Luna, implementation
+  used Terra, no premium call was attempted, the independent verifier passed, and
+  the offline receipt verified as
+  `467e6f0ebcae2e2fa01981f0a2c9dea1ae49b230ed53fd965f0fa8c99952f8bd`.
 - Ruff lint and formatting, Python compilation, browser JavaScript syntax, and
   product-manifest JSON validation pass.
 - The 0.11.0 wheel and source archive build. The wheel installs outside the
@@ -63,8 +68,8 @@ merge, and the tagged prerelease**.
 
 - It does not prove provider quota is extended. Lians reduces repeated work;
   the provider owns quota and billing.
-- An app-server handshake and simulated protocol events do not prove a full live
-  multi-turn coding mission. The first external matched runs provide that test.
+- One small internal live mission does not prove effectiveness across real customer
+  repositories. The first external matched runs provide that test.
 - It does not prove equal quality across repositories or teams.
 - It does not make Claude Code, Cursor Agent, or Gemini CLI routable.
 - It has no independent security audit or code signature.

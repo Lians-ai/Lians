@@ -9,6 +9,15 @@ import sys
 from pathlib import Path
 
 from .codex_app_server import make_codex_runner
+from .hosted_connector import (
+    HostedAPI,
+    HostedConnectorError,
+    connect_defaults,
+    default_config_path,
+    pair_connector,
+    run_agent_once,
+    save_config,
+)
 from .policy import (
     MODE_PREMIUM_BUDGETS,
     MODES,
@@ -77,6 +86,23 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the final receipt as JSON instead of the human summary",
     )
+    default_name, default_server = connect_defaults()
+    connect = subparsers.add_parser("connect", help="Pair this computer with Lians on the web")
+    connect.add_argument("--code", required=True, help="One-time code shown in Lians")
+    connect.add_argument("--server", default=default_server, help="Hosted Lians origin")
+    connect.add_argument("--name", default=default_name, help="Name shown for this computer")
+    connect.add_argument("--project", type=Path, default=Path.cwd(), help="Local project folder")
+    connect.add_argument("--label", help="Project name shown in Lians")
+    connect.add_argument("--verify", required=True, help="Local proof command for this project")
+    connect.add_argument("--allow-verifier", action="append", default=[], metavar="PATH")
+    connect.add_argument("--codex-bin", default="codex")
+    connect.add_argument("--codex-bridge", choices=("auto", "app-server", "exec"), default="auto")
+    connect.add_argument("--config", type=Path, default=default_config_path())
+    agent = subparsers.add_parser(
+        "agent", help="Claim one hosted mission and run it on this computer"
+    )
+    agent.add_argument("--once", action="store_true", required=True)
+    agent.add_argument("--config", type=Path, default=default_config_path())
     return parser
 
 
@@ -99,6 +125,38 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(payload, separators=(",", ":")))
         return 0
+    if args.command == "connect":
+        try:
+            repository = args.project.resolve()
+            config = pair_connector(
+                HostedAPI(args.server),
+                code=args.code,
+                name=args.name,
+                repository=repository,
+                label=args.label or repository.name,
+                verification_command=args.verify,
+                allowed_verifiers=args.allow_verifier,
+                codex_bin=args.codex_bin,
+                codex_bridge=args.codex_bridge,
+            )
+            save_config(args.config.resolve(), config)
+            print(f"CONNECTED name={config['name']} project={config['projects'][0]['label']}")
+            print("Run `lians-finish agent --once` when a mission is waiting.")
+            return 0
+        except (HostedConnectorError, OSError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+    if args.command == "agent":
+        try:
+            result = run_agent_once(args.config.resolve())
+            if result is None:
+                print("IDLE no hosted mission is waiting")
+                return 0
+            print(f"{result['status']} mission={result['mission_id']}")
+            return 0 if result["status"] == "PASS" else 2
+        except (HostedConnectorError, OSError, ValueError, RuntimeError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
     try:
         repo = Path(args.repo).resolve()
         if not repo.is_dir():

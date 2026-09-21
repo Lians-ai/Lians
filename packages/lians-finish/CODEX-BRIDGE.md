@@ -4,16 +4,16 @@ Lians does not replace Codex's model, authentication, tools, or interface. It
 adds two open-source layers around Codex:
 
 ```text
-Lians Guard MCP/plugin     durable state, corrections, and proof tools in Codex
+Lians MCP/plugin           durable state, corrections, and proof tools in Codex
             ↓
 Codex app-server           one real Codex thread with streamed turns and usage
             ↓
-Mission Control            mission, model policy, verifier, and signed receipt
+Lians application          mission, model policy, verifier, and signed receipt
 ```
 
 ## The gap this closes
 
-The previous Mission Control adapter launched a new `codex exec` process for
+The previous Lians adapter launched a new `codex exec` process for
 every stage and copied the prior model's final message into the next prompt.
 That was auditable, but it repeated context and reduced a mission to summaries.
 
@@ -29,7 +29,7 @@ remain available.
 - App-server is feature-detected. Older Codex installs use `codex exec`.
 - `LIANS_CODEX_BRIDGE=exec` or `--codex-bridge exec` forces the compatibility
   path. `app-server` forces the new path and fails clearly if unavailable.
-- Mission Control requests no interactive approvals. An unexpected background
+- Lians requests no interactive approvals. An unexpected background
   approval or permission request is declined rather than silently expanding
   authority.
 - Discovery receives a read-only sandbox. Implementation and repair receive
@@ -52,7 +52,7 @@ codex mcp add lians --env LIANS_MCP_ENABLED_TOOLS=remember,recall,list_memories,
 
 Restart Codex and run `codex mcp list`. The packaged
 [`lians-memory`](../../plugins/lians-memory) plugin adds the fuller Codex-native
-workflow, including skills and lifecycle hooks. Mission Control works without
+workflow, including skills and lifecycle hooks. Lians works without
 that plugin, but the plugin is how the open-source state layer follows the user
 inside the Codex app, CLI, and IDE.
 
