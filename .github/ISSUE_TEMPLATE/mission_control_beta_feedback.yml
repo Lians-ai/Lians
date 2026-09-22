@@ -1,0 +1,92 @@
+name: Mission Control beta feedback
+description: Share one real Windows + Codex run so we can improve the public beta.
+title: "mission control beta: "
+labels: [beta-feedback]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Lians Mission Control. Please use a real task, but remove credentials, private code, personal data, and confidential receipt contents before submitting.
+
+  - type: input
+    id: lians_version
+    attributes:
+      label: Lians version
+      description: The version shown in the app or release name.
+      placeholder: v0.10.1
+    validations:
+      required: true
+
+  - type: input
+    id: codex_version
+    attributes:
+      label: Codex version
+      description: Your Codex CLI version, if known.
+      placeholder: codex-cli version
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode used
+      options:
+        - Protect
+        - Balanced
+        - Maximum
+        - I tried more than one mode
+    validations:
+      required: true
+
+  - type: textarea
+    id: task
+    attributes:
+      label: What were you trying to finish?
+      description: Describe the task and the finish condition without sharing private code or data.
+      placeholder: Fix a failing test in a local repository; done meant the named test and the full suite both passed.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - PASS - the required proof passed
+        - BLOCKED - Lians stopped with a clear blocker
+        - ERROR - the app or run failed unexpectedly
+        - UNCLEAR - I could not tell whether the task was done
+    validations:
+      required: true
+
+  - type: textarea
+    id: value
+    attributes:
+      label: Did Lians change the result?
+      description: Tell us whether the mode, proof check, or receipt prevented re-explaining work, caught a false finish, or added unnecessary friction.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reuse
+    attributes:
+      label: Would you use it for another task this week?
+      options:
+        - Yes
+        - Maybe, after a specific fix
+        - No
+    validations:
+      required: true
+
+  - type: textarea
+    id: receipt
+    attributes:
+      label: Redacted receipt or error details
+      description: Optional. Paste only the minimum needed to reproduce the behavior. Remove paths, source, prompts, secrets, and identifiers.
+      render: shell
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, private code, personal data, and confidential project information.
+          required: true
