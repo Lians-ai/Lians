@@ -24,7 +24,7 @@ dependencies = ["httpx>=0.25"]
 
 [project.optional-dependencies]
 langchain     = ["langchain-core>=0.2"]
-langgraph     = ["langchain-core>=0.2", "langgraph>=0.1"]
+langgraph     = ["langchain-core>=0.2", "langgraph>=1.2.11"]
 crewai        = ["crewai>=0.28"]
 openai-agents = ["openai-agents>=0.0.1"]
 autogen       = ["autogen-core>=0.4"]
