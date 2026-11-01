@@ -40,7 +40,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	c := lians.NewClient("https://agentmem-lotus.fly.dev", os.Getenv("LIANS_API_KEY"),
+	c := lians.NewClient("http://localhost:8000", os.Getenv("LIANS_API_KEY"),
 		lians.WithAdminSecret(os.Getenv("LIANS_ADMIN_SECRET"))) // admin secret optional
 
 	// Store a fact with its BUSINESS event-time (not now)

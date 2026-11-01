@@ -11,7 +11,7 @@
 // The client uses only the standard library (net/http, encoding/json) and is safe
 // for concurrent use. Every method takes a context.Context.
 //
-//	c := lians.NewClient("https://agentmem-lotus.fly.dev", os.Getenv("LIANS_API_KEY"))
+//	c := lians.NewClient("http://localhost:8000", os.Getenv("LIANS_API_KEY"))
 //
 //	_, err := c.AddMemory(ctx, lians.AddMemoryRequest{
 //	    AgentID:   "equity-desk",

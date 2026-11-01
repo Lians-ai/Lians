@@ -5,7 +5,7 @@ description = "Frozen private runtime for the Lians Memory Codex plugin"
 requires-python = ">=3.11,<3.15"
 dependencies = [
   "lians-sdk[bge-onnx]",
-  "mcp==1.28.1",
+  "mcp==1.30.0",
 ]
 
 [tool.uv]

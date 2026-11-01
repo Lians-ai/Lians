@@ -1,5 +1,7 @@
 # Lians Memory universal submission bundle
 
+> **Status, Nov 1 2026: the hosted endpoint is offline.** The Fly app behind `mcp.lians.ai` (`agentmem-lotus`) no longer exists, so `https://mcp.lians.ai/mcp` fails TLS. Statements below that the endpoint is "live" describe the August 10, 2026 deployment. Do not submit, install, or link to this plugin until the endpoint is redeployed and every check is re-run.
+
 This directory is the portal-review package for the OpenAI universal plugin directory. It is not the locally installed Codex plugin in `plugins/lians-memory` and is not intended for `codex plugin add`.
 
 The uploaded `lians-memory` skill declares its hosted Streamable HTTP dependency in `skills/lians-memory/agents/openai.yaml`. The OpenAI submission flow binds that dependency to the canonical OAuth-protected endpoint at `https://mcp.lians.ai/mcp`; no local command, bundled runtime, or static bearer credential belongs in this package.

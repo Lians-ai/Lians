@@ -74,7 +74,7 @@ mem = LocalLiansClient()
 
 # Hosted mode (your server or the current Lians API endpoint)
 from lians import LiansClient
-mem = LiansClient(base_url="https://agentmem-lotus.fly.dev", api_key="lians_...")
+mem = LiansClient(base_url="http://localhost:8000", api_key="lians_...")
 
 # Both share the same API surface - one line change
 ```

@@ -41,7 +41,7 @@ This produces the `lians` library, a `lians_example` binary, and the test runner
 
 int main(void) {
     lians_global_init();
-    lians_client_t *c = lians_client_new("https://agentmem-lotus.fly.dev", getenv("LIANS_API_KEY"), NULL);
+    lians_client_t *c = lians_client_new("http://localhost:8000", getenv("LIANS_API_KEY"), NULL);
 
     /* Store a fact with its BUSINESS event-time (ISO-8601 UTC). */
     lians_response_t r = lians_add(c, "equity-desk",

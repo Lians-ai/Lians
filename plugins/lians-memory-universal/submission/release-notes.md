@@ -1,5 +1,7 @@
 # Lians Memory 0.1.0
 
+> **Status, Nov 1 2026: the hosted endpoint is offline.** The Fly app behind `mcp.lians.ai` (`agentmem-lotus`) no longer exists, so `https://mcp.lians.ai/mcp` fails TLS. Statements below that the endpoint is "live" describe the August 10, 2026 deployment. Do not submit, install, or link to this plugin until the endpoint is redeployed and every check is re-run.
+
 Initial universal-directory submission draft for ChatGPT and Codex.
 
 - Adds one focused Lians Memory skill for explicit durable storage, bounded recall, and confirmed deletion.
