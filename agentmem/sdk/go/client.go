@@ -52,7 +52,7 @@ func WithHTTPClient(h *http.Client) Option {
 
 // NewClient creates a client for the given base URL and API key.
 //
-//	c := lians.NewClient("https://agentmem-lotus.fly.dev", os.Getenv("LIANS_API_KEY"),
+//	c := lians.NewClient("http://localhost:8000", os.Getenv("LIANS_API_KEY"),
 //	    lians.WithAdminSecret(os.Getenv("LIANS_ADMIN_SECRET")))
 func NewClient(baseURL, apiKey string, opts ...Option) *Client {
 	c := &Client{

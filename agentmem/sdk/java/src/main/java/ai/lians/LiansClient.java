@@ -32,7 +32,7 @@ import java.util.Map;
  *
  * <pre>{@code
  * LiansClient client = new LiansClient(LiansClientOptions.builder()
- *     .baseUrl("https://agentmem-lotus.fly.dev")
+ *     .baseUrl("http://localhost:8000")
  *     .apiKey(System.getenv("LIANS_API_KEY"))
  *     .build());
  *

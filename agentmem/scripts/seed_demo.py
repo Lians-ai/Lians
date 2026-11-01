@@ -13,7 +13,7 @@ Usage:
     python scripts/seed_demo.py
 
     # Or point at a different host:
-    python scripts/seed_demo.py --api-url https://agentmem.fly.dev --admin-secret <secret>
+    python scripts/seed_demo.py --api-url http://localhost:8000 --admin-secret <secret>
 
     # Export a read key to a new owner-only file (never printed to stdout):
     python scripts/seed_demo.py --read-key-output .demo-read-key

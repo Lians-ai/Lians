@@ -66,3 +66,7 @@ agentmem/benchmarks/data/*.sqlite
 .artifacts/*.db
 # Local standalone-installer build and smoke-test output.
 tmp/lians-easy-*
+
+# Local scratch and key material - never commit
+/tmp/
+*.key
