@@ -1,14 +1,16 @@
-Lians brand assets. The canonical scalable lotus is
-`docs/assets/lians-lotus.svg`. It uses a transparent background, a sampled Lians
-blue (`#1D3B7B`), and nine separately identified petal paths so motion work can
-animate the mark without tracing a PNG.
+Lians brand assets. The canonical scalable mark is `docs/assets/lians-mark.svg`:
+a four-part L (periwinkle #8b9ee8, sage #79bfa9, apricot #f0ac76, rose #e693b2)
+on a transparent background. The wordmark sets "Lians" in Inter Tight Bold with
+one colour per letter: L #5b6fd0, i #3f9883, a #d9864a, n #c8638a, s #7a5aa8.
+Ink is #1f2a44 on warm off-white #fbfaf7. The same mark and palette are used on
+check.lians.ai.
 
-The older PNG set remains for surfaces that require raster files.
+Raster derivatives, all rendered from that SVG and palette:
 
-- logo.png - trimmed mark with padding; used atop the SDK READMEs (PyPI/npm/pkg.go.dev)
+- logo.png - 325x120 mark + wordmark, transparent; used atop the SDK READMEs (PyPI/npm/pkg.go.dev)
 - banner.png - 1600x400 mark + wordmark + tagline; used atop the main README
-- avatar.png - 512x512 square; upload as the GitHub org avatar / social icons
-- favicon.png - 64x64; embedded as a data URI in demo/index.html
+- avatar.png - 512x512 mark on #fbfaf7; upload as the GitHub org avatar / social icons
+- favicon.png - 128x128 mark, transparent
 
-Regenerate raster derivatives from the SVG if the mark changes. Do not redraw or
-recolor the lotus independently on each surface.
+Regenerate the PNGs from the SVG if the mark changes. Do not redraw or recolour
+the mark independently on each surface.

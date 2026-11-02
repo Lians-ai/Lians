@@ -1,10 +1,8 @@
 <p align="center">
   <a href="https://github.com/Lians-ai/Lians">
-    <img src="docs/assets/lians-lotus.svg" width="190" alt="Lians lotus">
+    <img src="docs/images/banner.png" width="800" alt="Lians: Recover the task. Reject stale state. Block unsupported done.">
   </a>
 </p>
-
-<p align="center"><strong>Recover the task. Reject stale state. Block unsupported done.</strong></p>
 
 <p align="center">
   <a href="docs/quickstart.md"><strong>Quickstart</strong></a> ·
